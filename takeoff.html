@@ -329,6 +329,49 @@
         #pdfCanvas { display: block; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
         #drawCanvas { position: absolute; top: 0; left: 0; cursor: crosshair; }
         
+        /* Continuous scroll view */
+        .pages-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            padding: 20px;
+        }
+        
+        .page-wrapper {
+            position: relative;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+        }
+        
+        .page-wrapper .page-label {
+            position: absolute;
+            top: -25px;
+            left: 0;
+            background: #f5a623;
+            color: #000;
+            padding: 4px 12px;
+            border-radius: 4px 4px 0 0;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        
+        .page-wrapper canvas.pdf-canvas { display: block; }
+        .page-wrapper canvas.draw-canvas { position: absolute; top: 0; left: 0; cursor: crosshair; }
+        
+        .view-toggle button {
+            background: rgba(78, 205, 196, 0.2);
+            border: 1px solid #4ecdc4;
+            color: #4ecdc4;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        
+        .view-toggle button:hover {
+            background: rgba(78, 205, 196, 0.3);
+        }
+        
         /* Upload Overlay */
         .upload-overlay {
             position: absolute;
@@ -1046,7 +1089,10 @@
                     <button onclick="zoomFit()" title="Fit to Screen">⊡</button>
                 </div>
                 <button class="undo-btn" onclick="undoLast()" title="Undo Last (Ctrl+Z)">↩ Undo</button>
-                <div class="page-controls">
+                <div class="view-toggle">
+                    <button id="viewToggle" onclick="toggleViewMode()" title="Toggle view mode">📄 Single Page</button>
+                </div>
+                <div class="page-controls" id="pageControls">
                     <button onclick="prevPage()">◀</button>
                     <span class="page-info">Page <span id="currentPage">1</span> / <span id="totalPages">1</span></span>
                     <button onclick="nextPage()">▶</button>
@@ -1062,10 +1108,14 @@
                     </div>
                 </div>
                 
+                <!-- Single page view -->
                 <div class="canvas-wrapper" id="canvasWrapper" style="display: none;">
                     <canvas id="pdfCanvas"></canvas>
                     <canvas id="drawCanvas"></canvas>
                 </div>
+                
+                <!-- Continuous scroll view -->
+                <div class="pages-container" id="pagesContainer" style="display: none;"></div>
             </div>
             
             <div class="status-bar">
@@ -1129,6 +1179,10 @@
         let scalePoints = [];
         let scaleMode = false;
         let polygonPoints = [];
+        let viewMode = 'single'; // 'single' or 'continuous'
+        let pageCanvases = []; // For continuous mode
+        let activeDrawCanvas = null; // Currently active draw canvas
+        let activePageNum = 1; // Currently active page in continuous mode
         
         const pdfCanvas = document.getElementById('pdfCanvas');
         const drawCanvas = document.getElementById('drawCanvas');
@@ -1295,24 +1349,336 @@
         function zoomIn() {
             zoom = Math.min(zoom * 1.25, 4);
             document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
-            if (pdfDoc) renderPage(currentPage);
+            if (pdfDoc) {
+                if (viewMode === 'continuous') renderAllPages();
+                else renderPage(currentPage);
+            }
         }
         
         function zoomOut() {
             zoom = Math.max(zoom / 1.25, 0.25);
             document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
-            if (pdfDoc) renderPage(currentPage);
+            if (pdfDoc) {
+                if (viewMode === 'continuous') renderAllPages();
+                else renderPage(currentPage);
+            }
         }
         
         function zoomFit() {
             zoom = 1;
             document.getElementById('zoomLevel').textContent = '100%';
-            if (pdfDoc) renderPage(currentPage);
+            if (pdfDoc) {
+                if (viewMode === 'continuous') renderAllPages();
+                else renderPage(currentPage);
+            }
         }
         
         // Page navigation
         function prevPage() { if (currentPage > 1 && pdfDoc) renderPage(currentPage - 1); }
         function nextPage() { if (pdfDoc && currentPage < pdfDoc.numPages) renderPage(currentPage + 1); }
+        
+        // View mode toggle
+        function toggleViewMode() {
+            if (!pdfDoc) return;
+            
+            viewMode = viewMode === 'single' ? 'continuous' : 'single';
+            const btn = document.getElementById('viewToggle');
+            const pageControls = document.getElementById('pageControls');
+            
+            if (viewMode === 'continuous') {
+                btn.textContent = '📜 Continuous';
+                pageControls.style.display = 'none';
+                document.getElementById('canvasWrapper').style.display = 'none';
+                document.getElementById('pagesContainer').style.display = 'flex';
+                renderAllPages();
+            } else {
+                btn.textContent = '📄 Single Page';
+                pageControls.style.display = 'flex';
+                document.getElementById('canvasWrapper').style.display = 'block';
+                document.getElementById('pagesContainer').style.display = 'none';
+                renderPage(currentPage);
+            }
+        }
+        
+        // Render all pages for continuous mode
+        async function renderAllPages() {
+            const container = document.getElementById('pagesContainer');
+            container.innerHTML = '';
+            pageCanvases = [];
+            
+            for (let i = 1; i <= pdfDoc.numPages; i++) {
+                const page = await pdfDoc.getPage(i);
+                const viewport = page.getViewport({ scale: zoom * 1.5 });
+                
+                // Create page wrapper
+                const wrapper = document.createElement('div');
+                wrapper.className = 'page-wrapper';
+                wrapper.dataset.page = i;
+                
+                // Page label
+                const label = document.createElement('div');
+                label.className = 'page-label';
+                label.textContent = `Page ${i}`;
+                wrapper.appendChild(label);
+                
+                // PDF canvas
+                const pdfCvs = document.createElement('canvas');
+                pdfCvs.className = 'pdf-canvas';
+                pdfCvs.width = viewport.width;
+                pdfCvs.height = viewport.height;
+                wrapper.appendChild(pdfCvs);
+                
+                // Draw canvas
+                const drawCvs = document.createElement('canvas');
+                drawCvs.className = 'draw-canvas';
+                drawCvs.width = viewport.width;
+                drawCvs.height = viewport.height;
+                drawCvs.dataset.page = i;
+                wrapper.appendChild(drawCvs);
+                
+                // Render PDF page
+                await page.render({ canvasContext: pdfCvs.getContext('2d'), viewport }).promise;
+                
+                // Store reference
+                pageCanvases.push({ pageNum: i, pdfCanvas: pdfCvs, drawCanvas: drawCvs, wrapper });
+                
+                // Add mouse event listeners
+                drawCvs.addEventListener('mousedown', (e) => handleContinuousMouseDown(e, i, drawCvs));
+                drawCvs.addEventListener('mousemove', (e) => handleContinuousMouseMove(e, i, drawCvs));
+                drawCvs.addEventListener('mouseup', (e) => handleContinuousMouseUp(e, i, drawCvs));
+                drawCvs.addEventListener('dblclick', (e) => handleContinuousDoubleClick(e, i, drawCvs));
+                
+                container.appendChild(wrapper);
+            }
+            
+            redrawAllMeasurements();
+        }
+        
+        // Continuous mode mouse handlers
+        function handleContinuousMouseDown(e, pageNum, canvas) {
+            activePageNum = pageNum;
+            activeDrawCanvas = canvas;
+            const rect = canvas.getBoundingClientRect();
+            const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+            
+            if (scaleMode) {
+                scalePoints.push(pos);
+                if (scalePoints.length === 2) {
+                    document.getElementById('scaleModal').classList.remove('hidden');
+                    document.getElementById('scaleDistance').focus();
+                }
+                redrawAllMeasurements();
+                return;
+            }
+            
+            if (!scale) {
+                alert('Please set scale first!');
+                return;
+            }
+            
+            if (currentTool === 'rectangle' || currentTool === 'line') {
+                isDrawing = true;
+                drawStart = pos;
+            } else if (currentTool === 'polygon') {
+                polygonPoints.push(pos);
+                redrawAllMeasurements();
+            }
+        }
+        
+        function handleContinuousMouseMove(e, pageNum, canvas) {
+            const rect = canvas.getBoundingClientRect();
+            const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+            document.getElementById('mousePos').textContent = `X: ${Math.round(pos.x)}, Y: ${Math.round(pos.y)}`;
+            
+            if (activePageNum !== pageNum) return;
+            
+            if (isDrawing && drawStart) {
+                redrawAllMeasurements();
+                const ctx = canvas.getContext('2d');
+                const color = elementColors[currentElement];
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                
+                if (currentTool === 'rectangle') {
+                    ctx.strokeRect(drawStart.x, drawStart.y, pos.x - drawStart.x, pos.y - drawStart.y);
+                    if (scale) {
+                        const widthFt = Math.abs(pos.x - drawStart.x) / scale;
+                        const heightFt = Math.abs(pos.y - drawStart.y) / scale;
+                        const area = widthFt * heightFt;
+                        document.getElementById('measurementPreview').textContent = 
+                            `${widthFt.toFixed(1)}' × ${heightFt.toFixed(1)}' = ${area.toFixed(1)} SF`;
+                    }
+                } else if (currentTool === 'line') {
+                    ctx.beginPath();
+                    ctx.moveTo(drawStart.x, drawStart.y);
+                    ctx.lineTo(pos.x, pos.y);
+                    ctx.stroke();
+                    if (scale) {
+                        const length = Math.sqrt(Math.pow(pos.x - drawStart.x, 2) + Math.pow(pos.y - drawStart.y, 2)) / scale;
+                        document.getElementById('measurementPreview').textContent = `Length: ${length.toFixed(1)}'`;
+                    }
+                }
+                ctx.setLineDash([]);
+            }
+        }
+        
+        function handleContinuousMouseUp(e, pageNum, canvas) {
+            if (!isDrawing || !drawStart || activePageNum !== pageNum) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+            const config = getElementConfig();
+            
+            if (currentTool === 'rectangle') {
+                const widthFt = Math.abs(pos.x - drawStart.x) / scale;
+                const heightFt = Math.abs(pos.y - drawStart.y) / scale;
+                const area = widthFt * heightFt;
+                
+                if (area > 0.5) {
+                    const measurement = {
+                        id: Date.now(),
+                        type: 'rectangle',
+                        config,
+                        points: [drawStart, pos],
+                        area,
+                        dimensions: { width: widthFt, height: heightFt },
+                        page: pageNum
+                    };
+                    measurement.volume = calculateVolume(measurement);
+                    measurements.push(measurement);
+                }
+            } else if (currentTool === 'line') {
+                const length = Math.sqrt(Math.pow(pos.x - drawStart.x, 2) + Math.pow(pos.y - drawStart.y, 2)) / scale;
+                
+                if (length > 0.5) {
+                    const measurement = {
+                        id: Date.now(),
+                        type: 'line',
+                        config,
+                        points: [drawStart, pos],
+                        length,
+                        page: pageNum
+                    };
+                    measurement.volume = calculateVolume(measurement);
+                    measurements.push(measurement);
+                }
+            }
+            
+            isDrawing = false;
+            drawStart = null;
+            document.getElementById('measurementPreview').textContent = '';
+            updateMeasurementsList();
+            redrawAllMeasurements();
+        }
+        
+        function handleContinuousDoubleClick(e, pageNum, canvas) {
+            if (currentTool === 'polygon' && polygonPoints.length >= 3 && activePageNum === pageNum) {
+                const config = getElementConfig();
+                
+                let area = 0;
+                for (let i = 0; i < polygonPoints.length; i++) {
+                    const j = (i + 1) % polygonPoints.length;
+                    area += polygonPoints[i].x * polygonPoints[j].y;
+                    area -= polygonPoints[j].x * polygonPoints[i].y;
+                }
+                area = Math.abs(area / 2) / (scale * scale);
+                
+                const measurement = {
+                    id: Date.now(),
+                    type: 'polygon',
+                    config,
+                    points: [...polygonPoints],
+                    area,
+                    page: pageNum
+                };
+                measurement.volume = calculateVolume(measurement);
+                measurements.push(measurement);
+                
+                polygonPoints = [];
+                updateMeasurementsList();
+                redrawAllMeasurements();
+            }
+        }
+        
+        // Redraw measurements on all pages (continuous mode)
+        function redrawAllMeasurements() {
+            pageCanvases.forEach(({ pageNum, drawCanvas }) => {
+                const ctx = drawCanvas.getContext('2d');
+                ctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+                
+                // Draw scale points if on first page
+                if (pageNum === 1) {
+                    scalePoints.forEach(p => {
+                        ctx.fillStyle = '#4ecdc4';
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+                    
+                    if (scalePoints.length === 2) {
+                        ctx.strokeStyle = '#4ecdc4';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(scalePoints[0].x, scalePoints[0].y);
+                        ctx.lineTo(scalePoints[1].x, scalePoints[1].y);
+                        ctx.stroke();
+                    }
+                }
+                
+                // Draw measurements for this page
+                measurements.filter(m => m.page === pageNum).forEach(m => {
+                    drawMeasurementOnContext(ctx, m);
+                });
+            });
+        }
+        
+        // Draw a measurement on a given context
+        function drawMeasurementOnContext(ctx, m) {
+            const color = elementColors[m.config.type];
+            
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color + '33';
+            ctx.lineWidth = 2;
+            
+            if (m.type === 'rectangle') {
+                const [p1, p2] = m.points;
+                ctx.fillRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
+                ctx.strokeRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
+                
+                ctx.fillStyle = color;
+                ctx.font = 'bold 11px sans-serif';
+                ctx.fillText(`${m.area.toFixed(0)} SF · ${m.volume.toFixed(2)} yd³`, Math.min(p1.x, p2.x) + 5, Math.min(p1.y, p2.y) + 15);
+            } else if (m.type === 'line') {
+                const [p1, p2] = m.points;
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
+                
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(p1.x, p1.y, 4, 0, Math.PI * 2);
+                ctx.arc(p2.x, p2.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.font = 'bold 11px sans-serif';
+                ctx.fillText(`${m.length.toFixed(1)}' · ${m.volume.toFixed(2)} yd³`, (p1.x + p2.x) / 2 + 8, (p1.y + p2.y) / 2 - 8);
+            } else if (m.type === 'polygon') {
+                ctx.beginPath();
+                ctx.moveTo(m.points[0].x, m.points[0].y);
+                m.points.forEach(p => ctx.lineTo(p.x, p.y));
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                
+                const cx = m.points.reduce((s, p) => s + p.x, 0) / m.points.length;
+                const cy = m.points.reduce((s, p) => s + p.y, 0) / m.points.length;
+                ctx.fillStyle = color;
+                ctx.font = 'bold 11px sans-serif';
+                ctx.fillText(`${m.area.toFixed(0)} SF · ${m.volume.toFixed(2)} yd³`, cx - 30, cy);
+            }
+        }
         
         // Tool selection
         function setTool(tool) {
@@ -1533,6 +1899,10 @@
         
         // Redraw measurements
         function redrawMeasurements() {
+            if (viewMode === 'continuous') {
+                redrawAllMeasurements();
+                return;
+            }
             drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
             
             // Scale points
