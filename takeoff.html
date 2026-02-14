@@ -1190,11 +1190,27 @@
         let pageCanvases = []; // For continuous mode
         let activeDrawCanvas = null; // Currently active draw canvas
         let activePageNum = 1; // Currently active page in continuous mode
+        const BASE_SCALE = 1.5; // Base PDF render scale (fixed)
         
         const pdfCanvas = document.getElementById('pdfCanvas');
         const drawCanvas = document.getElementById('drawCanvas');
         const pdfCtx = pdfCanvas.getContext('2d');
         const drawCtx = drawCanvas.getContext('2d');
+        
+        // Convert screen pixels to PDF coordinates
+        function screenToPdf(pos) {
+            return { x: pos.x / zoom, y: pos.y / zoom };
+        }
+        
+        // Convert PDF coordinates to screen pixels
+        function pdfToScreen(pos) {
+            return { x: pos.x * zoom, y: pos.y * zoom };
+        }
+        
+        // Get current viewport scale
+        function getViewportScale() {
+            return zoom * BASE_SCALE;
+        }
         
         const elementColors = {
             slab: '#4ecdc4',
@@ -1544,9 +1560,13 @@
             const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
             const config = getElementConfig();
             
+            // Convert to PDF coordinates
+            const pdfStart = screenToPdf(drawStart);
+            const pdfEnd = screenToPdf(pos);
+            
             if (currentTool === 'rectangle') {
-                const widthFt = Math.abs(pos.x - drawStart.x) / scale;
-                const heightFt = Math.abs(pos.y - drawStart.y) / scale;
+                const widthFt = Math.abs(pdfEnd.x - pdfStart.x) / scale;
+                const heightFt = Math.abs(pdfEnd.y - pdfStart.y) / scale;
                 const area = widthFt * heightFt;
                 
                 if (area > 0.5) {
@@ -1554,7 +1574,7 @@
                         id: Date.now(),
                         type: 'rectangle',
                         config,
-                        points: [drawStart, pos],
+                        points: [pdfStart, pdfEnd],
                         area,
                         dimensions: { width: widthFt, height: heightFt },
                         page: pageNum
@@ -1563,14 +1583,14 @@
                     measurements.push(measurement);
                 }
             } else if (currentTool === 'line') {
-                const length = Math.sqrt(Math.pow(pos.x - drawStart.x, 2) + Math.pow(pos.y - drawStart.y, 2)) / scale;
+                const length = Math.sqrt(Math.pow(pdfEnd.x - pdfStart.x, 2) + Math.pow(pdfEnd.y - pdfStart.y, 2)) / scale;
                 
                 if (length > 0.5) {
                     const measurement = {
                         id: Date.now(),
                         type: 'line',
                         config,
-                        points: [drawStart, pos],
+                        points: [pdfStart, pdfEnd],
                         length,
                         page: pageNum
                     };
@@ -1590,11 +1610,14 @@
             if (currentTool === 'polygon' && polygonPoints.length >= 3 && activePageNum === pageNum) {
                 const config = getElementConfig();
                 
+                // Convert polygon points to PDF coordinates
+                const pdfPoints = polygonPoints.map(p => screenToPdf(p));
+                
                 let area = 0;
-                for (let i = 0; i < polygonPoints.length; i++) {
-                    const j = (i + 1) % polygonPoints.length;
-                    area += polygonPoints[i].x * polygonPoints[j].y;
-                    area -= polygonPoints[j].x * polygonPoints[i].y;
+                for (let i = 0; i < pdfPoints.length; i++) {
+                    const j = (i + 1) % pdfPoints.length;
+                    area += pdfPoints[i].x * pdfPoints[j].y;
+                    area -= pdfPoints[j].x * pdfPoints[i].y;
                 }
                 area = Math.abs(area / 2) / (scale * scale);
                 
@@ -1602,7 +1625,7 @@
                     id: Date.now(),
                     type: 'polygon',
                     config,
-                    points: [...polygonPoints],
+                    points: pdfPoints, // Store in PDF coordinates
                     area,
                     page: pageNum
                 };
@@ -1656,7 +1679,9 @@
             ctx.lineWidth = 2;
             
             if (m.type === 'rectangle') {
-                const [p1, p2] = m.points;
+                // Convert PDF coordinates to screen coordinates
+                const p1 = pdfToScreen(m.points[0]);
+                const p2 = pdfToScreen(m.points[1]);
                 ctx.fillRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
                 ctx.strokeRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
                 
@@ -1664,7 +1689,8 @@
                 ctx.font = 'bold 11px sans-serif';
                 ctx.fillText(`${m.area.toFixed(0)} SF · ${m.volume.toFixed(2)} yd³`, Math.min(p1.x, p2.x) + 5, Math.min(p1.y, p2.y) + 15);
             } else if (m.type === 'line') {
-                const [p1, p2] = m.points;
+                const p1 = pdfToScreen(m.points[0]);
+                const p2 = pdfToScreen(m.points[1]);
                 ctx.beginPath();
                 ctx.moveTo(p1.x, p1.y);
                 ctx.lineTo(p2.x, p2.y);
@@ -1679,15 +1705,16 @@
                 ctx.font = 'bold 11px sans-serif';
                 ctx.fillText(`${m.length.toFixed(1)}' · ${m.volume.toFixed(2)} yd³`, (p1.x + p2.x) / 2 + 8, (p1.y + p2.y) / 2 - 8);
             } else if (m.type === 'polygon') {
+                const screenPoints = m.points.map(p => pdfToScreen(p));
                 ctx.beginPath();
-                ctx.moveTo(m.points[0].x, m.points[0].y);
-                m.points.forEach(p => ctx.lineTo(p.x, p.y));
+                ctx.moveTo(screenPoints[0].x, screenPoints[0].y);
+                screenPoints.forEach(p => ctx.lineTo(p.x, p.y));
                 ctx.closePath();
                 ctx.fill();
                 ctx.stroke();
                 
-                const cx = m.points.reduce((s, p) => s + p.x, 0) / m.points.length;
-                const cy = m.points.reduce((s, p) => s + p.y, 0) / m.points.length;
+                const cx = screenPoints.reduce((s, p) => s + p.x, 0) / screenPoints.length;
+                const cy = screenPoints.reduce((s, p) => s + p.y, 0) / screenPoints.length;
                 ctx.fillStyle = color;
                 ctx.font = 'bold 11px sans-serif';
                 ctx.fillText(`${m.area.toFixed(0)} SF · ${m.volume.toFixed(2)} yd³`, cx - 30, cy);
@@ -1718,18 +1745,25 @@
             const unit = document.getElementById('scaleUnit').value;
             
             if (distance && scalePoints.length === 2) {
-                const pixelDist = Math.sqrt(
-                    Math.pow(scalePoints[1].x - scalePoints[0].x, 2) +
-                    Math.pow(scalePoints[1].y - scalePoints[0].y, 2)
+                // Convert scale points to PDF coordinates for zoom-independent measurement
+                const p1 = screenToPdf(scalePoints[0]);
+                const p2 = screenToPdf(scalePoints[1]);
+                
+                const pdfPixelDist = Math.sqrt(
+                    Math.pow(p2.x - p1.x, 2) +
+                    Math.pow(p2.y - p1.y, 2)
                 );
                 
                 const distInFeet = unit === 'in' ? distance / 12 : distance;
-                scale = pixelDist / distInFeet;
+                // Scale is now in PDF pixels per foot (zoom-independent)
+                scale = pdfPixelDist / distInFeet;
                 
-                document.getElementById('scaleValue').textContent = `1" = ${(12 / (scale * zoom * 1.5)).toFixed(2)} ft`;
+                // Display scale (convert to architectural scale format)
+                const inchesPerFoot = 12 / (scale / BASE_SCALE);
+                document.getElementById('scaleValue').textContent = `${inchesPerFoot.toFixed(2)}" = 1'-0"`;
                 document.getElementById('scaleStatus').classList.remove('not-set');
                 document.getElementById('scaleStatus').classList.add('set');
-                document.querySelector('#scaleStatus .scale-help').textContent = 'Scale calibrated ✓';
+                document.querySelector('#scaleStatus .scale-help').textContent = 'Scale calibrated ✓ (zoom-independent)';
                 
                 document.getElementById('scaleModal').classList.add('hidden');
                 scaleMode = false;
@@ -1779,6 +1813,7 @@
         
         function handleMouseMove(e) {
             const pos = getMousePos(e);
+            const pdfPos = screenToPdf(pos);
             document.getElementById('mousePos').textContent = `X: ${Math.round(pos.x)}, Y: ${Math.round(pos.y)}`;
             
             if (isDrawing && drawStart) {
@@ -1792,8 +1827,10 @@
                     drawCtx.strokeRect(drawStart.x, drawStart.y, pos.x - drawStart.x, pos.y - drawStart.y);
                     
                     if (scale) {
-                        const widthFt = Math.abs(pos.x - drawStart.x) / scale;
-                        const heightFt = Math.abs(pos.y - drawStart.y) / scale;
+                        // Use PDF coordinates for accurate measurement
+                        const pdfStart = screenToPdf(drawStart);
+                        const widthFt = Math.abs(pdfPos.x - pdfStart.x) / scale;
+                        const heightFt = Math.abs(pdfPos.y - pdfStart.y) / scale;
                         const area = widthFt * heightFt;
                         document.getElementById('measurementPreview').textContent = 
                             `${widthFt.toFixed(1)}' × ${heightFt.toFixed(1)}' = ${area.toFixed(1)} SF`;
@@ -1805,9 +1842,10 @@
                     drawCtx.stroke();
                     
                     if (scale) {
+                        const pdfStart = screenToPdf(drawStart);
                         const length = Math.sqrt(
-                            Math.pow(pos.x - drawStart.x, 2) +
-                            Math.pow(pos.y - drawStart.y, 2)
+                            Math.pow(pdfPos.x - pdfStart.x, 2) +
+                            Math.pow(pdfPos.y - pdfStart.y, 2)
                         ) / scale;
                         document.getElementById('measurementPreview').textContent = `Length: ${length.toFixed(1)}'`;
                     }
@@ -1837,9 +1875,13 @@
             const pos = getMousePos(e);
             const config = getElementConfig();
             
+            // Convert to PDF coordinates for storage (zoom-independent)
+            const pdfStart = screenToPdf(drawStart);
+            const pdfEnd = screenToPdf(pos);
+            
             if (currentTool === 'rectangle') {
-                const widthFt = Math.abs(pos.x - drawStart.x) / scale;
-                const heightFt = Math.abs(pos.y - drawStart.y) / scale;
+                const widthFt = Math.abs(pdfEnd.x - pdfStart.x) / scale;
+                const heightFt = Math.abs(pdfEnd.y - pdfStart.y) / scale;
                 const area = widthFt * heightFt;
                 
                 if (area > 0.5) {
@@ -1847,7 +1889,7 @@
                         id: Date.now(),
                         type: 'rectangle',
                         config,
-                        points: [drawStart, pos],
+                        points: [pdfStart, pdfEnd], // Store in PDF coordinates
                         area,
                         dimensions: { width: widthFt, height: heightFt },
                         page: currentPage
@@ -1857,8 +1899,8 @@
                 }
             } else if (currentTool === 'line') {
                 const length = Math.sqrt(
-                    Math.pow(pos.x - drawStart.x, 2) +
-                    Math.pow(pos.y - drawStart.y, 2)
+                    Math.pow(pdfEnd.x - pdfStart.x, 2) +
+                    Math.pow(pdfEnd.y - pdfStart.y, 2)
                 ) / scale;
                 
                 if (length > 0.5) {
@@ -1866,7 +1908,7 @@
                         id: Date.now(),
                         type: 'line',
                         config,
-                        points: [drawStart, pos],
+                        points: [pdfStart, pdfEnd], // Store in PDF coordinates
                         length,
                         page: currentPage
                     };
@@ -1886,11 +1928,15 @@
             if (currentTool === 'polygon' && polygonPoints.length >= 3) {
                 const config = getElementConfig();
                 
+                // Convert polygon points to PDF coordinates
+                const pdfPoints = polygonPoints.map(p => screenToPdf(p));
+                
+                // Calculate area in PDF coordinate space
                 let area = 0;
-                for (let i = 0; i < polygonPoints.length; i++) {
-                    const j = (i + 1) % polygonPoints.length;
-                    area += polygonPoints[i].x * polygonPoints[j].y;
-                    area -= polygonPoints[j].x * polygonPoints[i].y;
+                for (let i = 0; i < pdfPoints.length; i++) {
+                    const j = (i + 1) % pdfPoints.length;
+                    area += pdfPoints[i].x * pdfPoints[j].y;
+                    area -= pdfPoints[j].x * pdfPoints[i].y;
                 }
                 area = Math.abs(area / 2) / (scale * scale);
                 
@@ -1898,7 +1944,7 @@
                     id: Date.now(),
                     type: 'polygon',
                     config,
-                    points: [...polygonPoints],
+                    points: pdfPoints, // Store in PDF coordinates
                     area,
                     page: currentPage
                 };
@@ -1936,7 +1982,7 @@
                 drawCtx.stroke();
             }
             
-            // Measurements for current page
+            // Measurements for current page (convert PDF coords to screen)
             measurements.filter(m => m.page === currentPage).forEach(m => {
                 const color = elementColors[m.config.type];
                 
@@ -1945,7 +1991,9 @@
                 drawCtx.lineWidth = 2;
                 
                 if (m.type === 'rectangle') {
-                    const [p1, p2] = m.points;
+                    // Convert PDF coordinates to screen coordinates
+                    const p1 = pdfToScreen(m.points[0]);
+                    const p2 = pdfToScreen(m.points[1]);
                     drawCtx.fillRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
                     drawCtx.strokeRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
                     
@@ -1957,7 +2005,8 @@
                         Math.min(p1.y, p2.y) + 15
                     );
                 } else if (m.type === 'line') {
-                    const [p1, p2] = m.points;
+                    const p1 = pdfToScreen(m.points[0]);
+                    const p2 = pdfToScreen(m.points[1]);
                     drawCtx.beginPath();
                     drawCtx.moveTo(p1.x, p1.y);
                     drawCtx.lineTo(p2.x, p2.y);
@@ -1977,15 +2026,16 @@
                         (p1.y + p2.y) / 2 - 8
                     );
                 } else if (m.type === 'polygon') {
+                    const screenPoints = m.points.map(p => pdfToScreen(p));
                     drawCtx.beginPath();
-                    drawCtx.moveTo(m.points[0].x, m.points[0].y);
-                    m.points.forEach(p => drawCtx.lineTo(p.x, p.y));
+                    drawCtx.moveTo(screenPoints[0].x, screenPoints[0].y);
+                    screenPoints.forEach(p => drawCtx.lineTo(p.x, p.y));
                     drawCtx.closePath();
                     drawCtx.fill();
                     drawCtx.stroke();
                     
-                    const cx = m.points.reduce((s, p) => s + p.x, 0) / m.points.length;
-                    const cy = m.points.reduce((s, p) => s + p.y, 0) / m.points.length;
+                    const cx = screenPoints.reduce((s, p) => s + p.x, 0) / screenPoints.length;
+                    const cy = screenPoints.reduce((s, p) => s + p.y, 0) / screenPoints.length;
                     drawCtx.fillStyle = color;
                     drawCtx.font = 'bold 11px sans-serif';
                     drawCtx.fillText(`${m.area.toFixed(0)} SF · ${m.volume.toFixed(2)} yd³`, cx - 30, cy);
