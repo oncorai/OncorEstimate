@@ -2212,15 +2212,62 @@
             }
         });
         
-        // Ctrl/Cmd + scroll wheel to zoom (like Bluebeam)
+        // Ctrl/Cmd + scroll wheel to zoom toward cursor (like Bluebeam/Figma)
         document.getElementById('canvasContainer').addEventListener('wheel', (e) => {
             if (e.ctrlKey || e.metaKey) {
                 e.preventDefault();
+                
+                const container = document.getElementById('canvasContainer');
+                const wrapper = viewMode === 'continuous' 
+                    ? document.getElementById('pagesContainer')
+                    : document.getElementById('canvasWrapper');
+                
+                // Get mouse position relative to container
+                const rect = container.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                // Current scroll position
+                const scrollLeft = container.scrollLeft;
+                const scrollTop = container.scrollTop;
+                
+                // Point in content space (before zoom)
+                const contentX = scrollLeft + mouseX;
+                const contentY = scrollTop + mouseY;
+                
+                // Current scale
+                const oldScale = displayZoom / renderZoom;
+                
+                // Apply zoom
                 if (e.deltaY < 0) {
-                    zoomIn();
+                    displayZoom = Math.min(displayZoom * 1.03, 4);
                 } else {
-                    zoomOut();
+                    displayZoom = Math.max(displayZoom / 1.03, 0.1);
                 }
+                
+                // New scale
+                const newScale = displayZoom / renderZoom;
+                
+                // Update display
+                document.getElementById('zoomLevel').textContent = Math.round(displayZoom * 100) + '%';
+                wrapper.style.transform = `scale(${newScale})`;
+                wrapper.style.transformOrigin = 'top left';
+                
+                // Calculate new scroll to keep mouse point stationary
+                const scaleRatio = newScale / oldScale;
+                const newScrollLeft = contentX * scaleRatio - mouseX;
+                const newScrollTop = contentY * scaleRatio - mouseY;
+                
+                container.scrollLeft = newScrollLeft;
+                container.scrollTop = newScrollTop;
+                
+                // Debounce re-render
+                clearTimeout(zoomTimeout);
+                zoomTimeout = setTimeout(() => {
+                    if (Math.abs(displayZoom - renderZoom) / renderZoom > 0.5) {
+                        reRenderAtCurrentZoom();
+                    }
+                }, 500);
             }
         }, { passive: false });
         
