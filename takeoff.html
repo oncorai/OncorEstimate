@@ -1326,7 +1326,9 @@
                     document.getElementById('totalPages').textContent = pdfDoc.numPages;
                     document.getElementById('uploadOverlay').style.display = 'none';
                     document.getElementById('canvasWrapper').style.display = 'block';
-                    renderPage(1);
+                    currentPage = 1;
+                    // Start with fit to window
+                    await zoomFit();
                 };
                 reader.readAsArrayBuffer(file);
             }
@@ -1368,9 +1370,9 @@
             redrawMeasurements();
         }
         
-        // Zoom controls
+        // Zoom controls (subtle 5% increments)
         function zoomIn() {
-            zoom = Math.min(zoom * 1.25, 4);
+            zoom = Math.min(zoom * 1.05, 4);
             document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
             if (pdfDoc) {
                 if (viewMode === 'continuous') renderAllPages();
@@ -1379,7 +1381,7 @@
         }
         
         function zoomOut() {
-            zoom = Math.max(zoom / 1.25, 0.25);
+            zoom = Math.max(zoom / 1.05, 0.1);
             document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
             if (pdfDoc) {
                 if (viewMode === 'continuous') renderAllPages();
@@ -1387,13 +1389,26 @@
             }
         }
         
-        function zoomFit() {
-            zoom = 1;
-            document.getElementById('zoomLevel').textContent = '100%';
-            if (pdfDoc) {
-                if (viewMode === 'continuous') renderAllPages();
-                else renderPage(currentPage);
-            }
+        // Fit to window
+        async function zoomFit() {
+            if (!pdfDoc) return;
+            
+            const page = await pdfDoc.getPage(currentPage);
+            const viewport = page.getViewport({ scale: 1 });
+            const container = document.getElementById('canvasContainer');
+            
+            // Calculate zoom to fit width or height (whichever is smaller)
+            const containerWidth = container.clientWidth - 40; // padding
+            const containerHeight = container.clientHeight - 40;
+            
+            const scaleX = containerWidth / (viewport.width * BASE_SCALE);
+            const scaleY = containerHeight / (viewport.height * BASE_SCALE);
+            
+            zoom = Math.min(scaleX, scaleY, 2); // Cap at 200%
+            document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
+            
+            if (viewMode === 'continuous') renderAllPages();
+            else renderPage(currentPage);
         }
         
         // Page navigation
