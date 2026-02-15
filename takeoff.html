@@ -324,7 +324,15 @@
             justify-content: center;
         }
         
-        .canvas-wrapper { position: relative; display: inline-block; }
+        .canvas-wrapper { 
+            position: relative; 
+            display: inline-block; 
+            transition: transform 0.05s ease-out;
+        }
+        
+        .pages-container {
+            transition: transform 0.05s ease-out;
+        }
         
         #pdfCanvas { display: block; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
         #drawCanvas { position: absolute; top: 0; left: 0; cursor: crosshair; }
@@ -1370,23 +1378,57 @@
             redrawMeasurements();
         }
         
-        // Zoom controls (subtle 5% increments)
+        // Zoom state
+        let renderZoom = 1; // The zoom level at which PDF was rendered
+        let displayZoom = 1; // The current display zoom (CSS transform)
+        let zoomTimeout = null;
+        
+        // Zoom controls - use CSS transform for instant zoom
         function zoomIn() {
-            zoom = Math.min(zoom * 1.05, 4);
-            document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
-            if (pdfDoc) {
-                if (viewMode === 'continuous') renderAllPages();
-                else renderPage(currentPage);
-            }
+            displayZoom = Math.min(displayZoom * 1.08, 4);
+            applyZoom();
         }
         
         function zoomOut() {
-            zoom = Math.max(zoom / 1.05, 0.1);
-            document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
-            if (pdfDoc) {
-                if (viewMode === 'continuous') renderAllPages();
-                else renderPage(currentPage);
-            }
+            displayZoom = Math.max(displayZoom / 1.08, 0.1);
+            applyZoom();
+        }
+        
+        // Apply zoom using CSS transform (instant)
+        function applyZoom() {
+            document.getElementById('zoomLevel').textContent = Math.round(displayZoom * 100) + '%';
+            
+            const wrapper = viewMode === 'continuous' 
+                ? document.getElementById('pagesContainer')
+                : document.getElementById('canvasWrapper');
+            
+            // Use CSS transform for instant zoom
+            const scale = displayZoom / renderZoom;
+            wrapper.style.transform = `scale(${scale})`;
+            wrapper.style.transformOrigin = 'top center';
+            
+            // Debounce re-render for quality (only when zoom changes significantly)
+            clearTimeout(zoomTimeout);
+            zoomTimeout = setTimeout(() => {
+                // Re-render if zoom difference is significant (for quality)
+                if (Math.abs(displayZoom - renderZoom) / renderZoom > 0.5) {
+                    reRenderAtCurrentZoom();
+                }
+            }, 300);
+        }
+        
+        // Re-render at current zoom for quality
+        async function reRenderAtCurrentZoom() {
+            renderZoom = displayZoom;
+            zoom = displayZoom;
+            
+            const wrapper = viewMode === 'continuous' 
+                ? document.getElementById('pagesContainer')
+                : document.getElementById('canvasWrapper');
+            wrapper.style.transform = 'scale(1)';
+            
+            if (viewMode === 'continuous') await renderAllPages();
+            else await renderPage(currentPage);
         }
         
         // Fit to window
@@ -1397,18 +1439,25 @@
             const viewport = page.getViewport({ scale: 1 });
             const container = document.getElementById('canvasContainer');
             
-            // Calculate zoom to fit width or height (whichever is smaller)
-            const containerWidth = container.clientWidth - 40; // padding
+            const containerWidth = container.clientWidth - 40;
             const containerHeight = container.clientHeight - 40;
             
             const scaleX = containerWidth / (viewport.width * BASE_SCALE);
             const scaleY = containerHeight / (viewport.height * BASE_SCALE);
             
-            zoom = Math.min(scaleX, scaleY, 2); // Cap at 200%
-            document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
+            displayZoom = Math.min(scaleX, scaleY, 2);
+            renderZoom = displayZoom;
+            zoom = displayZoom;
             
-            if (viewMode === 'continuous') renderAllPages();
-            else renderPage(currentPage);
+            document.getElementById('zoomLevel').textContent = Math.round(displayZoom * 100) + '%';
+            
+            const wrapper = viewMode === 'continuous' 
+                ? document.getElementById('pagesContainer')
+                : document.getElementById('canvasWrapper');
+            wrapper.style.transform = 'scale(1)';
+            
+            if (viewMode === 'continuous') await renderAllPages();
+            else await renderPage(currentPage);
         }
         
         // Page navigation
