@@ -1646,61 +1646,133 @@
         // Render all pages for continuous mode
         async function renderAllPages() {
             const container = document.getElementById('pagesContainer');
+            if (!container) {
+                console.error('pagesContainer not found');
+                return;
+            }
+            
+            // Clear existing content
             container.innerHTML = '';
             pageCanvases = [];
             
-            for (let i = 1; i <= pdfDoc.numPages; i++) {
-                const page = await pdfDoc.getPage(i);
-                const viewport = page.getViewport({ scale: zoom * BASE_SCALE });
-                
-                // Create page wrapper
-                const wrapper = document.createElement('div');
-                wrapper.className = 'page-wrapper';
-                wrapper.dataset.page = i;
-                
-                // Page label
-                const label = document.createElement('div');
-                label.className = 'page-label';
-                label.textContent = `Page ${i}`;
-                wrapper.appendChild(label);
-                
-                // PDF canvas
-                const pdfCvs = document.createElement('canvas');
-                pdfCvs.className = 'pdf-canvas';
-                pdfCvs.width = viewport.width;
-                pdfCvs.height = viewport.height;
-                wrapper.appendChild(pdfCvs);
-                
-                // Draw canvas
-                const drawCvs = document.createElement('canvas');
-                drawCvs.className = 'draw-canvas';
-                drawCvs.width = viewport.width;
-                drawCvs.height = viewport.height;
-                drawCvs.dataset.page = i;
-                wrapper.appendChild(drawCvs);
-                
-                // Add mouse event listeners
-                drawCvs.addEventListener('mousedown', (e) => handleContinuousMouseDown(e, i, drawCvs));
-                drawCvs.addEventListener('mousemove', (e) => handleContinuousMouseMove(e, i, drawCvs));
-                drawCvs.addEventListener('mouseup', (e) => handleContinuousMouseUp(e, i, drawCvs));
-                drawCvs.addEventListener('dblclick', (e) => handleContinuousDoubleClick(e, i, drawCvs));
-                
-                // Append to DOM BEFORE rendering (required for some browsers)
-                container.appendChild(wrapper);
-                
-                // Store reference
-                pageCanvases.push({ pageNum: i, pdfCanvas: pdfCvs, drawCanvas: drawCvs, wrapper });
-                
-                // Render PDF page (canvas must be in DOM first)
-                const ctx = pdfCvs.getContext('2d');
-                if (!ctx) {
-                    console.error('Failed to get canvas context for page', i);
-                    continue;
-                }
-                await page.render({ canvasContext: ctx, viewport }).promise;
+            if (!pdfDoc || !pdfDoc.numPages) {
+                console.error('No PDF document loaded');
+                return;
             }
             
-            redrawAllMeasurements();
+            console.log('Rendering', pdfDoc.numPages, 'pages at zoom', zoom);
+            
+            // Calculate scale - ensure it's valid
+            const renderScale = Math.max(0.1, Math.min(zoom * BASE_SCALE, 4));
+            
+            // First pass: create all DOM elements
+            const pageData = [];
+            for (let i = 1; i <= pdfDoc.numPages; i++) {
+                try {
+                    const page = await pdfDoc.getPage(i);
+                    const viewport = page.getViewport({ scale: renderScale });
+                    
+                    // Validate viewport dimensions
+                    const width = Math.floor(Math.max(1, Math.min(viewport.width, 8000)));
+                    const height = Math.floor(Math.max(1, Math.min(viewport.height, 8000)));
+                    
+                    // Create page wrapper
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'page-wrapper';
+                    wrapper.dataset.page = i;
+                    
+                    // Page label
+                    const label = document.createElement('div');
+                    label.className = 'page-label';
+                    label.textContent = `Page ${i}`;
+                    wrapper.appendChild(label);
+                    
+                    // PDF canvas
+                    const pdfCvs = document.createElement('canvas');
+                    pdfCvs.className = 'pdf-canvas';
+                    pdfCvs.width = width;
+                    pdfCvs.height = height;
+                    wrapper.appendChild(pdfCvs);
+                    
+                    // Draw canvas (overlay for measurements)
+                    const drawCvs = document.createElement('canvas');
+                    drawCvs.className = 'draw-canvas';
+                    drawCvs.width = width;
+                    drawCvs.height = height;
+                    drawCvs.dataset.page = i;
+                    wrapper.appendChild(drawCvs);
+                    
+                    // Append to DOM
+                    container.appendChild(wrapper);
+                    
+                    pageData.push({ pageNum: i, page, viewport, pdfCvs, drawCvs, wrapper, width, height });
+                } catch (err) {
+                    console.error('Error preparing page', i, err);
+                }
+            }
+            
+            // Wait for DOM to settle
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            
+            // Second pass: render PDF content and attach events
+            for (const data of pageData) {
+                try {
+                    const { pageNum, page, viewport, pdfCvs, drawCvs, wrapper } = data;
+                    
+                    // Get context after DOM is settled
+                    const ctx = pdfCvs.getContext('2d', { alpha: false });
+                    if (!ctx) {
+                        console.error('Failed to get context for page', pageNum);
+                        continue;
+                    }
+                    
+                    // Render the PDF page
+                    await page.render({ 
+                        canvasContext: ctx, 
+                        viewport: viewport 
+                    }).promise;
+                    
+                    // Store reference
+                    pageCanvases.push({ pageNum, pdfCanvas: pdfCvs, drawCanvas: drawCvs, wrapper });
+                    
+                    // Add mouse event listeners
+                    const addEvent = (evt, handler) => {
+                        drawCvs.addEventListener(evt, (e) => handler(e, pageNum, drawCvs));
+                    };
+                    addEvent('mousedown', handleContinuousMouseDown);
+                    addEvent('mousemove', handleContinuousMouseMove);
+                    addEvent('mouseup', handleContinuousMouseUp);
+                    addEvent('dblclick', handleContinuousDoubleClick);
+                    
+                    // Touch events for mobile
+                    drawCvs.addEventListener('touchstart', (e) => {
+                        e.preventDefault();
+                        const touch = e.touches[0];
+                        handleContinuousMouseDown({ clientX: touch.clientX, clientY: touch.clientY }, pageNum, drawCvs);
+                    }, { passive: false });
+                    drawCvs.addEventListener('touchmove', (e) => {
+                        e.preventDefault();
+                        const touch = e.touches[0];
+                        handleContinuousMouseMove({ clientX: touch.clientX, clientY: touch.clientY }, pageNum, drawCvs);
+                    }, { passive: false });
+                    drawCvs.addEventListener('touchend', (e) => {
+                        e.preventDefault();
+                        const touch = e.changedTouches[0];
+                        handleContinuousMouseUp({ clientX: touch.clientX, clientY: touch.clientY }, pageNum, drawCvs);
+                    }, { passive: false });
+                    
+                    console.log('Page', pageNum, 'rendered');
+                } catch (err) {
+                    console.error('Error rendering page', data.pageNum, err);
+                }
+            }
+            
+            console.log('All pages rendered, pageCanvases:', pageCanvases.length);
+            
+            // Only redraw measurements if we have canvases
+            if (pageCanvases.length > 0) {
+                redrawAllMeasurements();
+            }
         }
         
         // Continuous mode mouse handlers
@@ -1741,35 +1813,39 @@
             
             if (activePageNum !== pageNum) return;
             
-            if (isDrawing && drawStart) {
+            if (isDrawing && drawStart && canvas) {
                 redrawAllMeasurements();
-                const ctx = canvas.getContext('2d');
-                if (!ctx) return;
-                const color = elementColors[currentElement];
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 2;
-                ctx.setLineDash([5, 5]);
-                
-                if (currentTool === 'rectangle') {
-                    ctx.strokeRect(drawStart.x, drawStart.y, pos.x - drawStart.x, pos.y - drawStart.y);
-                    if (scale) {
-                        const widthFt = Math.abs(pos.x - drawStart.x) / scale;
-                        const heightFt = Math.abs(pos.y - drawStart.y) / scale;
-                        const area = widthFt * heightFt;
-                        document.getElementById('measurementPreview').textContent = 
-                            `${widthFt.toFixed(1)}' × ${heightFt.toFixed(1)}' = ${area.toFixed(1)} SF`;
+                try {
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return;
+                    const color = elementColors[currentElement] || '#f5a623';
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+                    
+                    if (currentTool === 'rectangle') {
+                        ctx.strokeRect(drawStart.x, drawStart.y, pos.x - drawStart.x, pos.y - drawStart.y);
+                        if (scale) {
+                            const widthFt = Math.abs(pos.x - drawStart.x) / scale;
+                            const heightFt = Math.abs(pos.y - drawStart.y) / scale;
+                            const area = widthFt * heightFt;
+                            document.getElementById('measurementPreview').textContent = 
+                                `${widthFt.toFixed(1)}' × ${heightFt.toFixed(1)}' = ${area.toFixed(1)} SF`;
+                        }
+                    } else if (currentTool === 'line') {
+                        ctx.beginPath();
+                        ctx.moveTo(drawStart.x, drawStart.y);
+                        ctx.lineTo(pos.x, pos.y);
+                        ctx.stroke();
+                        if (scale) {
+                            const length = Math.sqrt(Math.pow(pos.x - drawStart.x, 2) + Math.pow(pos.y - drawStart.y, 2)) / scale;
+                            document.getElementById('measurementPreview').textContent = `Length: ${length.toFixed(1)}'`;
+                        }
                     }
-                } else if (currentTool === 'line') {
-                    ctx.beginPath();
-                    ctx.moveTo(drawStart.x, drawStart.y);
-                    ctx.lineTo(pos.x, pos.y);
-                    ctx.stroke();
-                    if (scale) {
-                        const length = Math.sqrt(Math.pow(pos.x - drawStart.x, 2) + Math.pow(pos.y - drawStart.y, 2)) / scale;
-                        document.getElementById('measurementPreview').textContent = `Length: ${length.toFixed(1)}'`;
-                    }
+                    ctx.setLineDash([]);
+                } catch (err) {
+                    console.error('Draw error:', err);
                 }
-                ctx.setLineDash([]);
             }
         }
         
@@ -1860,38 +1936,53 @@
         
         // Redraw measurements on all pages (continuous mode)
         function redrawAllMeasurements() {
-            if (!pageCanvases || pageCanvases.length === 0) return;
+            if (!pageCanvases || pageCanvases.length === 0) {
+                return;
+            }
             
-            pageCanvases.forEach(({ pageNum, drawCanvas }) => {
-                if (!drawCanvas) return;
-                const ctx = drawCanvas.getContext('2d');
-                if (!ctx) return;
-                ctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+            for (const pc of pageCanvases) {
+                if (!pc || !pc.drawCanvas) continue;
                 
-                // Draw scale points if on first page
-                if (pageNum === 1) {
-                    scalePoints.forEach(p => {
-                        ctx.fillStyle = '#4ecdc4';
-                        ctx.beginPath();
-                        ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
-                        ctx.fill();
-                    });
+                try {
+                    const ctx = pc.drawCanvas.getContext('2d');
+                    if (!ctx) continue;
                     
-                    if (scalePoints.length === 2) {
-                        ctx.strokeStyle = '#4ecdc4';
-                        ctx.lineWidth = 2;
-                        ctx.beginPath();
-                        ctx.moveTo(scalePoints[0].x, scalePoints[0].y);
-                        ctx.lineTo(scalePoints[1].x, scalePoints[1].y);
-                        ctx.stroke();
+                    const w = pc.drawCanvas.width || 0;
+                    const h = pc.drawCanvas.height || 0;
+                    if (w <= 0 || h <= 0) continue;
+                    
+                    ctx.clearRect(0, 0, w, h);
+                    
+                    // Draw scale points if on first page
+                    if (pc.pageNum === 1 && scalePoints && scalePoints.length > 0) {
+                        scalePoints.forEach(p => {
+                            if (!p) return;
+                            ctx.fillStyle = '#4ecdc4';
+                            ctx.beginPath();
+                            ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+                            ctx.fill();
+                        });
+                        
+                        if (scalePoints.length === 2) {
+                            ctx.strokeStyle = '#4ecdc4';
+                            ctx.lineWidth = 2;
+                            ctx.beginPath();
+                            ctx.moveTo(scalePoints[0].x, scalePoints[0].y);
+                            ctx.lineTo(scalePoints[1].x, scalePoints[1].y);
+                            ctx.stroke();
+                        }
                     }
+                    
+                    // Draw measurements for this page
+                    if (measurements && measurements.length > 0) {
+                        measurements
+                            .filter(m => m && m.page === pc.pageNum)
+                            .forEach(m => drawMeasurementOnContext(ctx, m));
+                    }
+                } catch (err) {
+                    console.error('Error redrawing page', pc.pageNum, err);
                 }
-                
-                // Draw measurements for this page
-                measurements.filter(m => m.page === pageNum).forEach(m => {
-                    drawMeasurementOnContext(ctx, m);
-                });
-            });
+            }
         }
         
         // Draw a measurement on a given context
