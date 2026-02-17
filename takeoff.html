@@ -1412,40 +1412,57 @@
         function applyVisualZoom() {
             document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
             
+            const container = document.getElementById('canvasContainer');
             const content = viewMode === 'continuous' 
                 ? document.getElementById('pagesContainer')
                 : document.getElementById('canvasWrapper');
             
             // Calculate relative scale from render zoom
             const visualScale = zoom / renderZoom;
-            content.style.transformOrigin = 'center center';
+            
+            // For button zoom, zoom from center of viewport
+            const centerX = container.scrollLeft + container.clientWidth / 2;
+            const centerY = container.scrollTop + container.clientHeight / 2;
+            
+            content.style.transformOrigin = '0 0';
             content.style.transform = `scale(${visualScale})`;
             
-            // Re-render sooner to keep text crisp
+            // Re-render when needed
             clearTimeout(zoomTimeout);
-            if (Math.abs(zoom - renderZoom) / renderZoom > 0.2) {
+            if (Math.abs(zoom - renderZoom) / renderZoom > 0.25) {
                 zoomTimeout = setTimeout(doFullRender, 300);
             }
         }
         
         // Full quality re-render (debounced)
         async function doFullRender() {
-            renderZoom = zoom;
             const container = document.getElementById('canvasContainer');
-            const scrollRatio = container.scrollHeight > 0 ? container.scrollTop / container.scrollHeight : 0;
+            
+            // Save scroll position relative to content
+            const oldScrollLeft = container.scrollLeft;
+            const oldScrollTop = container.scrollTop;
+            const oldScale = renderZoom > 0 ? zoom / renderZoom : 1;
+            
+            renderZoom = zoom;
+            panX = 0;
+            panY = 0;
             
             // Reset transform before re-render
             const targetContainer = viewMode === 'continuous' 
                 ? document.getElementById('pagesContainer')
                 : document.getElementById('canvasWrapper');
             targetContainer.style.transform = 'scale(1)';
+            targetContainer.style.transformOrigin = '0 0';
             
             if (viewMode === 'continuous') {
                 await renderAllPages();
-                container.scrollTop = scrollRatio * container.scrollHeight;
             } else {
                 await renderPage(currentPage);
             }
+            
+            // Restore scroll position (content is now rendered at new zoom, so scroll stays same)
+            container.scrollLeft = oldScrollLeft;
+            container.scrollTop = oldScrollTop;
         }
         
         // Fit to window
@@ -1477,6 +1494,8 @@
         }
         
         // Mouse wheel zoom centered on cursor
+        let panX = 0, panY = 0; // Track pan offset for zoom centering
+        
         document.getElementById('canvasContainer').addEventListener('wheel', (e) => {
             // Don't zoom if no PDF loaded
             if (!pdfDoc) return;
@@ -1490,32 +1509,62 @@
             
             if (!content || content.offsetParent === null) return;
             
-            const rect = content.getBoundingClientRect();
+            const rect = container.getBoundingClientRect();
             
-            // Mouse position relative to content
+            // Mouse position relative to container viewport
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
             
+            // Point in content space (accounting for scroll and current pan)
+            const contentX = (mouseX + container.scrollLeft - panX) / (zoom / renderZoom);
+            const contentY = (mouseY + container.scrollTop - panY) / (zoom / renderZoom);
+            
             const oldZoom = zoom;
             
-            // Ultra-fine zoom (0.5% per scroll tick)
+            // Fine zoom (3% per scroll tick - balanced between smooth and responsive)
             if (e.deltaY < 0) {
-                zoom = Math.min(zoom * 1.005, 5);
+                zoom = Math.min(zoom * 1.03, 5);
             } else {
-                zoom = Math.max(zoom / 1.005, 0.2);
+                zoom = Math.max(zoom / 1.03, 0.2);
             }
             
-            // Set transform origin to cursor position and apply scale
-            const visualScale = zoom / renderZoom;
-            content.style.transformOrigin = `${mouseX}px ${mouseY}px`;
-            content.style.transform = `scale(${visualScale})`;
+            const newScale = zoom / renderZoom;
+            const oldScale = oldZoom / renderZoom;
+            
+            // Calculate new pan to keep content point under cursor
+            const newContentX = contentX * newScale;
+            const newContentY = contentY * newScale;
+            const oldContentX = contentX * oldScale;
+            const oldContentY = contentY * oldScale;
+            
+            panX += (newContentX - oldContentX) - (mouseX + container.scrollLeft) * (newScale/oldScale - 1);
+            panY += (newContentY - oldContentY) - (mouseY + container.scrollTop) * (newScale/oldScale - 1);
+            
+            // Keep it simple - just scale from top-left and adjust scroll
+            content.style.transformOrigin = '0 0';
+            content.style.transform = `scale(${newScale})`;
+            
+            // Adjust scroll to keep cursor point stationary
+            const scrollAdjustX = (newContentX - oldContentX);
+            const scrollAdjustY = (newContentY - oldContentY);
+            container.scrollLeft += scrollAdjustX;
+            container.scrollTop += scrollAdjustY;
             
             document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
             
-            // Re-render sooner to keep text crisp (when 20% off from render zoom)
+            // Re-render when 25% off from render zoom to keep text crisp
             clearTimeout(zoomTimeout);
-            if (Math.abs(zoom - renderZoom) / renderZoom > 0.2) {
-                zoomTimeout = setTimeout(doFullRender, 300);
+            if (Math.abs(zoom - renderZoom) / renderZoom > 0.25) {
+                zoomTimeout = setTimeout(() => {
+                    // Save scroll ratios before re-render
+                    const scrollRatioX = container.scrollLeft / (container.scrollWidth || 1);
+                    const scrollRatioY = container.scrollTop / (container.scrollHeight || 1);
+                    doFullRender().then(() => {
+                        // Restore scroll position proportionally
+                        container.scrollLeft = scrollRatioX * container.scrollWidth;
+                        container.scrollTop = scrollRatioY * container.scrollHeight;
+                    });
+                }, 400);
             }
         }, { passive: false });
         
