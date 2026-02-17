@@ -1389,27 +1389,50 @@
         
         // Zoom state
         let zoomTimeout = null;
+        let renderZoom = 1; // The zoom level PDFs are actually rendered at
         
-        // Simple zoom with debounced re-render
+        // Fast CSS-based zoom (instant)
         function zoomIn() {
-            zoom = Math.min(zoom * 1.15, 4);
-            queueRender();
+            zoom = Math.min(zoom * 1.2, 5);
+            applyVisualZoom();
         }
         
         function zoomOut() {
-            zoom = Math.max(zoom / 1.15, 0.25);
-            queueRender();
+            zoom = Math.max(zoom / 1.2, 0.2);
+            applyVisualZoom();
         }
         
-        function queueRender() {
+        // Instant visual zoom via CSS transform
+        function applyVisualZoom() {
             document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
+            
+            const container = viewMode === 'continuous' 
+                ? document.getElementById('pagesContainer')
+                : document.getElementById('canvasWrapper');
+            
+            // Calculate relative scale from render zoom
+            const visualScale = zoom / renderZoom;
+            container.style.transform = `scale(${visualScale})`;
+            container.style.transformOrigin = 'top center';
+            
+            // Queue high-quality re-render if zoom changed significantly
             clearTimeout(zoomTimeout);
-            zoomTimeout = setTimeout(doRender, 150);
+            if (Math.abs(zoom - renderZoom) / renderZoom > 0.3) {
+                zoomTimeout = setTimeout(doFullRender, 500);
+            }
         }
         
-        async function doRender() {
+        // Full quality re-render (debounced)
+        async function doFullRender() {
+            renderZoom = zoom;
             const container = document.getElementById('canvasContainer');
             const scrollRatio = container.scrollHeight > 0 ? container.scrollTop / container.scrollHeight : 0;
+            
+            // Reset transform before re-render
+            const targetContainer = viewMode === 'continuous' 
+                ? document.getElementById('pagesContainer')
+                : document.getElementById('canvasWrapper');
+            targetContainer.style.transform = 'scale(1)';
             
             if (viewMode === 'continuous') {
                 await renderAllPages();
@@ -1434,11 +1457,27 @@
             const scaleY = containerHeight / (viewport.height * BASE_SCALE);
             
             zoom = Math.min(scaleX, scaleY, 2);
+            renderZoom = zoom; // Sync render zoom
             document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
+            
+            // Reset any CSS transform
+            const targetContainer = viewMode === 'continuous' 
+                ? document.getElementById('pagesContainer')
+                : document.getElementById('canvasWrapper');
+            targetContainer.style.transform = 'scale(1)';
             
             if (viewMode === 'continuous') await renderAllPages();
             else await renderPage(currentPage);
         }
+        
+        // Mouse wheel zoom
+        document.getElementById('canvasContainer').addEventListener('wheel', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                if (e.deltaY < 0) zoomIn();
+                else zoomOut();
+            }
+        }, { passive: false });
         
         // Page navigation
         function prevPage() { if (currentPage > 1 && pdfDoc) renderPage(currentPage - 1); }
