@@ -333,11 +333,11 @@
         
         .pages-container {
             will-change: transform;
-            transition: transform 0.1s ease-out;
+            transition: transform 0.05s linear;
         }
         
         .canvas-wrapper {
-            transition: transform 0.1s ease-out;
+            transition: transform 0.05s linear;
         }
         
         #pdfCanvas { display: block; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
@@ -1408,23 +1408,23 @@
             applyVisualZoom();
         }
         
-        // Instant visual zoom via CSS transform
+        // Instant visual zoom via CSS transform (for button zoom - centers on viewport)
         function applyVisualZoom() {
             document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
             
-            const container = viewMode === 'continuous' 
+            const content = viewMode === 'continuous' 
                 ? document.getElementById('pagesContainer')
                 : document.getElementById('canvasWrapper');
             
             // Calculate relative scale from render zoom
             const visualScale = zoom / renderZoom;
-            container.style.transform = `scale(${visualScale})`;
-            container.style.transformOrigin = 'top center';
+            content.style.transformOrigin = 'center center';
+            content.style.transform = `scale(${visualScale})`;
             
             // Queue high-quality re-render if zoom changed significantly
             clearTimeout(zoomTimeout);
-            if (Math.abs(zoom - renderZoom) / renderZoom > 0.3) {
-                zoomTimeout = setTimeout(doFullRender, 500);
+            if (Math.abs(zoom - renderZoom) / renderZoom > 0.5) {
+                zoomTimeout = setTimeout(doFullRender, 800);
             }
         }
         
@@ -1481,35 +1481,39 @@
             e.preventDefault();
             
             const container = document.getElementById('canvasContainer');
-            const rect = container.getBoundingClientRect();
+            const content = viewMode === 'continuous' 
+                ? document.getElementById('pagesContainer')
+                : document.getElementById('canvasWrapper');
             
-            // Mouse position relative to container
-            const mouseX = e.clientX - rect.left + container.scrollLeft;
-            const mouseY = e.clientY - rect.top + container.scrollTop;
+            const rect = content.getBoundingClientRect();
             
-            // Current scroll ratios (where cursor is pointing)
-            const scrollRatioX = mouseX / container.scrollWidth;
-            const scrollRatioY = mouseY / container.scrollHeight;
+            // Mouse position relative to content
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
             
             const oldZoom = zoom;
             
             // Zoom in or out
             if (e.deltaY < 0) {
-                zoom = Math.min(zoom * 1.15, 5);
+                zoom = Math.min(zoom * 1.1, 5);
             } else {
-                zoom = Math.max(zoom / 1.15, 0.2);
+                zoom = Math.max(zoom / 1.1, 0.2);
             }
             
-            applyVisualZoom();
+            const zoomFactor = zoom / oldZoom;
             
-            // Adjust scroll to keep cursor point fixed
-            requestAnimationFrame(() => {
-                const newMouseX = scrollRatioX * container.scrollWidth;
-                const newMouseY = scrollRatioY * container.scrollHeight;
-                
-                container.scrollLeft = newMouseX - (e.clientX - rect.left);
-                container.scrollTop = newMouseY - (e.clientY - rect.top);
-            });
+            // Set transform origin to cursor position and apply scale
+            const visualScale = zoom / renderZoom;
+            content.style.transformOrigin = `${mouseX}px ${mouseY}px`;
+            content.style.transform = `scale(${visualScale})`;
+            
+            document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
+            
+            // Queue re-render if needed
+            clearTimeout(zoomTimeout);
+            if (Math.abs(zoom - renderZoom) / renderZoom > 0.5) {
+                zoomTimeout = setTimeout(doFullRender, 800);
+            }
         }, { passive: false });
         
         // Page navigation
