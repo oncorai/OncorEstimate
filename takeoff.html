@@ -1153,7 +1153,7 @@
         </div>
     </div>
     
-    <input type="file" id="fileInput" accept=".pdf" onchange="handleFileUpload(event)">
+    <input type="file" id="fileInput" accept=".pdf,application/pdf" onchange="handleFileUpload(event)">
     
     <!-- Scale Input Modal -->
     <div class="modal hidden" id="scaleModal">
@@ -1333,17 +1333,42 @@
         // File upload handling
         function handleFileUpload(event) {
             const file = event.target.files[0];
-            if (file && file.type === 'application/pdf') {
-                const reader = new FileReader();
-                reader.onload = async function(e) {
+            if (!file) {
+                console.error('No file selected');
+                return;
+            }
+            
+            // Accept any PDF (some have different MIME types)
+            const isPDF = file.type === 'application/pdf' || 
+                          file.name.toLowerCase().endsWith('.pdf');
+            
+            if (!isPDF) {
+                alert('Please upload a PDF file');
+                return;
+            }
+            
+            console.log('Loading PDF:', file.name, file.size, 'bytes');
+            
+            const reader = new FileReader();
+            reader.onerror = function(e) {
+                console.error('FileReader error:', e);
+                alert('Error reading file');
+            };
+            reader.onload = async function(e) {
+                try {
+                    console.log('File read complete, parsing PDF...');
                     const typedArray = new Uint8Array(e.target.result);
                     pdfDoc = await pdfjsLib.getDocument(typedArray).promise;
+                    console.log('PDF loaded:', pdfDoc.numPages, 'pages');
+                    
                     document.getElementById('totalPages').textContent = pdfDoc.numPages;
                     document.getElementById('uploadOverlay').style.display = 'none';
                     currentPage = 1;
                     
                     // Always start in continuous mode
                     viewMode = 'continuous';
+                    renderZoom = 1;
+                    zoom = 1;
                     document.getElementById('viewToggle').textContent = '📜 Continuous';
                     document.getElementById('pageControls').style.display = 'none';
                     document.getElementById('canvasWrapper').style.display = 'none';
@@ -1352,25 +1377,33 @@
                     
                     // Fit and render
                     await zoomFit();
-                };
-                reader.readAsArrayBuffer(file);
-            }
+                    console.log('PDF render complete');
+                } catch (err) {
+                    console.error('PDF load error:', err);
+                    alert('Error loading PDF: ' + err.message);
+                }
+            };
+            reader.readAsArrayBuffer(file);
         }
         
         // Drag and drop
         const uploadOverlay = document.getElementById('uploadOverlay');
         uploadOverlay.addEventListener('dragover', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             uploadOverlay.querySelector('.upload-box').style.borderColor = '#f5a623';
         });
-        uploadOverlay.addEventListener('dragleave', () => {
+        uploadOverlay.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
             uploadOverlay.querySelector('.upload-box').style.borderColor = 'rgba(245, 166, 35, 0.5)';
         });
         uploadOverlay.addEventListener('drop', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             const file = e.dataTransfer.files[0];
-            if (file && file.type === 'application/pdf') {
-                document.getElementById('fileInput').files = e.dataTransfer.files;
+            if (file) {
+                console.log('Dropped file:', file.name, file.type);
                 handleFileUpload({ target: { files: [file] } });
             }
         });
