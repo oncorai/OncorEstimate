@@ -1199,7 +1199,7 @@
         let pageCanvases = []; // For continuous mode
         let activeDrawCanvas = null; // Currently active draw canvas
         let activePageNum = 1; // Currently active page in continuous mode
-        const BASE_SCALE = 2; // Base PDF render scale
+        const BASE_SCALE = 1.5; // Base PDF render scale (fixed)
         
         const pdfCanvas = document.getElementById('pdfCanvas');
         const drawCanvas = document.getElementById('drawCanvas');
@@ -1380,88 +1380,32 @@
         }
         
         // Zoom state
-        let renderZoom = 1; // The zoom level at which PDF was rendered
-        let displayZoom = 1; // The current display zoom (CSS transform)
         let zoomTimeout = null;
         
-        // Zoom controls - use CSS transform for instant zoom (2% increments for smoothness)
+        // Simple zoom with debounced re-render
         function zoomIn() {
-            displayZoom = Math.min(displayZoom * 1.02, 4);
-            applyZoom();
+            zoom = Math.min(zoom * 1.15, 4);
+            queueRender();
         }
         
         function zoomOut() {
-            displayZoom = Math.max(displayZoom / 1.02, 0.1);
-            applyZoom();
+            zoom = Math.max(zoom / 1.15, 0.25);
+            queueRender();
         }
         
-        // Apply zoom using CSS transform (instant)
-        function applyZoom() {
-            document.getElementById('zoomLevel').textContent = Math.round(displayZoom * 100) + '%';
-            
-            const wrapper = viewMode === 'continuous' 
-                ? document.getElementById('pagesContainer')
-                : document.getElementById('canvasWrapper');
-            
-            // Use CSS transform for instant zoom
-            const scale = displayZoom / renderZoom;
-            wrapper.style.transform = `scale(${scale})`;
-            wrapper.style.transformOrigin = 'top center';
-            
-            // Debounce re-render for quality
+        function queueRender() {
+            document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
             clearTimeout(zoomTimeout);
-            zoomTimeout = setTimeout(() => {
-                reRenderClean();
-            }, 150);
+            zoomTimeout = setTimeout(doRender, 150);
         }
         
-        // Clean re-render without scroll reset
-        async function reRenderClean() {
-            renderZoom = displayZoom;
-            zoom = displayZoom;
-            
-            const wrapper = viewMode === 'continuous' 
-                ? document.getElementById('pagesContainer')
-                : document.getElementById('canvasWrapper');
-            
-            // Reset transform before re-render
-            wrapper.style.transform = 'scale(1)';
-            wrapper.style.transformOrigin = 'center center';
-            
-            if (viewMode === 'continuous') {
-                const container = document.getElementById('canvasContainer');
-                const scrollRatio = container.scrollHeight > 0 ? container.scrollTop / container.scrollHeight : 0;
-                await renderAllPages();
-                requestAnimationFrame(() => {
-                    container.scrollTop = scrollRatio * container.scrollHeight;
-                });
-            } else {
-                await renderPage(currentPage);
-            }
-        
-        // Re-render at current zoom for quality
-        async function reRenderAtCurrentZoom() {
+        async function doRender() {
             const container = document.getElementById('canvasContainer');
-            
-            // Save scroll position (as percentage of total scroll)
-            const scrollTop = container.scrollTop;
-            const scrollHeight = container.scrollHeight;
-            const scrollRatio = scrollHeight > 0 ? scrollTop / scrollHeight : 0;
-            
-            renderZoom = displayZoom;
-            zoom = displayZoom;
-            
-            const wrapper = viewMode === 'continuous' 
-                ? document.getElementById('pagesContainer')
-                : document.getElementById('canvasWrapper');
-            wrapper.style.transform = 'scale(1)';
+            const scrollRatio = container.scrollHeight > 0 ? container.scrollTop / container.scrollHeight : 0;
             
             if (viewMode === 'continuous') {
                 await renderAllPages();
-                // Restore scroll position
-                requestAnimationFrame(() => {
-                    container.scrollTop = scrollRatio * container.scrollHeight;
-                });
+                container.scrollTop = scrollRatio * container.scrollHeight;
             } else {
                 await renderPage(currentPage);
             }
@@ -1481,16 +1425,8 @@
             const scaleX = containerWidth / (viewport.width * BASE_SCALE);
             const scaleY = containerHeight / (viewport.height * BASE_SCALE);
             
-            displayZoom = Math.min(scaleX, scaleY, 2);
-            renderZoom = displayZoom;
-            zoom = displayZoom;
-            
-            document.getElementById('zoomLevel').textContent = Math.round(displayZoom * 100) + '%';
-            
-            const wrapper = viewMode === 'continuous' 
-                ? document.getElementById('pagesContainer')
-                : document.getElementById('canvasWrapper');
-            wrapper.style.transform = 'scale(1)';
+            zoom = Math.min(scaleX, scaleY, 2);
+            document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
             
             if (viewMode === 'continuous') await renderAllPages();
             else await renderPage(currentPage);
@@ -2233,47 +2169,15 @@
             }
         });
         
-        // Ctrl/Cmd + scroll wheel to zoom toward cursor (like Bluebeam/Figma)
+        // Ctrl/Cmd + scroll wheel to zoom (like Bluebeam)
         document.getElementById('canvasContainer').addEventListener('wheel', (e) => {
             if (e.ctrlKey || e.metaKey) {
                 e.preventDefault();
-                
-                const container = document.getElementById('canvasContainer');
-                const wrapper = viewMode === 'continuous' 
-                    ? document.getElementById('pagesContainer')
-                    : document.getElementById('canvasWrapper');
-                
-                // Get mouse position relative to the wrapper
-                const wrapperRect = wrapper.getBoundingClientRect();
-                const mouseXInWrapper = e.clientX - wrapperRect.left;
-                const mouseYInWrapper = e.clientY - wrapperRect.top;
-                
-                // Calculate mouse position as percentage of wrapper size
-                const originX = (mouseXInWrapper / wrapperRect.width) * 100;
-                const originY = (mouseYInWrapper / wrapperRect.height) * 100;
-                
-                // Save old zoom for scroll adjustment
-                const oldDisplayZoom = displayZoom;
-                
-                // Apply zoom
                 if (e.deltaY < 0) {
-                    displayZoom = Math.min(displayZoom * 1.03, 4);
+                    zoomIn();
                 } else {
-                    displayZoom = Math.max(displayZoom / 1.03, 0.1);
+                    zoomOut();
                 }
-                
-                const newScale = displayZoom / renderZoom;
-                
-                // Update display with transform origin at mouse position
-                document.getElementById('zoomLevel').textContent = Math.round(displayZoom * 100) + '%';
-                wrapper.style.transformOrigin = `${originX}% ${originY}%`;
-                wrapper.style.transform = `scale(${newScale})`;
-                
-                // Debounce actual re-render for quality
-                clearTimeout(zoomTimeout);
-                zoomTimeout = setTimeout(() => {
-                    reRenderClean();
-                }, 150);
             }
         }, { passive: false });
         
