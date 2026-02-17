@@ -1199,7 +1199,7 @@
         let pageCanvases = []; // For continuous mode
         let activeDrawCanvas = null; // Currently active draw canvas
         let activePageNum = 1; // Currently active page in continuous mode
-        const BASE_SCALE = 3; // Render at high res so zoom stays crisp
+        const BASE_SCALE = 2; // Base PDF render scale
         
         const pdfCanvas = document.getElementById('pdfCanvas');
         const drawCanvas = document.getElementById('drawCanvas');
@@ -1408,8 +1408,36 @@
             wrapper.style.transform = `scale(${scale})`;
             wrapper.style.transformOrigin = 'top center';
             
-            // No auto re-render - CSS transform only for smooth zooming
+            // Debounce re-render for quality
+            clearTimeout(zoomTimeout);
+            zoomTimeout = setTimeout(() => {
+                reRenderClean();
+            }, 150);
         }
+        
+        // Clean re-render without scroll reset
+        async function reRenderClean() {
+            renderZoom = displayZoom;
+            zoom = displayZoom;
+            
+            const wrapper = viewMode === 'continuous' 
+                ? document.getElementById('pagesContainer')
+                : document.getElementById('canvasWrapper');
+            
+            // Reset transform before re-render
+            wrapper.style.transform = 'scale(1)';
+            wrapper.style.transformOrigin = 'center center';
+            
+            if (viewMode === 'continuous') {
+                const container = document.getElementById('canvasContainer');
+                const scrollRatio = container.scrollHeight > 0 ? container.scrollTop / container.scrollHeight : 0;
+                await renderAllPages();
+                requestAnimationFrame(() => {
+                    container.scrollTop = scrollRatio * container.scrollHeight;
+                });
+            } else {
+                await renderPage(currentPage);
+            }
         
         // Re-render at current zoom for quality
         async function reRenderAtCurrentZoom() {
@@ -2241,8 +2269,11 @@
                 wrapper.style.transformOrigin = `${originX}% ${originY}%`;
                 wrapper.style.transform = `scale(${newScale})`;
                 
-                // No re-render - just CSS transform for smooth zooming
-                // Re-render only on manual button click if needed
+                // Debounce actual re-render for quality
+                clearTimeout(zoomTimeout);
+                zoomTimeout = setTimeout(() => {
+                    reRenderClean();
+                }, 150);
             }
         }, { passive: false });
         
