@@ -147,7 +147,27 @@
                     <tbody id="tableBody"></tbody>
                 </table>
             </div>
-            <button class="btn export-btn" id="exportBtn">📥 Export to Excel</button>
+            
+            <h2 style="margin-top: 30px;">�icing Products & Manufacturers Referenced</h2>
+            <p class="summary" id="productsSummary"></p>
+            <div class="table-wrapper">
+                <table id="productsTable">
+                    <thead>
+                        <tr>
+                            <th>Manufacturer</th>
+                            <th>Product</th>
+                            <th>Category</th>
+                            <th>Mentions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productsBody"></tbody>
+                </table>
+            </div>
+            
+            <div style="margin-top: 20px;">
+                <button class="btn export-btn" id="exportBtn">📥 Export to Excel</button>
+                <button class="btn btn-primary" id="addToBuyoutBtn" style="margin-left: 10px;">➕ Add Products to Buyout</button>
+            </div>
         </div>
     </div>
     
@@ -168,6 +188,64 @@
         let currentFile = null;
         let extractedSubmittals = [];
         let sectionNum = '';
+        
+        // Product/Manufacturer patterns to extract
+        const PRODUCT_PATTERNS = [
+            // Admixture manufacturers
+            { pattern: /\bSika\b/gi, manufacturer: 'Sika', category: 'admixture' },
+            { pattern: /\bEuclid\b/gi, manufacturer: 'Euclid Chemical', category: 'admixture' },
+            { pattern: /\bBASF\b/gi, manufacturer: 'BASF', category: 'admixture' },
+            { pattern: /\bMaster\s?Builders\b/gi, manufacturer: 'BASF Master Builders', category: 'admixture' },
+            { pattern: /\bMasterGlenium\b/gi, manufacturer: 'BASF', category: 'admixture', product: 'MasterGlenium' },
+            { pattern: /\bMasterPozzolith\b/gi, manufacturer: 'BASF', category: 'admixture', product: 'MasterPozzolith' },
+            { pattern: /\bMasterAir\b/gi, manufacturer: 'BASF', category: 'admixture', product: 'MasterAir' },
+            { pattern: /\bMasterFlow\b/gi, manufacturer: 'BASF', category: 'grout', product: 'MasterFlow' },
+            { pattern: /\bMasterKure\b/gi, manufacturer: 'BASF', category: 'curing', product: 'MasterKure' },
+            { pattern: /\bGCP\b/gi, manufacturer: 'GCP Applied Technologies', category: 'admixture' },
+            { pattern: /\bDARA(CEM|TARD)\b/gi, manufacturer: 'GCP', category: 'admixture' },
+            { pattern: /\bMapei\b/gi, manufacturer: 'Mapei', category: 'admixture' },
+            { pattern: /\bChryso\b/gi, manufacturer: 'Chryso', category: 'admixture' },
+            { pattern: /\bFritz-?Pak\b/gi, manufacturer: 'Fritz-Pak', category: 'admixture' },
+            // Curing & Sealers
+            { pattern: /\bW\.?\s?R\.?\s?Meadows\b/gi, manufacturer: 'W.R. Meadows', category: 'curing' },
+            { pattern: /\bScofield\b/gi, manufacturer: 'L.M. Scofield', category: 'curing' },
+            { pattern: /\bDayton\s?Superior\b/gi, manufacturer: 'Dayton Superior', category: 'formwork' },
+            { pattern: /\bProsoco\b/gi, manufacturer: 'Prosoco', category: 'curing' },
+            { pattern: /\bConsolideck\b/gi, manufacturer: 'Prosoco', category: 'curing', product: 'Consolideck' },
+            { pattern: /\bSpecChem\b/gi, manufacturer: 'SpecChem', category: 'curing' },
+            // Grouts
+            { pattern: /\bFive\s?Star\b/gi, manufacturer: 'Five Star Products', category: 'grout' },
+            { pattern: /\bQUIKRETE\b/gi, manufacturer: 'QUIKRETE', category: 'grout' },
+            // Fibers
+            { pattern: /\bFibermesh\b/gi, manufacturer: 'Propex/Fibermesh', category: 'fiber' },
+            { pattern: /\bForta\b/gi, manufacturer: 'Forta', category: 'fiber' },
+            { pattern: /\bNycon\b/gi, manufacturer: 'Nycon', category: 'fiber' },
+            { pattern: /\bPropex\b/gi, manufacturer: 'Propex', category: 'fiber' },
+            // Waterstops
+            { pattern: /\bCETCO\b/gi, manufacturer: 'CETCO', category: 'waterstop' },
+            { pattern: /\bWaterstop-?RX\b/gi, manufacturer: 'CETCO', category: 'waterstop', product: 'Waterstop-RX' },
+            { pattern: /\bGreenstreak\b/gi, manufacturer: 'Greenstreak', category: 'waterstop' },
+            // Vapor Barriers
+            { pattern: /\bStego\b/gi, manufacturer: 'Stego Industries', category: 'vapor_barrier' },
+            { pattern: /\bStego\s?Wrap\b/gi, manufacturer: 'Stego Industries', category: 'vapor_barrier', product: 'Stego Wrap' },
+            // Forms
+            { pattern: /\bSymons\b/gi, manufacturer: 'Dayton/Symons', category: 'formwork' },
+            { pattern: /\bEFCO\b/gi, manufacturer: 'EFCO', category: 'formwork' },
+            { pattern: /\bPERI\b/gi, manufacturer: 'PERI', category: 'formwork' },
+            { pattern: /\bDoka\b/gi, manufacturer: 'Doka', category: 'formwork' },
+            { pattern: /\bMeadow\s?Burke\b/gi, manufacturer: 'Meadow Burke', category: 'accessories' },
+            // Color
+            { pattern: /\bDavis\s?Colors\b/gi, manufacturer: 'Davis Colors', category: 'color' },
+            { pattern: /\bSolomon\s?Colors\b/gi, manufacturer: 'Solomon Colors', category: 'color' },
+            { pattern: /\bBrickform\b/gi, manufacturer: 'Brickform', category: 'color' },
+            // Ready-mix (usually in producer list)
+            { pattern: /\bCEMEX\b/gi, manufacturer: 'CEMEX', category: 'concrete' },
+            { pattern: /\bMartin\s?Marietta\b/gi, manufacturer: 'Martin Marietta', category: 'concrete' },
+            { pattern: /\bVulcan\b/gi, manufacturer: 'Vulcan Materials', category: 'concrete' },
+            { pattern: /\bLehigh\s?Hanson\b/gi, manufacturer: 'Lehigh Hanson', category: 'concrete' },
+        ];
+        
+        let extractedProducts = [];
         
         // Submittal patterns to look for
         const SUBMITTAL_ITEMS = [
@@ -307,10 +385,36 @@
             return 'Prior to construction';
         }
         
+        function extractProducts(text) {
+            const products = [];
+            const foundProducts = new Set();
+            
+            for (const { pattern, manufacturer, category, product } of PRODUCT_PATTERNS) {
+                const matches = text.match(pattern);
+                if (matches) {
+                    const key = (product || manufacturer).toLowerCase();
+                    if (!foundProducts.has(key)) {
+                        foundProducts.add(key);
+                        products.push({
+                            manufacturer: manufacturer,
+                            product: product || '',
+                            category: category,
+                            count: matches.length
+                        });
+                    }
+                }
+            }
+            
+            return products;
+        }
+        
         function extractSubmittals(text) {
             const submittals = [];
             const foundItems = new Set();
             sectionNum = findSectionNumber(text);
+            
+            // Also extract products
+            extractedProducts = extractProducts(text);
             
             // Split into paragraphs
             const paragraphs = text.split(/\n+/);
@@ -377,6 +481,28 @@
                 });
                 
                 summaryText.textContent = `Found ${extractedSubmittals.length} submittal requirements in Section ${sectionNum}`;
+                
+                // Display products
+                const productsBody = document.getElementById('productsBody');
+                const productsSummary = document.getElementById('productsSummary');
+                productsBody.innerHTML = '';
+                
+                if (extractedProducts.length > 0) {
+                    productsSummary.textContent = `Found ${extractedProducts.length} manufacturers/products referenced`;
+                    extractedProducts.forEach(p => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td><strong>${p.manufacturer}</strong></td>
+                            <td>${p.product || '-'}</td>
+                            <td><span class="status-badge">${p.category}</span></td>
+                            <td>${p.count}</td>
+                        `;
+                        productsBody.appendChild(row);
+                    });
+                } else {
+                    productsSummary.textContent = 'No specific manufacturers referenced';
+                }
+                
                 results.classList.add('show');
                 
             } catch (error) {
@@ -438,6 +564,19 @@
                 
                 XLSX.utils.book_append_sheet(wb, ws, 'Submittal Log');
                 
+                // Add Products sheet
+                if (extractedProducts.length > 0) {
+                    const productData = [
+                        ['Manufacturer', 'Product', 'Category', 'Mentions']
+                    ];
+                    extractedProducts.forEach(p => {
+                        productData.push([p.manufacturer, p.product || '', p.category, p.count]);
+                    });
+                    const wsProducts = XLSX.utils.aoa_to_sheet(productData);
+                    wsProducts['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 10 }];
+                    XLSX.utils.book_append_sheet(wb, wsProducts, 'Products Referenced');
+                }
+                
                 // Generate safe filename
                 const safeSectionNum = (sectionNum || 'Unknown').replace(/[^a-zA-Z0-9]/g, '');
                 const dateStr = new Date().toISOString().slice(0,10);
@@ -450,6 +589,40 @@
                 console.error('Export error:', error);
                 alert('Error exporting to Excel: ' + error.message);
             }
+        });
+        
+        // Add to Buyout button
+        document.getElementById('addToBuyoutBtn').addEventListener('click', () => {
+            if (extractedProducts.length === 0) {
+                alert('No products to add');
+                return;
+            }
+            
+            // Get existing buyout products from localStorage
+            let buyoutProducts = JSON.parse(localStorage.getItem('cpm_products') || '[]');
+            let added = 0;
+            
+            extractedProducts.forEach(p => {
+                // Check if product already exists
+                const exists = buyoutProducts.some(bp => 
+                    bp.name.toLowerCase().includes(p.manufacturer.toLowerCase()) ||
+                    (p.product && bp.name.toLowerCase().includes(p.product.toLowerCase()))
+                );
+                
+                if (!exists) {
+                    buyoutProducts.push({
+                        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                        category: p.category,
+                        name: p.product ? `${p.manufacturer} ${p.product}` : p.manufacturer,
+                        unit: 'EA',
+                        spec: `Section ${sectionNum}`
+                    });
+                    added++;
+                }
+            });
+            
+            localStorage.setItem('cpm_products', JSON.stringify(buyoutProducts));
+            alert(`Added ${added} new products to Buyout database. ${extractedProducts.length - added} already existed.`);
         });
     </script>
 </body>
