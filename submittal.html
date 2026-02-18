@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concrete PM - Submittal Log Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        header {
+            background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 { font-size: 2rem; margin-bottom: 10px; }
+        .subtitle { opacity: 0.9; font-size: 1.1rem; }
+        .upload-section {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        .drop-zone {
+            border: 3px dashed #ccc;
+            border-radius: 10px;
+            padding: 60px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: #2d5a87;
+            background: #f0f7ff;
+        }
+        .drop-zone h3 { color: #333; margin-bottom: 10px; }
+        .drop-zone p { color: #666; }
+        #fileInput { display: none; }
+        .btn {
+            background: #2d5a87;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background 0.3s;
+        }
+        .btn:hover { background: #1e3a5f; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        .results {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: none;
+        }
+        .results.show { display: block; }
+        .results h2 { margin-bottom: 20px; color: #1e3a5f; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 0.9rem; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; font-weight: 600; color: #333; position: sticky; top: 0; }
+        tr:hover { background: #f8f9fa; }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        .loading { text-align: center; padding: 40px; display: none; }
+        .loading.show { display: block; }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #2d5a87;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .export-btn { background: #28a745; }
+        .export-btn:hover { background: #218838; }
+        .file-name { margin-top: 15px; color: #28a745; font-weight: 500; }
+        .table-wrapper { max-height: 500px; overflow-y: auto; margin-bottom: 20px; }
+        .summary { margin-bottom: 15px; color: #666; }
+        .back-link { color: white; text-decoration: none; opacity: 0.8; }
+        .back-link:hover { opacity: 1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <a href="index.html" class="back-link">← Back to Oncor</a>
+            <h1>⚡ Concrete PM - Submittal Log Generator</h1>
+            <p class="subtitle">Upload a spec section PDF → Get an organized submittal log</p>
+        </header>
+        
+        <div class="upload-section">
+            <div class="drop-zone" id="dropZone">
+                <h3>📄 Drop your spec PDF here</h3>
+                <p>Example: Section 03 30 00 - Cast-in-Place Concrete</p>
+                <input type="file" id="fileInput" accept=".pdf">
+                <div class="file-name" id="fileName"></div>
+            </div>
+            <center>
+                <button class="btn" id="processBtn" disabled>Process Spec</button>
+            </center>
+        </div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Analyzing spec and extracting submittal requirements...</p>
+        </div>
+        
+        <div class="results" id="results">
+            <h2>📋 Extracted Submittal Requirements</h2>
+            <p class="summary" id="summaryText"></p>
+            <div class="table-wrapper">
+                <table id="submittalTable">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Submittal Item</th>
+                            <th>Spec Reference</th>
+                            <th>Type</th>
+                            <th>Required Timing</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+            <button class="btn export-btn" id="exportBtn">📥 Export to Excel</button>
+        </div>
+    </div>
+    
+    <script>
+        // Set PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const processBtn = document.getElementById('processBtn');
+        const loading = document.getElementById('loading');
+        const results = document.getElementById('results');
+        const tableBody = document.getElementById('tableBody');
+        const fileName = document.getElementById('fileName');
+        const exportBtn = document.getElementById('exportBtn');
+        const summaryText = document.getElementById('summaryText');
+        
+        let currentFile = null;
+        let extractedSubmittals = [];
+        let sectionNum = '';
+        
+        // Submittal patterns to look for
+        const SUBMITTAL_ITEMS = [
+            { pattern: /mix design/i, name: 'Mix Design', type: 'Mix Design' },
+            { pattern: /product data/i, name: 'Product Data', type: 'Product Data' },
+            { pattern: /shop drawing/i, name: 'Shop Drawings', type: 'Shop Drawing' },
+            { pattern: /test report/i, name: 'Test Reports', type: 'Report' },
+            { pattern: /certificate of compliance/i, name: 'Certificate of Compliance', type: 'Certificate' },
+            { pattern: /quality control plan/i, name: 'Quality Control Plan', type: 'Plan' },
+            { pattern: /cold weather (protection )?plan/i, name: 'Cold Weather Plan', type: 'Plan' },
+            { pattern: /hot weather (protection )?plan/i, name: 'Hot Weather Plan', type: 'Plan' },
+            { pattern: /curing plan/i, name: 'Curing Plan', type: 'Plan' },
+            { pattern: /placement plan/i, name: 'Placement Plan', type: 'Plan' },
+            { pattern: /environmental product declaration|epd/i, name: 'Environmental Product Declaration (EPD)', type: 'Worksheet' },
+            { pattern: /carbon budget worksheet/i, name: 'Carbon Budget Worksheet', type: 'Worksheet' },
+            { pattern: /delivery ticket|batch ticket/i, name: 'Delivery Tickets', type: 'Delivery Ticket' },
+            { pattern: /strength (test )?(report|curve)/i, name: 'Strength Test Reports', type: 'Report' },
+            { pattern: /material certificate/i, name: 'Material Certificates', type: 'Certificate' },
+            { pattern: /manufacturer'?s? (data|certificate|instructions)/i, name: "Manufacturer's Data", type: 'Product Data' },
+            { pattern: /concrete (mix|mixture) (design|proportion)/i, name: 'Concrete Mix Design', type: 'Mix Design' },
+            { pattern: /reinforcing (steel )?(shop drawing|schedule)/i, name: 'Reinforcing Shop Drawings', type: 'Shop Drawing' },
+            { pattern: /mockup|mock-up/i, name: 'Mockup', type: 'Sample' },
+            { pattern: /sample/i, name: 'Samples', type: 'Sample' },
+            { pattern: /execution plan/i, name: 'Execution Plan', type: 'Plan' },
+            { pattern: /pre-?(placement|pour) (meeting|conference|checklist)/i, name: 'Pre-Placement Meeting', type: 'Plan' },
+            { pattern: /field quality control/i, name: 'Field Quality Control', type: 'Report' },
+            { pattern: /inspection report/i, name: 'Inspection Reports', type: 'Report' },
+            { pattern: /concrete (cylinder|core)/i, name: 'Concrete Test Specimens', type: 'Report' },
+            { pattern: /slump test/i, name: 'Slump Test Results', type: 'Report' },
+            { pattern: /air content test/i, name: 'Air Content Test Results', type: 'Report' },
+            { pattern: /temperature (log|record)/i, name: 'Temperature Logs', type: 'Report' },
+            { pattern: /admixture (data|certification)/i, name: 'Admixture Data', type: 'Product Data' },
+            { pattern: /aggregate (test|report)/i, name: 'Aggregate Test Reports', type: 'Report' },
+            { pattern: /cement (mill )?(certificate|report)/i, name: 'Cement Mill Certificates', type: 'Certificate' },
+            { pattern: /curing (compound|material) (data|certificate)/i, name: 'Curing Material Data', type: 'Product Data' },
+            { pattern: /form (release|oil) (data|certificate)/i, name: 'Form Release Agent Data', type: 'Product Data' },
+            { pattern: /waterstop (data|shop drawing)/i, name: 'Waterstop Submittals', type: 'Product Data' },
+            { pattern: /joint (sealant|filler) (data|certificate)/i, name: 'Joint Sealant Data', type: 'Product Data' },
+            { pattern: /vapor (barrier|retarder) (data|certificate)/i, name: 'Vapor Barrier Data', type: 'Product Data' },
+            { pattern: /reinforcement (certificate|mill report)/i, name: 'Reinforcement Mill Certificates', type: 'Certificate' },
+            { pattern: /welding (procedure|certification)/i, name: 'Welding Certifications', type: 'Certificate' },
+            { pattern: /post-?tension(ing)? (shop drawing|calculation)/i, name: 'Post-Tensioning Submittals', type: 'Shop Drawing' },
+            { pattern: /anchor (data|shop drawing|calculation)/i, name: 'Anchor Submittals', type: 'Product Data' },
+            { pattern: /embed (data|shop drawing)/i, name: 'Embed Submittals', type: 'Shop Drawing' },
+            { pattern: /grout (data|mix design)/i, name: 'Grout Data', type: 'Mix Design' },
+            { pattern: /form(work)? (drawing|design|plan)/i, name: 'Formwork Drawings', type: 'Shop Drawing' },
+            { pattern: /shoring (drawing|design|plan)/i, name: 'Shoring Drawings', type: 'Shop Drawing' },
+            { pattern: /pour (sequence|schedule)/i, name: 'Pour Schedule', type: 'Schedule' },
+        ];
+        
+        const TIMING_PATTERNS = [
+            { pattern: /prior to (start of |beginning of )?construction/i, timing: 'Prior to construction' },
+            { pattern: /before (start of |beginning of )?(concrete )?(work|construction|placement)/i, timing: 'Before construction' },
+            { pattern: /with (the )?first (concrete )?(mix design|delivery|placement)/i, timing: 'With first mix design' },
+            { pattern: /at (time of )?bid/i, timing: 'At bid' },
+            { pattern: /before (first )?(concrete )?placement/i, timing: 'Before first placement' },
+            { pattern: /(\d+) days? (prior|before)/i, timing: 'X days before' },
+            { pattern: /concurrent(ly)? with/i, timing: 'Concurrent with mix design' },
+            { pattern: /within (\d+) days?/i, timing: 'Within X days' },
+            { pattern: /upon (request|completion)/i, timing: 'Upon request/completion' },
+            { pattern: /for each/i, timing: 'For each pour/delivery' },
+        ];
+        
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+        
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length && files[0].type === 'application/pdf') {
+                handleFile(files[0]);
+            }
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleFile(e.target.files[0]);
+            }
+        });
+        
+        function handleFile(file) {
+            currentFile = file;
+            fileName.textContent = '✓ ' + file.name;
+            processBtn.disabled = false;
+        }
+        
+        async function extractTextFromPDF(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+            let fullText = '';
+            
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(' ');
+                fullText += pageText + '\n';
+            }
+            
+            return fullText;
+        }
+        
+        function findSectionNumber(text) {
+            const patterns = [
+                /SECTION\s+(\d{2}\s*\d{2}\s*\d{2})/i,
+                /(\d{2}\s*\d{2}\s*\d{2})\s*[-–]\s*CAST/i,
+                /SECTION\s+(\d{6})/i,
+            ];
+            
+            for (const pattern of patterns) {
+                const match = text.match(pattern);
+                if (match) {
+                    return match[1].replace(/\s+/g, ' ');
+                }
+            }
+            return 'Unknown';
+        }
+        
+        function extractTiming(context) {
+            for (const { pattern, timing } of TIMING_PATTERNS) {
+                if (pattern.test(context)) {
+                    const match = context.match(pattern);
+                    if (timing.includes('X') && match[1]) {
+                        return timing.replace('X', match[1]);
+                    }
+                    return timing;
+                }
+            }
+            return 'Prior to construction';
+        }
+        
+        function extractSubmittals(text) {
+            const submittals = [];
+            const foundItems = new Set();
+            sectionNum = findSectionNumber(text);
+            
+            // Split into paragraphs
+            const paragraphs = text.split(/\n+/);
+            
+            for (const para of paragraphs) {
+                if (para.length < 20) continue;
+                
+                // Check for submittal indicators
+                if (/submit|provide|furnish|product data|shop drawing|mix design|certificate|report/i.test(para)) {
+                    
+                    // Try to find paragraph reference
+                    const paraRefMatch = para.match(/^(\d+\.[\d.]*|\d+\.\d+\.[A-Z]\.?\d*)/);
+                    const paraRef = paraRefMatch ? paraRefMatch[1] : '';
+                    
+                    // Look for specific submittal items
+                    for (const { pattern, name, type } of SUBMITTAL_ITEMS) {
+                        if (pattern.test(para) && !foundItems.has(name.toLowerCase())) {
+                            foundItems.add(name.toLowerCase());
+                            
+                            // Get context for timing
+                            const contextStart = Math.max(0, para.indexOf(name) - 100);
+                            const contextEnd = Math.min(para.length, para.indexOf(name) + 200);
+                            const context = para.substring(contextStart, contextEnd);
+                            
+                            submittals.push({
+                                item_name: name,
+                                spec_reference: paraRef ? `Section ${sectionNum}, Para ${paraRef}` : `Section ${sectionNum}`,
+                                type: type,
+                                timing: extractTiming(context),
+                                submitted_date: '',
+                                approval_status: '',
+                                notes: ''
+                            });
+                        }
+                    }
+                }
+            }
+            
+            return submittals;
+        }
+        
+        processBtn.addEventListener('click', async () => {
+            if (!currentFile) return;
+            
+            loading.classList.add('show');
+            results.classList.remove('show');
+            processBtn.disabled = true;
+            
+            try {
+                const text = await extractTextFromPDF(currentFile);
+                extractedSubmittals = extractSubmittals(text);
+                
+                tableBody.innerHTML = '';
+                extractedSubmittals.forEach((item, index) => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${index + 1}</td>
+                        <td>${item.item_name}</td>
+                        <td>${item.spec_reference}</td>
+                        <td><span class="status-badge">${item.type}</span></td>
+                        <td>${item.timing}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+                
+                summaryText.textContent = `Found ${extractedSubmittals.length} submittal requirements in Section ${sectionNum}`;
+                results.classList.add('show');
+                
+            } catch (error) {
+                alert('Error processing file: ' + error.message);
+                console.error(error);
+            } finally {
+                loading.classList.remove('show');
+                processBtn.disabled = false;
+            }
+        });
+        
+        exportBtn.addEventListener('click', () => {
+            if (extractedSubmittals.length === 0) return;
+            
+            // Create workbook
+            const wb = XLSX.utils.book_new();
+            
+            // Prepare data with headers
+            const data = [
+                ['Item #', 'Submittal Item', 'Spec Reference', 'Type', 'Required Timing', 'Submitted Date', 'Approval Status', 'Notes']
+            ];
+            
+            extractedSubmittals.forEach((item, index) => {
+                data.push([
+                    index + 1,
+                    item.item_name,
+                    item.spec_reference,
+                    item.type,
+                    item.timing,
+                    '',
+                    '',
+                    ''
+                ]);
+            });
+            
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            
+            // Set column widths
+            ws['!cols'] = [
+                { wch: 8 },
+                { wch: 35 },
+                { wch: 25 },
+                { wch: 15 },
+                { wch: 25 },
+                { wch: 15 },
+                { wch: 15 },
+                { wch: 30 }
+            ];
+            
+            XLSX.utils.book_append_sheet(wb, ws, 'Submittal Log');
+            
+            // Generate filename
+            const filename = `Submittal_Log_${sectionNum.replace(/\s/g, '')}_${new Date().toISOString().slice(0,10)}.xlsx`;
+            
+            // Download
+            XLSX.writeFile(wb, filename);
+        });
+    </script>
+</body>
+</html>
