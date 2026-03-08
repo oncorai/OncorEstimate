@@ -55,4 +55,24 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 
 ---
 
+### GitHub (oncorai)
+- **Account:** oncorai
+- **Auth:** `~/.config/gh/hosts.yml` (PAT stored)
+- **Repos:**
+  - https://github.com/oncorai/OncorEstimate (estimating app)
+  - https://github.com/oncorai/maricopa-foreclosure-bot (foreclosure scraper)
+
+### Railway
+- **Status:** Need valid token
+- **Token location:** Will store in `~/.config/railway/config.json` once working
+- **Projects:** (none deployed yet)
+
+### Telegram Bot (Oncor Alerts)
+- **Status:** Not created yet
+- **Purpose:** Foreclosure alerts, system notifications
+- **Create via:** @BotFather
+- **JFS Chat ID:** 8398645153
+
+---
+
 Add whatever helps you do your job. This is your cheat sheet.
