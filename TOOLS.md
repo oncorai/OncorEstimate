@@ -63,14 +63,16 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
   - https://github.com/oncorai/maricopa-foreclosure-bot (foreclosure scraper)
 
 ### Railway
-- **Status:** Need valid token
-- **Token location:** Will store in `~/.config/railway/config.json` once working
-- **Projects:** (none deployed yet)
+- **Status:** ✅ Active
+- **Token:** `065212fd-af35-4428-9652-86d46a280dc0`
+- **Workspace:** fb87202a-69bb-4b8f-8656-d6646ad117b1 (oncorai's Projects)
+- **Projects:**
+  - maricopa-foreclosure-bot (id: 3e686f79-5ec3-420e-a2f1-cc55cac3a20f)
 
 ### Telegram Bot (Oncor Alerts)
-- **Status:** Not created yet
+- **Bot:** @Fcproceeedsbot (t.me/Fcproceeedsbot)
+- **Token:** `8796899511:AAGrm6j5pHnlvxqUaWmFpsWP4ClB6RKLk5U`
 - **Purpose:** Foreclosure alerts, system notifications
-- **Create via:** @BotFather
 - **JFS Chat ID:** 8398645153
 
 ---
