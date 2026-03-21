@@ -744,6 +744,12 @@
             color: #000;
             font-weight: 600;
         }
+        .cost-qty {
+            font-size: 0.68rem;
+            color: #666;
+            font-weight: normal;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -1037,8 +1043,16 @@
                             <div class="pricing-group">
                                 <div class="group-label">🪵 Forms & Finishing</div>
                                 <div class="pricing-row">
-                                    <label>Forms (per LF)</label>
+                                    <label>Slab Edge Forms (LF)</label>
                                     <input type="number" id="price-forms" value="8.50" step="0.50">
+                                </div>
+                                <div class="pricing-row">
+                                    <label>Footing/Beam Forms (LF)</label>
+                                    <input type="number" id="price-forms-linear" value="7.00" step="0.50" title="Applied to both sides of footings, grade beams, and curbs">
+                                </div>
+                                <div class="pricing-row">
+                                    <label>Wall Forms (LF)</label>
+                                    <input type="number" id="price-forms-wall" value="18.00" step="1.00" title="Applied to both sides of walls (higher cost for tall form panels)">
                                 </div>
                                 <div class="pricing-row">
                                     <label>Broom Finish (SF)</label>
@@ -1100,23 +1114,23 @@
                     <h3>💵 Cost Estimate</h3>
                     <div class="cost-summary" id="costSummary">
                         <div class="cost-row">
-                            <span class="cost-label">Concrete</span>
+                            <span class="cost-label">Concrete <span class="cost-qty" id="cost-concrete-qty"></span></span>
                             <span class="cost-value" id="cost-concrete">$0.00</span>
                         </div>
                         <div class="cost-row">
-                            <span class="cost-label">Rebar/Mesh</span>
+                            <span class="cost-label">Rebar/Mesh <span class="cost-qty" id="cost-rebar-qty"></span></span>
                             <span class="cost-value" id="cost-rebar">$0.00</span>
                         </div>
                         <div class="cost-row">
-                            <span class="cost-label">Forms</span>
+                            <span class="cost-label">Forms <span class="cost-qty" id="cost-forms-qty"></span></span>
                             <span class="cost-value" id="cost-forms">$0.00</span>
                         </div>
                         <div class="cost-row">
-                            <span class="cost-label">Finishing</span>
+                            <span class="cost-label">Finishing <span class="cost-qty" id="cost-finishing-qty"></span></span>
                             <span class="cost-value" id="cost-finishing">$0.00</span>
                         </div>
                         <div class="cost-row">
-                            <span class="cost-label">Labor</span>
+                            <span class="cost-label">Labor <span class="cost-qty" id="cost-labor-qty"></span></span>
                             <span class="cost-value" id="cost-labor">$0.00</span>
                         </div>
                         <div class="cost-row subtotal">
@@ -2595,6 +2609,8 @@
                 rebarCoverage: document.getElementById('rebar-coverage').value,
                 rebarSpacing: document.getElementById('rebar-spacing').value,
                 forms: document.getElementById('price-forms').value,
+                formsLinear: document.getElementById('price-forms-linear').value,
+                formsWall: document.getElementById('price-forms-wall').value,
                 broomFinish: document.getElementById('price-finish-broom').value,
                 stampFinish: document.getElementById('price-finish-stamp').value,
                 finishType: document.getElementById('finish-type').value,
@@ -2688,6 +2704,8 @@
                     document.getElementById('rebar-coverage').value = ps.rebarCoverage || 'mesh';
                     document.getElementById('rebar-spacing').value = ps.rebarSpacing || '12';
                     document.getElementById('price-forms').value = ps.forms || 8.50;
+                    document.getElementById('price-forms-linear').value = ps.formsLinear || 7.00;
+                    document.getElementById('price-forms-wall').value = ps.formsWall || 18.00;
                     document.getElementById('price-finish-broom').value = ps.broomFinish || 0.75;
                     document.getElementById('price-finish-stamp').value = ps.stampFinish || 4.50;
                     document.getElementById('finish-type').value = ps.finishType || 'broom';
@@ -2841,11 +2859,12 @@
                 doc.line(margin, y - 2, pageWidth - margin, y - 2);
                 y += 3;
                 
-                drawCostRow('Concrete Material', estimate.costs.concrete);
+                const q = estimate.quantities || {};
+                drawCostRow(`Concrete Material (${(q.yards||0).toFixed(1)} yd³)`, estimate.costs.concrete);
                 drawCostRow('Rebar / Mesh', estimate.costs.rebar);
-                drawCostRow('Forms', estimate.costs.forms);
+                drawCostRow(`Forms (${(q.totalFormsLF||0).toFixed(0)} LF total)`, estimate.costs.forms);
                 drawCostRow('Finishing', estimate.costs.finishing);
-                drawCostRow('Labor', estimate.costs.labor);
+                drawCostRow(`Labor (${(q.yards||0).toFixed(1)} yd³)`, estimate.costs.labor);
                 
                 doc.setDrawColor(200, 200, 200);
                 doc.line(margin, y - 2, pageWidth - margin, y - 2);
@@ -3071,9 +3090,15 @@
             const wastePct = parseFloat(document.getElementById('waste-factor').value) || 5;
             
             // Calculate quantities
+            // Get linear element forms prices
+            const linearFormsPrice = parseFloat(document.getElementById('price-forms-linear').value) || 7.00;
+            const wallFormsPrice = parseFloat(document.getElementById('price-forms-wall').value) || 18.00;
+            
             let totalYards = 0;
             let totalSF = 0;
-            let totalPerimeterLF = 0;
+            let totalPerimeterLF = 0;   // slab perimeter for edge forms
+            let totalLinearLF = 0;       // footing + gradebeam + curb linear LF (×2 both sides)
+            let totalWallLF = 0;         // wall LF (×2 both faces)
             
             measurements.forEach(m => {
                 totalYards += m.volume;
@@ -3096,7 +3121,14 @@
                         totalPerimeterLF += Math.sqrt(m.area) * 4;
                     }
                 }
-                // Note: linear elements (footing, wall, curb, gradebeam) don't add slab perimeter/SF
+                // Linear elements: footings, grade beams, curbs = formwork on both sides
+                if (m.length && (m.config.type === 'footing' || m.config.type === 'gradebeam' || m.config.type === 'curb')) {
+                    totalLinearLF += m.length * 2;
+                }
+                // Walls: both faces of wall
+                if (m.length && m.config.type === 'wall') {
+                    totalWallLF += m.length * 2;
+                }
             });
             
             // Waste factor applies to concrete only (concrete is ordered with overage)
@@ -3107,18 +3139,29 @@
             const concreteCost = totalYards * concretePrice; // base concrete cost (no waste)
             
             let rebarCost = 0;
+            let rebarQtyNote = '';
             if (rebarCoverage === 'mesh') {
                 rebarCost = totalSF * meshPrice;
+                if (totalSF > 0) rebarQtyNote = `${totalSF.toFixed(0)} SF`;
             } else if (rebarCoverage === '4') {
                 // LF per SF = (12/spacing) × 2 directions
                 const lf_per_sf = (12 / rebarSpacingIn) * 2;
-                rebarCost = totalSF * lf_per_sf * rebar4Price;
+                const totalRebarLF = totalSF * lf_per_sf;
+                rebarCost = totalRebarLF * rebar4Price;
+                if (totalSF > 0) rebarQtyNote = `${totalRebarLF.toFixed(0)} LF`;
             } else if (rebarCoverage === '5') {
                 const lf_per_sf = (12 / rebarSpacingIn) * 2;
-                rebarCost = totalSF * lf_per_sf * rebar5Price;
+                const totalRebarLF = totalSF * lf_per_sf;
+                rebarCost = totalRebarLF * rebar5Price;
+                if (totalSF > 0) rebarQtyNote = `${totalRebarLF.toFixed(0)} LF`;
             }
             
-            const formsCost = totalPerimeterLF * formsPrice;
+            // Forms: slab edges + footing/beam/curb sides + wall faces
+            const slabFormsCost = totalPerimeterLF * formsPrice;
+            const linearFormsCost = totalLinearLF * linearFormsPrice;
+            const wallFormsCost = totalWallLF * wallFormsPrice;
+            const formsCost = slabFormsCost + linearFormsCost + wallFormsCost;
+            const totalFormsLF = totalPerimeterLF + totalLinearLF + totalWallLF;
             
             let finishCost = 0;
             if (finishType === 'broom') {
@@ -3152,13 +3195,20 @@
             document.getElementById('cost-total').textContent = formatCurrency(totalBid);
             document.getElementById('cost-per-yard-label').textContent = `${formatCurrency(perYard)} per yd³ installed`;
             
+            // Update quantity hints
+            document.getElementById('cost-concrete-qty').textContent = totalYards > 0 ? `${totalYards.toFixed(1)} yd³` : '';
+            document.getElementById('cost-rebar-qty').textContent = rebarQtyNote;
+            document.getElementById('cost-forms-qty').textContent = totalFormsLF > 0 ? `${totalFormsLF.toFixed(0)} LF` : '';
+            document.getElementById('cost-finishing-qty').textContent = totalSF > 0 ? `${totalSF.toFixed(0)} SF` : '';
+            document.getElementById('cost-labor-qty').textContent = totalYards > 0 ? `${totalYards.toFixed(1)} yd³` : '';
+            
             document.getElementById('waste-pct').textContent = wastePct;
             document.getElementById('overhead-pct').textContent = overheadPct;
             document.getElementById('profit-pct').textContent = profitPct;
             
             // Store for PDF export
             window.lastEstimate = {
-                quantities: { yards: totalYards, sf: totalSF, lf: totalPerimeterLF },
+                quantities: { yards: totalYards, sf: totalSF, slabPerimLF: totalPerimeterLF, linearFormsLF: totalLinearLF, wallFormsLF: totalWallLF, totalFormsLF },
                 costs: {
                     concrete: concreteCost,
                     rebar: rebarCost,
@@ -3200,9 +3250,10 @@
             recalculateCosts();
         };
         
-        // Listen for pricing input changes
+        // Listen for pricing input changes (change fires on blur/select; input fires live on typing)
         document.querySelectorAll('.pricing-row input, .pricing-row select').forEach(el => {
             el.addEventListener('change', recalculateCosts);
+            el.addEventListener('input', recalculateCosts);
         });
     </script>
 </body>
