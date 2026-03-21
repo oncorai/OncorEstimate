@@ -855,14 +855,23 @@
                                 <input type="number" id="wall-height" value="8" min="1" step="0.5">
                             </div>
                             <div class="config-field">
+                                <label>Ht Unit</label>
+                                <select id="wall-height-unit">
+                                    <option value="ft" selected>ft</option>
+                                    <option value="in">in</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="config-row">
+                            <div class="config-field">
                                 <label>Thickness</label>
                                 <input type="number" id="wall-thickness" value="8" min="4" step="2">
                             </div>
                             <div class="config-field">
-                                <label>Unit</label>
-                                <select id="wall-unit">
-                                    <option value="ft">feet</option>
-                                    <option value="in" selected>inches</option>
+                                <label>Tk Unit</label>
+                                <select id="wall-thickness-unit">
+                                    <option value="in" selected>in</option>
+                                    <option value="ft">ft</option>
                                 </select>
                             </div>
                         </div>
@@ -972,6 +981,9 @@
                         <div class="grand-total">
                             <div class="label">TOTAL CONCRETE</div>
                             <div class="value" id="grandTotal">0.00 yd³</div>
+                        </div>
+                        <div class="truck-count" id="truckCount" style="display:none; margin-top:10px; padding:8px 10px; background:rgba(0,0,0,0.3); border-radius:6px; font-size:0.8rem; color:#ccc;">
+                            🚛 <span id="truckCountText">—</span>
                         </div>
                     </div>
                 </div>
@@ -1381,7 +1393,10 @@
                 case 'wall':
                     config.height = parseFloat(document.getElementById('wall-height').value);
                     config.thickness = parseFloat(document.getElementById('wall-thickness').value);
-                    config.unit = document.getElementById('wall-unit').value;
+                    config.heightUnit = document.getElementById('wall-height-unit').value;
+                    config.thicknessUnit = document.getElementById('wall-thickness-unit').value;
+                    // Legacy compat: unit = height unit (most references use height context)
+                    config.unit = config.heightUnit;
                     break;
                 case 'gradebeam':
                     config.width = parseFloat(document.getElementById('gradebeam-width').value);
@@ -1412,12 +1427,15 @@
                     // length in feet × width in feet × depth in feet
                     cubicFeet = measurement.length * (config.width / 12) * (config.depth / 12);
                     break;
-                case 'wall':
-                    // length × height × thickness
-                    const heightFt = config.unit === 'ft' ? config.height : config.height / 12;
-                    const thickFt = config.unit === 'ft' ? config.thickness : config.thickness / 12;
+                case 'wall': {
+                    // length × height × thickness (separate units since we split them)
+                    const hUnit = config.heightUnit || config.unit || 'ft';
+                    const tUnit = config.thicknessUnit || (config.unit === 'ft' ? 'ft' : 'in');
+                    const heightFt = hUnit === 'ft' ? config.height : config.height / 12;
+                    const thickFt = tUnit === 'ft' ? config.thickness : config.thickness / 12;
                     cubicFeet = measurement.length * heightFt * thickFt;
                     break;
+                }
                 case 'gradebeam':
                     cubicFeet = measurement.length * (config.width / 12) * (config.depth / 12);
                     break;
@@ -2494,7 +2512,10 @@
                                 <div class="value">${displayValue}</div>
                                 <div class="volume">${m.volume.toFixed(2)} yd³</div>
                             </div>
-                            <button class="delete-btn" onclick="deleteMeasurement(${m.id})">×</button>
+                            <div style="display:flex;flex-direction:column;gap:4px;">
+                                <button class="delete-btn" onclick="deleteMeasurement(${m.id})" title="Delete">×</button>
+                                <button class="delete-btn" style="background:rgba(78,205,196,0.2);color:#4ecdc4;font-size:0.9rem;" onclick="duplicateMeasurement(${m.id})" title="Duplicate">⎘</button>
+                            </div>
                         </div>
                     `;
                 }).join('');
@@ -2511,6 +2532,22 @@
         // Delete measurement
         function deleteMeasurement(id) {
             measurements = measurements.filter(m => m.id !== id);
+            updateMeasurementsList();
+            redrawMeasurements();
+        }
+        
+        // Duplicate measurement
+        function duplicateMeasurement(id) {
+            const m = measurements.find(m => m.id === id);
+            if (!m) return;
+            const copy = JSON.parse(JSON.stringify(m));
+            copy.id = Date.now();
+            copy.label = (copy.label ? copy.label + ' (copy)' : 'copy');
+            // Offset copy slightly so it's visually distinct
+            if (copy.points) {
+                copy.points = copy.points.map(p => ({ x: p.x + (10 / (zoom || 1)), y: p.y + (10 / (zoom || 1)) }));
+            }
+            measurements.push(copy);
             updateMeasurementsList();
             redrawMeasurements();
         }
@@ -2591,6 +2628,24 @@
             
             const grandTotal = Object.values(totals).reduce((a, b) => a + b, 0);
             document.getElementById('grandTotal').textContent = grandTotal.toFixed(2) + ' yd³';
+            
+            // Truck count display
+            const truckWidget = document.getElementById('truckCount');
+            if (grandTotal > 0) {
+                const TRUCK_CAP = 10; // standard ready-mix truck capacity (yd³)
+                const trucks = Math.ceil(grandTotal / TRUCK_CAP);
+                const partialYards = grandTotal % TRUCK_CAP;
+                const isShortLoad = partialYards > 0 && partialYards < 3;
+                let msg = `${trucks} truck${trucks !== 1 ? 's' : ''} (${TRUCK_CAP} yd³ each)`;
+                if (isShortLoad) {
+                    msg += ` — ⚠️ short-load on last truck (${partialYards.toFixed(1)} yd³) — consider ordering extra`;
+                }
+                document.getElementById('truckCountText').textContent = msg;
+                truckWidget.style.display = '';
+                truckWidget.style.borderLeft = isShortLoad ? '3px solid #f5a623' : '3px solid #4ecdc4';
+            } else {
+                truckWidget.style.display = 'none';
+            }
         }
         
         // Save project
@@ -2617,6 +2672,8 @@
                 labor: document.getElementById('price-labor').value,
                 pump: document.getElementById('price-pump').value,
                 includePump: document.getElementById('include-pump').value,
+                wallHeightUnit: document.getElementById('wall-height-unit').value,
+                wallThicknessUnit: document.getElementById('wall-thickness-unit').value,
                 overhead: document.getElementById('markup-overhead').value,
                 profit: document.getElementById('markup-profit').value,
                 waste: document.getElementById('waste-factor').value
@@ -2708,6 +2765,8 @@
                     document.getElementById('price-forms-wall').value = ps.formsWall || 18.00;
                     document.getElementById('price-finish-broom').value = ps.broomFinish || 0.75;
                     document.getElementById('price-finish-stamp').value = ps.stampFinish || 4.50;
+                    if (ps.wallHeightUnit) document.getElementById('wall-height-unit').value = ps.wallHeightUnit;
+                    if (ps.wallThicknessUnit) document.getElementById('wall-thickness-unit').value = ps.wallThicknessUnit;
                     document.getElementById('finish-type').value = ps.finishType || 'broom';
                     document.getElementById('price-labor').value = ps.labor || 85;
                     document.getElementById('price-pump').value = ps.pump || 45;
