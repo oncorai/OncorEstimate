@@ -960,22 +960,27 @@
                             <div class="total-item" data-type="slab">
                                 <div class="label">Slabs</div>
                                 <div class="value" id="slabTotal">0 yd³</div>
+                                <div style="font-size:0.7rem;color:#666;" id="slabTotalSF"></div>
                             </div>
                             <div class="total-item" data-type="footing">
                                 <div class="label">Footings</div>
                                 <div class="value" id="footingTotal">0 yd³</div>
+                                <div style="font-size:0.7rem;color:#666;" id="footingTotalLF"></div>
                             </div>
                             <div class="total-item" data-type="wall">
                                 <div class="label">Walls</div>
                                 <div class="value" id="wallTotal">0 yd³</div>
+                                <div style="font-size:0.7rem;color:#666;" id="wallTotalLF"></div>
                             </div>
                             <div class="total-item" data-type="gradebeam">
                                 <div class="label">Grade Beams</div>
                                 <div class="value" id="gradebeamTotal">0 yd³</div>
+                                <div style="font-size:0.7rem;color:#666;" id="gradebeamTotalLF"></div>
                             </div>
                             <div class="total-item" data-type="curb">
                                 <div class="label">Curbs</div>
                                 <div class="value" id="curbTotal">0 yd³</div>
+                                <div style="font-size:0.7rem;color:#666;" id="curbTotalLF"></div>
                             </div>
                         </div>
                         <div class="grand-total">
@@ -1272,8 +1277,9 @@
                 <div><kbd>P</kbd> Polygon</div><div><kbd>S</kbd> Select</div>
                 <div style="color: #888; margin-top: 8px;">Actions</div><div></div>
                 <div><kbd>Ctrl+Z</kbd> Undo</div><div><kbd>Esc</kbd> Cancel poly</div>
+                <div><kbd>Ctrl+S</kbd> Save</div><div><kbd>Ctrl+Scroll</kbd> Zoom</div>
                 <div><kbd>Ctrl++</kbd> Zoom In</div><div><kbd>Ctrl+−</kbd> Zoom Out</div>
-                <div><kbd>Ctrl+0</kbd> Fit View</div><div><kbd>Ctrl+Scroll</kbd> Zoom</div>
+                <div><kbd>Ctrl+0</kbd> Fit View</div><div></div>
             </div>
             <div style="margin-top: 16px; font-size: 0.8rem; color: #666;">Tip: Double-click to close a polygon</div>
             <div class="btn-row" style="margin-top: 15px;">
@@ -2563,10 +2569,34 @@
         
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
+            const inInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT';
+
+            // Ctrl/Cmd shortcuts work everywhere (override browser defaults intentionally)
+            if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !inInput) {
                 e.preventDefault();
                 undoLast();
             }
+            if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                saveProject();
+                return;
+            }
+            if ((e.key === '=' || e.key === '+') && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                zoomIn();
+            }
+            if (e.key === '-' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                zoomOut();
+            }
+            if (e.key === '0' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                zoomFit();
+            }
+
+            // Single-key shortcuts: only when NOT in an input field
+            if (inInput) return;
+
             if (e.key === 'Escape') {
                 polygonPoints = [];
                 isDrawing = false;
@@ -2582,20 +2612,7 @@
             if (e.key === 'r') setTool('rectangle');
             if (e.key === 'p') setTool('polygon');
             if (e.key === 'l') setTool('line');
-            if (e.key === 's' && !e.ctrlKey) setTool('select');
-            // Zoom shortcuts
-            if ((e.key === '=' || e.key === '+') && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault();
-                zoomIn();
-            }
-            if (e.key === '-' && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault();
-                zoomOut();
-            }
-            if (e.key === '0' && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault();
-                zoomFit();
-            }
+            if (e.key === 's') setTool('select');
         });
         
         // Ctrl/Cmd + scroll wheel to zoom (like Bluebeam)
@@ -2610,21 +2627,60 @@
             }
         }, { passive: false });
         
+        // Auto-save to localStorage (safety net — prevents data loss on tab close)
+        let autoSaveTimer = null;
+        function scheduleAutoSave() {
+            clearTimeout(autoSaveTimer);
+            autoSaveTimer = setTimeout(() => {
+                if (measurements.length === 0) return;
+                const projectName = document.getElementById('projectName').value || 'Untitled';
+                const data = {
+                    name: projectName,
+                    notes: document.getElementById('projectNotes').value || '',
+                    timestamp: new Date().toISOString(),
+                    scale,
+                    measurements,
+                    totalYards: measurements.reduce((sum, m) => sum + m.volume, 0),
+                    _autosave: true
+                };
+                try {
+                    localStorage.setItem('oncor_autosave', JSON.stringify(data));
+                } catch(e) {
+                    // Quota exceeded - not critical
+                }
+            }, 2000); // 2 second debounce
+        }
+
         // Update totals
         function updateTotals() {
             const totals = { slab: 0, footing: 0, wall: 0, gradebeam: 0, curb: 0 };
+            const lf = { footing: 0, wall: 0, gradebeam: 0, curb: 0 };
+            const sf = { slab: 0 };
             
             measurements.forEach(m => {
                 if (totals.hasOwnProperty(m.config.type)) {
                     totals[m.config.type] += m.volume;
                 }
+                // Track SF for slabs
+                if (m.config.type === 'slab' && m.area) {
+                    sf.slab += m.area;
+                }
+                // Track LF for linear elements
+                if (m.length && lf.hasOwnProperty(m.config.type)) {
+                    lf[m.config.type] += m.length;
+                }
             });
             
             document.getElementById('slabTotal').textContent = totals.slab.toFixed(2) + ' yd³';
+            document.getElementById('slabTotalSF').textContent = sf.slab > 0 ? sf.slab.toFixed(0) + ' SF' : '';
             document.getElementById('footingTotal').textContent = totals.footing.toFixed(2) + ' yd³';
+            document.getElementById('footingTotalLF').textContent = lf.footing > 0 ? lf.footing.toFixed(1) + ' LF' : '';
             document.getElementById('wallTotal').textContent = totals.wall.toFixed(2) + ' yd³';
+            document.getElementById('wallTotalLF').textContent = lf.wall > 0 ? lf.wall.toFixed(1) + ' LF' : '';
             document.getElementById('gradebeamTotal').textContent = totals.gradebeam.toFixed(2) + ' yd³';
+            document.getElementById('gradebeamTotalLF').textContent = lf.gradebeam > 0 ? lf.gradebeam.toFixed(1) + ' LF' : '';
             document.getElementById('curbTotal').textContent = totals.curb.toFixed(2) + ' yd³';
+            document.getElementById('curbTotalLF').textContent = lf.curb > 0 ? lf.curb.toFixed(1) + ' LF' : '';
             
             const grandTotal = Object.values(totals).reduce((a, b) => a + b, 0);
             document.getElementById('grandTotal').textContent = grandTotal.toFixed(2) + ' yd³';
@@ -3019,7 +3075,7 @@
             const rows = measurements.map((m, i) => {
                 const configDesc = m.config.type === 'slab' ? `${m.config.thickness}"t` :
                                    m.config.type === 'footing' ? `${m.config.width}"w × ${m.config.depth}"d` :
-                                   m.config.type === 'wall' ? `${m.config.height}${m.config.unit} h × ${m.config.thickness}"t` :
+                                   m.config.type === 'wall' ? `${m.config.height}${m.config.heightUnit || m.config.unit || 'ft'} h × ${m.config.thickness}${m.config.thicknessUnit || 'in'} t` :
                                    m.config.type === 'gradebeam' ? `${m.config.width}"w × ${m.config.depth}"d` :
                                    m.config.type === 'curb' ? `${m.config.width}"w × ${m.config.height}"h` : '';
                 return [
@@ -3302,12 +3358,43 @@
             document.getElementById('cost-per-yard-label').textContent = '$0.00 per yd³ installed';
         }
         
-        // Auto-recalculate when measurements change
+        // Auto-recalculate when measurements change + schedule auto-save
         const originalUpdateMeasurementsList = updateMeasurementsList;
         updateMeasurementsList = function() {
             originalUpdateMeasurementsList();
             recalculateCosts();
+            scheduleAutoSave();
         };
+
+        // Restore autosave on startup if no PDF loaded yet (prompt user)
+        window.addEventListener('load', () => {
+            try {
+                const saved = localStorage.getItem('oncor_autosave');
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    if (data._autosave && data.measurements && data.measurements.length > 0) {
+                        const ageMs = Date.now() - new Date(data.timestamp).getTime();
+                        const ageMin = Math.round(ageMs / 60000);
+                        // Only offer recovery if autosave is less than 24h old
+                        if (ageMs < 86400000) {
+                            const restore = confirm(`Autosave found: "${data.name}" (${data.measurements.length} items, ${ageMin}min ago). Restore?`);
+                            if (restore) {
+                                document.getElementById('projectName').value = data.name;
+                                document.getElementById('projectNotes').value = data.notes || '';
+                                scale = data.scale;
+                                measurements = data.measurements;
+                                if (scale) {
+                                    document.getElementById('scaleValue').textContent = 'Calibrated';
+                                    document.getElementById('scaleStatus').classList.remove('not-set');
+                                    document.getElementById('scaleStatus').classList.add('set');
+                                }
+                                updateMeasurementsList();
+                            }
+                        }
+                    }
+                }
+            } catch(e) { /* silently ignore */ }
+        });
         
         // Listen for pricing input changes (change fires on blur/select; input fires live on typing)
         document.querySelectorAll('.pricing-row input, .pricing-row select').forEach(el => {
