@@ -172,7 +172,7 @@
         }
         
         /* Measurements List */
-        .measurements-list { max-height: 200px; overflow-y: auto; }
+        .measurements-list { max-height: 260px; overflow-y: auto; }
         
         .measurement-item {
             background: rgba(0,0,0,0.3);
@@ -207,6 +207,26 @@
             transition: opacity 0.2s;
         }
         .measurement-item .delete-btn:hover { opacity: 1; }
+        
+        .measurement-label {
+            width: 100%;
+            background: transparent;
+            border: none;
+            border-bottom: 1px dashed rgba(255,255,255,0.15);
+            color: #aaa;
+            font-size: 0.72rem;
+            padding: 2px 0;
+            margin: 2px 0 3px;
+            outline: none;
+            font-style: italic;
+            transition: border-color 0.2s, color 0.2s;
+        }
+        .measurement-label:focus {
+            border-bottom-color: var(--element-color, #f5a623);
+            color: #fff;
+            font-style: normal;
+        }
+        .measurement-label::placeholder { color: rgba(255,255,255,0.2); }
         
         /* Totals */
         .totals-section {
@@ -531,11 +551,15 @@
             color: #888;
         }
         
-        .shortcuts-hint kbd {
-            background: rgba(255,255,255,0.1);
-            padding: 2px 6px;
+        .shortcuts-hint kbd, kbd {
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.25);
+            padding: 2px 7px;
             border-radius: 4px;
-            margin: 0 4px;
+            margin: 0 2px;
+            font-family: monospace;
+            font-size: 0.85em;
+            color: #fff;
         }
         
         /* Pricing Panel */
@@ -913,6 +937,10 @@
                                 <div class="label">Grade Beams</div>
                                 <div class="value" id="gradebeamTotal">0 yd³</div>
                             </div>
+                            <div class="total-item" data-type="curb">
+                                <div class="label">Curbs</div>
+                                <div class="value" id="curbTotal">0 yd³</div>
+                            </div>
                         </div>
                         <div class="grand-total">
                             <div class="label">TOTAL CONCRETE</div>
@@ -1093,6 +1121,10 @@
             <div class="actions">
                 <button class="action-btn primary" onclick="exportTakeoff()">📄 Export Takeoff PDF</button>
                 <div class="action-row">
+                    <button class="action-btn secondary" onclick="exportCSV()" title="Export measurements to CSV spreadsheet">📊 Export CSV</button>
+                    <button class="action-btn secondary" onclick="toggleShortcuts()" title="Keyboard shortcuts">⌨️ Shortcuts</button>
+                </div>
+                <div class="action-row">
                     <button class="action-btn secondary" onclick="saveProject()">💾 Save</button>
                     <button class="action-btn secondary" onclick="showLoadModal()">📂 Load</button>
                 </div>
@@ -1171,6 +1203,30 @@
         </div>
     </div>
     
+    <!-- Keyboard Shortcuts Modal -->
+    <div class="modal hidden" id="shortcutsModal">
+        <div class="modal-content">
+            <h2>⌨️ Keyboard Shortcuts</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; font-size: 0.85rem;">
+                <div style="color: #888;">Element Types</div><div></div>
+                <div><kbd>1</kbd> Slab</div><div><kbd>4</kbd> Grade Beam</div>
+                <div><kbd>2</kbd> Footing</div><div><kbd>5</kbd> Curb</div>
+                <div><kbd>3</kbd> Wall</div><div></div>
+                <div style="color: #888; margin-top: 8px;">Drawing Tools</div><div></div>
+                <div><kbd>R</kbd> Rectangle</div><div><kbd>L</kbd> Line</div>
+                <div><kbd>P</kbd> Polygon</div><div><kbd>S</kbd> Select</div>
+                <div style="color: #888; margin-top: 8px;">Actions</div><div></div>
+                <div><kbd>Ctrl+Z</kbd> Undo</div><div><kbd>Esc</kbd> Cancel poly</div>
+                <div><kbd>Ctrl++</kbd> Zoom In</div><div><kbd>Ctrl+−</kbd> Zoom Out</div>
+                <div><kbd>Ctrl+0</kbd> Fit View</div><div><kbd>Ctrl+Scroll</kbd> Zoom</div>
+            </div>
+            <div style="margin-top: 16px; font-size: 0.8rem; color: #666;">Tip: Double-click to close a polygon</div>
+            <div class="btn-row" style="margin-top: 15px;">
+                <button onclick="toggleShortcuts()">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Load Project Modal -->
     <div class="modal hidden" id="loadModal">
         <div class="modal-content">
@@ -2375,14 +2431,21 @@
             if (measurements.length === 0) {
                 list.innerHTML = '<p style="color: #666; text-align: center; padding: 20px; font-size: 0.85rem;">Draw on the plan to add measurements</p>';
             } else {
-                list.innerHTML = measurements.map(m => {
+                list.innerHTML = measurements.map((m, idx) => {
                     const displayValue = m.area ? `${m.area.toFixed(1)} SF` : `${m.length.toFixed(1)} LF`;
                     const dims = m.dimensions ? `${m.dimensions.width.toFixed(1)}' × ${m.dimensions.height.toFixed(1)}'` : '';
+                    const label = m.label || '';
                     
                     return `
                         <div class="measurement-item" data-type="${m.config.type}">
                             <div class="info">
                                 <div class="type">${elementNames[m.config.type]}</div>
+                                <input class="measurement-label" 
+                                       type="text" 
+                                       placeholder="Add label…" 
+                                       value="${label.replace(/"/g, '&quot;')}"
+                                       onchange="setMeasurementLabel(${m.id}, this.value)"
+                                       onclick="event.stopPropagation()">
                                 <div class="dims">${dims}</div>
                                 <div class="value">${displayValue}</div>
                                 <div class="volume">${m.volume.toFixed(2)} yd³</div>
@@ -2394,6 +2457,11 @@
             }
             
             updateTotals();
+        }
+        
+        function setMeasurementLabel(id, label) {
+            const m = measurements.find(m => m.id === id);
+            if (m) m.label = label;
         }
         
         // Delete measurement
@@ -2475,6 +2543,7 @@
             document.getElementById('footingTotal').textContent = totals.footing.toFixed(2) + ' yd³';
             document.getElementById('wallTotal').textContent = totals.wall.toFixed(2) + ' yd³';
             document.getElementById('gradebeamTotal').textContent = totals.gradebeam.toFixed(2) + ' yd³';
+            document.getElementById('curbTotal').textContent = totals.curb.toFixed(2) + ' yd³';
             
             const grandTotal = Object.values(totals).reduce((a, b) => a + b, 0);
             document.getElementById('grandTotal').textContent = grandTotal.toFixed(2) + ' yd³';
@@ -2678,8 +2747,9 @@
                 grouped[type].forEach((m, i) => {
                     const value = m.area ? `${m.area.toFixed(1)} SF` : `${m.length.toFixed(1)} LF`;
                     typeTotal += m.volume;
+                    const labelPart = m.label ? ` — ${m.label}` : '';
                     
-                    doc.text(`${i + 1}. ${value}`, margin + 5, y);
+                    doc.text(`${i + 1}. ${value}${labelPart}`, margin + 5, y);
                     doc.text(`${m.volume.toFixed(2)} yd³`, pageWidth - margin, y, { align: 'right' });
                     y += 5;
                 });
@@ -2801,6 +2871,69 @@
             doc.text('oncor.ai', pageWidth - margin, pageHeight - 8, { align: 'right' });
             
             doc.save(`Oncor_Estimate_${projectName.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+        }
+        
+        // CSV Export
+        function exportCSV() {
+            if (measurements.length === 0) {
+                alert('No measurements to export!');
+                return;
+            }
+            
+            const projectName = document.getElementById('projectName').value || 'Untitled';
+            const headers = ['#', 'Label', 'Type', 'Tool', 'Page', 'Area (SF)', 'Length (LF)', 'Width (ft)', 'Height (ft)', 'Volume (yd³)', 'Config'];
+            
+            const rows = measurements.map((m, i) => {
+                const configDesc = m.config.type === 'slab' ? `${m.config.thickness}"t` :
+                                   m.config.type === 'footing' ? `${m.config.width}"w × ${m.config.depth}"d` :
+                                   m.config.type === 'wall' ? `${m.config.height}${m.config.unit} h × ${m.config.thickness}"t` :
+                                   m.config.type === 'gradebeam' ? `${m.config.width}"w × ${m.config.depth}"d` :
+                                   m.config.type === 'curb' ? `${m.config.width}"w × ${m.config.height}"h` : '';
+                return [
+                    i + 1,
+                    (m.label || '').replace(/,/g, ';'),
+                    elementNames[m.config.type] || m.config.type,
+                    m.type,
+                    m.page || 1,
+                    m.area ? m.area.toFixed(2) : '',
+                    m.length ? m.length.toFixed(2) : '',
+                    m.dimensions ? m.dimensions.width.toFixed(2) : '',
+                    m.dimensions ? m.dimensions.height.toFixed(2) : '',
+                    m.volume.toFixed(3),
+                    configDesc
+                ].join(',');
+            });
+            
+            // Add totals section
+            const totalYards = measurements.reduce((s, m) => s + m.volume, 0);
+            rows.push('');
+            rows.push(['', '', '', '', '', '', '', '', 'TOTAL (yd³)', totalYards.toFixed(3), ''].join(','));
+            
+            const estimate = window.lastEstimate;
+            if (estimate && estimate.costs) {
+                rows.push('');
+                rows.push(['', '', '', '', '', '', '', '', 'Concrete Cost', estimate.costs.concrete.toFixed(2), ''].join(','));
+                rows.push(['', '', '', '', '', '', '', '', 'Rebar/Mesh', estimate.costs.rebar.toFixed(2), ''].join(','));
+                rows.push(['', '', '', '', '', '', '', '', 'Forms', estimate.costs.forms.toFixed(2), ''].join(','));
+                rows.push(['', '', '', '', '', '', '', '', 'Finishing', estimate.costs.finishing.toFixed(2), ''].join(','));
+                rows.push(['', '', '', '', '', '', '', '', 'Labor', estimate.costs.labor.toFixed(2), ''].join(','));
+                rows.push(['', '', '', '', '', '', '', '', 'TOTAL BID', estimate.costs.total.toFixed(2), ''].join(','));
+            }
+            
+            const csv = [headers.join(','), ...rows].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Oncor_Takeoff_${projectName.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        // Shortcuts modal toggle
+        function toggleShortcuts() {
+            const modal = document.getElementById('shortcutsModal');
+            modal.classList.toggle('hidden');
         }
         
         // Clear all
