@@ -1140,6 +1140,10 @@
                             <div class="icon">📍</div>
                             <div class="label">Point</div>
                         </button>
+                        <button class="tool-btn" id="rulerTool" onclick="setTool('ruler')" title="Ruler: click 2 points to check a dimension (doesn't add measurement)">
+                            <div class="icon">📐</div>
+                            <div class="label">Ruler</div>
+                        </button>
                     </div>
                 </div>
                 
@@ -1557,6 +1561,7 @@
                 <div><kbd>Ctrl+0</kbd> Fit View</div><div><kbd>Shift</kbd>+draw: snap/square</div>
                 <div><kbd>Middle click</kbd> Pan</div><div><kbd>👁 eye</kbd> Excl. from bid</div>
                 <div><kbd>E</kbd> Edit selected</div><div><kbd>Del</kbd> Delete selected</div>
+                <div><kbd>M</kbd> Ruler (measure)</div><div></div>
             </div>
             <div style="margin-top: 16px; font-size: 0.8rem; color: #666;">Tip: Double-click to close a polygon. Select a measurement then press E to edit its dimensions.</div>
             <div class="btn-row" style="margin-top: 15px;">
@@ -4827,6 +4832,186 @@
             document.getElementById('editMeasurementModal').classList.add('hidden');
             _editingMeasurementId = null;
         }
+
+        // ===== RULER TOOL =====
+        // Click 2 points to check a distance without adding a measurement
+        let rulerPoints = [];
+
+        // Extend setTool to handle ruler
+        const _origSetTool = setTool;
+        setTool = function(tool) {
+            if (tool !== 'ruler') {
+                // Clear ruler state when switching away
+                rulerPoints = [];
+                _origSetTool(tool);
+                return;
+            }
+            currentTool = 'ruler';
+            document.querySelectorAll('.tools-grid .tool-btn').forEach(btn => btn.classList.remove('active'));
+            const toolBtn = document.getElementById('rulerTool');
+            if (toolBtn) toolBtn.classList.add('active');
+            document.getElementById('currentMode').textContent = 'Mode: Ruler — click 2 points to check distance';
+            rulerPoints = [];
+            polygonPoints = [];
+            redrawMeasurements();
+        };
+
+        function handleRulerMouseDown(pos, canvasEl) {
+            if (currentTool !== 'ruler') return false;
+            if (!scale) { alert('Set scale first!'); return true; }
+            rulerPoints.push(screenToPdf(pos));
+            if (rulerPoints.length >= 2) {
+                const p1 = rulerPoints[rulerPoints.length - 2];
+                const p2 = rulerPoints[rulerPoints.length - 1];
+                const dist = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2)) / scale;
+                const ft = Math.floor(dist);
+                const inches = Math.round((dist - ft) * 12);
+                document.getElementById('measurementPreview').textContent =
+                    `📐 ${dist.toFixed(2)}' (${ft}'-${inches}")`;
+                // After showing result, reset to first=second point for chained measuring
+                rulerPoints = [p2];
+            } else {
+                document.getElementById('measurementPreview').textContent = '📐 Click second point…';
+            }
+            redrawMeasurements();
+            return true;
+        }
+
+        function handleRulerMouseMove(pos) {
+            if (currentTool !== 'ruler' || rulerPoints.length === 0) return false;
+            // Live distance preview
+            if (!scale) return true;
+            const p1 = rulerPoints[rulerPoints.length - 1];
+            const pdfPos = screenToPdf(pos);
+            const dist = Math.sqrt(Math.pow(pdfPos.x - p1.x, 2) + Math.pow(pdfPos.y - p1.y, 2)) / scale;
+            document.getElementById('measurementPreview').textContent =
+                `📐 ${dist.toFixed(2)}'`;
+            return true;
+        }
+
+        function drawRulerOnContext(ctx) {
+            if (currentTool !== 'ruler' || rulerPoints.length === 0) return;
+            rulerPoints.forEach(p => {
+                const sp = pdfToScreen(p);
+                ctx.fillStyle = '#fbbf24';
+                ctx.beginPath();
+                ctx.arc(sp.x, sp.y, 5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        // Intercept continuous mode mousedown for ruler
+        const _origHandleContinuousMouseDown = handleContinuousMouseDown;
+        handleContinuousMouseDown = function(e, pageNum, canvas) {
+            if (currentTool === 'ruler') {
+                if (spaceDown || e.button === 1) return;
+                activePageNum = pageNum;
+                activeDrawCanvas = canvas;
+                const rect = canvas.getBoundingClientRect();
+                const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                handleRulerMouseDown(pos, canvas);
+                return;
+            }
+            _origHandleContinuousMouseDown(e, pageNum, canvas);
+        };
+
+        const _origHandleContinuousMouseMove = handleContinuousMouseMove;
+        handleContinuousMouseMove = function(e, pageNum, canvas) {
+            if (currentTool === 'ruler') {
+                const rect = canvas.getBoundingClientRect();
+                const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                document.getElementById('mousePos').textContent = `X: ${Math.round(pos.x)}, Y: ${Math.round(pos.y)}`;
+                if (activePageNum !== pageNum) return;
+                handleRulerMouseMove(pos);
+                // Draw live ruler line on canvas
+                if (rulerPoints.length > 0 && activePageNum === pageNum) {
+                    redrawAllMeasurements();
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        const p1s = pdfToScreen(rulerPoints[rulerPoints.length - 1]);
+                        ctx.strokeStyle = '#fbbf24';
+                        ctx.lineWidth = 1.5;
+                        ctx.setLineDash([6, 3]);
+                        ctx.beginPath();
+                        ctx.moveTo(p1s.x, p1s.y);
+                        ctx.lineTo(pos.x, pos.y);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                        // Draw placed point
+                        ctx.fillStyle = '#fbbf24';
+                        ctx.beginPath();
+                        ctx.arc(p1s.x, p1s.y, 5, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+                return;
+            }
+            _origHandleContinuousMouseMove(e, pageNum, canvas);
+        };
+
+        // Also intercept single-page mode mousedown for ruler
+        const _origHandleMouseDown = handleMouseDown;
+        handleMouseDown = function(e) {
+            if (currentTool === 'ruler') {
+                if (spaceDown || e.button === 1) return;
+                const pos = getMousePos(e);
+                handleRulerMouseDown(pos, drawCanvas);
+                redrawMeasurements();
+                return;
+            }
+            _origHandleMouseDown(e);
+        };
+
+        const _origHandleMouseMove = handleMouseMove;
+        handleMouseMove = function(e) {
+            if (currentTool === 'ruler') {
+                const pos = getMousePos(e);
+                document.getElementById('mousePos').textContent = `X: ${Math.round(pos.x)}, Y: ${Math.round(pos.y)}`;
+                handleRulerMouseMove(pos);
+                redrawMeasurements();
+                // Draw live line
+                if (rulerPoints.length > 0) {
+                    const p1s = pdfToScreen(rulerPoints[rulerPoints.length - 1]);
+                    drawCtx.strokeStyle = '#fbbf24';
+                    drawCtx.lineWidth = 1.5;
+                    drawCtx.setLineDash([6, 3]);
+                    drawCtx.beginPath();
+                    drawCtx.moveTo(p1s.x, p1s.y);
+                    drawCtx.lineTo(pos.x, pos.y);
+                    drawCtx.stroke();
+                    drawCtx.setLineDash([]);
+                    drawCtx.fillStyle = '#fbbf24';
+                    drawCtx.beginPath();
+                    drawCtx.arc(p1s.x, p1s.y, 5, 0, Math.PI * 2);
+                    drawCtx.fill();
+                }
+                return;
+            }
+            _origHandleMouseMove(e);
+        };
+
+        // Draw ruler annotation in redrawMeasurements (single-page mode) and redrawAllMeasurements (continuous mode)
+        const _origRedrawMeasurements = redrawMeasurements;
+        redrawMeasurements = function() {
+            _origRedrawMeasurements();
+            if (currentTool === 'ruler' && viewMode !== 'continuous' && rulerPoints.length > 0) {
+                rulerPoints.forEach(p => {
+                    const sp = pdfToScreen(p);
+                    drawCtx.fillStyle = '#fbbf24';
+                    drawCtx.beginPath();
+                    drawCtx.arc(sp.x, sp.y, 5, 0, Math.PI * 2);
+                    drawCtx.fill();
+                });
+            }
+        };
+
+        // Add keyboard shortcut: M = ruler
+        document.addEventListener('keydown', (e2) => {
+            const inInput = e2.target.tagName === 'INPUT' || e2.target.tagName === 'TEXTAREA' || e2.target.tagName === 'SELECT';
+            if (!inInput && e2.key === 'm') {
+                setTool('ruler');
+            }
+        });
 
         // Add preset scale keyboard shortcut hint to shortcuts modal
         // (no code needed — covered by existing modal)
