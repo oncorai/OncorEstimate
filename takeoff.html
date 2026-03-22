@@ -785,6 +785,48 @@
         .measurement-item.excluded { opacity: 0.4; }
         .measurement-item.excluded .volume { text-decoration: line-through; color: #666; }
 
+        /* Preset scale selector */
+        .preset-scale-row {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+            align-items: center;
+        }
+        .preset-scale-row label { font-size: 0.75rem; color: #888; white-space: nowrap; }
+        .preset-scale-row select {
+            flex: 1;
+            padding: 6px 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(0,0,0,0.3);
+            color: #fff;
+            font-size: 0.8rem;
+        }
+        .preset-scale-row button {
+            padding: 6px 10px;
+            background: rgba(78,205,196,0.2);
+            border: 1px solid #4ecdc4;
+            color: #4ecdc4;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            white-space: nowrap;
+        }
+        .preset-scale-row button:hover { background: rgba(78,205,196,0.35); }
+
+        /* Canvas label toggle */
+        .canvas-label-toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.78rem;
+            color: #888;
+            cursor: pointer;
+            user-select: none;
+            margin-top: 4px;
+        }
+        .canvas-label-toggle input[type="checkbox"] { cursor: pointer; }
+
         /* Pan mode cursor */
         .canvas-container.panning { cursor: grabbing !important; }
         .canvas-container.pan-ready { cursor: grab !important; }
@@ -829,6 +871,20 @@
                     <button class="tool-btn" style="width: 100%;" onclick="startScaleMode()">
                         <span class="label">🎯 Set Scale</span>
                     </button>
+                    <div class="preset-scale-row">
+                        <label>— or —</label>
+                        <select id="presetScaleSelect">
+                            <option value="">Pick preset…</option>
+                            <option value="48">1/4" = 1'-0" (1:48)</option>
+                            <option value="96">1/8" = 1'-0" (1:96)</option>
+                            <option value="24">1/2" = 1'-0" (1:24)</option>
+                            <option value="16">3/4" = 1'-0" (1:16)</option>
+                            <option value="192">1/16" = 1'-0" (1:192)</option>
+                            <option value="20">3/5" = 1'-0" (1:20)</option>
+                            <option value="240">1" = 20'-0" (1:240)</option>
+                        </select>
+                        <button onclick="applyPresetScale()">Apply</button>
+                    </div>
                 </div>
                 
                 <!-- Project Notes -->
@@ -1228,6 +1284,25 @@
                                 </div>
                             </div>
                             <div class="pricing-group">
+                                <div class="group-label">✂️ Control Joints (Saw Cut)</div>
+                                <div class="pricing-row">
+                                    <label title="Maximum panel size for control joints. Rule of thumb: 10-15x slab thickness in feet. 10'×10' panels = 10.">Panel Size (ft)</label>
+                                    <input type="number" id="control-joint-spacing" value="10" min="4" step="1">
+                                </div>
+                                <div class="pricing-row">
+                                    <label>Saw Cut ($/LF)</label>
+                                    <input type="number" id="price-saw-cut" value="1.50" step="0.25">
+                                </div>
+                                <div class="pricing-row">
+                                    <label>Include Saw Cut?</label>
+                                    <select id="include-saw-cut">
+                                        <option value="no">No</option>
+                                        <option value="yes">Yes</option>
+                                    </select>
+                                </div>
+                                <div id="saw-cut-qty-hint" style="font-size:0.72rem;color:#666;margin-top:4px;"></div>
+                            </div>
+                            <div class="pricing-group">
                                 <div class="group-label">➕ Add-Ons</div>
                                 <div class="pricing-row">
                                     <label title="Fixed mobilization fee (site visit, setup, cleanup). Added to bid after markup.">Mobilization ($)</label>
@@ -1266,6 +1341,10 @@
                         <div class="cost-row">
                             <span class="cost-label">Finishing <span class="cost-qty" id="cost-finishing-qty"></span></span>
                             <span class="cost-value" id="cost-finishing">$0.00</span>
+                        </div>
+                        <div class="cost-row" id="cost-sawcut-row" style="display:none;">
+                            <span class="cost-label">Control Joints <span class="cost-qty" id="cost-sawcut-qty"></span></span>
+                            <span class="cost-value" id="cost-sawcut">$0.00</span>
                         </div>
                         <div class="cost-row">
                             <span class="cost-label">Labor <span class="cost-qty" id="cost-labor-qty"></span></span>
@@ -1341,6 +1420,10 @@
                 <div class="view-toggle">
                     <button id="viewToggle" onclick="toggleViewMode()" title="Toggle view mode">📜 Continuous</button>
                 </div>
+                <label class="canvas-label-toggle" title="Toggle measurement labels on canvas">
+                    <input type="checkbox" id="showLabelsToggle" checked onchange="redrawMeasurements()">
+                    Labels
+                </label>
                 <div style="flex: 1;"></div>
                 <div class="page-controls" id="pageControls" style="display: none;">
                     <button onclick="prevPage()">◀</button>
@@ -2471,10 +2554,16 @@
             if (!ctx || !m) return;
             const color = elementColors[m.config.type];
             const isSelected = (m.id === selectedMeasurementId);
+            const showLabels = document.getElementById('showLabelsToggle')?.checked !== false;
             
             ctx.strokeStyle = isSelected ? '#fff' : color;
             ctx.fillStyle = isSelected ? color + '55' : color + '33';
             ctx.lineWidth = isSelected ? 4 : 2;
+            // Excluded items: draw with dashed line + reduced opacity
+            if (m.excluded) {
+                ctx.globalAlpha = 0.35;
+                ctx.setLineDash([6, 4]);
+            }
             
             if (m.type === 'rectangle') {
                 // Convert PDF coordinates to screen coordinates
@@ -2483,9 +2572,14 @@
                 ctx.fillRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
                 ctx.strokeRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
                 
-                ctx.fillStyle = color;
-                ctx.font = 'bold 11px sans-serif';
-                ctx.fillText(`${m.area.toFixed(0)} SF · ${m.volume.toFixed(2)} yd³`, Math.min(p1.x, p2.x) + 5, Math.min(p1.y, p2.y) + 15);
+                if (showLabels) {
+                    ctx.setLineDash([]);
+                    ctx.globalAlpha = m.excluded ? 0.4 : 1;
+                    ctx.fillStyle = color;
+                    ctx.font = 'bold 11px sans-serif';
+                    const labelText = m.label ? `${m.label} · ` : '';
+                    ctx.fillText(`${labelText}${m.area.toFixed(0)} SF · ${m.volume.toFixed(2)} yd³`, Math.min(p1.x, p2.x) + 5, Math.min(p1.y, p2.y) + 15);
+                }
             } else if (m.type === 'line') {
                 const p1 = pdfToScreen(m.points[0]);
                 const p2 = pdfToScreen(m.points[1]);
@@ -2494,14 +2588,19 @@
                 ctx.lineTo(p2.x, p2.y);
                 ctx.stroke();
                 
+                ctx.setLineDash([]);
+                ctx.globalAlpha = m.excluded ? 0.4 : 1;
                 ctx.fillStyle = color;
                 ctx.beginPath();
                 ctx.arc(p1.x, p1.y, 4, 0, Math.PI * 2);
                 ctx.arc(p2.x, p2.y, 4, 0, Math.PI * 2);
                 ctx.fill();
                 
-                ctx.font = 'bold 11px sans-serif';
-                ctx.fillText(`${m.length.toFixed(1)}' · ${m.volume.toFixed(2)} yd³`, (p1.x + p2.x) / 2 + 8, (p1.y + p2.y) / 2 - 8);
+                if (showLabels) {
+                    ctx.font = 'bold 11px sans-serif';
+                    const labelText = m.label ? `${m.label} · ` : '';
+                    ctx.fillText(`${labelText}${m.length.toFixed(1)}' · ${m.volume.toFixed(2)} yd³`, (p1.x + p2.x) / 2 + 8, (p1.y + p2.y) / 2 - 8);
+                }
             } else if (m.type === 'polygon') {
                 const screenPoints = m.points.map(p => pdfToScreen(p));
                 ctx.beginPath();
@@ -2511,11 +2610,16 @@
                 ctx.fill();
                 ctx.stroke();
                 
-                const cx = screenPoints.reduce((s, p) => s + p.x, 0) / screenPoints.length;
-                const cy = screenPoints.reduce((s, p) => s + p.y, 0) / screenPoints.length;
-                ctx.fillStyle = color;
-                ctx.font = 'bold 11px sans-serif';
-                ctx.fillText(`${m.area.toFixed(0)} SF · ${m.volume.toFixed(2)} yd³`, cx - 30, cy);
+                if (showLabels) {
+                    ctx.setLineDash([]);
+                    ctx.globalAlpha = m.excluded ? 0.4 : 1;
+                    const cx = screenPoints.reduce((s, p) => s + p.x, 0) / screenPoints.length;
+                    const cy = screenPoints.reduce((s, p) => s + p.y, 0) / screenPoints.length;
+                    ctx.fillStyle = color;
+                    ctx.font = 'bold 11px sans-serif';
+                    const labelText = m.label ? `${m.label} · ` : '';
+                    ctx.fillText(`${labelText}${m.area.toFixed(0)} SF · ${m.volume.toFixed(2)} yd³`, cx - 30, cy);
+                }
             } else if (m.type === 'point') {
                 // Draw pier as a filled circle with diameter proportional to zoom
                 const p = pdfToScreen(m.points[0]);
@@ -2523,6 +2627,8 @@
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, RADIUS, 0, Math.PI * 2);
                 ctx.fill();
+                ctx.setLineDash([]);
+                ctx.globalAlpha = m.excluded ? 0.4 : 1;
                 ctx.strokeStyle = color;
                 ctx.lineWidth = 2;
                 ctx.stroke();
@@ -2533,11 +2639,17 @@
                 ctx.moveTo(p.x, p.y - RADIUS);
                 ctx.lineTo(p.x, p.y + RADIUS);
                 ctx.stroke();
-                ctx.fillStyle = color;
-                ctx.font = 'bold 10px sans-serif';
-                const dIn = m.config.diameterUnit === 'ft' ? (m.config.diameter * 12).toFixed(0) : m.config.diameter.toFixed(0);
-                ctx.fillText(`⌀${dIn}" ${m.volume.toFixed(3)} yd³`, p.x + RADIUS + 3, p.y - 3);
+                if (showLabels) {
+                    ctx.fillStyle = color;
+                    ctx.font = 'bold 10px sans-serif';
+                    const dIn = m.config.diameterUnit === 'ft' ? (m.config.diameter * 12).toFixed(0) : m.config.diameter.toFixed(0);
+                    const labelText = m.label ? `${m.label} · ` : '';
+                    ctx.fillText(`${labelText}⌀${dIn}" ${m.volume.toFixed(3)} yd³`, p.x + RADIUS + 3, p.y - 3);
+                }
             }
+            // Reset
+            ctx.globalAlpha = 1;
+            ctx.setLineDash([]);
         }
         
         // Tool selection
@@ -2591,6 +2703,30 @@
                 setTool('rectangle');
                 redrawMeasurements();
             }
+        }
+
+        // Apply preset architectural scale (no click-calibration needed)
+        // scaleRatio = full-size inches per 1 inch on paper (e.g. 48 for 1/4"=1')
+        // PDF rendered at BASE_SCALE pixels per pt, and 1 pt = 1/72 inch of paper
+        // So: pixels per pt = BASE_SCALE; pts per paper-inch = 72
+        // 1 paper-inch represents scaleRatio real inches = scaleRatio/12 real feet
+        // pixels per real foot = (BASE_SCALE * 72) / (scaleRatio / 12) = BASE_SCALE * 72 * 12 / scaleRatio
+        function applyPresetScale() {
+            const sel = document.getElementById('presetScaleSelect');
+            const ratio = parseFloat(sel.value);
+            if (!ratio) { alert('Please pick a preset scale first.'); return; }
+            // Pixels per real foot at current BASE_SCALE render
+            scale = (BASE_SCALE * 72 * 12) / ratio;
+            // Display friendly label
+            const inchesPerFoot = 12 / (scale / BASE_SCALE);
+            const label = sel.options[sel.selectedIndex].text.split('(')[0].trim();
+            document.getElementById('scaleValue').textContent = label;
+            document.getElementById('scaleStatus').classList.remove('not-set');
+            document.getElementById('scaleStatus').classList.add('set');
+            document.querySelector('#scaleStatus .scale-help').textContent = 'Preset scale applied ✓';
+            sel.value = ''; // reset dropdown
+            setTool('rectangle');
+            redrawMeasurements();
         }
         
         // Mouse events
@@ -3295,7 +3431,10 @@
                 waste: document.getElementById('waste-factor').value,
                 mobilization: document.getElementById('price-mobilization').value,
                 misc: document.getElementById('price-misc').value,
-                miscLabel: document.getElementById('price-misc-label').value
+                miscLabel: document.getElementById('price-misc-label').value,
+                controlJointSpacing: document.getElementById('control-joint-spacing').value,
+                sawCutPrice: document.getElementById('price-saw-cut').value,
+                includeSawCut: document.getElementById('include-saw-cut').value
             };
             
             const data = {
@@ -3411,9 +3550,12 @@
                     document.getElementById('price-mobilization').value = ps.mobilization || 0;
                     document.getElementById('price-misc').value = ps.misc || 0;
                     document.getElementById('price-misc-label').value = ps.miscLabel || '';
+                    if (ps.controlJointSpacing) document.getElementById('control-joint-spacing').value = ps.controlJointSpacing;
+                    if (ps.sawCutPrice) document.getElementById('price-saw-cut').value = ps.sawCutPrice;
+                    if (ps.includeSawCut) document.getElementById('include-saw-cut').value = ps.includeSawCut;
                 }
                 // Restore client name
-                document.getElementById('clientName').value = p.client || '';
+                document.getElementById('clientName').value = project.client || '';
                 
                 undoStack = []; // clear history on load
                 redoStack = [];
@@ -3605,6 +3747,9 @@
                 }
                 if (estimate.costs.misc > 0) {
                     drawCostRow(estimate.costs.miscLabel || 'Misc Allowance', estimate.costs.misc);
+                }
+                if (estimate.costs.sawCut > 0) {
+                    drawCostRow(`Control Joints (${(estimate.costs.sawCutLF||0).toFixed(0)} LF saw cut)`, estimate.costs.sawCut);
                 }
                 
                 y += 3;
@@ -3957,7 +4102,32 @@
             const miscCost = parseFloat(document.getElementById('price-misc').value) || 0;
             const miscLabel = document.getElementById('price-misc-label').value.trim() || 'Misc Allowance';
 
-            const totalBid = subtotal + wasteCost + overheadCost + profitCost + mobilizationCost + miscCost;
+            // Control joint saw cut estimate
+            const includeSawCut = document.getElementById('include-saw-cut').value === 'yes';
+            const sawCutPricePerLF = parseFloat(document.getElementById('price-saw-cut').value) || 1.50;
+            const panelSpacingFt = parseFloat(document.getElementById('control-joint-spacing').value) || 10;
+            let sawCutCost = 0;
+            let sawCutLF = 0;
+            if (includeSawCut && totalSF > 0 && panelSpacingFt > 0) {
+                // Grid of control joints at panel spacing across total slab SF
+                // Approximate as √(totalSF) panels each way on an equivalent square area
+                // More accurate: for each slab, estimate cut LF = totalSF / panelSpacingFt
+                // (joints run one direction every `spacing` feet: totalSF/spacing LF, then same other direction)
+                sawCutLF = (totalSF / panelSpacingFt) * 2;
+                sawCutCost = sawCutLF * sawCutPricePerLF;
+            }
+            // Update saw cut hint
+            const sawCutHint = document.getElementById('saw-cut-qty-hint');
+            if (sawCutHint) {
+                if (totalSF > 0 && panelSpacingFt > 0) {
+                    const estLF = (totalSF / panelSpacingFt) * 2;
+                    sawCutHint.textContent = `Est. ~${estLF.toFixed(0)} LF of cuts for ${totalSF.toFixed(0)} SF @ ${panelSpacingFt}' grid`;
+                } else {
+                    sawCutHint.textContent = '';
+                }
+            }
+
+            const totalBid = subtotal + wasteCost + overheadCost + profitCost + mobilizationCost + miscCost + sawCutCost;
             const perYard = totalYards > 0 ? totalBid / totalYards : 0;
             
             // Update display
@@ -3985,6 +4155,14 @@
                 document.getElementById('cost-misc').textContent = formatCurrency(miscCost);
                 document.getElementById('cost-misc-label').textContent = miscLabel;
             } else { miscRow.style.display = 'none'; }
+
+            // Show/hide saw cut row
+            const sawCutRow = document.getElementById('cost-sawcut-row');
+            if (sawCutCost > 0) {
+                sawCutRow.style.display = '';
+                document.getElementById('cost-sawcut').textContent = formatCurrency(sawCutCost);
+                document.getElementById('cost-sawcut-qty').textContent = `${sawCutLF.toFixed(0)} LF`;
+            } else { sawCutRow.style.display = 'none'; }
 
             document.getElementById('cost-total').textContent = formatCurrency(totalBid);
             document.getElementById('cost-per-yard-label').textContent = `${formatCurrency(perYard)} per yd³ installed`;
@@ -4019,6 +4197,8 @@
                     mobilization: mobilizationCost,
                     misc: miscCost,
                     miscLabel,
+                    sawCut: sawCutCost,
+                    sawCutLF,
                     total: totalBid
                 },
                 options: {
@@ -4152,6 +4332,9 @@
             el.addEventListener('change', recalculateCosts);
             el.addEventListener('input', recalculateCosts);
         });
+
+        // Add preset scale keyboard shortcut hint to shortcuts modal
+        // (no code needed — covered by existing modal)
     </script>
 </body>
 </html>
