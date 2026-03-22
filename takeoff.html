@@ -1188,8 +1188,15 @@
                 
                 <!-- Measurements -->
                 <div class="section">
-                    <h3>📋 Measurements (<span id="measurementCount">0</span>)
-                        <button onclick="toggleGroupBy()" id="groupByBtn" title="Toggle grouping by element type" style="background:none;border:1px solid rgba(255,255,255,0.15);color:#888;border-radius:4px;padding:2px 7px;font-size:0.7rem;cursor:pointer;margin-left:6px;">group</button>
+                    <h3 style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">📋 Measurements (<span id="measurementCount">0</span>)
+                        <button onclick="toggleGroupBy()" id="groupByBtn" title="Toggle grouping by element type" style="background:none;border:1px solid rgba(255,255,255,0.15);color:#888;border-radius:4px;padding:2px 7px;font-size:0.7rem;cursor:pointer;">group</button>
+                        <select id="phaseFilter" onchange="updateMeasurementsList()" title="Filter measurements by phase" style="background:#1a1a2e;border:1px solid rgba(255,255,255,0.15);color:#aaa;border-radius:4px;padding:2px 5px;font-size:0.7rem;cursor:pointer;">
+                            <option value="">All Phases</option>
+                            <option value="1">Phase 1</option>
+                            <option value="2">Phase 2</option>
+                            <option value="3">Phase 3</option>
+                            <option value="none">Untagged</option>
+                        </select>
                     </h3>
                     <div class="measurements-list" id="measurementsList">
                         <p style="color: #666; text-align: center; padding: 20px; font-size: 0.85rem;">Draw on the plan to add measurements</p>
@@ -1551,6 +1558,12 @@
                         <div id="elementBreakdownRows"></div>
                     </div>
                     <button onclick="toggleElementBreakdown()" id="breakdownToggleBtn" style="width:100%;margin-top:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#888;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;">▼ Show element breakdown</button>
+                    <!-- Phase Breakdown (collapsible) -->
+                    <div id="phaseBreakdownPanel" style="display:none;margin-top:8px;background:rgba(0,0,0,0.25);border:1px solid rgba(99,179,237,0.2);border-radius:8px;padding:10px;font-size:0.82rem;">
+                        <div style="color:#63b3ed;font-weight:700;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">🏗️ Phase Breakdown</div>
+                        <div id="phaseBreakdownRows"></div>
+                    </div>
+                    <button onclick="togglePhaseBreakdown()" id="phaseBreakdownToggleBtn" style="width:100%;margin-top:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#63b3ed;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;">🏗️ Show Phase Breakdown</button>
                     <!-- Material Buyout Sheet (collapsible) -->
                     <div id="buyoutSheetPanel" style="display:none;margin-top:8px;background:rgba(0,0,0,0.25);border:1px solid rgba(245,166,35,0.25);border-radius:8px;padding:10px;font-size:0.82rem;">
                         <div style="color:#f5a623;font-weight:700;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">🛒 Material Buyout Sheet</div>
@@ -3227,10 +3240,21 @@
             const list = document.getElementById('measurementsList');
             document.getElementById('measurementCount').textContent = measurements.length;
             
+            // Phase filter
+            const phaseFilterEl = document.getElementById('phaseFilter');
+            const phaseFilterVal = phaseFilterEl ? phaseFilterEl.value : '';
+            const visibleMeasurements = phaseFilterVal === ''
+                ? measurements
+                : phaseFilterVal === 'none'
+                    ? measurements.filter(m => !m.phase)
+                    : measurements.filter(m => m.phase === phaseFilterVal);
+            
             if (measurements.length === 0) {
                 list.innerHTML = '<p style="color: #666; text-align: center; padding: 20px; font-size: 0.85rem;">Draw on the plan to add measurements</p>';
+            } else if (visibleMeasurements.length === 0) {
+                list.innerHTML = `<p style="color: #666; text-align: center; padding: 20px; font-size: 0.85rem;">No measurements match filter</p>`;
             } else {
-                list.innerHTML = measurements.map((m, idx) => {
+                list.innerHTML = visibleMeasurements.map((m, idx) => {
                     const displayValue = m.area ? `${m.area.toFixed(1)} SF` : m.length ? `${m.length.toFixed(1)} LF` : `1 pier`;
                     let dims = m.dimensions ? `${m.dimensions.width.toFixed(1)}' × ${m.dimensions.height.toFixed(1)}'` : '';
                     // Append element config summary to dims
@@ -3259,6 +3283,8 @@
                     
                     const pageTag = m.page ? `<span style="font-size:0.7rem;color:#888;margin-left:4px;">pg ${m.page}</span>` : '';
                     const psiTag = m.psiOverride ? `<span style="font-size:0.65rem;background:rgba(168,85,247,0.25);color:#c084fc;border-radius:3px;padding:1px 4px;margin-left:4px;" title="PSI override: ${m.psiOverride}">${m.psiOverride}</span>` : '';
+                    const phaseTag = m.phase ? `<span style="font-size:0.65rem;background:rgba(99,179,237,0.2);color:#63b3ed;border-radius:3px;padding:1px 4px;margin-left:4px;" title="Phase ${m.phase}">P${m.phase}</span>` : '';
+                    const notesTag = m.notes ? `<span style="font-size:0.75rem;margin-left:4px;cursor:help;" title="${(m.notes||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}">📝</span>` : '';
                     // Per-item cost chip
                     const itemCost = getItemEstimatedCost(m);
                     const costChip = itemCost != null
@@ -3267,7 +3293,7 @@
                     return `
                         <div class="measurement-item${m.id === selectedMeasurementId ? ' selected' : ''}${m.excluded ? ' excluded' : ''}" data-type="${m.config.type}" data-id="${m.id}" onclick="selectAndScrollTo(${m.id}, event)">
                             <div class="info">
-                                <div class="type">${elementNames[m.config.type]}${pageTag}${psiTag}</div>
+                                <div class="type">${elementNames[m.config.type]}${pageTag}${psiTag}${phaseTag}${notesTag}</div>
                                 <input class="measurement-label" 
                                        type="text" 
                                        placeholder="Add label…" 
@@ -3280,7 +3306,7 @@
                             </div>
                             <div style="display:flex;flex-direction:column;gap:4px;">
                                 <button class="delete-btn" onclick="deleteMeasurement(${m.id})" title="Delete">×</button>
-                                <button class="delete-btn" style="background:rgba(245,166,35,0.15);color:#f5a623;font-size:0.8rem;padding:3px 5px;" onclick="openEditModal(${m.id})" title="Edit dimensions">✏️</button>
+                                <button class="delete-btn" style="background:rgba(245,166,35,0.15);color:#f5a623;font-size:0.8rem;padding:3px 5px;" onclick="openEditModal(${m.id})" title="Edit dimensions / phase / notes">✏️</button>
                                 <button class="delete-btn" style="background:rgba(78,205,196,0.2);color:#4ecdc4;font-size:0.9rem;" onclick="duplicateMeasurement(${m.id})" title="Duplicate">⎘</button>
                                 <button class="vis-btn${m.excluded ? ' hidden-m' : ''}" onclick="toggleMeasurementVisibility(${m.id})" title="${m.excluded ? 'Excluded from estimate (click to include)' : 'Included in estimate (click to exclude)'}">${m.excluded ? '🚫' : '👁'}</button>
                             </div>
@@ -4107,10 +4133,22 @@
                     typeTotal += m.volume;
                     const labelPart = m.label ? ` — ${m.label}` : '';
                     const psiPart = m.psiOverride ? ` [${m.psiOverride} PSI${m.psiCustomPrice ? ' @ $' + m.psiCustomPrice.toFixed(0) + '/yd³' : ''}]` : '';
+                    const phasePart = m.phase ? ` [Ph.${m.phase}]` : '';
                     
-                    doc.text(`${i + 1}. ${value}${labelPart}${psiPart}`, margin + 5, y);
+                    doc.text(`${i + 1}. ${value}${labelPart}${psiPart}${phasePart}`, margin + 5, y);
                     doc.text(`${m.volume.toFixed(2)} yd³`, pageWidth - margin, y, { align: 'right' });
                     y += 5;
+                    // Notes line (indented, smaller, italic)
+                    if (m.notes) {
+                        doc.setFontSize(7);
+                        doc.setFont('helvetica', 'italic');
+                        doc.setTextColor(120, 120, 120);
+                        const noteLines = doc.splitTextToSize(`Note: ${m.notes}`, pageWidth - margin * 2 - 12);
+                        noteLines.forEach(nl => { doc.text(nl, margin + 10, y); y += 4; });
+                        doc.setFontSize(9);
+                        doc.setFont('helvetica', 'normal');
+                        doc.setTextColor(50, 50, 50);
+                    }
                 });
                 
                 doc.setFont('helvetica', 'bold');
@@ -4227,6 +4265,46 @@
                 y += 5;
             }
             
+            // ===== PHASE BREAKDOWN (if any phases assigned) =====
+            const phasedMeasurements = measurements.filter(m => !m.excluded && m.phase);
+            if (phasedMeasurements.length > 0) {
+                y += 5;
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(50, 50, 50);
+                doc.text('PHASE BREAKDOWN', margin, y);
+                y += 7;
+                // Build phase map
+                const phasePDFMap = {};
+                measurements.filter(m => !m.excluded).forEach(m => {
+                    const ph = m.phase || 'Untagged';
+                    if (!phasePDFMap[ph]) phasePDFMap[ph] = 0;
+                    phasePDFMap[ph] += m.volume;
+                });
+                const totalPDFYd = measurements.filter(m => !m.excluded).reduce((s, m) => s + m.volume, 0);
+                const totalPDFBid = estimate && estimate.costs ? estimate.costs.total : 0;
+                const phOrder = ['1','2','3','Untagged'];
+                const phList = phOrder.filter(p => phasePDFMap[p]);
+                Object.keys(phasePDFMap).forEach(p => { if (!phOrder.includes(p)) phList.push(p); });
+                doc.setFontSize(8.5);
+                doc.setFont('helvetica', 'normal');
+                phList.forEach(ph => {
+                    const yd = phasePDFMap[ph];
+                    const share = totalPDFYd > 0 ? yd / totalPDFYd : 0;
+                    const estCost = totalPDFBid > 0 ? totalPDFBid * share : 0;
+                    const label = ph === 'Untagged' ? 'Untagged' : `Phase ${ph}`;
+                    doc.setTextColor(60, 60, 140);
+                    doc.text(label, margin + 4, y);
+                    doc.setTextColor(80, 80, 80);
+                    doc.text(`${yd.toFixed(2)} yd³ (${(share*100).toFixed(0)}%)`, margin + 50, y);
+                    if (totalPDFBid > 0) {
+                        doc.text(`Est. ${new Intl.NumberFormat('en-US', {style:'currency',currency:'USD',minimumFractionDigits:0,maximumFractionDigits:0}).format(estCost)}`, pageWidth - margin, y, { align: 'right' });
+                    }
+                    y += 5;
+                });
+                y += 4;
+            }
+
             // ===== SCOPE INCLUSIONS / EXCLUSIONS =====
             const scopeIncludedItems = window.scopeItems ? window.scopeItems.filter(s => s.included) : [];
             const scopeExcludedItems = window.scopeItems ? window.scopeItems.filter(s => !s.included) : [];
@@ -4322,7 +4400,7 @@
             }
             
             const projectName = document.getElementById('projectName').value || 'Untitled';
-            const headers = ['#', 'Label', 'Type', 'Tool', 'Page', 'Area (SF)', 'Length (LF)', 'Width (ft)', 'Height (ft)', 'Volume (yd³)', 'Config'];
+            const headers = ['#', 'Label', 'Type', 'Tool', 'Page', 'Phase', 'Area (SF)', 'Length (LF)', 'Width (ft)', 'Height (ft)', 'Volume (yd³)', 'Config', 'Notes'];
             
             const rows = measurements.map((m, i) => {
                 const configDesc = m.config.type === 'slab' ? `${m.config.thickness}"t` :
@@ -4337,12 +4415,14 @@
                     elementNames[m.config.type] || m.config.type,
                     m.type,
                     m.page || 1,
+                    m.phase ? `Phase ${m.phase}` : '',
                     m.area ? m.area.toFixed(2) : '',
                     m.length ? m.length.toFixed(2) : '',
                     m.dimensions ? m.dimensions.width.toFixed(2) : '',
                     m.dimensions ? m.dimensions.height.toFixed(2) : '',
                     m.volume.toFixed(3),
-                    configDesc
+                    configDesc,
+                    `"${(m.notes || '').replace(/"/g, '""')}"`
                 ].join(',');
             });
             
@@ -4442,6 +4522,25 @@
             lines.push(`  (${formatCurrency(perYd)}/yd³ installed)`);
             if (q.sf > 0) {
                 lines.push(`  (${formatCurrency(c.total / q.sf)}/SF slab)`);
+            }
+            // Phase breakdown
+            const phasesSummary = {};
+            measurements.filter(m => !m.excluded && m.phase).forEach(m => {
+                const ph = m.phase;
+                if (!phasesSummary[ph]) phasesSummary[ph] = 0;
+                phasesSummary[ph] += m.volume;
+            });
+            const phaseKeys = Object.keys(phasesSummary).sort();
+            if (phaseKeys.length > 0) {
+                lines.push('');
+                lines.push('PHASE BREAKDOWN:');
+                const totalYdSummary = (q.yards || 0);
+                phaseKeys.forEach(ph => {
+                    const yd = phasesSummary[ph];
+                    const share = totalYdSummary > 0 ? yd / totalYdSummary : 0;
+                    const estCostPh = c.total * share;
+                    lines.push(`  Phase ${ph}: ${yd.toFixed(1)} yd³ (${(share*100).toFixed(0)}%) — est. ${formatCurrency(estCostPh)}`);
+                });
             }
             // Scope items
             const scopeIncl = window.scopeItems ? window.scopeItems.filter(s => s.included) : [];
@@ -4882,6 +4981,8 @@
 
             // Update concrete order summary if visible
             if (_concreteOrderVisible) updateConcreteOrder();
+            // Update phase breakdown if visible
+            if (_phaseBreakdownVisible) updatePhaseBreakdown();
             
             // Update quick bid banner
             const bidAmountEl = document.getElementById('quickBidAmount');
@@ -5247,6 +5348,78 @@
                                    slabFormLF, linearFormLF, wallFormLF, totalPierCount, totalSF, totalOrderYd };
         }
 
+        // ===== PHASE BREAKDOWN =====
+        let _phaseBreakdownVisible = false;
+        function togglePhaseBreakdown() {
+            _phaseBreakdownVisible = !_phaseBreakdownVisible;
+            const panel = document.getElementById('phaseBreakdownPanel');
+            const btn = document.getElementById('phaseBreakdownToggleBtn');
+            if (panel) panel.style.display = _phaseBreakdownVisible ? '' : 'none';
+            if (btn) btn.textContent = _phaseBreakdownVisible ? '▲ Hide Phase Breakdown' : '🏗️ Show Phase Breakdown';
+            if (_phaseBreakdownVisible) updatePhaseBreakdown();
+        }
+
+        function updatePhaseBreakdown() {
+            const rows = document.getElementById('phaseBreakdownRows');
+            if (!rows) return;
+            const est = window.lastEstimate;
+
+            // Gather phase groups
+            const phaseMap = {};
+            measurements.forEach(m => {
+                if (m.excluded) return;
+                const ph = m.phase || 'Untagged';
+                if (!phaseMap[ph]) phaseMap[ph] = { yd: 0, sf: 0, count: 0 };
+                phaseMap[ph].yd += m.volume;
+                phaseMap[ph].sf += m.area || 0;
+                phaseMap[ph].count++;
+            });
+
+            const total = measurements.filter(m => !m.excluded).reduce((s, m) => s + m.volume, 0);
+            const totalBid = est ? est.costs.total : 0;
+
+            const phaseOrder = ['1', '2', '3', 'Untagged'];
+            const phases = phaseOrder.filter(p => phaseMap[p]);
+            // Also include any custom phases
+            Object.keys(phaseMap).forEach(p => { if (!phaseOrder.includes(p)) phases.push(p); });
+
+            if (phases.length === 0) {
+                rows.innerHTML = '<div style="color:#666;font-size:0.78rem;text-align:center;">No measurements to show. Add measurements and recalculate.</div>';
+                return;
+            }
+
+            let html = `<table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
+                <thead><tr style="color:#aaa;border-bottom:1px solid rgba(255,255,255,0.1);">
+                    <th style="text-align:left;padding:3px 4px;">Phase</th>
+                    <th style="text-align:right;padding:3px 4px;">yd³</th>
+                    <th style="text-align:right;padding:3px 4px;">Share</th>
+                    <th style="text-align:right;padding:3px 4px;">Est. Cost</th>
+                </tr></thead><tbody>`;
+
+            phases.forEach(ph => {
+                const d = phaseMap[ph];
+                const share = total > 0 ? d.yd / total : 0;
+                const estCost = totalBid > 0 ? totalBid * share : 0;
+                const label = ph === 'Untagged' ? 'Untagged' : `Phase ${ph}`;
+                const color = ph === '1' ? '#63b3ed' : ph === '2' ? '#68d391' : ph === '3' ? '#f6ad55' : '#888';
+                html += `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                    <td style="padding:4px;color:${color};font-weight:600;">${label}</td>
+                    <td style="text-align:right;padding:4px;color:#e0e0e0;">${d.yd.toFixed(2)}</td>
+                    <td style="text-align:right;padding:4px;color:#aaa;">${(share*100).toFixed(0)}%</td>
+                    <td style="text-align:right;padding:4px;color:#4ecdc4;font-weight:600;">${totalBid > 0 ? formatCurrency(estCost) : '—'}</td>
+                </tr>`;
+            });
+
+            html += `<tr style="border-top:1px solid rgba(255,255,255,0.15);font-weight:bold;">
+                <td style="padding:4px;color:#fff;">Total</td>
+                <td style="text-align:right;padding:4px;color:#4ecdc4;">${total.toFixed(2)}</td>
+                <td style="text-align:right;padding:4px;color:#aaa;">100%</td>
+                <td style="text-align:right;padding:4px;color:#4ecdc4;">${totalBid > 0 ? formatCurrency(totalBid) : '—'}</td>
+            </tr></tbody></table>`;
+
+            rows.innerHTML = html;
+        }
+
         function copyBuyoutSheet() {
             const d = window._buyoutData;
             if (!d) return;
@@ -5488,12 +5661,33 @@
                     </div>
                 </div>`;
 
+            const phaseVal = m.phase || '';
+            const notesVal = (m.notes || '').replace(/"/g, '&quot;');
+            const phaseFields = `
+                <div class="edit-section-label" style="margin-top:14px;">🏗️ Phase & Notes</div>
+                <div class="edit-field-row">
+                    <div class="edit-field">
+                        <label title="Assign this measurement to a project phase for phase-cost breakdown">Phase</label>
+                        <select id="edit-phase">
+                            <option value="" ${phaseVal===''?'selected':''}>None</option>
+                            <option value="1" ${phaseVal==='1'?'selected':''}>Phase 1</option>
+                            <option value="2" ${phaseVal==='2'?'selected':''}>Phase 2</option>
+                            <option value="3" ${phaseVal==='3'?'selected':''}>Phase 3</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="margin-top:8px;">
+                    <label style="font-size:0.75rem;color:#aaa;display:block;margin-bottom:4px;" title="Notes for this measurement (appear in PDF and tooltips)">📝 Notes / Clarifications</label>
+                    <textarea id="edit-notes" rows="2" placeholder="e.g. Verify depth w/ GC, match T-beam spec..." style="width:100%;background:#16213e;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#e0e0e0;font-size:0.78rem;padding:6px 8px;resize:vertical;box-sizing:border-box;">${notesVal}</textarea>
+                </div>`;
+
             form.innerHTML = `
                 <div style="font-size:0.8rem;color:${color};font-weight:bold;text-transform:uppercase;margin-bottom:10px;border-left:3px solid ${color};padding-left:8px;">${elementNames[type]}</div>
                 <div class="edit-section-label">📐 Dimensions</div>
                 ${configFields}
                 ${drawnDim}
                 ${psiFields}
+                ${phaseFields}
             `;
 
             // Show/hide custom price field when PSI override changes
@@ -5587,6 +5781,12 @@
                 const cp = cpEl ? parseFloat(cpEl.value) : NaN;
                 m.psiCustomPrice = (!isNaN(cp) && cp > 0) ? cp : null;
             }
+            // Phase
+            const phaseSel = document.getElementById('edit-phase');
+            if (phaseSel) m.phase = phaseSel.value || '';
+            // Notes
+            const notesEl = document.getElementById('edit-notes');
+            if (notesEl) m.notes = notesEl.value.trim();
         }
 
         function saveEditedMeasurement() {
@@ -5820,11 +6020,20 @@
                 return;
             }
 
+            // Phase filter
+            const phaseFilterElG = document.getElementById('phaseFilter');
+            const phaseFilterValG = phaseFilterElG ? phaseFilterElG.value : '';
+            const filteredForGroup = phaseFilterValG === ''
+                ? measurements
+                : phaseFilterValG === 'none'
+                    ? measurements.filter(m => !m.phase)
+                    : measurements.filter(m => m.phase === phaseFilterValG);
+
             // Preserve element type order
             const typeOrder = ['slab', 'footing', 'wall', 'gradebeam', 'curb', 'pier'];
             const grouped = {};
             typeOrder.forEach(t => { grouped[t] = []; });
-            measurements.forEach(m => {
+            filteredForGroup.forEach(m => {
                 if (grouped[m.config.type]) grouped[m.config.type].push(m);
                 else grouped[m.config.type] = [m];
             });
@@ -5868,12 +6077,14 @@
                     const label = m.label || '';
                     const pageTag = m.page ? `<span style="font-size:0.65rem;color:#666;margin-left:3px;">pg ${m.page}</span>` : '';
                     const psiTag = m.psiOverride ? `<span style="font-size:0.65rem;background:rgba(168,85,247,0.25);color:#c084fc;border-radius:3px;padding:1px 4px;margin-left:4px;">${m.psiOverride}</span>` : '';
+                    const phaseTagG = m.phase ? `<span style="font-size:0.65rem;background:rgba(99,179,237,0.2);color:#63b3ed;border-radius:3px;padding:1px 4px;margin-left:4px;">P${m.phase}</span>` : '';
+                    const notesTagG = m.notes ? `<span style="font-size:0.75rem;margin-left:3px;cursor:help;" title="${(m.notes||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}">📝</span>` : '';
                     const itemCostG = getItemEstimatedCost(m);
                     const costChipG = itemCostG != null ? `<span class="item-cost-chip" title="Estimated cost for this item">~${formatCurrency(itemCostG)}</span>` : '';
 
                     html += `<div class="measurement-item${m.id === selectedMeasurementId ? ' selected' : ''}${m.excluded ? ' excluded' : ''}" data-type="${m.config.type}" data-id="${m.id}" onclick="selectAndScrollTo(${m.id}, event)" style="border-radius:0;border-top:1px solid rgba(255,255,255,0.04);">
                         <div class="info">
-                            <div class="type" style="font-size:0.65rem;">${idx + 1}${pageTag}${psiTag}</div>
+                            <div class="type" style="font-size:0.65rem;">${idx + 1}${pageTag}${psiTag}${phaseTagG}${notesTagG}</div>
                             <input class="measurement-label" type="text" placeholder="Add label…" value="${label.replace(/"/g, '&quot;')}"
                                    onchange="setMeasurementLabel(${m.id}, this.value)" onclick="event.stopPropagation()">
                             <div class="dims">${dims}</div>
