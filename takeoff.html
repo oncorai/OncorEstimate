@@ -1452,6 +1452,11 @@
                     <button class="action-btn secondary" onclick="saveProject()">💾 Save</button>
                     <button class="action-btn secondary" onclick="showLoadModal()">📂 Load</button>
                 </div>
+                <div class="action-row">
+                    <button class="action-btn secondary" onclick="exportProjectJSON()" title="Export project as .json file for backup or sharing">📤 Export</button>
+                    <button class="action-btn secondary" onclick="document.getElementById('importProjectInput').click()" title="Import a previously exported .json project file">📥 Import</button>
+                </div>
+                <input type="file" id="importProjectInput" accept=".json,application/json" style="display:none" onchange="importProjectJSON(event)">
                 <button class="action-btn secondary" onclick="clearAll()">🗑️ Clear All</button>
             </div>
         </div>
@@ -3545,6 +3550,149 @@
             alert(`Project "${projectName}" saved!`);
         }
         
+        // Export project to JSON file (portable backup, works across browsers/machines)
+        function exportProjectJSON() {
+            if (measurements.length === 0 && !scale) {
+                alert('Nothing to export — draw some measurements first.');
+                return;
+            }
+            const projectName = document.getElementById('projectName').value || 'Untitled';
+            const data = {
+                _format: 'oncor-takeoff-v1',
+                name: projectName,
+                client: document.getElementById('clientName').value || '',
+                notes: document.getElementById('projectNotes').value || '',
+                timestamp: new Date().toISOString(),
+                scale,
+                measurements,
+                pricingSettings: {
+                    psi: document.getElementById('selected-psi').value,
+                    concrete3000: document.getElementById('price-concrete-3000').value,
+                    concrete4000: document.getElementById('price-concrete-4000').value,
+                    concrete5000: document.getElementById('price-concrete-5000').value,
+                    rebar4: document.getElementById('price-rebar-4').value,
+                    rebar5: document.getElementById('price-rebar-5').value,
+                    mesh: document.getElementById('price-mesh').value,
+                    rebarCoverage: document.getElementById('rebar-coverage').value,
+                    rebarSpacing: document.getElementById('rebar-spacing').value,
+                    rebarLinearBars: document.getElementById('rebar-linear-bars').value,
+                    forms: document.getElementById('price-forms').value,
+                    formsLinear: document.getElementById('price-forms-linear').value,
+                    formsWall: document.getElementById('price-forms-wall').value,
+                    formsPier: document.getElementById('price-forms-pier').value,
+                    broomFinish: document.getElementById('price-finish-broom').value,
+                    stampFinish: document.getElementById('price-finish-stamp').value,
+                    finishType: document.getElementById('finish-type').value,
+                    labor: document.getElementById('price-labor').value,
+                    pump: document.getElementById('price-pump').value,
+                    includePump: document.getElementById('include-pump').value,
+                    wallHeightUnit: document.getElementById('wall-height-unit').value,
+                    wallThicknessUnit: document.getElementById('wall-thickness-unit').value,
+                    overhead: document.getElementById('markup-overhead').value,
+                    profit: document.getElementById('markup-profit').value,
+                    waste: document.getElementById('waste-factor').value,
+                    mobilization: document.getElementById('price-mobilization').value,
+                    misc: document.getElementById('price-misc').value,
+                    miscLabel: document.getElementById('price-misc-label').value,
+                    controlJointSpacing: document.getElementById('control-joint-spacing').value,
+                    sawCutPrice: document.getElementById('price-saw-cut').value,
+                    includeSawCut: document.getElementById('include-saw-cut').value
+                },
+                estimate: window.lastEstimate
+            };
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const safeDate = new Date().toISOString().split('T')[0];
+            a.download = `Oncor_${projectName.replace(/[^a-z0-9]/gi, '_')}_${safeDate}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Import project from JSON file
+        function importProjectJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (!data._format || !data._format.startsWith('oncor-takeoff')) {
+                        alert('This doesn\'t look like an Oncor project file. Make sure you\'re importing a file exported from this tool.');
+                        return;
+                    }
+                    if (!confirm(`Import project "${data.name}" (${(data.measurements||[]).length} measurements)? This will replace your current workspace.`)) return;
+
+                    // Restore project data
+                    document.getElementById('projectName').value = data.name || 'Untitled';
+                    document.getElementById('clientName').value = data.client || '';
+                    document.getElementById('projectNotes').value = data.notes || '';
+                    scale = data.scale || null;
+                    measurements = data.measurements || [];
+
+                    if (scale) {
+                        document.getElementById('scaleValue').textContent = 'Calibrated (imported)';
+                        document.getElementById('scaleStatus').classList.remove('not-set');
+                        document.getElementById('scaleStatus').classList.add('set');
+                        document.querySelector('#scaleStatus .scale-help').textContent = 'Scale from imported project ✓';
+                    }
+
+                    // Restore pricing settings
+                    if (data.pricingSettings) {
+                        const ps = data.pricingSettings;
+                        const setVal = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+                        setVal('selected-psi', ps.psi);
+                        setVal('price-concrete-3000', ps.concrete3000);
+                        setVal('price-concrete-4000', ps.concrete4000);
+                        setVal('price-concrete-5000', ps.concrete5000);
+                        setVal('price-rebar-4', ps.rebar4);
+                        setVal('price-rebar-5', ps.rebar5);
+                        setVal('price-mesh', ps.mesh);
+                        setVal('rebar-coverage', ps.rebarCoverage);
+                        setVal('rebar-spacing', ps.rebarSpacing);
+                        setVal('rebar-linear-bars', ps.rebarLinearBars);
+                        setVal('price-forms', ps.forms);
+                        setVal('price-forms-linear', ps.formsLinear);
+                        setVal('price-forms-wall', ps.formsWall);
+                        setVal('price-forms-pier', ps.formsPier);
+                        setVal('price-finish-broom', ps.broomFinish);
+                        setVal('price-finish-stamp', ps.stampFinish);
+                        setVal('finish-type', ps.finishType);
+                        setVal('price-labor', ps.labor);
+                        setVal('price-pump', ps.pump);
+                        setVal('include-pump', ps.includePump);
+                        setVal('wall-height-unit', ps.wallHeightUnit);
+                        setVal('wall-thickness-unit', ps.wallThicknessUnit);
+                        setVal('markup-overhead', ps.overhead);
+                        setVal('markup-profit', ps.profit);
+                        setVal('waste-factor', ps.waste);
+                        setVal('price-mobilization', ps.mobilization);
+                        setVal('price-misc', ps.misc);
+                        setVal('price-misc-label', ps.miscLabel);
+                        setVal('control-joint-spacing', ps.controlJointSpacing);
+                        setVal('price-saw-cut', ps.sawCutPrice);
+                        setVal('include-saw-cut', ps.includeSawCut);
+                    }
+
+                    undoStack = [];
+                    redoStack = [];
+                    updateUndoButtons();
+                    updateMeasurementsList();
+                    redrawMeasurements();
+
+                    // Clear the file input so the same file can be re-imported later
+                    event.target.value = '';
+
+                    alert(`✅ Imported "${data.name}" — ${measurements.length} measurements loaded.\n\nNote: You'll need to re-upload the PDF plan separately (plans aren't stored in the export).`);
+                } catch (err) {
+                    alert('Error reading file: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
         // Show load modal
         function showLoadModal() {
             const projects = JSON.parse(localStorage.getItem('oncor_projects') || '[]');
