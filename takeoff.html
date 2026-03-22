@@ -1086,6 +1086,15 @@
                             <option value="on_hold">⏸ On Hold</option>
                         </select>
                     </div>
+                    <!-- Bid Due / Pour Date countdown fields -->
+                    <div style="display:flex;gap:4px;align-items:center;margin-top:3px;" title="Bid due date — shows countdown in banner">
+                        <span style="font-size:0.68rem;color:#555;white-space:nowrap;">Bid Due:</span>
+                        <input type="date" class="project-name" id="bidDueDate" oninput="updateDateCountdowns()" style="font-size:0.68rem;opacity:0.55;flex:1;color:#fbbf24;" title="Bid submittal deadline — countdown shows in banner">
+                    </div>
+                    <div style="display:flex;gap:4px;align-items:center;margin-top:3px;" title="Scheduled pour date — shows countdown in banner">
+                        <span style="font-size:0.68rem;color:#555;white-space:nowrap;">Pour Date:</span>
+                        <input type="date" class="project-name" id="pourDate" oninput="updateDateCountdowns()" style="font-size:0.68rem;opacity:0.55;flex:1;color:#86efac;" title="Scheduled pour date — countdown shows in banner">
+                    </div>
                 </div>
             </div>
             
@@ -1096,6 +1105,11 @@
                     <span class="bid-amount" id="quickBidAmount">—</span>
                     <span class="bid-yards" id="quickBidYards"></span>
                 </span>
+            </div>
+            <!-- Date Countdown Strip: bid due + pour date -->
+            <div id="dateCountdownStrip" style="display:none;background:rgba(0,0,0,0.35);border-bottom:1px solid rgba(255,255,255,0.06);padding:3px 10px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:flex-start;">
+                <span id="bidDueCountdown" style="font-size:0.7rem;display:none;"></span>
+                <span id="pourDateCountdown" style="font-size:0.7rem;display:none;"></span>
             </div>
 
             <div class="sidebar-content">
@@ -2118,7 +2132,13 @@
                     <!-- Payment Schedule (collapsible) -->
                     <div id="paymentSchedulePanel" style="display:none;margin-top:8px;background:rgba(0,0,0,0.25);border:1px solid rgba(99,102,241,0.25);border-radius:8px;padding:10px;font-size:0.82rem;">
                         <div style="color:#818cf8;font-weight:700;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">💳 Payment Schedule</div>
-                        <div style="font-size:0.7rem;color:#666;margin-bottom:8px;">Define milestone payments as % of total bid. Must total 100%.</div>
+                        <div style="font-size:0.7rem;color:#666;margin-bottom:6px;">Define milestone payments as % of total bid. Must total 100%.</div>
+                        <!-- Retainage field -->
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.18);border-radius:6px;padding:5px 8px;">
+                            <label style="font-size:0.72rem;color:#a5b4fc;white-space:nowrap;">Retainage %:</label>
+                            <input type="number" id="retainagePct" min="0" max="15" step="0.5" value="0" oninput="renderPaySchedule()" style="width:54px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:5px;padding:3px 6px;color:#e0e0e0;font-size:0.78rem;text-align:right;" title="GC retainage held per draw (typically 5-10%)">
+                            <span style="font-size:0.68rem;color:#555;flex:1;">GC holds this % of each draw until final</span>
+                        </div>
                         <div id="payScheduleMilestones" style="margin-bottom:8px;"></div>
                         <div style="display:flex;gap:4px;margin-bottom:6px;">
                             <input type="text" id="psNewDesc" placeholder="Milestone name" maxlength="40" style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:4px 7px;color:#e0e0e0;font-size:0.75rem;" onkeydown="if(event.key==='Enter'){addPayMilestone();event.preventDefault();}">
@@ -2253,7 +2273,10 @@
                     <button class="action-btn secondary" onclick="printTransmittal()" title="Print a transmittal / cover sheet for attaching to a bid package">📨 Transmittal</button>
                     <button class="action-btn secondary" onclick="togglePaymentSchedule()" title="Generate a payment schedule / milestone breakdown for the bid">💳 Pay Schedule</button>
                 </div>
-                <button class="action-btn secondary" onclick="clearAll()">🗑️ Clear All</button>
+                <div class="action-row">
+                    <button class="action-btn secondary" onclick="shareProjectURL()" title="Encode project (no PDF plan) into a shareable URL — paste to any browser to load">🔗 Share URL</button>
+                    <button class="action-btn secondary" onclick="clearAll()">🗑️ Clear All</button>
+                </div>
             </div>
         </div>
         
@@ -4492,6 +4515,8 @@
                 estimator: document.getElementById('estimatorName').value || '',
                 bidDate: document.getElementById('bidDate').value || '',
                 bidValidDays: document.getElementById('bidValidDays').value || '45',
+                bidDueDate: document.getElementById('bidDueDate')?.value || '',
+                pourDate: document.getElementById('pourDate')?.value || '',
                 notes: document.getElementById('projectNotes').value || '',
                 estimatorNotes: document.getElementById('estimatorNotes').value || '',
                 projectStatus: document.getElementById('projectStatus')?.value || 'estimating',
@@ -4509,7 +4534,8 @@
                 changeOrders: changeOrders,
                 coNextId: _coNextId,
                 payMilestones: payMilestones,
-                psNextId: _psNextId
+                psNextId: _psNextId,
+                retainagePct: parseFloat(document.getElementById('retainagePct')?.value || '0') || 0,
             };
             
             // Get existing projects
@@ -4628,6 +4654,9 @@
                     document.getElementById('estimatorName').value = data.estimator || '';
                     document.getElementById('bidDate').value      = data.bidDate || '';
                     document.getElementById('bidValidDays').value = data.bidValidDays || '45';
+                    if (document.getElementById('bidDueDate')) document.getElementById('bidDueDate').value = data.bidDueDate || '';
+                    if (document.getElementById('pourDate')) document.getElementById('pourDate').value = data.pourDate || '';
+                    if (document.getElementById('retainagePct') && data.retainagePct !== undefined) document.getElementById('retainagePct').value = data.retainagePct;
                     document.getElementById('projectNotes').value = data.notes || '';
                     if (document.getElementById('estimatorNotes')) document.getElementById('estimatorNotes').value = data.estimatorNotes || '';
                     if (document.getElementById('projectStatus')) document.getElementById('projectStatus').value = data.projectStatus || 'estimating';
@@ -4848,8 +4877,12 @@
                 document.getElementById('estimatorName').value = project.estimator || '';
                 document.getElementById('bidDate').value     = project.bidDate || '';
                 document.getElementById('bidValidDays').value = project.bidValidDays || '45';
+                if (document.getElementById('bidDueDate')) document.getElementById('bidDueDate').value = project.bidDueDate || '';
+                if (document.getElementById('pourDate')) document.getElementById('pourDate').value = project.pourDate || '';
+                if (document.getElementById('retainagePct') && project.retainagePct !== undefined) document.getElementById('retainagePct').value = project.retainagePct;
                 if (document.getElementById('estimatorNotes')) document.getElementById('estimatorNotes').value = project.estimatorNotes || '';
                 if (document.getElementById('projectStatus')) document.getElementById('projectStatus').value = project.projectStatus || 'estimating';
+                updateDateCountdowns();
                 
                 // Restore bid alternates
                 if (project.bidAlternates && Array.isArray(project.bidAlternates)) {
@@ -10370,16 +10403,35 @@ ${mx && (mx.slump || mx.admixtures || mx.testing) ? `
 
             const baseBid = window.lastEstimate?.costs?.total || 0;
             const totalPct = payMilestones.reduce((s, m) => s + m.pct, 0);
+            const retPct = parseFloat(document.getElementById('retainagePct')?.value || '0') || 0;
+            const hasRetainage = retPct > 0 && baseBid > 0;
+            const isLastMilestone = (idx) => idx === payMilestones.length - 1;
 
             if (payMilestones.length === 0) {
                 list.innerHTML = '<div style="color:#555;font-size:0.75rem;font-style:italic;margin-bottom:4px;">No milestones added. Click ↺ Defaults or add above.</div>';
             } else {
-                list.innerHTML = payMilestones.map(m => {
-                    const amt = baseBid > 0 ? baseBid * m.pct / 100 : 0;
+                // Running retainage total to show release on last milestone
+                let retainageCumulative = 0;
+                list.innerHTML = payMilestones.map((m, idx) => {
+                    const grossAmt = baseBid > 0 ? baseBid * m.pct / 100 : 0;
+                    const retHeld = isLastMilestone(idx) ? 0 : (grossAmt * retPct / 100); // last draw releases all retainage
+                    const retRelease = isLastMilestone(idx) && hasRetainage ? retainageCumulative : 0;
+                    const netAmt = grossAmt - retHeld + retRelease;
+                    if (!isLastMilestone(idx)) retainageCumulative += retHeld;
+
+                    let retLabel = '';
+                    if (hasRetainage && baseBid > 0) {
+                        if (isLastMilestone(idx) && retainageCumulative > 0) {
+                            retLabel = `<span style="font-size:0.68rem;color:#4ade80;"> + ${formatCurrency(retRelease)} retainage release</span>`;
+                        } else if (retHeld > 0) {
+                            retLabel = `<span style="font-size:0.68rem;color:#f87171;"> (−${formatCurrency(retHeld)} held)</span>`;
+                        }
+                    }
+
                     return `<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:5px;padding:4px 7px;">
-                        <span style="flex:1;font-size:0.75rem;color:#e0e0e0;">${m.desc}</span>
+                        <span style="flex:1;font-size:0.75rem;color:#e0e0e0;">${m.desc}${retLabel}</span>
                         <span style="color:#818cf8;font-weight:600;font-size:0.75rem;min-width:32px;text-align:right;">${m.pct}%</span>
-                        ${baseBid > 0 ? `<span style="color:#a5b4fc;font-size:0.73rem;min-width:68px;text-align:right;">${formatCurrency(amt)}</span>` : ''}
+                        ${baseBid > 0 ? `<span style="color:${hasRetainage ? '#fbbf24' : '#a5b4fc'};font-size:0.73rem;min-width:68px;text-align:right;" title="${hasRetainage ? 'Net cash collected (gross minus retainage)' : 'Draw amount'}">${formatCurrency(netAmt)}</span>` : ''}
                         <button onclick="removePayMilestone(${m.id})" style="background:none;border:none;color:#555;cursor:pointer;font-size:0.8rem;padding:0 2px;" title="Remove">✕</button>
                     </div>`;
                 }).join('');
@@ -10394,6 +10446,12 @@ ${mx && (mx.slump || mx.admixtures || mx.testing) ? `
             </div>`;
             if (baseBid === 0) {
                 sumHtml += `<div style="color:#555;font-size:0.72rem;margin-top:4px;">Run cost estimate to see payment amounts.</div>`;
+            } else if (hasRetainage) {
+                const totalRetHeld = payMilestones.slice(0, -1).reduce((s, m) => s + baseBid * m.pct / 100 * retPct / 100, 0);
+                sumHtml += `<div style="margin-top:5px;padding:4px 6px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:5px;font-size:0.72rem;">
+                    <span style="color:#888;">Retainage (${retPct}%) held: </span><span style="color:#f87171;font-weight:600;">${formatCurrency(totalRetHeld)}</span>
+                    <span style="color:#555;"> — released at final milestone</span>
+                </div>`;
             }
             summary.innerHTML = sumHtml;
         }
@@ -10402,6 +10460,7 @@ ${mx && (mx.slump || mx.admixtures || mx.testing) ? `
             const baseBid = window.lastEstimate?.costs?.total || 0;
             const projectName = document.getElementById('projectName').value.trim() || 'Untitled';
             const clientName = document.getElementById('clientName').value.trim();
+            const retPct = parseFloat(document.getElementById('retainagePct')?.value || '0') || 0;
 
             if (payMilestones.length === 0) { alert('Add milestones first.'); return; }
 
@@ -10409,17 +10468,33 @@ ${mx && (mx.slump || mx.admixtures || mx.testing) ? `
                 `PAYMENT SCHEDULE — ${projectName}`,
                 clientName ? `Client: ${clientName}` : '',
                 baseBid > 0 ? `Total Contract: ${formatCurrency(baseBid)}` : '',
+                retPct > 0 ? `Retainage: ${retPct}% held each draw, released at final` : '',
                 '',
-                'MILESTONE'.padEnd(35) + 'PCT'.padStart(5) + 'AMOUNT'.padStart(14),
-                '─'.repeat(54),
+                (retPct > 0 && baseBid > 0)
+                    ? 'MILESTONE'.padEnd(35) + 'PCT'.padStart(5) + 'GROSS'.padStart(12) + 'NET'.padStart(10)
+                    : 'MILESTONE'.padEnd(35) + 'PCT'.padStart(5) + 'AMOUNT'.padStart(14),
+                '─'.repeat(retPct > 0 ? 62 : 54),
             ].filter(Boolean);
 
             const totalPct = payMilestones.reduce((s, m) => s + m.pct, 0);
-            payMilestones.forEach(m => {
-                const amt = baseBid > 0 ? formatCurrency(baseBid * m.pct / 100) : `${m.pct}% of contract`;
-                lines.push(`${m.desc.padEnd(35)}${String(m.pct + '%').padStart(5)}${(baseBid > 0 ? amt : '').padStart(14)}`);
+            let retCum = 0;
+            payMilestones.forEach((m, idx) => {
+                const gross = baseBid > 0 ? baseBid * m.pct / 100 : 0;
+                const isLast = idx === payMilestones.length - 1;
+                const held = (retPct > 0 && !isLast) ? gross * retPct / 100 : 0;
+                const release = (retPct > 0 && isLast) ? retCum : 0;
+                const net = gross - held + release;
+                retCum += held;
+                if (retPct > 0 && baseBid > 0) {
+                    const grossStr = formatCurrency(gross);
+                    const netStr = formatCurrency(net);
+                    lines.push(`${m.desc.padEnd(35)}${String(m.pct + '%').padStart(5)}${grossStr.padStart(12)}${netStr.padStart(10)}`);
+                } else {
+                    const amt = baseBid > 0 ? formatCurrency(gross) : `${m.pct}% of contract`;
+                    lines.push(`${m.desc.padEnd(35)}${String(m.pct + '%').padStart(5)}${(baseBid > 0 ? amt : '').padStart(14)}`);
+                }
             });
-            lines.push('─'.repeat(54));
+            lines.push('─'.repeat(retPct > 0 ? 62 : 54));
             lines.push(`${'TOTAL'.padEnd(35)}${String(totalPct.toFixed(0) + '%').padStart(5)}${(baseBid > 0 ? formatCurrency(baseBid) : '').padStart(14)}`);
             if (Math.abs(totalPct - 100) > 0.1) {
                 lines.push('');
@@ -10804,6 +10879,282 @@ ${bidTotal > 0 ? `
                 navigator.clipboard.writeText(text).catch(() => prompt('Copy:', text));
             } else { prompt('Copy:', text); }
         }
+
+        // ============================================================
+        // DATE COUNTDOWNS (Bid Due + Pour Date)
+        // Shows in the strip below the Quick Bid Banner.
+        // ============================================================
+        function updateDateCountdowns() {
+            const bidDueVal  = document.getElementById('bidDueDate')?.value;
+            const pourVal    = document.getElementById('pourDate')?.value;
+            const strip      = document.getElementById('dateCountdownStrip');
+            const bidDueEl   = document.getElementById('bidDueCountdown');
+            const pourEl     = document.getElementById('pourDateCountdown');
+
+            let anyVisible = false;
+
+            function daysFrom(dateStr) {
+                if (!dateStr) return null;
+                const d = new Date(dateStr + 'T12:00:00');
+                const now = new Date();
+                now.setHours(12, 0, 0, 0);
+                return Math.round((d - now) / 86400000);
+            }
+
+            // Bid Due countdown
+            if (bidDueEl) {
+                const days = daysFrom(bidDueVal);
+                if (days !== null) {
+                    let label, color;
+                    if (days < 0)       { label = `Bid Due: ${Math.abs(days)}d ago`; color = '#6b7280'; }
+                    else if (days === 0){ label = `⚠️ Bid Due: TODAY`;               color = '#f87171'; }
+                    else if (days <= 2) { label = `⚠️ Bid Due: ${days}d`;            color = '#f87171'; }
+                    else if (days <= 7) { label = `Bid Due: ${days}d`;               color = '#fbbf24'; }
+                    else                { label = `Bid Due: ${days}d`;               color = '#a5b4fc'; }
+                    bidDueEl.style.display = '';
+                    bidDueEl.style.color = color;
+                    bidDueEl.textContent = label;
+                    anyVisible = true;
+                } else {
+                    bidDueEl.style.display = 'none';
+                }
+            }
+
+            // Pour Date countdown
+            if (pourEl) {
+                const days = daysFrom(pourVal);
+                if (days !== null) {
+                    let label, color;
+                    if (days < 0)       { label = `Pour: ${Math.abs(days)}d ago`;    color = '#6b7280'; }
+                    else if (days === 0){ label = `🏗️ Pour: TODAY`;                  color = '#4ade80'; }
+                    else if (days <= 3) { label = `🏗️ Pour: ${days}d`;              color = '#fbbf24'; }
+                    else                { label = `Pour: ${days}d`;                  color = '#86efac'; }
+                    pourEl.style.display = '';
+                    pourEl.style.color = color;
+                    pourEl.textContent = label;
+                    anyVisible = true;
+                } else {
+                    pourEl.style.display = 'none';
+                }
+            }
+
+            if (strip) strip.style.display = anyVisible ? 'flex' : 'none';
+        }
+
+        // Run on load and persist with save/load
+        document.addEventListener('DOMContentLoaded', () => setTimeout(updateDateCountdowns, 500));
+
+        // ============================================================
+        // SHARE VIA URL
+        // Encodes project data (no PDF plan) to a URL hash.
+        // Decompresses on load if hash present.
+        // ============================================================
+        async function compressToBase64(str) {
+            if (typeof CompressionStream !== 'undefined') {
+                const stream = new Blob([new TextEncoder().encode(str)]).stream();
+                const compressed = stream.pipeThrough(new CompressionStream('gzip'));
+                const chunks = [];
+                const reader = compressed.getReader();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                }
+                const buf = new Uint8Array(chunks.reduce((a, b) => [...a, ...b], []));
+                return btoa(String.fromCharCode(...buf)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+            }
+            // Fallback: no compression, just base64
+            return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        }
+
+        async function decompressFromBase64(b64) {
+            const raw = atob(b64.replace(/-/g, '+').replace(/_/g, '/'));
+            if (typeof DecompressionStream !== 'undefined') {
+                const bytes = Uint8Array.from(raw, c => c.charCodeAt(0));
+                const stream = new Blob([bytes]).stream();
+                const decompressed = stream.pipeThrough(new DecompressionStream('gzip'));
+                const chunks = [];
+                const reader = decompressed.getReader();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                }
+                const buf = new Uint8Array(chunks.reduce((a, b) => [...a, ...b], []));
+                return new TextDecoder().decode(buf);
+            }
+            return decodeURIComponent(escape(raw));
+        }
+
+        async function shareProjectURL() {
+            const projectName = document.getElementById('projectName').value.trim() || 'Untitled';
+            const data = {
+                _format: 'oncor-share-v1',
+                name: projectName,
+                client: document.getElementById('clientName').value.trim() || '',
+                estimator: document.getElementById('estimatorName').value.trim() || '',
+                bidDate: document.getElementById('bidDate').value || '',
+                bidValidDays: document.getElementById('bidValidDays').value || '45',
+                bidDueDate: document.getElementById('bidDueDate').value || '',
+                pourDate: document.getElementById('pourDate').value || '',
+                notes: document.getElementById('projectNotes').value || '',
+                projectStatus: document.getElementById('projectStatus')?.value || 'estimating',
+                mixDesign: getMixDesignData(),
+                measurements,
+                scale,
+                pricingSettings: {
+                    psi: document.getElementById('selected-psi').value,
+                    concrete2500: document.getElementById('price-concrete-2500').value,
+                    concrete3000: document.getElementById('price-concrete-3000').value,
+                    concrete4000: document.getElementById('price-concrete-4000').value,
+                    concrete5000: document.getElementById('price-concrete-5000').value,
+                    rebar4: document.getElementById('price-rebar-4').value,
+                    rebar5: document.getElementById('price-rebar-5').value,
+                    mesh: document.getElementById('price-mesh').value,
+                    rebarCoverage: document.getElementById('rebar-coverage').value,
+                    rebarSpacing: document.getElementById('rebar-spacing').value,
+                    rebarLinearBars: document.getElementById('rebar-linear-bars').value,
+                    forms: document.getElementById('price-forms').value,
+                    formsLinear: document.getElementById('price-forms-linear').value,
+                    formsWall: document.getElementById('price-forms-wall').value,
+                    formsPier: document.getElementById('price-forms-pier').value,
+                    broomFinish: document.getElementById('price-finish-broom').value,
+                    stampFinish: document.getElementById('price-finish-stamp').value,
+                    finishType: document.getElementById('finish-type').value,
+                    labor: document.getElementById('price-labor').value,
+                    pump: document.getElementById('price-pump').value,
+                    includePump: document.getElementById('include-pump').value,
+                    overhead: document.getElementById('markup-overhead').value,
+                    profit: document.getElementById('markup-profit').value,
+                    waste: document.getElementById('waste-factor').value,
+                    mobilization: document.getElementById('price-mobilization').value,
+                    misc: document.getElementById('price-misc').value,
+                    miscLabel: document.getElementById('price-misc-label').value,
+                    contingency: document.getElementById('markup-contingency').value,
+                    escalation: document.getElementById('markup-escalation').value,
+                    controlJointSpacing: document.getElementById('control-joint-spacing').value,
+                    sawCutPrice: document.getElementById('price-saw-cut').value,
+                    includeSawCut: document.getElementById('include-saw-cut').value,
+                },
+                bidAlternates,
+                specialtySubItems,
+                changeOrders,
+                payMilestones,
+                retainagePct: parseFloat(document.getElementById('retainagePct')?.value || '0') || 0,
+                scopeItems: window.scopeItems || [],
+                estimate: window.lastEstimate,
+            };
+
+            const btn = document.querySelector('button[onclick="shareProjectURL()"]');
+            if (btn) { btn.textContent = '⏳ Encoding…'; btn.disabled = true; }
+
+            try {
+                const json = JSON.stringify(data);
+                const compressed = await compressToBase64(json);
+                const url = `${location.origin}${location.pathname}#share=${compressed}`;
+
+                if (url.length > 50000) {
+                    alert(`⚠️ Project is too large for a URL (${Math.round(url.length/1024)}KB). Use 📤 Export to share as a .json file instead.`);
+                    if (btn) { btn.textContent = '🔗 Share URL'; btn.disabled = false; }
+                    return;
+                }
+
+                if (navigator.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(url);
+                    if (btn) { const o = '🔗 Share URL'; btn.textContent = '✅ URL Copied!'; btn.disabled = false; setTimeout(() => btn.textContent = o, 3000); }
+                } else {
+                    prompt('Copy this URL to share the project (measurements + pricing):', url);
+                    if (btn) { btn.textContent = '🔗 Share URL'; btn.disabled = false; }
+                }
+            } catch(e) {
+                alert('Could not encode project: ' + e.message);
+                if (btn) { btn.textContent = '🔗 Share URL'; btn.disabled = false; }
+            }
+        }
+
+        // On page load: check for #share= hash and auto-import
+        async function checkShareHash() {
+            const hash = location.hash;
+            if (!hash.startsWith('#share=')) return;
+            const encoded = hash.slice(7);
+            if (!encoded) return;
+            try {
+                const json = await decompressFromBase64(encoded);
+                const data = JSON.parse(json);
+                if (data._format !== 'oncor-share-v1') return;
+
+                const doLoad = confirm(`📦 Shared project detected: "${data.name}"\n\nLoad it? (Your current work will be replaced.)`);
+                if (!doLoad) { history.replaceState(null, '', location.pathname); return; }
+
+                // Load into tool — reuse importProjectJSON logic
+                const fakeEvt = { _data: data };
+                _loadSharedProjectData(data);
+                history.replaceState(null, '', location.pathname); // clear hash
+            } catch(e) {
+                console.warn('Failed to load shared project:', e);
+                history.replaceState(null, '', location.pathname);
+            }
+        }
+
+        function _loadSharedProjectData(data) {
+            // Project info
+            if (data.name) document.getElementById('projectName').value = data.name;
+            if (data.client) document.getElementById('clientName').value = data.client;
+            if (data.estimator) document.getElementById('estimatorName').value = data.estimator;
+            if (data.bidDate) document.getElementById('bidDate').value = data.bidDate;
+            if (data.bidValidDays) document.getElementById('bidValidDays').value = data.bidValidDays;
+            if (data.bidDueDate) document.getElementById('bidDueDate').value = data.bidDueDate;
+            if (data.pourDate) document.getElementById('pourDate').value = data.pourDate;
+            if (data.notes) document.getElementById('projectNotes').value = data.notes;
+            if (data.projectStatus) { const el = document.getElementById('projectStatus'); if (el) { el.value = data.projectStatus; updateProjectStatusBadge(); } }
+
+            // Measurements & scale
+            if (data.scale) scale = data.scale;
+            if (data.measurements) { measurements = data.measurements; snapshotHistory(); }
+
+            // Pricing
+            if (data.pricingSettings) {
+                const ps = data.pricingSettings;
+                const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+                set('selected-psi', ps.psi); set('price-concrete-2500', ps.concrete2500);
+                set('price-concrete-3000', ps.concrete3000); set('price-concrete-4000', ps.concrete4000);
+                set('price-concrete-5000', ps.concrete5000); set('price-rebar-4', ps.rebar4);
+                set('price-rebar-5', ps.rebar5); set('price-mesh', ps.mesh);
+                set('rebar-coverage', ps.rebarCoverage); set('rebar-spacing', ps.rebarSpacing);
+                set('rebar-linear-bars', ps.rebarLinearBars); set('price-forms', ps.forms);
+                set('price-forms-linear', ps.formsLinear); set('price-forms-wall', ps.formsWall);
+                set('price-forms-pier', ps.formsPier); set('price-finish-broom', ps.broomFinish);
+                set('price-finish-stamp', ps.stampFinish); set('finish-type', ps.finishType);
+                set('price-labor', ps.labor); set('price-pump', ps.pump);
+                set('include-pump', ps.includePump); set('markup-overhead', ps.overhead);
+                set('markup-profit', ps.profit); set('waste-factor', ps.waste);
+                set('price-mobilization', ps.mobilization); set('price-misc', ps.misc);
+                set('price-misc-label', ps.miscLabel); set('markup-contingency', ps.contingency);
+                set('markup-escalation', ps.escalation); set('control-joint-spacing', ps.controlJointSpacing);
+                set('price-saw-cut', ps.sawCutPrice); set('include-saw-cut', ps.includeSawCut);
+            }
+
+            // Lists
+            if (data.bidAlternates) { bidAlternates = data.bidAlternates; _altNextId = data.altNextId || bidAlternates.length + 1; }
+            if (data.specialtySubItems) { specialtySubItems = data.specialtySubItems; _subNextId = data.subNextId || specialtySubItems.length + 1; }
+            if (data.changeOrders) { changeOrders = data.changeOrders; _coNextId = data.coNextId || changeOrders.length + 1; }
+            if (data.payMilestones) { payMilestones = data.payMilestones; _psNextId = data.psNextId || payMilestones.length + 1; }
+            if (data.retainagePct !== undefined && document.getElementById('retainagePct')) {
+                document.getElementById('retainagePct').value = data.retainagePct;
+            }
+            if (data.scopeItems && window.scopeItems !== undefined) window.scopeItems = data.scopeItems;
+
+            // Refresh UI
+            updateScale();
+            renderMeasurements();
+            redrawMeasurements();
+            updateDateCountdowns();
+            recalculate();
+            alert(`✅ Loaded shared project: "${data.name}" — ${(data.measurements||[]).length} measurements.\n\nNote: PDF plan not embedded — re-upload your plan file separately.`);
+        }
+
+        // Hook into page init
+        document.addEventListener('DOMContentLoaded', () => { setTimeout(checkShareHash, 800); });
 
         function renderAlternates() {
             const list = document.getElementById('alternatesList');
