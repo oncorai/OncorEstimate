@@ -224,6 +224,7 @@
             transition: opacity 0.2s;
         }
         .measurement-item .delete-btn:hover { opacity: 1; }
+        .measurement-item.selected { background: rgba(255,255,255,0.15); box-shadow: 0 0 8px var(--element-color); }
         
         .measurement-label {
             width: 100%;
@@ -1369,6 +1370,7 @@
         let scalePoints = [];
         let scaleMode = false;
         let polygonPoints = [];
+        let selectedMeasurementId = null; // For select tool highlight
         let viewMode = 'continuous'; // 'single' or 'continuous' — continuous is default
         let pageCanvases = []; // For continuous mode
         let activeDrawCanvas = null; // Currently active draw canvas
@@ -2009,6 +2011,47 @@
                 return;
             }
             
+            if (currentTool === 'select') {
+                // Click to select nearest measurement on this page
+                const pdfPos = screenToPdf(pos);
+                const pageMeasurements = measurements.filter(m => m.page === pageNum);
+                let closest = null;
+                let closestDist = Infinity;
+                pageMeasurements.forEach(m => {
+                    let dist = Infinity;
+                    if (m.type === 'rectangle' && m.points.length === 2) {
+                        const cx = (m.points[0].x + m.points[1].x) / 2;
+                        const cy = (m.points[0].y + m.points[1].y) / 2;
+                        dist = Math.sqrt(Math.pow(pdfPos.x - cx, 2) + Math.pow(pdfPos.y - cy, 2));
+                    } else if (m.type === 'line' && m.points.length === 2) {
+                        const cx = (m.points[0].x + m.points[1].x) / 2;
+                        const cy = (m.points[0].y + m.points[1].y) / 2;
+                        dist = Math.sqrt(Math.pow(pdfPos.x - cx, 2) + Math.pow(pdfPos.y - cy, 2));
+                    } else if (m.type === 'polygon' && m.points.length > 0) {
+                        const cx = m.points.reduce((s, p) => s + p.x, 0) / m.points.length;
+                        const cy = m.points.reduce((s, p) => s + p.y, 0) / m.points.length;
+                        dist = Math.sqrt(Math.pow(pdfPos.x - cx, 2) + Math.pow(pdfPos.y - cy, 2));
+                    } else if (m.type === 'point' && m.points.length > 0) {
+                        dist = Math.sqrt(Math.pow(pdfPos.x - m.points[0].x, 2) + Math.pow(pdfPos.y - m.points[0].y, 2));
+                    }
+                    if (dist < closestDist) {
+                        closestDist = dist;
+                        closest = m;
+                    }
+                });
+                if (closest && closestDist < 100 * scale) { // within ~100 ft
+                    selectedMeasurementId = closest.id;
+                    redrawAllMeasurements();
+                    // Scroll sidebar to selected item
+                    const item = document.querySelector(`.measurement-item[data-id="${closest.id}"]`);
+                    if (item) item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } else {
+                    selectedMeasurementId = null;
+                    redrawAllMeasurements();
+                }
+                return;
+            }
+            
             if (currentTool === 'point') {
                 // Pier placement — single click, no drag needed
                 const config = getElementConfig();
@@ -2309,10 +2352,11 @@
         function drawMeasurementOnContext(ctx, m) {
             if (!ctx || !m) return;
             const color = elementColors[m.config.type];
+            const isSelected = (m.id === selectedMeasurementId);
             
-            ctx.strokeStyle = color;
-            ctx.fillStyle = color + '33';
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = isSelected ? '#fff' : color;
+            ctx.fillStyle = isSelected ? color + '55' : color + '33';
+            ctx.lineWidth = isSelected ? 4 : 2;
             
             if (m.type === 'rectangle') {
                 // Convert PDF coordinates to screen coordinates
@@ -2761,7 +2805,7 @@
                     
                     const pageTag = m.page ? `<span style="font-size:0.7rem;color:#888;margin-left:4px;">pg ${m.page}</span>` : '';
                     return `
-                        <div class="measurement-item" data-type="${m.config.type}">
+                        <div class="measurement-item${m.id === selectedMeasurementId ? ' selected' : ''}" data-type="${m.config.type}" data-id="${m.id}">
                             <div class="info">
                                 <div class="type">${elementNames[m.config.type]}${pageTag}</div>
                                 <input class="measurement-label" 
