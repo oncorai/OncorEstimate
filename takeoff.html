@@ -1149,7 +1149,9 @@
                 
                 <!-- Measurements -->
                 <div class="section">
-                    <h3>📋 Measurements (<span id="measurementCount">0</span>)</h3>
+                    <h3>📋 Measurements (<span id="measurementCount">0</span>)
+                        <button onclick="toggleGroupBy()" id="groupByBtn" title="Toggle grouping by element type" style="background:none;border:1px solid rgba(255,255,255,0.15);color:#888;border-radius:4px;padding:2px 7px;font-size:0.7rem;cursor:pointer;margin-left:6px;">group</button>
+                    </h3>
                     <div class="measurements-list" id="measurementsList">
                         <p style="color: #666; text-align: center; padding: 20px; font-size: 0.85rem;">Draw on the plan to add measurements</p>
                     </div>
@@ -5012,6 +5014,116 @@
                 setTool('ruler');
             }
         });
+
+        // ===== GROUP-BY-TYPE TOGGLE =====
+        let _groupByType = false;
+
+        function toggleGroupBy() {
+            _groupByType = !_groupByType;
+            const btn = document.getElementById('groupByBtn');
+            if (btn) {
+                btn.textContent = _groupByType ? 'ungroup' : 'group';
+                btn.style.color = _groupByType ? '#f5a623' : '#888';
+                btn.style.borderColor = _groupByType ? 'rgba(245,166,35,0.4)' : 'rgba(255,255,255,0.15)';
+            }
+            updateMeasurementsList();
+        }
+
+        // Patch updateMeasurementsList to support group-by mode
+        const _origUpdateMeasurementsList2 = updateMeasurementsList;
+        updateMeasurementsList = function() {
+            if (!_groupByType) {
+                _origUpdateMeasurementsList2();
+                return;
+            }
+
+            // Group mode: show measurements grouped by element type
+            const list = document.getElementById('measurementsList');
+            const count = measurements.length;
+            document.getElementById('measurementCount').textContent = count;
+
+            if (count === 0) {
+                list.innerHTML = '<p style="color: #666; text-align: center; padding: 20px; font-size: 0.85rem;">Draw on the plan to add measurements</p>';
+                updateTotals();
+                recalculateCosts();
+                scheduleAutoSave();
+                return;
+            }
+
+            // Preserve element type order
+            const typeOrder = ['slab', 'footing', 'wall', 'gradebeam', 'curb', 'pier'];
+            const grouped = {};
+            typeOrder.forEach(t => { grouped[t] = []; });
+            measurements.forEach(m => {
+                if (grouped[m.config.type]) grouped[m.config.type].push(m);
+                else grouped[m.config.type] = [m];
+            });
+
+            let html = '';
+            typeOrder.forEach(type => {
+                const items = grouped[type];
+                if (!items || items.length === 0) return;
+                const color = elementColors[type] || '#888';
+                const typeYd = items.filter(m => !m.excluded).reduce((s, m) => s + m.volume, 0);
+                html += `<div style="margin-bottom:4px;">
+                    <div style="font-size:0.7rem;color:${color};font-weight:bold;text-transform:uppercase;letter-spacing:1px;padding:4px 6px;background:rgba(0,0,0,0.2);border-left:3px solid ${color};border-radius:3px 3px 0 0;display:flex;justify-content:space-between;align-items:center;">
+                        <span>${elementNames[type]} (${items.length})</span>
+                        <span style="color:${color};opacity:0.8;">${typeYd.toFixed(2)} yd³</span>
+                    </div>`;
+
+                items.forEach((m, idx) => {
+                    const displayValue = m.area ? `${m.area.toFixed(1)} SF` : m.length ? `${m.length.toFixed(1)} LF` : `1 pier`;
+                    let dims = m.dimensions ? `${m.dimensions.width.toFixed(1)}' × ${m.dimensions.height.toFixed(1)}'` : '';
+                    let configSummary = '';
+                    switch(m.config.type) {
+                        case 'slab': configSummary = `${m.config.thickness || 4}" thick`; break;
+                        case 'footing': configSummary = `${m.config.width || 12}"w × ${m.config.depth || 12}"d`; break;
+                        case 'wall': {
+                            const hu = m.config.heightUnit || 'ft';
+                            const tu = m.config.thicknessUnit || 'in';
+                            configSummary = `${m.config.height || 8}${hu} × ${m.config.thickness || 8}${tu}`;
+                            break;
+                        }
+                        case 'gradebeam': configSummary = `${m.config.width || 18}"w × ${m.config.depth || 18}"d`; break;
+                        case 'curb': configSummary = `${m.config.width || 6}"w × ${m.config.height || 18}"h`; break;
+                        case 'pier': {
+                            const dIn = m.config.diameterUnit === 'ft' ? (m.config.diameter * 12).toFixed(0) : m.config.diameter.toFixed(0);
+                            const dDepth = m.config.depthUnit === 'in' ? (m.config.depth / 12).toFixed(1) : m.config.depth.toFixed(1);
+                            dims = `⌀${dIn}" × ${dDepth}' deep`;
+                            configSummary = '';
+                            break;
+                        }
+                    }
+                    if (configSummary) dims = dims ? `${dims} · ${configSummary}` : configSummary;
+                    const label = m.label || '';
+                    const pageTag = m.page ? `<span style="font-size:0.65rem;color:#666;margin-left:3px;">pg ${m.page}</span>` : '';
+                    const psiTag = m.psiOverride ? `<span style="font-size:0.65rem;background:rgba(168,85,247,0.25);color:#c084fc;border-radius:3px;padding:1px 4px;margin-left:4px;">${m.psiOverride}</span>` : '';
+
+                    html += `<div class="measurement-item${m.id === selectedMeasurementId ? ' selected' : ''}${m.excluded ? ' excluded' : ''}" data-type="${m.config.type}" data-id="${m.id}" onclick="selectAndScrollTo(${m.id}, event)" style="border-radius:0;border-top:1px solid rgba(255,255,255,0.04);">
+                        <div class="info">
+                            <div class="type" style="font-size:0.65rem;">${idx + 1}${pageTag}${psiTag}</div>
+                            <input class="measurement-label" type="text" placeholder="Add label…" value="${label.replace(/"/g, '&quot;')}"
+                                   onchange="setMeasurementLabel(${m.id}, this.value)" onclick="event.stopPropagation()">
+                            <div class="dims">${dims}</div>
+                            <div class="value">${displayValue}</div>
+                            <div class="volume">${m.volume.toFixed(2)} yd³</div>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:4px;">
+                            <button class="delete-btn" onclick="deleteMeasurement(${m.id})" title="Delete">×</button>
+                            <button class="delete-btn" style="background:rgba(245,166,35,0.15);color:#f5a623;font-size:0.8rem;padding:3px 5px;" onclick="openEditModal(${m.id})" title="Edit dimensions">✏️</button>
+                            <button class="delete-btn" style="background:rgba(78,205,196,0.2);color:#4ecdc4;font-size:0.9rem;" onclick="duplicateMeasurement(${m.id})" title="Duplicate">⎘</button>
+                            <button class="vis-btn${m.excluded ? ' hidden-m' : ''}" onclick="toggleMeasurementVisibility(${m.id})" title="${m.excluded ? 'Excluded' : 'Included'}">${m.excluded ? '🚫' : '👁'}</button>
+                        </div>
+                    </div>`;
+                });
+                html += '</div>';
+            });
+
+            list.innerHTML = html;
+            updateTotals();
+            recalculateCosts();
+            scheduleAutoSave();
+        };
 
         // Add preset scale keyboard shortcut hint to shortcuts modal
         // (no code needed — covered by existing modal)
