@@ -803,7 +803,10 @@
                     <h1>⚡ ONCOR</h1>
                     <p>Plan Takeoff Tool</p>
                 </div>
-                <input type="text" class="project-name" id="projectName" placeholder="Project Name" value="Untitled">
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    <input type="text" class="project-name" id="projectName" placeholder="Project Name" value="Untitled">
+                    <input type="text" class="project-name" id="clientName" placeholder="Client Name" style="font-size:0.75rem;opacity:0.7;">
+                </div>
             </div>
             
             <!-- Quick Bid Banner: always-visible cost summary -->
@@ -1224,6 +1227,21 @@
                                     <input type="number" id="waste-factor" value="5" step="1">
                                 </div>
                             </div>
+                            <div class="pricing-group">
+                                <div class="group-label">➕ Add-Ons</div>
+                                <div class="pricing-row">
+                                    <label title="Fixed mobilization fee (site visit, setup, cleanup). Added to bid after markup.">Mobilization ($)</label>
+                                    <input type="number" id="price-mobilization" value="0" step="50" min="0">
+                                </div>
+                                <div class="pricing-row">
+                                    <label title="Miscellaneous allowance — saw cutting, expansion joints, grout, etc.">Misc Allowance ($)</label>
+                                    <input type="number" id="price-misc" value="0" step="50" min="0">
+                                </div>
+                                <div class="pricing-row" style="align-items:flex-start;">
+                                    <label style="padding-top:4px;">Misc Label</label>
+                                    <input type="text" id="price-misc-label" value="" placeholder="Misc allowance" style="width:110px;text-align:left;font-size:0.75rem;" maxlength="30">
+                                </div>
+                            </div>
                         </div>
                         <button class="recalc-btn" onclick="recalculateCosts()">🔄 Recalculate Costs</button>
                     </div>
@@ -1268,6 +1286,14 @@
                         <div class="cost-row">
                             <span class="cost-label">Profit (<span id="profit-pct">15</span>%)</span>
                             <span class="cost-value" id="cost-profit">$0.00</span>
+                        </div>
+                        <div class="cost-row" id="cost-mobilization-row" style="display:none;">
+                            <span class="cost-label">Mobilization</span>
+                            <span class="cost-value" id="cost-mobilization">$0.00</span>
+                        </div>
+                        <div class="cost-row" id="cost-misc-row" style="display:none;">
+                            <span class="cost-label" id="cost-misc-label">Misc Allowance</span>
+                            <span class="cost-value" id="cost-misc">$0.00</span>
                         </div>
                         <div class="cost-row grand-total-cost">
                             <span class="cost-label">TOTAL BID</span>
@@ -2901,7 +2927,7 @@
                     
                     const pageTag = m.page ? `<span style="font-size:0.7rem;color:#888;margin-left:4px;">pg ${m.page}</span>` : '';
                     return `
-                        <div class="measurement-item${m.id === selectedMeasurementId ? ' selected' : ''}${m.excluded ? ' excluded' : ''}" data-type="${m.config.type}" data-id="${m.id}">
+                        <div class="measurement-item${m.id === selectedMeasurementId ? ' selected' : ''}${m.excluded ? ' excluded' : ''}" data-type="${m.config.type}" data-id="${m.id}" onclick="selectAndScrollTo(${m.id}, event)">
                             <div class="info">
                                 <div class="type">${elementNames[m.config.type]}${pageTag}</div>
                                 <input class="measurement-label" 
@@ -2975,6 +3001,52 @@
             updateMeasurementsList();
             redrawMeasurements();
             updateUndoButtons();
+        }
+
+        // Select measurement from sidebar click and scroll canvas to center on it
+        function selectAndScrollTo(id, event) {
+            // Don't trigger if click was on a button or input
+            if (event && (event.target.tagName === 'BUTTON' || event.target.tagName === 'INPUT')) return;
+            
+            selectedMeasurementId = id;
+            redrawMeasurements();
+            updateMeasurementsList();
+
+            // Scroll the canvas to center on the measurement's bounding box
+            const m = measurements.find(m => m.id === id);
+            if (!m || !scale) return;
+            
+            let centerPdfX, centerPdfY;
+            if (m.points && m.points.length > 0) {
+                const xs = m.points.map(p => p.x);
+                const ys = m.points.map(p => p.y);
+                centerPdfX = (Math.min(...xs) + Math.max(...xs)) / 2;
+                centerPdfY = (Math.min(...ys) + Math.max(...ys)) / 2;
+            } else if (m.startPoint) {
+                centerPdfX = (m.startPoint.x + (m.endPoint || m.startPoint).x) / 2;
+                centerPdfY = (m.startPoint.y + (m.endPoint || m.startPoint).y) / 2;
+            } else { return; }
+            
+            // Convert PDF coords to screen coords
+            const screenPos = pdfToScreen({ x: centerPdfX, y: centerPdfY });
+            const container = document.getElementById('canvasContainer');
+            const rect = container.getBoundingClientRect();
+            container.scrollLeft = screenPos.x - rect.width / 2;
+            container.scrollTop = screenPos.y - rect.height / 2;
+
+            // Flash the canvas selection highlight 3 times to draw attention
+            let flashCount = 0;
+            const flashInterval = setInterval(() => {
+                flashCount++;
+                if (flashCount > 5) {
+                    clearInterval(flashInterval);
+                    selectedMeasurementId = id; // keep selected after flash
+                    redrawMeasurements();
+                    return;
+                }
+                selectedMeasurementId = (flashCount % 2 === 0) ? id : null;
+                redrawMeasurements();
+            }, 140);
         }
 
         // Toggle measurement inclusion in estimate
@@ -3220,11 +3292,15 @@
                 wallThicknessUnit: document.getElementById('wall-thickness-unit').value,
                 overhead: document.getElementById('markup-overhead').value,
                 profit: document.getElementById('markup-profit').value,
-                waste: document.getElementById('waste-factor').value
+                waste: document.getElementById('waste-factor').value,
+                mobilization: document.getElementById('price-mobilization').value,
+                misc: document.getElementById('price-misc').value,
+                miscLabel: document.getElementById('price-misc-label').value
             };
             
             const data = {
                 name: projectName,
+                client: document.getElementById('clientName').value || '',
                 notes: document.getElementById('projectNotes').value || '',
                 timestamp: new Date().toISOString(),
                 scale,
@@ -3332,7 +3408,12 @@
                     document.getElementById('markup-overhead').value = ps.overhead || 10;
                     document.getElementById('markup-profit').value = ps.profit || 15;
                     document.getElementById('waste-factor').value = ps.waste || 5;
+                    document.getElementById('price-mobilization').value = ps.mobilization || 0;
+                    document.getElementById('price-misc').value = ps.misc || 0;
+                    document.getElementById('price-misc-label').value = ps.miscLabel || '';
                 }
+                // Restore client name
+                document.getElementById('clientName').value = p.client || '';
                 
                 undoStack = []; // clear history on load
                 redoStack = [];
@@ -3362,6 +3443,7 @@
             let y = 20;
             
             const projectName = document.getElementById('projectName').value || 'Untitled';
+            const clientName = document.getElementById('clientName').value.trim();
             const estimate = window.lastEstimate || {};
             
             // ===== PAGE 1: TAKEOFF SUMMARY =====
@@ -3381,10 +3463,18 @@
             
             doc.setFontSize(12);
             doc.setFont('helvetica', 'bold');
-            doc.text(projectName, pageWidth - margin, 22, { align: 'right' });
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(10);
-            doc.text(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), pageWidth - margin, 32, { align: 'right' });
+            doc.text(projectName, pageWidth - margin, 20, { align: 'right' });
+            if (clientName) {
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(10);
+                doc.text(`Prepared for: ${clientName}`, pageWidth - margin, 28, { align: 'right' });
+                doc.setFontSize(9);
+                doc.text(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), pageWidth - margin, 35, { align: 'right' });
+            } else {
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(10);
+                doc.text(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), pageWidth - margin, 32, { align: 'right' });
+            }
             
             y = 55;
             
@@ -3510,6 +3600,12 @@
                 drawCostRow(`Concrete Overage (${estimate.markups?.waste || 5}%)`, estimate.costs.waste);
                 drawCostRow(`Overhead (${estimate.markups?.overhead || 10}%)`, estimate.costs.overhead);
                 drawCostRow(`Profit (${estimate.markups?.profit || 15}%)`, estimate.costs.profit);
+                if (estimate.costs.mobilization > 0) {
+                    drawCostRow('Mobilization', estimate.costs.mobilization);
+                }
+                if (estimate.costs.misc > 0) {
+                    drawCostRow(estimate.costs.miscLabel || 'Misc Allowance', estimate.costs.misc);
+                }
                 
                 y += 3;
                 drawCostRow('TOTAL BID PRICE', estimate.costs.total, true, [78, 205, 196]);
@@ -3856,7 +3952,12 @@
             const overheadCost = subtotal * (overheadPct / 100);
             const profitCost = (subtotal + overheadCost) * (profitPct / 100);
             
-            const totalBid = subtotal + wasteCost + overheadCost + profitCost;
+            // Add-ons: mobilization + misc (added after markup, not subject to overhead/profit)
+            const mobilizationCost = parseFloat(document.getElementById('price-mobilization').value) || 0;
+            const miscCost = parseFloat(document.getElementById('price-misc').value) || 0;
+            const miscLabel = document.getElementById('price-misc-label').value.trim() || 'Misc Allowance';
+
+            const totalBid = subtotal + wasteCost + overheadCost + profitCost + mobilizationCost + miscCost;
             const perYard = totalYards > 0 ? totalBid / totalYards : 0;
             
             // Update display
@@ -3869,6 +3970,22 @@
             document.getElementById('cost-waste').textContent = formatCurrency(wasteCost);
             document.getElementById('cost-overhead').textContent = formatCurrency(overheadCost);
             document.getElementById('cost-profit').textContent = formatCurrency(profitCost);
+
+            // Show/hide mobilization row
+            const mobRow = document.getElementById('cost-mobilization-row');
+            if (mobilizationCost > 0) {
+                mobRow.style.display = '';
+                document.getElementById('cost-mobilization').textContent = formatCurrency(mobilizationCost);
+            } else { mobRow.style.display = 'none'; }
+
+            // Show/hide misc row
+            const miscRow = document.getElementById('cost-misc-row');
+            if (miscCost > 0) {
+                miscRow.style.display = '';
+                document.getElementById('cost-misc').textContent = formatCurrency(miscCost);
+                document.getElementById('cost-misc-label').textContent = miscLabel;
+            } else { miscRow.style.display = 'none'; }
+
             document.getElementById('cost-total').textContent = formatCurrency(totalBid);
             document.getElementById('cost-per-yard-label').textContent = `${formatCurrency(perYard)} per yd³ installed`;
             
@@ -3899,6 +4016,9 @@
                     waste: wasteCost,
                     overhead: overheadCost,
                     profit: profitCost,
+                    mobilization: mobilizationCost,
+                    misc: miscCost,
+                    miscLabel,
                     total: totalBid
                 },
                 options: {
@@ -3974,6 +4094,8 @@
                          'cost-labor', 'cost-subtotal', 'cost-waste', 'cost-overhead', 
                          'cost-profit', 'cost-total'];
             ids.forEach(id => document.getElementById(id).textContent = '$0.00');
+            document.getElementById('cost-mobilization-row').style.display = 'none';
+            document.getElementById('cost-misc-row').style.display = 'none';
             document.getElementById('cost-per-yard-label').textContent = '$0.00 per yd³ installed';
             const bidAmountEl = document.getElementById('quickBidAmount');
             if (bidAmountEl) bidAmountEl.textContent = '—';
