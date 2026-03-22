@@ -1330,7 +1330,7 @@
                 <div><kbd>Ctrl+Z</kbd> Undo</div><div><kbd>Esc</kbd> Cancel poly</div>
                 <div><kbd>Ctrl+S</kbd> Save</div><div><kbd>Ctrl+Scroll</kbd> Zoom</div>
                 <div><kbd>Ctrl++</kbd> Zoom In</div><div><kbd>Ctrl+−</kbd> Zoom Out</div>
-                <div><kbd>Ctrl+0</kbd> Fit View</div><div><kbd>Shift</kbd>+line snap 15°</div>
+                <div><kbd>Ctrl+0</kbd> Fit View</div><div><kbd>Shift</kbd>+draw: snap/square</div>
             </div>
             <div style="margin-top: 16px; font-size: 0.8rem; color: #666;">Tip: Double-click to close a polygon</div>
             <div class="btn-row" style="margin-top: 15px;">
@@ -2052,13 +2052,22 @@
                     ctx.setLineDash([5, 5]);
                     
                     if (currentTool === 'rectangle') {
-                        ctx.strokeRect(drawStart.x, drawStart.y, pos.x - drawStart.x, pos.y - drawStart.y);
+                        // Shift = force square
+                        let endX = pos.x - drawStart.x;
+                        let endY = pos.y - drawStart.y;
+                        if (e.shiftKey) {
+                            const side = Math.max(Math.abs(endX), Math.abs(endY));
+                            endX = Math.sign(endX) * side;
+                            endY = Math.sign(endY) * side;
+                        }
+                        ctx.strokeRect(drawStart.x, drawStart.y, endX, endY);
                         if (scale) {
-                            const widthFt = Math.abs(pos.x - drawStart.x) / scale;
-                            const heightFt = Math.abs(pos.y - drawStart.y) / scale;
+                            const widthFt = Math.abs(endX) / scale;
+                            const heightFt = Math.abs(endY) / scale;
                             const area = widthFt * heightFt;
+                            const squareNote = e.shiftKey ? ' (square)' : '';
                             document.getElementById('measurementPreview').textContent = 
-                                `${widthFt.toFixed(1)}' × ${heightFt.toFixed(1)}' = ${area.toFixed(1)} SF`;
+                                `${widthFt.toFixed(1)}' × ${heightFt.toFixed(1)}' = ${area.toFixed(1)} SF${squareNote}`;
                         }
                     } else if (currentTool === 'line') {
                         // Shift-snap to nearest 15° angle
@@ -2146,8 +2155,20 @@
             const pdfEnd = screenToPdf(pos);
             
             if (currentTool === 'rectangle') {
-                const widthFt = Math.abs(pdfEnd.x - pdfStart.x) / scale;
-                const heightFt = Math.abs(pdfEnd.y - pdfStart.y) / scale;
+                // Apply Shift = square logic at mouseup too
+                let snapEnd = pos;
+                if (e.shiftKey) {
+                    const dx = pos.x - drawStart.x;
+                    const dy = pos.y - drawStart.y;
+                    const side = Math.max(Math.abs(dx), Math.abs(dy));
+                    snapEnd = {
+                        x: drawStart.x + Math.sign(dx) * side,
+                        y: drawStart.y + Math.sign(dy) * side
+                    };
+                }
+                const snapPdfEnd = screenToPdf(snapEnd);
+                const widthFt = Math.abs(snapPdfEnd.x - pdfStart.x) / scale;
+                const heightFt = Math.abs(snapPdfEnd.y - pdfStart.y) / scale;
                 const area = widthFt * heightFt;
                 
                 if (area > 0.5) {
@@ -2155,7 +2176,7 @@
                         id: Date.now(),
                         type: 'rectangle',
                         config,
-                        points: [pdfStart, pdfEnd],
+                        points: [pdfStart, snapPdfEnd],
                         area,
                         dimensions: { width: widthFt, height: heightFt },
                         page: pageNum
