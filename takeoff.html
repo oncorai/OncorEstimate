@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Oncor Takeoff - Plan Measurement Tool</title>
+    <title>Oncor Takeoff - Plan Measurement Tool (v2026.03.22)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
@@ -1464,7 +1464,10 @@
                         <div style="color:#63b3ed;font-weight:700;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">📊 Measurement Statistics</div>
                         <div id="measurementStatsContent"></div>
                     </div>
-                    <button id="measurementStatsBtn" onclick="toggleMeasurementStats()" title="Show statistics about your measurements — type breakdown, min/max, thickness mix, PSI mix" style="width:100%;margin-bottom:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#63b3ed;border-radius:6px;padding:5px;cursor:pointer;font-size:0.75rem;">📊 Show Stats</button>
+                    <div style="display:flex;gap:5px;margin-bottom:6px;">
+                        <button id="measurementStatsBtn" onclick="toggleMeasurementStats()" title="Show statistics about your measurements — type breakdown, min/max, thickness mix, PSI mix" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#63b3ed;border-radius:6px;padding:5px;cursor:pointer;font-size:0.75rem;">📊 Stats</button>
+                        <button onclick="copyMeasurementsTable()" title="Copy all measurements as a table (tab-separated) for pasting into Excel or email" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#888;border-radius:6px;padding:5px;cursor:pointer;font-size:0.75rem;">📋 Copy Table</button>
+                    </div>
                     <!-- Search / filter bar -->
                     <div style="position:relative;margin-bottom:6px;">
                         <input type="text" id="measurementSearch" placeholder="🔍 Search labels, notes…" oninput="updateMeasurementsList()" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:5px 28px 5px 10px;color:#ccc;font-size:0.78rem;" title="Filter measurements by label or notes (case-insensitive)">
@@ -9246,6 +9249,53 @@ ${(() => {
             });
             lines.push(`<span style="color:#555;font-size:0.65rem;">${temp < 50 ? '⚠ Cold weather — heating/insulation required' : temp > 90 ? '⚠ Hot weather — evaporation risk' : '✓ Favorable curing conditions'}</span>`);
             el.innerHTML = lines.join('<br>');
+        }
+
+        // ============================================================
+        // COPY MEASUREMENTS AS TAB-SEPARATED TABLE (for Excel/email paste)
+        // ============================================================
+        function copyMeasurementsTable() {
+            if (measurements.length === 0) { alert('No measurements to copy.'); return; }
+            const typeLabels = { slab:'Slab', footing:'Footing', wall:'Wall', gradebeam:'Grade Beam', curb:'Curb', pier:'Pier' };
+            const headers = ['#', 'Label', 'Type', 'Page', 'Phase', 'Config', 'Area (SF)', 'Length (LF)', 'Volume (yd³)', 'Cost Est', 'Notes'];
+            const rows = [headers.join('\t')];
+            measurements.filter(m => !m.excluded).forEach((m, i) => {
+                const configStr = (() => {
+                    if (m.config.type === 'slab') return `${m.config.thickness||4}" thick`;
+                    if (m.config.type === 'footing') return `${m.config.width}"w × ${m.config.depth}"d`;
+                    if (m.config.type === 'wall') return `${m.config.height}${m.config.heightUnit||'ft'}h × ${m.config.thickness||8}"t`;
+                    if (m.config.type === 'gradebeam') return `${m.config.width}"w × ${m.config.depth}"d`;
+                    if (m.config.type === 'curb') return `${m.config.width}"w × ${m.config.height}"h`;
+                    if (m.config.type === 'pier') return `dia.${m.config.diameter}"`;
+                    return '';
+                })();
+                const cost = getItemEstimatedCost(m);
+                rows.push([
+                    i + 1,
+                    m.label || '',
+                    typeLabels[m.config.type] || m.config.type,
+                    m.page || 1,
+                    m.phase ? `P${m.phase}` : '',
+                    configStr,
+                    m.area ? m.area.toFixed(1) : '',
+                    m.length ? m.length.toFixed(1) : '',
+                    m.volume.toFixed(3),
+                    cost ? `$${Math.round(cost)}` : '',
+                    m.notes || ''
+                ].join('\t'));
+            });
+            // Totals row
+            const totalYd = measurements.filter(m=>!m.excluded).reduce((s,m)=>s+m.volume,0);
+            const est = window.lastEstimate;
+            rows.push(['', 'TOTAL', '', '', '', '', '', '', totalYd.toFixed(3), est?.costs?.total ? `$${Math.round(est.costs.total)}` : '', ''].join('\t'));
+
+            const text = rows.join('\n');
+            if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    const btn = document.querySelector('button[onclick="copyMeasurementsTable()"]');
+                    if (btn) { const o=btn.textContent; btn.textContent='✅ Copied!'; setTimeout(()=>{btn.textContent=o;},2000); }
+                }).catch(() => prompt('Copy measurements table:', text));
+            } else { prompt('Copy measurements table:', text); }
         }
 
         // ============================================================
