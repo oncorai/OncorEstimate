@@ -1793,6 +1793,16 @@
                                 <div id="subItemsTotal" style="font-size:0.75rem;color:#fb923c;margin-top:5px;text-align:right;display:none;"></div>
                             </div>
                             <div class="pricing-group">
+                                <div class="group-label">🔄 Price Update Utility</div>
+                                <div style="font-size:0.7rem;color:#666;margin-bottom:6px;">Apply a uniform % change to all material prices at once (for quarterly price updates from your supplier).</div>
+                                <div style="display:flex;gap:5px;align-items:center;">
+                                    <input type="number" id="bulk-price-pct" placeholder="e.g. +3 or -5" step="0.5" style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:5px 8px;color:#fff;font-size:0.82rem;" title="Positive = price increase, negative = decrease. Example: 3 = raise all prices 3%">
+                                    <span style="color:#888;font-size:0.78rem;flex-shrink:0;">%</span>
+                                    <button onclick="applyBulkPriceUpdate()" style="background:rgba(78,205,196,0.12);border:1px solid rgba(78,205,196,0.3);color:#4ecdc4;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:0.78rem;white-space:nowrap;">Apply</button>
+                                </div>
+                                <div style="font-size:0.68rem;color:#555;margin-top:4px;">Updates: concrete (all PSI), rebar, mesh, forms, labor. Markup/waste % untouched.</div>
+                            </div>
+                            <div class="pricing-group">
                                 <div class="group-label">➕ Add-Ons</div>
                                 <div class="pricing-row">
                                     <label title="Fixed mobilization fee (site visit, setup, cleanup). Added to bid after markup.">Mobilization ($)</label>
@@ -2123,6 +2133,10 @@
                     <button class="action-btn secondary" onclick="savePricingTemplate()" title="Save current pricing settings as your default template (no measurements saved)">📐 Save Template</button>
                     <button class="action-btn secondary" onclick="loadPricingTemplate()" title="Load your saved pricing template into the current project">📐 Load Template</button>
                 </div>
+                <div class="action-row">
+                    <button class="action-btn secondary" onclick="logBidToHistory()" title="Log this bid to your bid history (won/lost tracking)">📒 Log Bid</button>
+                    <button class="action-btn secondary" onclick="showBidHistory()" title="View your bid history — win rate, average bid size, trends">📒 Bid History</button>
+                </div>
                 <input type="file" id="importProjectInput" accept=".json,application/json" style="display:none" onchange="importProjectJSON(event)">
                 <div class="action-row">
                     <button class="action-btn secondary" onclick="copyBidSummary()" title="Copy bid summary text to clipboard for emailing or texting to GC">📋 Copy Bid Summary</button>
@@ -2275,6 +2289,18 @@
     </div>
 
     <!-- Load Project Modal -->
+    <!-- Bid History Modal -->
+    <div class="modal hidden" id="bidHistoryModal" onclick="if(event.target===this)closeBidHistory()">
+        <div class="modal-content" style="max-width:560px;">
+            <h2>📒 Bid History</h2>
+            <div id="bidHistoryContent" style="max-height:420px;overflow-y:auto;margin-bottom:12px;"></div>
+            <div class="btn-row">
+                <button class="btn-secondary" onclick="clearBidHistory()" style="color:#f87171;">Clear All</button>
+                <button class="btn-secondary" onclick="closeBidHistory()">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Pre-Export Checklist Modal -->
     <div class="modal hidden" id="preExportChecklistModal" onclick="if(event.target===this)closePreExportChecklist()">
         <div class="modal-content" style="max-width:520px;">
@@ -8790,6 +8816,177 @@ ${(() => {
                 </div>`;
             }
             html += `<div style="font-size:0.68rem;color:#444;margin-top:4px;">Data is indicative only. Varies by site conditions, schedule, and market conditions.</div>`;
+
+            el.innerHTML = html;
+        }
+
+        // ============================================================
+        // BULK PRICE UPDATE
+        // Apply a % change to all material input fields at once.
+        // ============================================================
+        function applyBulkPriceUpdate() {
+            const pct = parseFloat(document.getElementById('bulk-price-pct').value);
+            if (isNaN(pct) || pct === 0) { alert('Enter a non-zero percentage (e.g. 3 = +3%, -5 = -5%).'); return; }
+            if (!confirm(`Apply ${pct > 0 ? '+' : ''}${pct}% to all material prices (concrete, rebar, mesh, forms, labor)?`)) return;
+            const factor = 1 + pct / 100;
+            const fields = [
+                'price-concrete-2500', 'price-concrete-3000', 'price-concrete-4000', 'price-concrete-5000',
+                'price-rebar-4', 'price-rebar-5', 'price-mesh',
+                'price-forms', 'price-forms-linear', 'price-forms-wall', 'price-forms-pier',
+                'price-finish-broom', 'price-finish-stamp',
+                'price-labor', 'price-pump'
+            ];
+            fields.forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.value) {
+                    const newVal = parseFloat(el.value) * factor;
+                    el.value = newVal.toFixed(id.includes('mesh') || id.includes('broom') || id.includes('stamp') ? 2 : 0);
+                }
+            });
+            document.getElementById('bulk-price-pct').value = '';
+            const btn = document.querySelector('button[onclick="applyBulkPriceUpdate()"]');
+            if (btn) { const o = btn.textContent; btn.textContent = `✅ Updated ${pct > 0 ? '+' : ''}${pct}%`; setTimeout(() => { btn.textContent = o; }, 2500); }
+        }
+
+        // ============================================================
+        // BID HISTORY LOG
+        // Append-only log of submitted bids. Tracks: project, date,
+        // amount, yd³, $/yd³, and won/lost/pending status.
+        // ============================================================
+        const BID_HISTORY_KEY = 'oncor_bid_history';
+
+        function getBidHistory() {
+            try { return JSON.parse(localStorage.getItem(BID_HISTORY_KEY) || '[]'); } catch { return []; }
+        }
+
+        function saveBidHistoryData(history) {
+            localStorage.setItem(BID_HISTORY_KEY, JSON.stringify(history));
+        }
+
+        function logBidToHistory() {
+            const projectName = document.getElementById('projectName').value.trim() || 'Untitled';
+            const clientName  = document.getElementById('clientName').value.trim();
+            const est = window.lastEstimate;
+            const total = est?.costs?.total || 0;
+            const yd3 = est?.quantities?.yards || 0;
+
+            if (total === 0) { alert('Run the cost estimate first before logging a bid.'); return; }
+
+            const status = prompt(`Log bid for "${projectName}" (${formatCurrency(total)}).\n\nStatus? Enter: won / lost / pending`, 'pending');
+            if (!status) return;
+            const s = status.toLowerCase().trim();
+            const validStatuses = ['won', 'lost', 'pending'];
+            const finalStatus = validStatuses.includes(s) ? s : 'pending';
+
+            const history = getBidHistory();
+            history.unshift({
+                id: Date.now(),
+                project: projectName,
+                client: clientName,
+                date: new Date().toISOString().split('T')[0],
+                total,
+                yd3,
+                perYd: yd3 > 0 ? total / yd3 : 0,
+                status: finalStatus
+            });
+            // Keep last 100
+            saveBidHistoryData(history.slice(0, 100));
+            const btn = document.querySelector('button[onclick="logBidToHistory()"]');
+            if (btn) { const o=btn.textContent; btn.textContent='✅ Logged!'; setTimeout(()=>{btn.textContent=o;},2000); }
+        }
+
+        function showBidHistory() {
+            renderBidHistory();
+            document.getElementById('bidHistoryModal')?.classList.remove('hidden');
+        }
+
+        function closeBidHistory() {
+            document.getElementById('bidHistoryModal')?.classList.add('hidden');
+        }
+
+        function clearBidHistory() {
+            if (!confirm('Clear all bid history? This cannot be undone.')) return;
+            localStorage.removeItem(BID_HISTORY_KEY);
+            renderBidHistory();
+        }
+
+        function updateBidStatus(id, status) {
+            const history = getBidHistory();
+            const entry = history.find(e => e.id === id);
+            if (entry) { entry.status = status; saveBidHistoryData(history); renderBidHistory(); }
+        }
+
+        function deleteBidEntry(id) {
+            const history = getBidHistory().filter(e => e.id !== id);
+            saveBidHistoryData(history);
+            renderBidHistory();
+        }
+
+        function renderBidHistory() {
+            const el = document.getElementById('bidHistoryContent');
+            if (!el) return;
+            const history = getBidHistory();
+
+            if (history.length === 0) {
+                el.innerHTML = '<div style="color:#555;text-align:center;padding:20px;font-size:0.85rem;">No bids logged yet. Click "Log Bid" after running an estimate.</div>';
+                return;
+            }
+
+            // Stats summary
+            const won = history.filter(e => e.status === 'won');
+            const lost = history.filter(e => e.status === 'lost');
+            const pending = history.filter(e => e.status === 'pending');
+            const decided = won.length + lost.length;
+            const winRate = decided > 0 ? (won.length / decided * 100).toFixed(0) : null;
+            const avgBid = history.reduce((s, e) => s + e.total, 0) / history.length;
+            const totalWon = won.reduce((s, e) => s + e.total, 0);
+            const totalBidVol = history.reduce((s, e) => s + e.yd3, 0);
+
+            let html = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px;">
+                <div style="background:rgba(0,0,0,0.3);border-radius:6px;padding:7px 8px;text-align:center;">
+                    <div style="font-size:1.1rem;font-weight:700;color:#fff;">${history.length}</div>
+                    <div style="font-size:0.7rem;color:#888;">Total Bids</div>
+                </div>
+                <div style="background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.2);border-radius:6px;padding:7px 8px;text-align:center;">
+                    <div style="font-size:1.1rem;font-weight:700;color:#4ade80;">${winRate ? winRate + '%' : '—'}</div>
+                    <div style="font-size:0.7rem;color:#888;">Win Rate</div>
+                </div>
+                <div style="background:rgba(0,0,0,0.3);border-radius:6px;padding:7px 8px;text-align:center;">
+                    <div style="font-size:0.9rem;font-weight:700;color:#fff;">${avgBid > 0 ? '$' + Math.round(avgBid/1000) + 'k' : '—'}</div>
+                    <div style="font-size:0.7rem;color:#888;">Avg Bid</div>
+                </div>
+                <div style="background:rgba(0,0,0,0.3);border-radius:6px;padding:7px 8px;text-align:center;">
+                    <div style="font-size:0.9rem;font-weight:700;color:#4ecdc4;">${totalWon > 0 ? '$' + Math.round(totalWon/1000) + 'k' : '—'}</div>
+                    <div style="font-size:0.7rem;color:#888;">Won Volume</div>
+                </div>
+            </div>`;
+
+            // History list
+            html += history.map(e => {
+                const statusColors = { won: '#4ade80', lost: '#f87171', pending: '#fbbf24' };
+                const statusBg = { won: 'rgba(74,222,128,0.1)', lost: 'rgba(248,113,113,0.1)', pending: 'rgba(251,191,36,0.08)' };
+                const color = statusColors[e.status] || '#888';
+                const bg = statusBg[e.status] || 'rgba(0,0,0,0.2)';
+                const dateStr = e.date ? new Date(e.date + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '';
+                return `<div style="background:${bg};border:1px solid ${color}30;border-radius:6px;padding:8px 10px;margin-bottom:6px;">
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+                        <div style="flex:1;">
+                            <div style="font-weight:600;font-size:0.82rem;color:#e0e0e0;">${e.project}${e.client ? ` <span style="color:#666;font-weight:400;">— ${e.client}</span>` : ''}</div>
+                            <div style="font-size:0.73rem;color:#888;margin-top:2px;">${dateStr}${e.yd3 > 0 ? ` · ${e.yd3.toFixed(1)} yd³` : ''}${e.perYd > 0 ? ` · ${formatCurrency(e.perYd)}/yd³` : ''}</div>
+                        </div>
+                        <div style="text-align:right;flex-shrink:0;">
+                            <div style="font-size:0.95rem;font-weight:700;color:#fff;">${formatCurrency(e.total)}</div>
+                            <span style="background:${color}22;border:1px solid ${color}55;color:${color};border-radius:10px;padding:1px 7px;font-size:0.68rem;font-weight:600;text-transform:uppercase;">${e.status}</span>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:4px;margin-top:6px;">
+                        <button onclick="updateBidStatus(${e.id},'won')" style="flex:1;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:4px;padding:3px;cursor:pointer;font-size:0.68rem;${e.status==='won'?'font-weight:700;':''}">✓ Won</button>
+                        <button onclick="updateBidStatus(${e.id},'lost')" style="flex:1;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:4px;padding:3px;cursor:pointer;font-size:0.68rem;${e.status==='lost'?'font-weight:700;':''}">✗ Lost</button>
+                        <button onclick="updateBidStatus(${e.id},'pending')" style="flex:1;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.2);color:#fbbf24;border-radius:4px;padding:3px;cursor:pointer;font-size:0.68rem;${e.status==='pending'?'font-weight:700;':''}">⏳ Pending</button>
+                        <button onclick="deleteBidEntry(${e.id})" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#555;border-radius:4px;padding:3px 6px;cursor:pointer;font-size:0.68rem;" title="Delete">✕</button>
+                    </div>
+                </div>`;
+            }).join('');
 
             el.innerHTML = html;
         }
