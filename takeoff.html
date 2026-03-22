@@ -754,6 +754,44 @@
             font-weight: normal;
             font-style: italic;
         }
+
+        /* Quick Bid Banner */
+        .quick-bid-banner {
+            background: linear-gradient(135deg, rgba(78,205,196,0.15), rgba(245,166,35,0.1));
+            border-bottom: 1px solid rgba(78,205,196,0.3);
+            padding: 8px 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+        .quick-bid-banner .bid-left { font-size: 0.75rem; color: #888; }
+        .quick-bid-banner .bid-amount { font-size: 1.1rem; font-weight: bold; color: #4ecdc4; }
+        .quick-bid-banner .bid-yards { font-size: 0.75rem; color: #f5a623; margin-left: 8px; }
+
+        /* Measurement visibility toggle */
+        .vis-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 3px 5px;
+            font-size: 0.9rem;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+            line-height: 1;
+        }
+        .vis-btn:hover { opacity: 1; }
+        .vis-btn.hidden-m { opacity: 1; color: #ff6b6b; }
+        .measurement-item.excluded { opacity: 0.4; }
+        .measurement-item.excluded .volume { text-decoration: line-through; color: #666; }
+
+        /* Pan mode cursor */
+        .canvas-container.panning { cursor: grabbing !important; }
+        .canvas-container.pan-ready { cursor: grab !important; }
+
+        /* Redo button */
+        .undo-btn { transition: opacity 0.2s; }
+        .undo-btn:disabled { opacity: 0.3; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -768,6 +806,15 @@
                 <input type="text" class="project-name" id="projectName" placeholder="Project Name" value="Untitled">
             </div>
             
+            <!-- Quick Bid Banner: always-visible cost summary -->
+            <div class="quick-bid-banner" id="quickBidBanner">
+                <span class="bid-left">Est. Total Bid</span>
+                <span>
+                    <span class="bid-amount" id="quickBidAmount">—</span>
+                    <span class="bid-yards" id="quickBidYards"></span>
+                </span>
+            </div>
+
             <div class="sidebar-content">
                 <!-- Scale Section -->
                 <div class="section">
@@ -1253,7 +1300,8 @@
                     <button onclick="zoomIn()" title="Zoom In">+</button>
                     <button onclick="zoomFit()" title="Fit to Screen">⊡</button>
                 </div>
-                <button class="undo-btn" onclick="undoLast()" title="Undo Last (Ctrl+Z)">↩ Undo</button>
+                <button class="undo-btn" id="undoBtn" onclick="undoLast()" title="Undo (Ctrl+Z)">↩ Undo</button>
+                <button class="undo-btn" id="redoBtn" onclick="redoLast()" title="Redo (Ctrl+Y)" disabled>↪ Redo</button>
                 <div class="view-toggle">
                     <button id="viewToggle" onclick="toggleViewMode()" title="Toggle view mode">📜 Continuous</button>
                 </div>
@@ -1328,10 +1376,12 @@
                 <div><kbd>R</kbd> Rectangle</div><div><kbd>L</kbd> Line</div>
                 <div><kbd>P</kbd> Polygon</div><div><kbd>S</kbd> Select</div>
                 <div style="color: #888; margin-top: 8px;">Actions</div><div></div>
-                <div><kbd>Ctrl+Z</kbd> Undo</div><div><kbd>Esc</kbd> Cancel poly</div>
-                <div><kbd>Ctrl+S</kbd> Save</div><div><kbd>Ctrl+Scroll</kbd> Zoom</div>
+                <div><kbd>Ctrl+Z</kbd> Undo</div><div><kbd>Ctrl+Y</kbd> Redo</div>
+                <div><kbd>Esc</kbd> Cancel poly</div><div><kbd>Ctrl+S</kbd> Save</div>
+                <div><kbd>Ctrl+Scroll</kbd> Zoom</div><div><kbd>Space</kbd>+drag: Pan</div>
                 <div><kbd>Ctrl++</kbd> Zoom In</div><div><kbd>Ctrl+−</kbd> Zoom Out</div>
                 <div><kbd>Ctrl+0</kbd> Fit View</div><div><kbd>Shift</kbd>+draw: snap/square</div>
+                <div><kbd>Middle click</kbd> Pan</div><div><kbd>👁 eye</kbd> Excl. from bid</div>
             </div>
             <div style="margin-top: 16px; font-size: 0.8rem; color: #666;">Tip: Double-click to close a polygon</div>
             <div class="btn-row" style="margin-top: 15px;">
@@ -1376,6 +1426,33 @@
         let activeDrawCanvas = null; // Currently active draw canvas
         let activePageNum = 1; // Currently active page in continuous mode
         const BASE_SCALE = 1.5; // Base PDF render scale
+
+        // Undo/redo history stack
+        let undoStack = []; // each entry: snapshot of measurements array (JSON)
+        let redoStack = [];
+        const MAX_HISTORY = 50;
+
+        function snapshotHistory() {
+            undoStack.push(JSON.stringify(measurements));
+            if (undoStack.length > MAX_HISTORY) undoStack.shift();
+            redoStack = []; // new action clears redo
+            updateUndoButtons();
+        }
+
+        function updateUndoButtons() {
+            const undoBtn = document.getElementById('undoBtn');
+            const redoBtn = document.getElementById('redoBtn');
+            if (undoBtn) undoBtn.disabled = undoStack.length === 0;
+            if (redoBtn) redoBtn.disabled = redoStack.length === 0;
+        }
+
+        // Pan state
+        let isPanning = false;
+        let panStartX = 0;
+        let panStartY = 0;
+        let panScrollLeft = 0;
+        let panScrollTop = 0;
+        let spaceDown = false;
         
         const pdfCanvas = document.getElementById('pdfCanvas');
         const drawCanvas = document.getElementById('drawCanvas');
@@ -1991,6 +2068,7 @@
         
         // Continuous mode mouse handlers
         function handleContinuousMouseDown(e, pageNum, canvas) {
+            if (spaceDown || e.button === 1) return; // Pan mode — handled by container listener
             activePageNum = pageNum;
             activeDrawCanvas = canvas;
             const rect = canvas.getBoundingClientRect();
@@ -2064,6 +2142,7 @@
                     page: pageNum
                 };
                 measurement.volume = calculateVolume(measurement);
+                snapshotHistory();
                 measurements.push(measurement);
                 updateMeasurementsList();
                 redrawAllMeasurements();
@@ -2225,6 +2304,7 @@
                         page: pageNum
                     };
                     measurement.volume = calculateVolume(measurement);
+                    snapshotHistory();
                     measurements.push(measurement);
                 }
             } else if (currentTool === 'line') {
@@ -2254,6 +2334,7 @@
                         page: pageNum
                     };
                     measurement.volume = calculateVolume(measurement);
+                    snapshotHistory();
                     measurements.push(measurement);
                 }
             }
@@ -2289,6 +2370,7 @@
                     page: pageNum
                 };
                 measurement.volume = calculateVolume(measurement);
+                snapshotHistory();
                 measurements.push(measurement);
                 
                 polygonPoints = [];
@@ -2487,6 +2569,7 @@
         }
         
         function handleMouseDown(e) {
+            if (spaceDown || e.button === 1) return; // Pan mode — handled by container listener
             const pos = getMousePos(e);
             
             if (scaleMode) {
@@ -2612,6 +2695,7 @@
                         page: currentPage
                     };
                     measurement.volume = calculateVolume(measurement);
+                    snapshotHistory();
                     measurements.push(measurement);
                 }
             } else if (currentTool === 'line') {
@@ -2630,6 +2714,7 @@
                         page: currentPage
                     };
                     measurement.volume = calculateVolume(measurement);
+                    snapshotHistory();
                     measurements.push(measurement);
                 }
             }
@@ -2666,6 +2751,7 @@
                     page: currentPage
                 };
                 measurement.volume = calculateVolume(measurement);
+                snapshotHistory();
                 measurements.push(measurement);
                 
                 polygonPoints = [];
@@ -2805,7 +2891,7 @@
                     
                     const pageTag = m.page ? `<span style="font-size:0.7rem;color:#888;margin-left:4px;">pg ${m.page}</span>` : '';
                     return `
-                        <div class="measurement-item${m.id === selectedMeasurementId ? ' selected' : ''}" data-type="${m.config.type}" data-id="${m.id}">
+                        <div class="measurement-item${m.id === selectedMeasurementId ? ' selected' : ''}${m.excluded ? ' excluded' : ''}" data-type="${m.config.type}" data-id="${m.id}">
                             <div class="info">
                                 <div class="type">${elementNames[m.config.type]}${pageTag}</div>
                                 <input class="measurement-label" 
@@ -2821,6 +2907,7 @@
                             <div style="display:flex;flex-direction:column;gap:4px;">
                                 <button class="delete-btn" onclick="deleteMeasurement(${m.id})" title="Delete">×</button>
                                 <button class="delete-btn" style="background:rgba(78,205,196,0.2);color:#4ecdc4;font-size:0.9rem;" onclick="duplicateMeasurement(${m.id})" title="Duplicate">⎘</button>
+                                <button class="vis-btn${m.excluded ? ' hidden-m' : ''}" onclick="toggleMeasurementVisibility(${m.id})" title="${m.excluded ? 'Excluded from estimate (click to include)' : 'Included in estimate (click to exclude)'}">${m.excluded ? '🚫' : '👁'}</button>
                             </div>
                         </div>
                     `;
@@ -2837,6 +2924,7 @@
         
         // Delete measurement
         function deleteMeasurement(id) {
+            snapshotHistory();
             measurements = measurements.filter(m => m.id !== id);
             updateMeasurementsList();
             redrawMeasurements();
@@ -2853,18 +2941,42 @@
             if (copy.points) {
                 copy.points = copy.points.map(p => ({ x: p.x + (10 / (zoom || 1)), y: p.y + (10 / (zoom || 1)) }));
             }
+            snapshotHistory();
             measurements.push(copy);
             updateMeasurementsList();
             redrawMeasurements();
         }
         
-        // Undo last
+        // Undo last (proper history stack)
         function undoLast() {
-            if (measurements.length > 0) {
-                measurements.pop();
-                updateMeasurementsList();
-                redrawMeasurements();
-            }
+            if (undoStack.length === 0) return;
+            redoStack.push(JSON.stringify(measurements));
+            measurements = JSON.parse(undoStack.pop());
+            updateMeasurementsList();
+            redrawMeasurements();
+            updateUndoButtons();
+        }
+
+        // Redo last undone action
+        function redoLast() {
+            if (redoStack.length === 0) return;
+            undoStack.push(JSON.stringify(measurements));
+            measurements = JSON.parse(redoStack.pop());
+            updateMeasurementsList();
+            redrawMeasurements();
+            updateUndoButtons();
+        }
+
+        // Toggle measurement inclusion in estimate
+        function toggleMeasurementVisibility(id) {
+            const m = measurements.find(m => m.id === id);
+            if (!m) return;
+            snapshotHistory();
+            m.excluded = !m.excluded;
+            updateMeasurementsList();
+            redrawMeasurements();
+            recalculateCosts();
+            scheduleAutoSave();
         }
         
         // Keyboard shortcuts
@@ -2872,9 +2984,17 @@
             const inInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT';
 
             // Ctrl/Cmd shortcuts work everywhere (override browser defaults intentionally)
-            if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !inInput) {
+            if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !inInput) {
                 e.preventDefault();
                 undoLast();
+            }
+            if ((e.key === 'y' && (e.ctrlKey || e.metaKey)) || (e.key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey)) {
+                if (!inInput) { e.preventDefault(); redoLast(); }
+            }
+            if (e.key === ' ' && !inInput) {
+                e.preventDefault();
+                spaceDown = true;
+                document.getElementById('canvasContainer').classList.add('pan-ready');
             }
             if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
@@ -2927,6 +3047,53 @@
                 }
             }
         }, { passive: false });
+
+        // Spacebar keyup — release pan mode
+        document.addEventListener('keyup', (e) => {
+            if (e.key === ' ') {
+                spaceDown = false;
+                isPanning = false;
+                const cc = document.getElementById('canvasContainer');
+                cc.classList.remove('pan-ready', 'panning');
+            }
+        });
+
+        // Space+drag pan for canvas container
+        const canvasContainer = document.getElementById('canvasContainer');
+        canvasContainer.addEventListener('mousedown', (e) => {
+            if (spaceDown || e.button === 1) { // spacebar or middle click
+                e.preventDefault();
+                isPanning = true;
+                panStartX = e.clientX;
+                panStartY = e.clientY;
+                panScrollLeft = canvasContainer.scrollLeft;
+                panScrollTop = canvasContainer.scrollTop;
+                canvasContainer.classList.add('panning');
+                canvasContainer.classList.remove('pan-ready');
+            }
+        });
+        canvasContainer.addEventListener('mousemove', (e) => {
+            if (isPanning) {
+                e.preventDefault();
+                const dx = e.clientX - panStartX;
+                const dy = e.clientY - panStartY;
+                canvasContainer.scrollLeft = panScrollLeft - dx;
+                canvasContainer.scrollTop = panScrollTop - dy;
+            }
+        });
+        canvasContainer.addEventListener('mouseup', (e) => {
+            if (isPanning) {
+                isPanning = false;
+                canvasContainer.classList.remove('panning');
+                if (spaceDown) canvasContainer.classList.add('pan-ready');
+            }
+        });
+        canvasContainer.addEventListener('mouseleave', () => {
+            if (isPanning) {
+                isPanning = false;
+                canvasContainer.classList.remove('panning');
+            }
+        });
         
         // Auto-save to localStorage (safety net — prevents data loss on tab close)
         let autoSaveTimer = null;
@@ -2952,7 +3119,7 @@
             }, 2000); // 2 second debounce
         }
 
-        // Update totals
+        // Update totals (skips excluded measurements)
         function updateTotals() {
             const totals = { slab: 0, footing: 0, wall: 0, gradebeam: 0, curb: 0, pier: 0 };
             const lf = { footing: 0, wall: 0, gradebeam: 0, curb: 0 };
@@ -2960,6 +3127,7 @@
             let pierCount = 0;
             
             measurements.forEach(m => {
+                if (m.excluded) return; // Skip excluded items
                 if (totals.hasOwnProperty(m.config.type)) {
                     totals[m.config.type] += m.volume;
                 }
@@ -3142,6 +3310,9 @@
                     document.getElementById('waste-factor').value = ps.waste || 5;
                 }
                 
+                undoStack = []; // clear history on load
+                redoStack = [];
+                updateUndoButtons();
                 updateMeasurementsList();
                 redrawMeasurements();
                 hideLoadModal();
@@ -3200,9 +3371,20 @@
             doc.text('CONCRETE TAKEOFF SUMMARY', margin, y);
             y += 12;
             
-            // Group by element type
+            // Note excluded items
+            const excludedItems = measurements.filter(m => m.excluded);
+            if (excludedItems.length > 0) {
+                doc.setFontSize(9);
+                doc.setFont('helvetica', 'italic');
+                doc.setTextColor(150, 100, 0);
+                doc.text(`Note: ${excludedItems.length} item(s) marked excluded — not included in quantities or cost estimate below.`, margin, y);
+                y += 8;
+            }
+
+            // Group by element type (exclude items marked excluded)
             const grouped = {};
             measurements.forEach(m => {
+                if (m.excluded) return;
                 if (!grouped[m.config.type]) grouped[m.config.type] = [];
                 grouped[m.config.type].push(m);
             });
@@ -3444,6 +3626,7 @@
         // Clear all
         function clearAll() {
             if (measurements.length === 0 || confirm('Clear all measurements?')) {
+                snapshotHistory();
                 measurements = [];
                 polygonPoints = [];
                 updateMeasurementsList();
@@ -3534,6 +3717,7 @@
             let totalPierCount = 0;      // pier count (tube forms per ea)
             
             measurements.forEach(m => {
+                if (m.excluded) return; // Skip excluded items from cost calc
                 totalYards += m.volume;
                 
                 if (m.area) {
@@ -3670,6 +3854,19 @@
                 },
                 markups: { waste: wastePct, overhead: overheadPct, profit: profitPct }
             };
+
+            // Update quick bid banner
+            const bidAmountEl = document.getElementById('quickBidAmount');
+            const bidYardsEl = document.getElementById('quickBidYards');
+            if (bidAmountEl) {
+                bidAmountEl.textContent = totalBid > 0 ? formatCurrency(totalBid) : '—';
+                if (bidYardsEl) {
+                    const excludedCount = measurements.filter(m => m.excluded).length;
+                    let yardsText = totalYards > 0 ? `${totalYards.toFixed(1)} yd³` : '';
+                    if (excludedCount > 0) yardsText += ` (${excludedCount} excl.)`;
+                    bidYardsEl.textContent = yardsText;
+                }
+            }
         }
         
         function formatCurrency(amount) {
@@ -3682,6 +3879,10 @@
                          'cost-profit', 'cost-total'];
             ids.forEach(id => document.getElementById(id).textContent = '$0.00');
             document.getElementById('cost-per-yard-label').textContent = '$0.00 per yd³ installed';
+            const bidAmountEl = document.getElementById('quickBidAmount');
+            if (bidAmountEl) bidAmountEl.textContent = '—';
+            const bidYardsEl = document.getElementById('quickBidYards');
+            if (bidYardsEl) bidYardsEl.textContent = '';
         }
         
         // Auto-recalculate when measurements change + schedule auto-save
@@ -3714,6 +3915,9 @@
                                     document.getElementById('scaleStatus').classList.remove('not-set');
                                     document.getElementById('scaleStatus').classList.add('set');
                                 }
+                                undoStack = [];
+                                redoStack = [];
+                                updateUndoButtons();
                                 updateMeasurementsList();
                             }
                         }
@@ -3722,6 +3926,9 @@
             } catch(e) { /* silently ignore */ }
         });
         
+        // Initialize undo/redo button states on load
+        updateUndoButtons();
+
         // Listen for pricing input changes (change fires on blur/select; input fires live on typing)
         document.querySelectorAll('.pricing-row input, .pricing-row select').forEach(el => {
             el.addEventListener('change', recalculateCosts);
