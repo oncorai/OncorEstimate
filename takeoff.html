@@ -831,6 +831,56 @@
         .canvas-container.panning { cursor: grabbing !important; }
         .canvas-container.pan-ready { cursor: grab !important; }
 
+        /* Edit measurement modal */
+        .edit-field-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+            align-items: flex-end;
+        }
+        .edit-field {
+            flex: 1;
+        }
+        .edit-field label {
+            display: block;
+            font-size: 0.75rem;
+            color: #888;
+            margin-bottom: 4px;
+        }
+        .edit-field input, .edit-field select, .edit-field textarea {
+            width: 100%;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(0,0,0,0.3);
+            color: #fff;
+            font-size: 0.85rem;
+        }
+        .edit-field input:focus, .edit-field select:focus {
+            outline: none;
+            border-color: #4ecdc4;
+        }
+        .edit-section-label {
+            font-size: 0.75rem;
+            color: #4ecdc4;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 12px 0 8px;
+        }
+        .edit-btn {
+            background: none;
+            border: 1px solid rgba(245,166,35,0.4);
+            color: #f5a623;
+            border-radius: 6px;
+            padding: 5px 9px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            line-height: 1;
+            white-space: nowrap;
+        }
+        .edit-btn:hover { background: rgba(245,166,35,0.15); }
+
         /* Redo button */
         .undo-btn { transition: opacity 0.2s; }
         .undo-btn:disabled { opacity: 0.3; cursor: not-allowed; }
@@ -1501,10 +1551,27 @@
                 <div><kbd>Ctrl++</kbd> Zoom In</div><div><kbd>Ctrl+−</kbd> Zoom Out</div>
                 <div><kbd>Ctrl+0</kbd> Fit View</div><div><kbd>Shift</kbd>+draw: snap/square</div>
                 <div><kbd>Middle click</kbd> Pan</div><div><kbd>👁 eye</kbd> Excl. from bid</div>
+                <div><kbd>E</kbd> Edit selected</div><div><kbd>Del</kbd> Delete selected</div>
             </div>
-            <div style="margin-top: 16px; font-size: 0.8rem; color: #666;">Tip: Double-click to close a polygon</div>
+            <div style="margin-top: 16px; font-size: 0.8rem; color: #666;">Tip: Double-click to close a polygon. Select a measurement then press E to edit its dimensions.</div>
             <div class="btn-row" style="margin-top: 15px;">
                 <button onclick="toggleShortcuts()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Measurement Modal -->
+    <div class="modal hidden" id="editMeasurementModal" onclick="if(event.target===this) closeEditModal()">
+        <div class="modal-content" style="max-width:500px;">
+            <h2>✏️ Edit Measurement</h2>
+            <div id="editMeasurementForm" style="margin-bottom:15px;"></div>
+            <div style="margin:12px 0 8px;padding:10px;background:rgba(78,205,196,0.1);border:1px solid rgba(78,205,196,0.3);border-radius:8px;font-size:0.85rem;">
+                <span style="color:#888;">Updated Volume: </span>
+                <strong id="editVolumePreview" style="color:#4ecdc4;">—</strong>
+            </div>
+            <div class="btn-row">
+                <button onclick="saveEditedMeasurement()">💾 Save Changes</button>
+                <button class="btn-secondary" onclick="closeEditModal()">Cancel</button>
             </div>
         </div>
     </div>
@@ -3078,6 +3145,7 @@
                             </div>
                             <div style="display:flex;flex-direction:column;gap:4px;">
                                 <button class="delete-btn" onclick="deleteMeasurement(${m.id})" title="Delete">×</button>
+                                <button class="delete-btn" style="background:rgba(245,166,35,0.15);color:#f5a623;font-size:0.8rem;padding:3px 5px;" onclick="openEditModal(${m.id})" title="Edit dimensions">✏️</button>
                                 <button class="delete-btn" style="background:rgba(78,205,196,0.2);color:#4ecdc4;font-size:0.9rem;" onclick="duplicateMeasurement(${m.id})" title="Duplicate">⎘</button>
                                 <button class="vis-btn${m.excluded ? ' hidden-m' : ''}" onclick="toggleMeasurementVisibility(${m.id})" title="${m.excluded ? 'Excluded from estimate (click to include)' : 'Included in estimate (click to exclude)'}">${m.excluded ? '🚫' : '👁'}</button>
                             </div>
@@ -3252,6 +3320,15 @@
             if (e.key === 'p') setTool('polygon');
             if (e.key === 'l') setTool('line');
             if (e.key === 's') setTool('select');
+            // Edit selected measurement
+            if (e.key === 'e' && selectedMeasurementId) {
+                openEditModal(selectedMeasurementId);
+            }
+            // Delete selected measurement with Delete key
+            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedMeasurementId) {
+                deleteMeasurement(selectedMeasurementId);
+                selectedMeasurementId = null;
+            }
         });
         
         // Ctrl/Cmd + scroll wheel to zoom (like Bluebeam)
@@ -4332,6 +4409,219 @@
             el.addEventListener('change', recalculateCosts);
             el.addEventListener('input', recalculateCosts);
         });
+
+        // ===== EDIT MEASUREMENT MODAL =====
+        let _editingMeasurementId = null;
+
+        function openEditModal(id) {
+            const m = measurements.find(m => m.id === id);
+            if (!m) return;
+            _editingMeasurementId = id;
+
+            const form = document.getElementById('editMeasurementForm');
+            const type = m.config.type;
+            const color = elementColors[type];
+
+            let configFields = '';
+
+            switch (type) {
+                case 'slab':
+                    configFields = `
+                        <div class="edit-field-row">
+                            <div class="edit-field">
+                                <label>Thickness (inches)</label>
+                                <input type="number" id="edit-slab-thickness" value="${m.config.thickness || 4}" min="2" step="0.5">
+                            </div>
+                        </div>`;
+                    break;
+                case 'footing':
+                    configFields = `
+                        <div class="edit-field-row">
+                            <div class="edit-field"><label>Width (in)</label>
+                                <input type="number" id="edit-footing-width" value="${m.config.width || 24}" min="6" step="2">
+                            </div>
+                            <div class="edit-field"><label>Depth (in)</label>
+                                <input type="number" id="edit-footing-depth" value="${m.config.depth || 12}" min="6" step="2">
+                            </div>
+                        </div>`;
+                    break;
+                case 'wall':
+                    configFields = `
+                        <div class="edit-field-row">
+                            <div class="edit-field"><label>Height</label>
+                                <input type="number" id="edit-wall-height" value="${m.config.height || 8}" min="1" step="0.5">
+                            </div>
+                            <div class="edit-field"><label>Height Unit</label>
+                                <select id="edit-wall-height-unit">
+                                    <option value="ft" ${(m.config.heightUnit||m.config.unit||'ft')==='ft'?'selected':''}>ft</option>
+                                    <option value="in" ${(m.config.heightUnit||m.config.unit)==='in'?'selected':''}>in</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="edit-field-row">
+                            <div class="edit-field"><label>Thickness</label>
+                                <input type="number" id="edit-wall-thickness" value="${m.config.thickness || 8}" min="4" step="2">
+                            </div>
+                            <div class="edit-field"><label>Thickness Unit</label>
+                                <select id="edit-wall-thickness-unit">
+                                    <option value="in" ${(m.config.thicknessUnit||'in')==='in'?'selected':''}>in</option>
+                                    <option value="ft" ${(m.config.thicknessUnit)==='ft'?'selected':''}>ft</option>
+                                </select>
+                            </div>
+                        </div>`;
+                    break;
+                case 'gradebeam':
+                    configFields = `
+                        <div class="edit-field-row">
+                            <div class="edit-field"><label>Width (in)</label>
+                                <input type="number" id="edit-gradebeam-width" value="${m.config.width || 12}" min="6" step="2">
+                            </div>
+                            <div class="edit-field"><label>Depth (in)</label>
+                                <input type="number" id="edit-gradebeam-depth" value="${m.config.depth || 24}" min="8" step="2">
+                            </div>
+                        </div>`;
+                    break;
+                case 'curb':
+                    configFields = `
+                        <div class="edit-field-row">
+                            <div class="edit-field"><label>Width (in)</label>
+                                <input type="number" id="edit-curb-width" value="${m.config.width || 6}" min="4" step="1">
+                            </div>
+                            <div class="edit-field"><label>Height (in)</label>
+                                <input type="number" id="edit-curb-height" value="${m.config.height || 18}" min="6" step="2">
+                            </div>
+                        </div>`;
+                    break;
+                case 'pier':
+                    configFields = `
+                        <div class="edit-field-row">
+                            <div class="edit-field"><label>Diameter</label>
+                                <input type="number" id="edit-pier-diameter" value="${m.config.diameter || 12}" min="6" step="2">
+                            </div>
+                            <div class="edit-field"><label>Diam Unit</label>
+                                <select id="edit-pier-diameter-unit">
+                                    <option value="in" ${(m.config.diameterUnit||'in')==='in'?'selected':''}>in</option>
+                                    <option value="ft" ${m.config.diameterUnit==='ft'?'selected':''}>ft</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="edit-field-row">
+                            <div class="edit-field"><label>Depth</label>
+                                <input type="number" id="edit-pier-depth" value="${m.config.depth || 10}" min="1" step="1">
+                            </div>
+                            <div class="edit-field"><label>Depth Unit</label>
+                                <select id="edit-pier-depth-unit">
+                                    <option value="ft" ${(m.config.depthUnit||'ft')==='ft'?'selected':''}>ft</option>
+                                    <option value="in" ${m.config.depthUnit==='in'?'selected':''}>in</option>
+                                </select>
+                            </div>
+                        </div>`;
+                    break;
+            }
+
+            // Read-only drawn dimension (LF or SF)
+            let drawnDim = '';
+            if (m.area !== undefined) drawnDim = `<div class="edit-field-row"><div class="edit-field"><label>Drawn Area (read-only)</label><input type="text" value="${m.area.toFixed(2)} SF" readonly style="opacity:0.5;cursor:default;"></div></div>`;
+            else if (m.length !== undefined) drawnDim = `<div class="edit-field-row"><div class="edit-field"><label>Drawn Length (read-only)</label><input type="text" value="${m.length.toFixed(2)} LF" readonly style="opacity:0.5;cursor:default;"></div></div>`;
+
+            form.innerHTML = `
+                <div style="font-size:0.8rem;color:${color};font-weight:bold;text-transform:uppercase;margin-bottom:10px;border-left:3px solid ${color};padding-left:8px;">${elementNames[type]}</div>
+                <div class="edit-section-label">📐 Dimensions</div>
+                ${configFields}
+                ${drawnDim}
+            `;
+
+            // Attach live preview listeners
+            form.querySelectorAll('input, select').forEach(el => {
+                el.addEventListener('input', updateEditVolumePreview);
+                el.addEventListener('change', updateEditVolumePreview);
+            });
+
+            updateEditVolumePreview();
+
+            document.getElementById('editMeasurementModal').classList.remove('hidden');
+        }
+
+        function updateEditVolumePreview() {
+            const m = measurements.find(m => m.id === _editingMeasurementId);
+            if (!m) return;
+            // Build a temp config from current form values
+            const tempM = JSON.parse(JSON.stringify(m));
+            patchEditConfig(tempM);
+            tempM.volume = calculateVolume(tempM);
+            const el = document.getElementById('editVolumePreview');
+            if (el) el.textContent = tempM.volume.toFixed(3) + ' yd³';
+        }
+
+        function patchEditConfig(m) {
+            const type = m.config.type;
+            switch (type) {
+                case 'slab': {
+                    const v = document.getElementById('edit-slab-thickness');
+                    if (v) m.config.thickness = parseFloat(v.value) || 4;
+                    break;
+                }
+                case 'footing': {
+                    const w = document.getElementById('edit-footing-width');
+                    const d = document.getElementById('edit-footing-depth');
+                    if (w) m.config.width = parseFloat(w.value) || 24;
+                    if (d) m.config.depth = parseFloat(d.value) || 12;
+                    break;
+                }
+                case 'wall': {
+                    const h = document.getElementById('edit-wall-height');
+                    const hu = document.getElementById('edit-wall-height-unit');
+                    const t = document.getElementById('edit-wall-thickness');
+                    const tu = document.getElementById('edit-wall-thickness-unit');
+                    if (h) m.config.height = parseFloat(h.value) || 8;
+                    if (hu) { m.config.heightUnit = hu.value; m.config.unit = hu.value; }
+                    if (t) m.config.thickness = parseFloat(t.value) || 8;
+                    if (tu) m.config.thicknessUnit = tu.value;
+                    break;
+                }
+                case 'gradebeam': {
+                    const w = document.getElementById('edit-gradebeam-width');
+                    const d = document.getElementById('edit-gradebeam-depth');
+                    if (w) m.config.width = parseFloat(w.value) || 12;
+                    if (d) m.config.depth = parseFloat(d.value) || 24;
+                    break;
+                }
+                case 'curb': {
+                    const w = document.getElementById('edit-curb-width');
+                    const h = document.getElementById('edit-curb-height');
+                    if (w) m.config.width = parseFloat(w.value) || 6;
+                    if (h) m.config.height = parseFloat(h.value) || 18;
+                    break;
+                }
+                case 'pier': {
+                    const d = document.getElementById('edit-pier-diameter');
+                    const du = document.getElementById('edit-pier-diameter-unit');
+                    const dep = document.getElementById('edit-pier-depth');
+                    const depu = document.getElementById('edit-pier-depth-unit');
+                    if (d) m.config.diameter = parseFloat(d.value) || 12;
+                    if (du) m.config.diameterUnit = du.value;
+                    if (dep) m.config.depth = parseFloat(dep.value) || 10;
+                    if (depu) m.config.depthUnit = depu.value;
+                    break;
+                }
+            }
+        }
+
+        function saveEditedMeasurement() {
+            const m = measurements.find(m => m.id === _editingMeasurementId);
+            if (!m) return;
+            snapshotHistory();
+            patchEditConfig(m);
+            m.volume = calculateVolume(m);
+            closeEditModal();
+            updateMeasurementsList();
+            redrawMeasurements();
+        }
+
+        function closeEditModal() {
+            document.getElementById('editMeasurementModal').classList.add('hidden');
+            _editingMeasurementId = null;
+        }
 
         // Add preset scale keyboard shortcut hint to shortcuts modal
         // (no code needed — covered by existing modal)
