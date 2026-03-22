@@ -1074,6 +1074,18 @@
                             <option value="90">90 days</option>
                         </select>
                     </div>
+                    <div style="display:flex;gap:4px;align-items:center;margin-top:3px;">
+                        <span style="font-size:0.68rem;color:#555;">Status:</span>
+                        <select id="projectStatus" onchange="updateProjectStatusBadge()" style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:4px 6px;color:#ccc;font-size:0.72rem;" title="Project status — tracked in saved project data">
+                            <option value="estimating">📝 Estimating</option>
+                            <option value="submitted">📬 Submitted</option>
+                            <option value="awarded">🏆 Awarded</option>
+                            <option value="in_progress">🔨 In Progress</option>
+                            <option value="complete">✅ Complete</option>
+                            <option value="lost">❌ Lost</option>
+                            <option value="on_hold">⏸ On Hold</option>
+                        </select>
+                    </div>
                 </div>
             </div>
             
@@ -2136,6 +2148,9 @@
                 <div class="action-row">
                     <button class="action-btn secondary" onclick="logBidToHistory()" title="Log this bid to your bid history (won/lost tracking)">📒 Log Bid</button>
                     <button class="action-btn secondary" onclick="showBidHistory()" title="View your bid history — win rate, average bid size, trends">📒 Bid History</button>
+                </div>
+                <div class="action-row">
+                    <button class="action-btn secondary" onclick="printFormalBidLetter()" title="Print a formal proposal letter to accompany your bid package">📜 Bid Letter</button>
                 </div>
                 <input type="file" id="importProjectInput" accept=".json,application/json" style="display:none" onchange="importProjectJSON(event)">
                 <div class="action-row">
@@ -4379,6 +4394,7 @@
                 bidValidDays: document.getElementById('bidValidDays').value || '45',
                 notes: document.getElementById('projectNotes').value || '',
                 estimatorNotes: document.getElementById('estimatorNotes').value || '',
+                projectStatus: document.getElementById('projectStatus')?.value || 'estimating',
                 mixDesign: getMixDesignData(),
                 timestamp: new Date().toISOString(),
                 scale,
@@ -4430,6 +4446,7 @@
                 bidValidDays: document.getElementById('bidValidDays').value || '45',
                 notes: document.getElementById('projectNotes').value || '',
                 estimatorNotes: document.getElementById('estimatorNotes').value || '',
+                projectStatus: document.getElementById('projectStatus')?.value || 'estimating',
                 mixDesign: getMixDesignData(),
                 payMilestones: payMilestones,
                 psNextId: _psNextId,
@@ -4513,6 +4530,7 @@
                     document.getElementById('bidValidDays').value = data.bidValidDays || '45';
                     document.getElementById('projectNotes').value = data.notes || '';
                     if (document.getElementById('estimatorNotes')) document.getElementById('estimatorNotes').value = data.estimatorNotes || '';
+                    if (document.getElementById('projectStatus')) document.getElementById('projectStatus').value = data.projectStatus || 'estimating';
                     scale = data.scale || null;
                     measurements = data.measurements || [];
 
@@ -4633,15 +4651,19 @@
             if (projects.length === 0) {
                 container.innerHTML = '<p style="color: #666; text-align: center;">No saved projects</p>';
             } else {
-                container.innerHTML = projects.map((p, i) => `
-                    <div class="recent-project" style="display:flex;align-items:center;gap:8px;" onclick="loadProject(${i})">
+                const statusEmoji = { estimating:'📝', submitted:'📬', awarded:'🏆', in_progress:'🔨', complete:'✅', lost:'❌', on_hold:'⏸' };
+                container.innerHTML = projects.map((p, i) => {
+                    const statusIco = statusEmoji[p.projectStatus] || '';
+                    const estTotal = p.estimate?.costs?.total || 0;
+                    const totalStr = estTotal > 0 ? `  ·  ${formatCurrency(estTotal)}` : '';
+                    return `<div class="recent-project" style="display:flex;align-items:center;gap:8px;" onclick="loadProject(${i})">
                         <div style="flex:1;">
-                            <div class="name">${p.name}</div>
-                            <div class="meta">${new Date(p.timestamp).toLocaleDateString()} · ${p.measurements.length} items · ${p.totalYards.toFixed(1)} yd³</div>
+                            <div class="name">${statusIco ? statusIco + ' ' : ''}${p.name}${p.client ? ` <span style="font-weight:400;color:#888;font-size:0.8rem;">— ${p.client}</span>` : ''}</div>
+                            <div class="meta">${new Date(p.timestamp).toLocaleDateString()} · ${p.measurements.length} items · ${p.totalYards.toFixed(1)} yd³${totalStr}</div>
                         </div>
                         <button onclick="event.stopPropagation();deleteProject(${i})" title="Delete project" style="background:rgba(255,100,100,0.2);border:none;color:#ff6b6b;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:0.9rem;flex-shrink:0;">🗑</button>
-                    </div>
-                `).join('');
+                    </div>`;
+                }).join('');
             }
             
             document.getElementById('loadModal').classList.remove('hidden');
@@ -4727,6 +4749,7 @@
                 document.getElementById('bidDate').value     = project.bidDate || '';
                 document.getElementById('bidValidDays').value = project.bidValidDays || '45';
                 if (document.getElementById('estimatorNotes')) document.getElementById('estimatorNotes').value = project.estimatorNotes || '';
+                if (document.getElementById('projectStatus')) document.getElementById('projectStatus').value = project.projectStatus || 'estimating';
                 
                 // Restore bid alternates
                 if (project.bidAlternates && Array.isArray(project.bidAlternates)) {
@@ -8818,6 +8841,219 @@ ${(() => {
             html += `<div style="font-size:0.68rem;color:#444;margin-top:4px;">Data is indicative only. Varies by site conditions, schedule, and market conditions.</div>`;
 
             el.innerHTML = html;
+        }
+
+        // ============================================================
+        // PROJECT STATUS BADGE
+        // ============================================================
+        function updateProjectStatusBadge() {
+            // Future: could add visual indicator. For now just save with project.
+        }
+
+        // ============================================================
+        // FORMAL BID LETTER
+        // A professional proposal letter format (not just a table).
+        // Opens a print-ready pop-up window.
+        // ============================================================
+        function printFormalBidLetter() {
+            const projectName = document.getElementById('projectName').value.trim() || 'Untitled Project';
+            const clientName  = document.getElementById('clientName').value.trim();
+            const estimatorName = document.getElementById('estimatorName').value.trim();
+            const bidDateVal  = document.getElementById('bidDate').value;
+            const bidValidDays = parseInt(document.getElementById('bidValidDays').value) || 45;
+            const est = window.lastEstimate;
+            const notes = document.getElementById('projectNotes').value.trim();
+
+            if (!est || !est.costs || est.costs.total === 0) {
+                alert('Run the cost estimate first before generating the bid letter.');
+                return;
+            }
+
+            const today = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+            let bidDateStr = today;
+            let expiryStr = '';
+            if (bidDateVal) {
+                const bd = new Date(bidDateVal + 'T12:00:00');
+                bidDateStr = bd.toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+                const exp = new Date(bd); exp.setDate(exp.getDate() + bidValidDays);
+                expiryStr = exp.toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+            } else {
+                const exp = new Date(); exp.setDate(exp.getDate() + bidValidDays);
+                expiryStr = exp.toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+            }
+
+            const company = (function() {
+                try { return JSON.parse(localStorage.getItem('oncor_company_settings') || '{}'); } catch { return {}; }
+            })();
+
+            const senderName = estimatorName || company.name || 'Oncor';
+            const companyName = company.name || 'Oncor';
+            const phone = company.phone || '';
+            const email = company.email || '';
+            const addr = company.address || '';
+
+            const q = est.quantities || {};
+            const c = est.costs;
+            const psi = document.getElementById('selected-psi').value;
+            const rebarCov = document.getElementById('rebar-coverage').value;
+            const rebarDesc = rebarCov === 'mesh' ? 'welded wire mesh (WWF)' : rebarCov === 'none' ? 'no rebar reinforcement' : `#${rebarCov} deformed rebar`;
+            const finishType = document.getElementById('finish-type').value;
+            const finishDesc = finishType === 'stamp' ? 'stamped architectural' : finishType === 'broom' ? 'broom finish' : 'no finish';
+            const includePump = document.getElementById('include-pump').value === 'yes';
+            const perYd = q.yards > 0 ? c.total / q.yards : 0;
+            const perSF = q.sf > 0 ? c.total / q.sf : 0;
+
+            // Scope inclusions
+            const scopeIncl = window.scopeItems ? window.scopeItems.filter(s => s.included).map(s => s.text) : [];
+            const scopeExcl = window.scopeItems ? window.scopeItems.filter(s => !s.included).map(s => s.text) : [];
+
+            // Mix design
+            const mx = getMixDesignData();
+
+            // Phase breakdown
+            const phaseMap = {};
+            measurements.filter(m => !m.excluded && m.phase).forEach(m => {
+                phaseMap[m.phase] = (phaseMap[m.phase] || 0) + m.volume;
+            });
+            const phaseKeys = Object.keys(phaseMap).sort();
+
+            const win = window.open('', '_blank', 'width=860,height=760');
+            if (!win) { alert('Pop-up blocked.'); return; }
+
+            win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Bid Proposal — ${projectName}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Times New Roman', Times, serif; color: #222; font-size: 11.5pt; padding: 25mm 20mm; max-width: 850px; margin: 0 auto; line-height: 1.5; }
+  .letterhead { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:22px; border-bottom:2px solid #222; padding-bottom:12px; }
+  .co-name { font-family: Arial, sans-serif; font-size:18pt; font-weight:700; color:#1a1a1a; }
+  .co-sub { font-size:9pt; color:#777; font-family:Arial,sans-serif; margin-top:2px; }
+  .co-contact { text-align:right; font-size:9pt; color:#555; font-family:Arial,sans-serif; line-height:1.5; }
+  .date-block { margin-bottom:18px; font-family:Arial,sans-serif; font-size:10.5pt; }
+  .to-block { margin-bottom:18px; font-family:Arial,sans-serif; font-size:10.5pt; line-height:1.6; }
+  .re-block { margin-bottom:18px; font-family:Arial,sans-serif; font-size:10.5pt; }
+  .re-block strong { font-size:11pt; }
+  p { margin-bottom:12px; }
+  .scope-table { width:100%; border-collapse:collapse; margin:12px 0 16px 0; font-family:Arial,sans-serif; font-size:10pt; }
+  .scope-table th { background:#1a1a1a; color:#fff; padding:6px 10px; text-align:left; }
+  .scope-table td { padding:6px 10px; border-bottom:1px solid #ddd; vertical-align:top; }
+  .scope-table tr:nth-child(even) td { background:#f9f9f9; }
+  .bid-total-box { background:#1a1a1a; color:#fff; padding:12px 16px; margin:16px 0; display:flex; justify-content:space-between; align-items:center; }
+  .bid-total-label { font-family:Arial,sans-serif; font-size:10pt; text-transform:uppercase; letter-spacing:0.5px; }
+  .bid-total-value { font-family:Arial,sans-serif; font-size:16pt; font-weight:700; }
+  .unit-rates { font-family:Arial,sans-serif; font-size:9pt; color:#aaa; margin-top:3px; }
+  .terms-list { margin-left:20px; }
+  .terms-list li { margin-bottom:4px; }
+  .sig-area { margin-top:30px; display:flex; gap:60px; font-family:Arial,sans-serif; font-size:9.5pt; }
+  .sig-block { flex:1; }
+  .sig-line { border-bottom:1px solid #222; margin:30px 0 4px; }
+  .footer-bar { margin-top:30px; border-top:1px solid #ddd; padding-top:8px; font-family:Arial,sans-serif; font-size:8pt; color:#aaa; display:flex; justify-content:space-between; }
+  h3 { font-family:Arial,sans-serif; font-size:10.5pt; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:6px; margin-top:16px; }
+  @media print { body { padding:12mm; font-size:10.5pt; } .print-btn { display:none !important; } }
+</style>
+</head>
+<body>
+<div style="text-align:right;margin-bottom:12px;">
+  <button class="print-btn" onclick="window.print()" style="background:#1a1a1a;color:#fff;border:none;padding:7px 18px;border-radius:4px;cursor:pointer;font-size:10pt;font-family:Arial,sans-serif;">🖨️ Print / Save PDF</button>
+</div>
+
+<div class="letterhead">
+  <div>
+    <div class="co-name">${companyName}</div>
+    <div class="co-sub">Concrete Estimating &amp; Construction Services</div>
+    ${addr ? `<div style="font-size:9pt;color:#888;font-family:Arial,sans-serif;margin-top:2px;">${addr}</div>` : ''}
+  </div>
+  <div class="co-contact">
+    ${phone ? `<div>${phone}</div>` : ''}
+    ${email ? `<div>${email}</div>` : ''}
+  </div>
+</div>
+
+<div class="date-block">${bidDateStr}</div>
+
+<div class="to-block">
+  ${clientName ? `<div>${clientName}</div>` : '<div>[Client Name]</div>'}
+  <div>[Contact Name, Title]</div>
+  <div>[Company Address]</div>
+</div>
+
+<div class="re-block"><strong>Re: Concrete Bid Proposal — ${projectName}</strong></div>
+
+<p>Dear ${clientName ? clientName : 'Sir or Madam'},</p>
+
+<p>We appreciate the opportunity to submit this proposal for concrete construction services on the <strong>${projectName}</strong> project. ${companyName} specializes in concrete placement, finishing, and forming for commercial, residential, and industrial applications throughout the El Paso region.</p>
+
+<p>Based on our review of the project plans and specifications, we are pleased to submit the following bid for your consideration:</p>
+
+<h3>Scope of Work</h3>
+<table class="scope-table">
+  <thead><tr><th>Item</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>Concrete</td><td>${(q.yards||0).toFixed(1)} cubic yards @ ${psi} PSI${q.sf > 0 ? `, ${q.sf.toFixed(0)} SF total area` : ''}</td></tr>
+    <tr><td>Reinforcement</td><td style="text-transform:capitalize;">${rebarDesc}</td></tr>
+    <tr><td>Finish</td><td style="text-transform:capitalize;">${finishDesc}</td></tr>
+    ${includePump ? '<tr><td>Pump</td><td>Concrete pump included</td></tr>' : ''}
+    ${phaseKeys.length > 1 ? `<tr><td>Phases</td><td>${phaseKeys.map(ph => `Phase ${ph}: ${phaseMap[ph].toFixed(1)} yd³`).join(' | ')}</td></tr>` : ''}
+  </tbody>
+</table>
+
+${scopeIncl.length > 0 ? `<p><strong>Included in this proposal:</strong> ${scopeIncl.join('; ')}.</p>` : ''}
+${scopeExcl.length > 0 ? `<p><strong>Excluded from this proposal:</strong> ${scopeExcl.join('; ')}. These items may be added by separate proposal upon request.</p>` : ''}
+${notes ? `<p>${notes}</p>` : ''}
+
+<div class="bid-total-box">
+  <div>
+    <div class="bid-total-label">Total Base Bid</div>
+    <div class="unit-rates">${(q.yards||0).toFixed(1)} yd³${perYd > 0 ? ` · ${formatCurrency(perYd)}/yd³ installed` : ''}${perSF > 0 ? ` · ${formatCurrency(perSF)}/SF` : ''}</div>
+  </div>
+  <div class="bid-total-value">${formatCurrency(c.total)}</div>
+</div>
+
+<h3>Terms &amp; Conditions</h3>
+<ul class="terms-list">
+  <li>This proposal is valid for ${bidValidDays} days from the date of issue (expires ${expiryStr}).</li>
+  <li>Payment terms: 50% mobilization deposit, balance due within 30 days of project completion.</li>
+  <li>Prices are firm based on current material and labor market conditions. Price adjustments may apply if scope or project timing changes materially.</li>
+  <li>Excludes permits, engineering, geotechnical testing, and site excavation unless otherwise noted.</li>
+  <li>All concrete work to be performed in accordance with ACI 301 and project specifications.</li>
+  <li>A written change order is required for any additions or modifications to the scope of work.</li>
+</ul>
+
+${mx && (mx.slump || mx.admixtures || mx.testing) ? `
+<h3>Mix Design Notes</h3>
+<p style="font-size:10pt;">${[
+    mx.slump ? `Min slump: ${mx.slump}"` : '',
+    mx.wcRatio ? `Max w/c ratio: ${mx.wcRatio}` : '',
+    mx.aggSize ? `Max aggregate: ${mx.aggSize}` : '',
+    mx.air ? `Air: ${mx.air}` : ''
+].filter(Boolean).join('  |  ')}${mx.admixtures ? '<br>' + mx.admixtures : ''}${mx.testing ? '<br>Testing: ' + mx.testing : ''}</p>` : ''}
+
+<p>We are committed to quality workmanship and on-schedule delivery. Please do not hesitate to contact us with any questions or to discuss the scope in more detail. We look forward to the opportunity to work with you on this project.</p>
+
+<p>Respectfully submitted,</p>
+
+<div class="sig-area">
+  <div class="sig-block">
+    <div class="sig-line"></div>
+    <div>${senderName}</div>
+    <div style="color:#666;">${companyName}${phone ? ' | ' + phone : ''}</div>
+  </div>
+  <div class="sig-block">
+    <div class="sig-line"></div>
+    <div>[Authorized Signature]</div>
+    <div style="color:#666;">Title / Date</div>
+  </div>
+</div>
+
+<div class="footer-bar">
+  <span>${companyName}${addr ? ' · ' + addr : ''}</span>
+  <span>Generated by Oncor Takeoff Tool · ${today}</span>
+</div>
+</body></html>`);
+            win.document.close();
         }
 
         // ============================================================
