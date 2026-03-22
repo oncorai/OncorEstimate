@@ -1394,6 +1394,12 @@
                         <button onclick="batchAssignPhase('')" title="Clear phase from all visible/filtered measurements" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#666;border-radius:4px;padding:2px 7px;font-size:0.68rem;cursor:pointer;">✕ clr</button>
                         <span id="batchAssignFeedback" style="font-size:0.68rem;color:#4ecdc4;"></span>
                     </div>
+                    <!-- Measurement Statistics Panel (collapsible) -->
+                    <div id="measurementStatsPanel" style="display:none;background:rgba(0,0,0,0.25);border:1px solid rgba(99,179,237,0.2);border-radius:8px;padding:10px;font-size:0.82rem;margin-bottom:8px;">
+                        <div style="color:#63b3ed;font-weight:700;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">📊 Measurement Statistics</div>
+                        <div id="measurementStatsContent"></div>
+                    </div>
+                    <button id="measurementStatsBtn" onclick="toggleMeasurementStats()" title="Show statistics about your measurements — type breakdown, min/max, thickness mix, PSI mix" style="width:100%;margin-bottom:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#63b3ed;border-radius:6px;padding:5px;cursor:pointer;font-size:0.75rem;">📊 Show Stats</button>
                     <div class="measurements-list" id="measurementsList">
                         <p style="color: #666; text-align: center; padding: 20px; font-size: 0.85rem;">Draw on the plan to add measurements</p>
                     </div>
@@ -1940,6 +1946,10 @@
                 <input type="file" id="importProjectInput" accept=".json,application/json" style="display:none" onchange="importProjectJSON(event)">
                 <div class="action-row">
                     <button class="action-btn secondary" onclick="copyBidSummary()" title="Copy bid summary text to clipboard for emailing or texting to GC">📋 Copy Bid Summary</button>
+                </div>
+                <div class="action-row">
+                    <button class="action-btn secondary" id="emailDraftBtn" onclick="generateEmailDraft()" title="Generate a professional email draft with bid details — copy and paste into your email client">📧 Email Draft</button>
+                    <button class="action-btn secondary" onclick="printFieldSummaryCard()" title="Print a field summary card with quantities only — no pricing, for PM or field super">📋 Field Card</button>
                 </div>
                 <button class="action-btn secondary" onclick="clearAll()">🗑️ Clear All</button>
             </div>
@@ -3685,6 +3695,8 @@
             }
             
             updateTotals();
+            // Refresh stats panel if open
+            if (_statsVisible) renderMeasurementStats();
         }
         
         // ===== PER-ITEM COST ESTIMATE =====
@@ -5668,6 +5680,9 @@
 
             // Run sanity checks on quantities
             runSanityChecks(totalYards, totalSF);
+
+            // Refresh stats panel if open
+            if (_statsVisible) renderMeasurementStats();
         }
 
         // Refresh just the cost chip badges on sidebar items without re-rendering the whole list
@@ -5702,6 +5717,7 @@
             return '$' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
         
+        let _statsVisible = false;
         let _breakdownVisible = false;
         function toggleElementBreakdown() {
             _breakdownVisible = !_breakdownVisible;
@@ -7597,6 +7613,583 @@
         function removeAlternate(id) {
             bidAlternates = bidAlternates.filter(a => a.id !== id);
             renderAlternates();
+        }
+
+        // ============================================================
+        // EMAIL DRAFT GENERATOR
+        // Generates a professional, paste-ready email body for sending
+        // bid quotes to GCs/owners. Covers: subject line, greeting,
+        // scope summary, cost table, total, terms, CTA, signature.
+        // ============================================================
+        function generateEmailDraft() {
+            const projectName = document.getElementById('projectName').value.trim() || 'Untitled Project';
+            const clientName  = document.getElementById('clientName').value.trim();
+            const estimatorName = document.getElementById('estimatorName').value.trim();
+            const est = window.lastEstimate;
+
+            if (!est || !est.costs || est.costs.total === 0) {
+                alert('Run the cost estimate first (click Recalculate) before generating the email draft.');
+                return;
+            }
+
+            const q = est.quantities || {};
+            const c = est.costs;
+            const psi = document.getElementById('selected-psi').value;
+            const rebarCov = document.getElementById('rebar-coverage').value;
+            const rebarDesc = rebarCov === 'mesh' ? 'WWF Mesh' : rebarCov === 'none' ? 'No Rebar' : `#${rebarCov} Rebar`;
+            const finishDesc = (() => {
+                const f = document.getElementById('finish-type').value;
+                if (f === 'broom') return 'Broom Finish';
+                if (f === 'stamp') return 'Stamped Finish';
+                return 'No Finish';
+            })();
+            const includePump = document.getElementById('include-pump').value === 'yes';
+
+            // Bid date + validity
+            const bidDateVal = document.getElementById('bidDate').value;
+            const bidValidDays = parseInt(document.getElementById('bidValidDays').value) || 45;
+            const today = new Date();
+            let bidDateStr = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+            let expiryStr = '';
+            if (bidDateVal) {
+                const bd = new Date(bidDateVal + 'T12:00:00');
+                bidDateStr = bd.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                const exp = new Date(bd);
+                exp.setDate(exp.getDate() + bidValidDays);
+                expiryStr = exp.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+            } else {
+                const exp = new Date(today);
+                exp.setDate(exp.getDate() + bidValidDays);
+                expiryStr = exp.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+            }
+
+            // Company info for signature
+            const company = (function() {
+                try { return JSON.parse(localStorage.getItem('oncor_company_settings') || '{}'); } catch { return {}; }
+            })();
+            const senderName = estimatorName || company.name || 'The Oncor Team';
+            const companyName = company.name || 'Oncor';
+            const phone = company.phone || '';
+            const email = company.email || '';
+
+            const greeting = clientName ? `Hi ${clientName},` : 'Hello,';
+            const perYd = (q.yards || 0) > 0 ? c.total / q.yards : 0;
+            const perSF = (q.sf || 0) > 0 ? c.total / q.sf : 0;
+
+            // Build included/excluded scope list
+            const scopeIncl = window.scopeItems ? window.scopeItems.filter(s => s.included).map(s => s.text) : [];
+            const scopeExcl = window.scopeItems ? window.scopeItems.filter(s => !s.included).map(s => s.text) : [];
+
+            // Bid alternates
+            const includedAlts = bidAlternates.filter(a => a.included);
+            const altTotal = includedAlts.reduce((sum, a) => sum + a.amount, 0);
+            const adjustedBid = c.total + altTotal;
+
+            // Change orders
+            const coTotal = changeOrders.reduce((s, co) => s + co.amount, 0);
+            const revisedContract = c.total + coTotal;
+
+            // Phase breakdown
+            const phaseMap = {};
+            measurements.filter(m => !m.excluded && m.phase).forEach(m => {
+                phaseMap[m.phase] = (phaseMap[m.phase] || 0) + m.volume;
+            });
+
+            const lines = [];
+
+            // Subject line (user can copy separately)
+            lines.push(`SUBJECT: Concrete Bid – ${projectName} | ${formatCurrency(adjustedBid > c.total ? adjustedBid : c.total)}`);
+            lines.push('');
+            lines.push('─'.repeat(60));
+            lines.push('');
+            lines.push(greeting);
+            lines.push('');
+            lines.push(`Thank you for the opportunity to quote on ${projectName}. Please find our concrete scope below.`);
+            lines.push('');
+
+            // Scope
+            lines.push('SCOPE OF WORK');
+            lines.push(`  Project:    ${projectName}`);
+            lines.push(`  Date:       ${bidDateStr}`);
+            lines.push(`  Concrete:   ${(q.yards || 0).toFixed(1)} yd³ @ ${psi} PSI`);
+            if (q.sf > 0) lines.push(`  Slab area:  ${q.sf.toFixed(0)} SF`);
+            lines.push(`  Reinforcement: ${rebarDesc}`);
+            lines.push(`  Finish:     ${finishDesc}`);
+            if (includePump) lines.push(`  Pump:       Included`);
+            if (scopeIncl.length > 0) {
+                lines.push('');
+                lines.push('  INCLUDED:');
+                scopeIncl.forEach(s => lines.push(`    ✓ ${s}`));
+            }
+            if (scopeExcl.length > 0) {
+                lines.push('');
+                lines.push('  EXCLUDED:');
+                scopeExcl.forEach(s => lines.push(`    ✗ ${s}`));
+            }
+
+            // Phase breakdown
+            const phaseKeys = Object.keys(phaseMap).sort();
+            if (phaseKeys.length > 1) {
+                lines.push('');
+                lines.push('  PHASE BREAKDOWN:');
+                phaseKeys.forEach(ph => {
+                    const yd = phaseMap[ph];
+                    const share = (q.yards || 0) > 0 ? yd / q.yards : 0;
+                    lines.push(`    Phase ${ph}: ${yd.toFixed(1)} yd³ (${(share*100).toFixed(0)}%)`);
+                });
+            }
+
+            // Cost table — right-aligned values in a fixed-width format
+            const fmtRow = (label, value) => `  ${label.padEnd(28)} ${value.padStart(12)}`;
+            lines.push('');
+            lines.push('COST ESTIMATE');
+            lines.push(fmtRow('Concrete Material:', formatCurrency(c.concrete)));
+            lines.push(fmtRow('Rebar / Mesh:', formatCurrency(c.rebar)));
+            lines.push(fmtRow('Formwork:', formatCurrency(c.forms)));
+            lines.push(fmtRow('Finishing:', formatCurrency(c.finishing)));
+            if (c.fiber > 0) lines.push(fmtRow('Fiber Reinforcement:', formatCurrency(c.fiber)));
+            if (c.baseCourse > 0) lines.push(fmtRow('Base Course:', formatCurrency(c.baseCourse)));
+            if (c.vaporBarrier > 0) lines.push(fmtRow('Vapor Barrier:', formatCurrency(c.vaporBarrier)));
+            lines.push(fmtRow('Labor:', formatCurrency(c.labor)));
+            lines.push(fmtRow('Overhead & Profit:', formatCurrency(c.overhead + c.profit)));
+            lines.push(fmtRow('Concrete Overage:', formatCurrency(c.waste)));
+            if (c.contingency > 0) lines.push(fmtRow('Contingency:', formatCurrency(c.contingency)));
+            if (c.mobilization > 0) lines.push(fmtRow('Mobilization:', formatCurrency(c.mobilization)));
+            if (c.misc > 0) lines.push(fmtRow((c.miscLabel || 'Misc Allowance') + ':', formatCurrency(c.misc)));
+            if (c.sawCut > 0) lines.push(fmtRow('Control Joints:', formatCurrency(c.sawCut)));
+            if (c.subItems > 0) {
+                specialtySubItems.forEach(s => lines.push(fmtRow(`  ${s.desc}:`, formatCurrency(s.amount))));
+            }
+            lines.push('  ' + '─'.repeat(40));
+            lines.push(fmtRow('BASE BID TOTAL:', formatCurrency(c.total)));
+            lines.push(`  ${formatCurrency(perYd)}/yd³ installed${q.sf > 0 ? `  |  ${formatCurrency(perSF)}/SF slab` : ''}`);
+
+            // Alternates
+            if (includedAlts.length > 0) {
+                lines.push('');
+                lines.push('  BID ALTERNATES (included):');
+                includedAlts.forEach(a => {
+                    const sign = a.amount >= 0 ? '+' : '';
+                    lines.push(`    ${sign}${formatCurrency(a.amount)}  — ${a.desc}`);
+                });
+                lines.push(fmtRow('ADJUSTED TOTAL:', formatCurrency(adjustedBid)));
+            }
+
+            // Change orders
+            if (changeOrders.length > 0) {
+                lines.push('');
+                lines.push('  CHANGE ORDERS:');
+                changeOrders.forEach((co, i) => {
+                    const sign = co.amount >= 0 ? '+' : '';
+                    lines.push(`    CO-${String(i+1).padStart(2,'0')}: ${sign}${formatCurrency(co.amount)}  — ${co.desc}`);
+                });
+                lines.push(fmtRow('REVISED CONTRACT:', formatCurrency(revisedContract)));
+            }
+
+            // Terms
+            lines.push('');
+            lines.push('TERMS');
+            lines.push(`  This quote is valid through ${expiryStr}. Prices are based on current`);
+            lines.push(`  material and labor rates. Final quantities subject to field conditions.`);
+
+            // Call to action
+            lines.push('');
+            lines.push('Please feel free to reach out with any questions or scope clarifications.');
+            lines.push('We look forward to working with you.');
+            lines.push('');
+
+            // Signature
+            lines.push(`Best regards,`);
+            lines.push(senderName);
+            if (companyName && companyName !== senderName) lines.push(companyName);
+            if (phone) lines.push(phone);
+            if (email) lines.push(email);
+
+            lines.push('');
+            lines.push('─'.repeat(60));
+
+            const text = lines.join('\n');
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    const btn = document.getElementById('emailDraftBtn');
+                    if (btn) {
+                        const orig = btn.textContent;
+                        btn.textContent = '✅ Copied!';
+                        setTimeout(() => { btn.textContent = orig; }, 2500);
+                    }
+                }).catch(() => { prompt('Copy this email draft:', text); });
+            } else {
+                prompt('Copy this email draft:', text);
+            }
+        }
+
+        // ============================================================
+        // FIELD SUMMARY CARD
+        // Prints a compact, cost-free quantity summary for the PM or
+        // field superintendent — no dollar amounts, just field data.
+        // ============================================================
+        function printFieldSummaryCard() {
+            const projectName = document.getElementById('projectName').value.trim() || 'Untitled Project';
+            const clientName  = document.getElementById('clientName').value.trim();
+            const estimatorName = document.getElementById('estimatorName').value.trim();
+            const notes = document.getElementById('projectNotes').value.trim();
+            const bidDateVal = document.getElementById('bidDate').value;
+            const wastePct = parseFloat(document.getElementById('waste-factor').value) || 5;
+
+            const activeMeasurements = measurements.filter(m => !m.excluded);
+            if (activeMeasurements.length === 0) {
+                alert('No measurements to summarize. Draw measurements first.');
+                return;
+            }
+
+            // Compute quantities by type
+            const typeStats = {};
+            let totalYards = 0, totalSF = 0, totalLF = 0, totalPiers = 0;
+            activeMeasurements.forEach(m => {
+                const t = m.config.type;
+                if (!typeStats[t]) typeStats[t] = { count: 0, volume: 0, sf: 0, lf: 0, items: [] };
+                typeStats[t].count++;
+                typeStats[t].volume += m.volume;
+                if (m.area) { typeStats[t].sf += m.area; totalSF += m.area; }
+                if (m.length) { typeStats[t].lf += m.length; totalLF += m.length; }
+                typeStats[t].items.push(m);
+                totalYards += m.volume;
+            });
+            totalPiers = typeStats.pier ? typeStats.pier.count : 0;
+
+            // Phase breakdown
+            const phaseMap = {};
+            activeMeasurements.filter(m => m.phase).forEach(m => {
+                phaseMap[m.phase] = (phaseMap[m.phase] || 0) + m.volume;
+            });
+
+            // Concrete order
+            const orderedYards = totalYards * (1 + wastePct / 100);
+            const truckCount = Math.ceil(orderedYards / 10);
+
+            // Bid date
+            let dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            if (bidDateVal) {
+                const bd = new Date(bidDateVal + 'T12:00:00');
+                dateStr = bd.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            }
+
+            // Type name map
+            const typeLabels = { slab:'Slab', footing:'Footing', wall:'Wall', gradebeam:'Grade Beam', curb:'Curb', pier:'Pier' };
+
+            // Build HTML for print window
+            const typeRows = Object.entries(typeStats).map(([t, s]) => {
+                const label = typeLabels[t] || t;
+                const volStr = s.volume.toFixed(2) + ' yd³';
+                let qtyDetail = '';
+                if (s.sf > 0) qtyDetail += `${s.sf.toFixed(0)} SF`;
+                if (s.lf > 0) qtyDetail += (qtyDetail ? '  /  ' : '') + `${s.lf.toFixed(0)} LF`;
+                if (t === 'pier') qtyDetail = `${s.count} ea`;
+                return `<tr>
+                    <td>${label}</td>
+                    <td style="text-align:center;">${s.count}</td>
+                    <td>${qtyDetail}</td>
+                    <td style="text-align:right;font-weight:600;">${volStr}</td>
+                </tr>`;
+            }).join('');
+
+            const phaseRows = Object.entries(phaseMap).sort().map(([ph, yd]) => {
+                const share = totalYards > 0 ? (yd / totalYards * 100) : 0;
+                return `<tr><td>Phase ${ph}</td><td style="text-align:right;">${yd.toFixed(2)} yd³</td><td style="text-align:right;">${share.toFixed(0)}%</td></tr>`;
+            }).join('');
+
+            // Individual items list grouped by page
+            const pageNums = [...new Set(activeMeasurements.map(m => m.page || 1))].sort((a,b) => a-b);
+            const itemRowsByPage = pageNums.map(pg => {
+                const pageItems = activeMeasurements.filter(m => (m.page || 1) === pg);
+                const rows = pageItems.map((m, i) => {
+                    const typeLbl = typeLabels[m.config.type] || m.config.type;
+                    const configStr = (() => {
+                        if (m.config.type === 'slab') return `${m.config.thickness || 4}"t`;
+                        if (m.config.type === 'footing') return `${m.config.width}"w × ${m.config.depth}"d`;
+                        if (m.config.type === 'wall') return `${m.config.height}${m.config.heightUnit || 'ft'} h × ${m.config.thickness}${m.config.thicknessUnit || 'in'} t`;
+                        if (m.config.type === 'gradebeam') return `${m.config.width}"w × ${m.config.depth}"d`;
+                        if (m.config.type === 'curb') return `${m.config.width}"w × ${m.config.height}"h`;
+                        if (m.config.type === 'pier') return `⌀${m.config.diameter}" × ${m.config.depth}'d`;
+                        return '';
+                    })();
+                    const qtyStr = m.area ? `${m.area.toFixed(0)} SF` : m.length ? `${m.length.toFixed(1)} LF` : '';
+                    const phaseBadge = m.phase ? ` <span style="font-size:0.7em;color:#666;">[P${m.phase}]</span>` : '';
+                    return `<tr>
+                        <td style="color:#888;">${i+1}</td>
+                        <td>${m.label ? `<strong>${m.label}</strong>` : ''} <span style="color:#555;">${typeLbl}</span>${phaseBadge}</td>
+                        <td style="color:#666;">${configStr}</td>
+                        <td style="text-align:right;">${qtyStr}</td>
+                        <td style="text-align:right;font-weight:600;">${m.volume.toFixed(3)} yd³</td>
+                        <td style="color:#888;font-size:0.8em;">${m.notes || ''}</td>
+                    </tr>`;
+                }).join('');
+                return `<tr><td colspan="6" style="background:#f5f5f5;font-weight:700;color:#333;padding:6px 8px;font-size:0.85em;">── Sheet ${pg} ──</td></tr>${rows}`;
+            }).join('');
+
+            // Company info for header
+            const company = (function() {
+                try { return JSON.parse(localStorage.getItem('oncor_company_settings') || '{}'); } catch { return {}; }
+            })();
+
+            const win = window.open('', '_blank', 'width=900,height=700');
+            if (!win) { alert('Pop-up blocked — allow pop-ups for this site.'); return; }
+
+            win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Field Summary — ${projectName}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: Arial, sans-serif; color: #333; font-size: 11pt; padding: 20mm 15mm; }
+  .header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 14px; }
+  .header-left h1 { font-size:16pt; font-weight:700; color:#1a1a1a; }
+  .header-left .subtitle { font-size:9pt; color:#666; margin-top:2px; }
+  .header-right { text-align:right; font-size:9pt; color:#555; }
+  .header-right .co-name { font-size:11pt; font-weight:700; color:#333; }
+  .badge { background:#333; color:#fff; padding:2px 7px; border-radius:3px; font-size:8pt; font-weight:600; letter-spacing:0.5px; display:inline-block; margin-bottom:4px; }
+  .project-meta { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px 20px; margin-bottom:14px; background:#f9f9f9; border:1px solid #ddd; border-radius:4px; padding:10px 12px; font-size:9.5pt; }
+  .meta-item label { display:block; font-size:7.5pt; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:1px; }
+  .meta-item span { font-weight:600; color:#222; }
+  h2 { font-size:10pt; font-weight:700; color:#444; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; margin-top:12px; border-bottom:1px solid #ddd; padding-bottom:4px; }
+  table { width:100%; border-collapse:collapse; font-size:9.5pt; }
+  table th { text-align:left; background:#eee; padding:5px 7px; font-size:8pt; text-transform:uppercase; letter-spacing:0.4px; color:#555; border:1px solid #ddd; }
+  table td { padding:5px 7px; border:1px solid #e5e5e5; vertical-align:top; }
+  table tr:nth-child(even) td { background:#fafafa; }
+  .totals-box { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:14px; }
+  .total-card { border:1px solid #ddd; border-radius:4px; padding:8px 10px; text-align:center; background:#f9f9f9; }
+  .total-card .val { font-size:15pt; font-weight:700; color:#1a1a1a; }
+  .total-card .lbl { font-size:7.5pt; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; }
+  .order-box { background:#e8f5e9; border:1px solid #a5d6a7; border-radius:4px; padding:8px 12px; font-size:9.5pt; margin-top:8px; }
+  .order-box strong { color:#2e7d32; }
+  .notes-box { background:#fff9e6; border:1px solid #ffd54f; border-radius:4px; padding:8px 12px; font-size:9.5pt; margin-top:10px; }
+  .no-cost-banner { text-align:center; margin:10px 0; font-size:8pt; color:#aaa; letter-spacing:1px; text-transform:uppercase; }
+  @media print {
+    body { padding: 10mm; font-size: 10pt; }
+    .print-btn { display:none !important; }
+  }
+</style>
+</head>
+<body>
+<div style="text-align:right;margin-bottom:8px;">
+  <button class="print-btn" onclick="window.print()" style="background:#333;color:#fff;border:none;padding:7px 18px;border-radius:4px;cursor:pointer;font-size:10pt;">🖨️ Print / Save PDF</button>
+</div>
+
+<div class="header">
+  <div class="header-left">
+    <div class="badge">FIELD QUANTITY SUMMARY</div>
+    <h1>${projectName}</h1>
+    ${clientName ? `<div class="subtitle">Client: ${clientName}</div>` : ''}
+  </div>
+  <div class="header-right">
+    ${company.name ? `<div class="co-name">${company.name}</div>` : '<div class="co-name">Oncor</div>'}
+    ${company.phone ? `<div>${company.phone}</div>` : ''}
+    ${company.email ? `<div>${company.email}</div>` : ''}
+    <div>Date: ${dateStr}</div>
+    ${estimatorName ? `<div>Estimator: ${estimatorName}</div>` : ''}
+  </div>
+</div>
+
+<div class="no-cost-banner">⚠ This document contains quantities only — no pricing information</div>
+
+<div class="project-meta">
+  <div class="meta-item"><label>Total Concrete</label><span>${totalYards.toFixed(2)} yd³</span></div>
+  <div class="meta-item"><label>Ordered (w/ ${wastePct}% overage)</label><span>${orderedYards.toFixed(1)} yd³</span></div>
+  <div class="meta-item"><label>Trucks (~10 yd³ ea)</label><span>${truckCount} trucks</span></div>
+  ${totalSF > 0 ? `<div class="meta-item"><label>Total Slab Area</label><span>${totalSF.toFixed(0)} SF</span></div>` : ''}
+  ${totalLF > 0 ? `<div class="meta-item"><label>Total Linear LF</label><span>${totalLF.toFixed(0)} LF</span></div>` : ''}
+  ${totalPiers > 0 ? `<div class="meta-item"><label>Piers</label><span>${totalPiers} ea</span></div>` : ''}
+</div>
+
+<h2>Concrete by Element Type</h2>
+<table>
+  <thead><tr><th>Type</th><th>Count</th><th>Area / Length</th><th style="text-align:right;">Volume (yd³)</th></tr></thead>
+  <tbody>${typeRows}</tbody>
+  <tfoot>
+    <tr style="font-weight:700;background:#efefef;">
+      <td>TOTAL</td>
+      <td style="text-align:center;">${activeMeasurements.length}</td>
+      <td>${totalSF > 0 ? `${totalSF.toFixed(0)} SF` : ''}${totalSF > 0 && totalLF > 0 ? '  /  ' : ''}${totalLF > 0 ? `${totalLF.toFixed(0)} LF` : ''}</td>
+      <td style="text-align:right;">${totalYards.toFixed(2)} yd³</td>
+    </tr>
+  </tfoot>
+</table>
+
+${Object.keys(phaseMap).length > 1 ? `
+<h2>Phase Breakdown</h2>
+<table>
+  <thead><tr><th>Phase</th><th style="text-align:right;">Volume (yd³)</th><th style="text-align:right;">% of Total</th></tr></thead>
+  <tbody>${phaseRows}</tbody>
+</table>` : ''}
+
+<h2>Measurement Detail</h2>
+<table>
+  <thead><tr><th>#</th><th>Label / Type</th><th>Config</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Volume (yd³)</th><th>Notes</th></tr></thead>
+  <tbody>${itemRowsByPage}</tbody>
+</table>
+
+<div class="order-box">
+  <strong>🚛 Concrete Order:</strong> ${orderedYards.toFixed(1)} yd³ ordered (${totalYards.toFixed(2)} net + ${wastePct}% overage) = <strong>${truckCount} trucks</strong> @ ~10 yd³ each.
+  ${(orderedYards % 10) > 0 && (orderedYards % 10) < 3 ? ' ⚠ Last truck is a <strong>short load</strong> (&lt;3 yd³) — coordinate with plant.' : ''}
+</div>
+
+${notes ? `<div class="notes-box"><strong>Scope Notes:</strong> ${notes.replace(/\n/g, '<br>')}</div>` : ''}
+
+<div style="margin-top:16px;font-size:8pt;color:#aaa;text-align:center;">
+  Generated by Oncor Takeoff Tool — ${new Date().toLocaleString()} — QUANTITIES ONLY, NO PRICING
+</div>
+</body></html>`);
+            win.document.close();
+        }
+
+        // ============================================================
+        // MEASUREMENT STATISTICS PANEL
+        // Quick analysis of the measurement set — per-type stats,
+        // average thickness, min/max volumes, consistency check.
+        // ============================================================
+        function toggleMeasurementStats() {
+            _statsVisible = !_statsVisible;
+            const panel = document.getElementById('measurementStatsPanel');
+            const btn = document.getElementById('measurementStatsBtn');
+            if (panel) panel.style.display = _statsVisible ? '' : 'none';
+            if (btn) btn.textContent = _statsVisible ? '📊 Hide Stats' : '📊 Show Stats';
+            if (_statsVisible) renderMeasurementStats();
+        }
+
+        function renderMeasurementStats() {
+            const el = document.getElementById('measurementStatsContent');
+            if (!el) return;
+            const active = measurements.filter(m => !m.excluded);
+            if (active.length === 0) {
+                el.innerHTML = '<div style="color:#555;font-style:italic;font-size:0.78rem;">No measurements. Draw elements first.</div>';
+                return;
+            }
+
+            const typeLabels = { slab:'Slab', footing:'Footing', wall:'Wall', gradebeam:'Grade Beam', curb:'Curb', pier:'Pier' };
+            const typeColors = { slab:'#4ecdc4', footing:'#f5a623', wall:'#a855f7', gradebeam:'#f97316', curb:'#f43f5e', pier:'#fb923c' };
+
+            const totalYards = active.reduce((s, m) => s + m.volume, 0);
+            const types = [...new Set(active.map(m => m.config.type))];
+
+            // Stats per type
+            const typeStats = {};
+            types.forEach(t => {
+                const items = active.filter(m => m.config.type === t);
+                const vols = items.map(m => m.volume);
+                typeStats[t] = {
+                    count: items.length,
+                    total: vols.reduce((a, b) => a + b, 0),
+                    min: Math.min(...vols),
+                    max: Math.max(...vols),
+                    avg: vols.reduce((a, b) => a + b, 0) / vols.length,
+                    share: totalYards > 0 ? vols.reduce((a, b) => a + b, 0) / totalYards : 0,
+                    items
+                };
+            });
+
+            // Build HTML
+            let html = `<div style="margin-bottom:8px;font-size:0.78rem;color:#888;">${active.length} active measurements · ${totalYards.toFixed(2)} yd³ total</div>`;
+
+            // Per-type table
+            html += `<table style="width:100%;border-collapse:collapse;font-size:0.75rem;margin-bottom:8px;">
+                <tr style="color:#666;border-bottom:1px solid rgba(255,255,255,0.08);">
+                    <th style="text-align:left;padding:3px 4px;">Type</th>
+                    <th style="text-align:center;padding:3px 4px;">Cnt</th>
+                    <th style="text-align:right;padding:3px 4px;">Total yd³</th>
+                    <th style="text-align:right;padding:3px 4px;">Share</th>
+                    <th style="text-align:right;padding:3px 4px;">Avg yd³</th>
+                    <th style="text-align:right;padding:3px 4px;">Min</th>
+                    <th style="text-align:right;padding:3px 4px;">Max</th>
+                </tr>`;
+            types.forEach(t => {
+                const s = typeStats[t];
+                const color = typeColors[t] || '#888';
+                html += `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                    <td style="padding:4px;color:${color};font-weight:600;">${typeLabels[t] || t}</td>
+                    <td style="text-align:center;padding:4px;color:#ccc;">${s.count}</td>
+                    <td style="text-align:right;padding:4px;color:#fff;">${s.total.toFixed(2)}</td>
+                    <td style="text-align:right;padding:4px;color:#888;">${(s.share*100).toFixed(0)}%</td>
+                    <td style="text-align:right;padding:4px;color:#aaa;">${s.avg.toFixed(2)}</td>
+                    <td style="text-align:right;padding:4px;color:#777;">${s.min.toFixed(2)}</td>
+                    <td style="text-align:right;padding:4px;color:#777;">${s.max.toFixed(2)}</td>
+                </tr>`;
+            });
+            html += '</table>';
+
+            // Slab thickness distribution
+            const slabs = active.filter(m => m.config.type === 'slab');
+            if (slabs.length > 1) {
+                const thkMap = {};
+                slabs.forEach(m => {
+                    const t = m.psiOverride || document.getElementById('selected-psi').value;
+                    const thkIn = m.config.thickness || 4;
+                    const thkUnit = m.config.thicknessUnit || 'in';
+                    const thkKey = thkUnit === 'in' ? `${thkIn}"` : `${thkIn}'`;
+                    thkMap[thkKey] = (thkMap[thkKey] || 0) + (m.area || 0);
+                });
+                const thkEntries = Object.entries(thkMap).sort((a, b) => parseFloat(a[0]) - parseFloat(b[0]));
+                if (thkEntries.length > 1) {
+                    html += `<div style="font-size:0.72rem;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Slab Thickness Mix</div>`;
+                    html += `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;">`;
+                    thkEntries.forEach(([thk, sf]) => {
+                        html += `<div style="background:rgba(78,205,196,0.12);border:1px solid rgba(78,205,196,0.3);border-radius:4px;padding:3px 8px;font-size:0.75rem;">
+                            <span style="color:#4ecdc4;font-weight:600;">${thk}</span>
+                            <span style="color:#888;margin-left:4px;">${sf.toFixed(0)} SF</span>
+                        </div>`;
+                    });
+                    html += `</div>`;
+                }
+            }
+
+            // PSI distribution
+            const psiMap = {};
+            active.forEach(m => {
+                const psi = m.psiOverride || document.getElementById('selected-psi').value;
+                psiMap[psi] = (psiMap[psi] || 0) + m.volume;
+            });
+            const psiEntries = Object.entries(psiMap);
+            if (psiEntries.length > 1) {
+                html += `<div style="font-size:0.72rem;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">PSI Mix</div>`;
+                html += `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;">`;
+                psiEntries.forEach(([psi, yd]) => {
+                    const share = totalYards > 0 ? yd / totalYards : 0;
+                    html += `<div style="background:rgba(245,166,35,0.1);border:1px solid rgba(245,166,35,0.25);border-radius:4px;padding:3px 8px;font-size:0.75rem;">
+                        <span style="color:#f5a623;font-weight:600;">${psi} PSI</span>
+                        <span style="color:#aaa;margin-left:4px;">${yd.toFixed(1)} yd³ (${(share*100).toFixed(0)}%)</span>
+                    </div>`;
+                });
+                html += `</div>`;
+            }
+
+            // Page distribution
+            const pageMap = {};
+            active.forEach(m => {
+                const pg = m.page || 1;
+                pageMap[pg] = (pageMap[pg] || 0) + m.volume;
+            });
+            const pgEntries = Object.entries(pageMap).sort((a,b) => a[0]-b[0]);
+            if (pgEntries.length > 1) {
+                html += `<div style="font-size:0.72rem;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">By Sheet</div>`;
+                html += `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;">`;
+                pgEntries.forEach(([pg, yd]) => {
+                    const share = totalYards > 0 ? yd / totalYards : 0;
+                    html += `<div style="background:rgba(99,179,237,0.1);border:1px solid rgba(99,179,237,0.25);border-radius:4px;padding:3px 8px;font-size:0.75rem;">
+                        <span style="color:#63b3ed;font-weight:600;">Sheet ${pg}</span>
+                        <span style="color:#aaa;margin-left:4px;">${yd.toFixed(1)} yd³</span>
+                    </div>`;
+                });
+                html += `</div>`;
+            }
+
+            // Excluded items count
+            const excCount = measurements.filter(m => m.excluded).length;
+            if (excCount > 0) {
+                html += `<div style="font-size:0.75rem;color:#f87171;margin-top:2px;">⚠ ${excCount} measurement${excCount !== 1 ? 's' : ''} excluded from totals</div>`;
+            }
+
+            el.innerHTML = html;
         }
 
         function renderAlternates() {
