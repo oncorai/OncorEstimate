@@ -1872,6 +1872,8 @@
                                     </select>
                                 </div>
                                 <div id="saw-cut-qty-hint" style="font-size:0.72rem;color:#666;margin-top:4px;"></div>
+                                <button onclick="computeJointSpacing()" style="width:100%;margin-top:6px;background:rgba(78,205,196,0.08);border:1px solid rgba(78,205,196,0.2);color:#4ecdc4;border-radius:5px;padding:4px;cursor:pointer;font-size:0.7rem;">📐 Suggest Joint Spacing</button>
+                                <div id="jointSpacingHint" style="font-size:0.71rem;color:#ccc;margin-top:4px;line-height:1.5;display:none;"></div>
                             </div>
                             <div class="pricing-group">
                                 <div class="group-label">🔧 Specialty Sub / Vendor Items</div>
@@ -9244,6 +9246,60 @@ ${(() => {
             });
             lines.push(`<span style="color:#555;font-size:0.65rem;">${temp < 50 ? '⚠ Cold weather — heating/insulation required' : temp > 90 ? '⚠ Hot weather — evaporation risk' : '✓ Favorable curing conditions'}</span>`);
             el.innerHTML = lines.join('<br>');
+        }
+
+        // ============================================================
+        // JOINT SPACING ADVISOR
+        // Suggests control joint spacing based on slab thickness and
+        // load conditions (ACI 360R guidelines).
+        // ============================================================
+        function computeJointSpacing() {
+            const el = document.getElementById('jointSpacingHint');
+            const spacingInput = document.getElementById('control-joint-spacing');
+            if (!el) return;
+
+            // Get slab thickness from active slab measurements (average or first)
+            const slabs = measurements.filter(m => !m.excluded && m.config.type === 'slab');
+            let thkIn = 4; // default
+            if (slabs.length > 0) {
+                const thkRaw = slabs[0].config.thickness || 4;
+                const thkUnit = slabs[0].config.thicknessUnit || 'in';
+                thkIn = thkUnit === 'in' ? thkRaw : thkRaw * 12;
+            }
+            const thkFt = thkIn / 12;
+
+            // ACI 360R recommendations:
+            // Control joint spacing = 2-3 times slab thickness (in feet)
+            // Max spacing: 10-15× thickness for unreinforced, up to 20× for reinforced
+            const minSpacing = Math.round(thkFt * 24); // 24× thickness in inches = 2× in feet
+            const maxSpacing = Math.round(thkFt * 36); // 36× thickness = 3× in feet
+            const maxUnreinforced = Math.round(thkFt * 15); // 15× (ft)
+            const maxReinforced = Math.round(thkFt * 18);   // 18× (ft)
+
+            // Determine reinforcement type
+            const rebarCov = document.getElementById('rebar-coverage')?.value || 'mesh';
+            const hasRebar = rebarCov !== 'none';
+
+            const recSpacing = hasRebar ? maxReinforced : maxUnreinforced;
+            const minRec = Math.max(6, Math.min(10, minSpacing));
+            const maxRec = Math.max(8, Math.min(20, maxSpacing));
+
+            const lines = [
+                `Slab: ${thkIn}" thick → rule of thumb: <strong>${minRec}–${maxRec}' panel max</strong>`,
+                `ACI 360R: ${hasRebar ? `reinforced slab → ≤${maxReinforced}'` : `unreinforced slab → ≤${maxUnreinforced}'`}`,
+                `Typical: 10'×10' for 4" slab, 12'×12' for 5", 15'×15' for 6".`,
+                `<span style="color:#888;">Factors: shrinkage, aggregate size, w/c ratio, curing conditions.</span>`
+            ];
+
+            // Update the spacing input with recommended value if it's at default
+            const curSpacing = parseFloat(spacingInput?.value) || 10;
+            if (spacingInput && (curSpacing === 10 || curSpacing === 0)) {
+                spacingInput.value = Math.min(recSpacing, 15);
+                recalculateCosts();
+            }
+
+            el.innerHTML = lines.join('<br>');
+            el.style.display = '';
         }
 
         // ============================================================
