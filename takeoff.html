@@ -1631,6 +1631,11 @@
                                     <label title="Risk/contingency % on top of profit. Applied after overhead+profit. Use 3-5% for typical unknowns, 0 when scope is fully defined.">Contingency %</label>
                                     <input type="number" id="markup-contingency" value="0" min="0" step="1" title="0 = none. 3% for light unknowns, 5% for complex scope.">
                                 </div>
+                                <div class="pricing-row">
+                                    <label title="Material price escalation for future-dated work. Applies % uplift to concrete, rebar, fiber, forms, and labor prices before calculating. Use 2-4% per quarter forward. Does NOT change the price fields — applies at calc time only.">Escalation %</label>
+                                    <input type="number" id="markup-escalation" value="0" min="0" max="50" step="0.5" title="0 = current pricing. Add % for future pours: 2-4% per quarter is typical for concrete.">
+                                </div>
+                                <div id="escalation-hint" style="font-size:0.7rem;color:#fb923c;margin-top:2px;display:none;text-align:right;padding-right:2px;">Escalated material prices in effect</div>
                                 <div style="display:flex;gap:5px;margin-top:8px;">
                                     <button onclick="applyMarkupPreset('competitive')" title="Competitive: 8% overhead, 10% profit — tight bid to win work" style="flex:1;background:rgba(245,166,35,0.12);border:1px solid rgba(245,166,35,0.35);color:#f5a623;border-radius:6px;padding:5px 3px;cursor:pointer;font-size:0.7rem;font-weight:600;">🏆 Win</button>
                                     <button onclick="applyMarkupPreset('standard')" title="Standard: 10% overhead, 15% profit — normal target margin" style="flex:1;background:rgba(78,205,196,0.12);border:1px solid rgba(78,205,196,0.35);color:#4ecdc4;border-radius:6px;padding:5px 3px;cursor:pointer;font-size:0.7rem;font-weight:600;">⚖️ Std</button>
@@ -1893,6 +1898,30 @@
                 </div>
             </div>
             
+            <!-- Change Order Log -->
+            <div class="section">
+                <div id="changeOrderPanel" style="display:none;margin-bottom:4px;background:rgba(0,0,0,0.25);border:1px solid rgba(251,146,60,0.25);border-radius:8px;padding:10px;font-size:0.82rem;">
+                    <div style="color:#fb923c;font-weight:700;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;">📝 Change Order Log</div>
+                    <div style="font-size:0.7rem;color:#666;margin-bottom:8px;">Track approved COs against the original bid. Positive = additive, negative = deductive.</div>
+                    <div id="coList" style="margin-bottom:6px;"></div>
+                    <div style="display:grid;grid-template-columns:1fr 75px auto;gap:4px;align-items:center;margin-bottom:6px;">
+                        <input type="text" id="coNewDesc" placeholder="CO description" maxlength="50"
+                            style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:5px;padding:4px 6px;color:#e0e0e0;font-size:0.75rem;"
+                            onkeydown="if(event.key==='Enter'){addChangeOrder();event.preventDefault();}">
+                        <input type="number" id="coNewAmt" placeholder="$" step="100"
+                            style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:5px;padding:4px 6px;color:#e0e0e0;font-size:0.75rem;text-align:right;"
+                            onkeydown="if(event.key==='Enter'){addChangeOrder();event.preventDefault();}">
+                        <button onclick="addChangeOrder()"
+                            style="background:rgba(251,146,60,0.15);border:1px solid rgba(251,146,60,0.3);color:#fb923c;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:0.82rem;" title="Add CO">+</button>
+                    </div>
+                    <div id="coSummary" style="font-size:0.78rem;padding-top:6px;border-top:1px solid rgba(255,255,255,0.07);"></div>
+                </div>
+                <button onclick="toggleChangeOrderPanel()" id="changeOrderToggleBtn"
+                    style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fb923c;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;">
+                    📝 Show Change Order Log
+                </button>
+            </div>
+
             <!-- Actions -->
             <div class="actions">
                 <button class="action-btn primary" onclick="exportTakeoff()">📄 Export Takeoff PDF</button>
@@ -4088,7 +4117,8 @@
                 controlJointSpacing: document.getElementById('control-joint-spacing').value,
                 sawCutPrice: document.getElementById('price-saw-cut').value,
                 includeSawCut: document.getElementById('include-saw-cut').value,
-                contingency: document.getElementById('markup-contingency').value
+                contingency: document.getElementById('markup-contingency').value,
+                escalation: document.getElementById('markup-escalation').value
             };
             
             const data = {
@@ -4107,7 +4137,9 @@
                 bidAlternates: bidAlternates,
                 altNextId: _altNextId,
                 specialtySubItems: specialtySubItems,
-                subNextId: _subNextId
+                subNextId: _subNextId,
+                changeOrders: changeOrders,
+                coNextId: _coNextId
             };
             
             // Get existing projects
@@ -4179,13 +4211,16 @@
                     controlJointSpacing: document.getElementById('control-joint-spacing').value,
                     sawCutPrice: document.getElementById('price-saw-cut').value,
                     includeSawCut: document.getElementById('include-saw-cut').value,
-                    contingency: document.getElementById('markup-contingency').value
+                    contingency: document.getElementById('markup-contingency').value,
+                    escalation: document.getElementById('markup-escalation').value
                 },
                 estimate: window.lastEstimate,
                 bidAlternates: bidAlternates,
                 altNextId: _altNextId,
                 specialtySubItems: specialtySubItems,
-                subNextId: _subNextId
+                subNextId: _subNextId,
+                changeOrders: changeOrders,
+                coNextId: _coNextId
             };
             const json = JSON.stringify(data, null, 2);
             const blob = new Blob([json], { type: 'application/json' });
@@ -4272,6 +4307,7 @@
                         setVal('price-saw-cut', ps.sawCutPrice);
                         setVal('include-saw-cut', ps.includeSawCut);
                         setVal('markup-contingency', ps.contingency || 0);
+                        setVal('markup-escalation', ps.escalation || 0);
                     }
 
                     // Restore bid alternates
@@ -4286,6 +4322,13 @@
                         specialtySubItems = data.specialtySubItems;
                         _subNextId = data.subNextId || (specialtySubItems.length > 0 ? Math.max(...specialtySubItems.map(s => s.id)) + 1 : 1);
                         renderSubItems();
+                    }
+
+                    // Restore change orders
+                    if (data.changeOrders && Array.isArray(data.changeOrders)) {
+                        changeOrders = data.changeOrders;
+                        _coNextId = data.coNextId || (changeOrders.length > 0 ? Math.max(...changeOrders.map(c => c.id)) + 1 : 1);
+                        renderChangeOrders();
                     }
 
                     undoStack = [];
@@ -4399,6 +4442,7 @@
                     if (ps.sawCutPrice) document.getElementById('price-saw-cut').value = ps.sawCutPrice;
                     if (ps.includeSawCut) document.getElementById('include-saw-cut').value = ps.includeSawCut;
                     if (ps.contingency !== undefined) document.getElementById('markup-contingency').value = ps.contingency;
+                    if (ps.escalation !== undefined) document.getElementById('markup-escalation').value = ps.escalation;
                 }
                 // Restore client name, estimator name, bid date/validity
                 document.getElementById('clientName').value  = project.client || '';
@@ -4422,6 +4466,17 @@
                     specialtySubItems = [];
                     _subNextId = 1;
                     renderSubItems();
+                }
+
+                // Restore change orders
+                if (project.changeOrders && Array.isArray(project.changeOrders)) {
+                    changeOrders = project.changeOrders;
+                    _coNextId = project.coNextId || (changeOrders.length > 0 ? Math.max(...changeOrders.map(c => c.id)) + 1 : 1);
+                    renderChangeOrders();
+                } else {
+                    changeOrders = [];
+                    _coNextId = 1;
+                    renderChangeOrders();
                 }
 
                 undoStack = []; // clear history on load
@@ -4822,6 +4877,46 @@
 
             // ===== TERMS & CONDITIONS =====
             if (y < pageHeight - 60) {
+                // Change Order summary (if any)
+                if (changeOrders && changeOrders.length > 0) {
+                    const checkAndAddPage = (space) => {
+                        if (y + space > pageHeight - 30) { doc.addPage(); y = 25; }
+                    };
+                    checkAndAddPage(12 + changeOrders.length * 6 + 12);
+                    doc.setFontSize(10);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(200, 100, 30);
+                    doc.text('CHANGE ORDER LOG', margin, y);
+                    y += 7;
+                    doc.setFontSize(8.5);
+                    doc.setFont('helvetica', 'normal');
+                    const coTotal = changeOrders.reduce((s, c) => s + c.amount, 0);
+                    changeOrders.forEach((c, i) => {
+                        doc.setTextColor(60, 60, 60);
+                        doc.text(`CO-${String(i+1).padStart(2,'0')}  ${c.desc}`, margin + 3, y);
+                        const amtStr = (c.amount >= 0 ? '+' : '') + formatCurrency(c.amount);
+                        doc.setTextColor(c.amount >= 0 ? 30 : 200, c.amount >= 0 ? 130 : 50, 30);
+                        doc.text(amtStr, pageWidth - margin, y, { align: 'right' });
+                        y += 5.5;
+                    });
+                    y += 2;
+                    doc.setDrawColor(200, 100, 30); doc.line(margin, y, pageWidth - margin, y); y += 4;
+                    doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+                    const baseBid2 = estimate.costs ? estimate.costs.total : 0;
+                    doc.setTextColor(60, 60, 60);
+                    doc.text('Base Contract:', margin + 3, y);
+                    doc.text(formatCurrency(baseBid2), pageWidth - margin, y, { align: 'right' });
+                    y += 5.5;
+                    doc.setTextColor(200, 100, 30);
+                    doc.text('Total Change Orders:', margin + 3, y);
+                    doc.text((coTotal >= 0 ? '+' : '') + formatCurrency(coTotal), pageWidth - margin, y, { align: 'right' });
+                    y += 5.5;
+                    doc.setTextColor(0, 100, 150);
+                    doc.text('REVISED CONTRACT VALUE:', margin + 3, y);
+                    doc.text(formatCurrency(baseBid2 + coTotal), pageWidth - margin, y, { align: 'right' });
+                    y += 10;
+                }
+
                 doc.setFontSize(10);
                 doc.setFont('helvetica', 'bold');
                 doc.setTextColor(50, 50, 50);
@@ -5059,6 +5154,21 @@
             // Net margin
             const netMarginPct = c.total > 0 ? (c.profit / c.total * 100) : 0;
             if (netMarginPct > 0) lines.push(`  Net Margin: ${netMarginPct.toFixed(1)}% of revenue`);
+            // Escalation note
+            const escalPct = parseFloat(document.getElementById('markup-escalation').value) || 0;
+            if (escalPct > 0) lines.push(`  [Note: ${escalPct}% material price escalation applied]`);
+            // Change orders
+            if (changeOrders && changeOrders.length > 0) {
+                lines.push('');
+                lines.push('CHANGE ORDERS:');
+                changeOrders.forEach((co, i) => {
+                    const sign = co.amount >= 0 ? '+' : '';
+                    lines.push(`  CO-${String(i+1).padStart(2,'0')}: ${sign}${formatCurrency(co.amount)}  ${co.desc}`);
+                });
+                const coTotal2 = changeOrders.reduce((s, co) => s + co.amount, 0);
+                lines.push(`  CO Total: ${coTotal2 >= 0 ? '+' : ''}${formatCurrency(coTotal2)}`);
+                lines.push(`  *** REVISED CONTRACT:  ${formatCurrency(c.total + coTotal2)} ***`);
+            }
             lines.push('');
             lines.push(`${validNote} Excludes permits, engineering, and excavation unless noted.`);
             lines.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
@@ -5138,14 +5248,20 @@
                 return;
             }
             
+            // Escalation factor — applied to material + labor prices (not markup/add-ons)
+            const escalationPct = parseFloat(document.getElementById('markup-escalation').value) || 0;
+            const esc = 1 + escalationPct / 100;
+            const escalHint = document.getElementById('escalation-hint');
+            if (escalHint) escalHint.style.display = escalationPct > 0 ? '' : 'none';
+
             // Get pricing inputs
             const selectedPSI = document.getElementById('selected-psi').value;
-            const concretePrice = parseFloat(document.getElementById(`price-concrete-${selectedPSI}`).value) || 155;
+            const concretePrice = (parseFloat(document.getElementById(`price-concrete-${selectedPSI}`).value) || 155) * esc;
             
             const rebarCoverage = document.getElementById('rebar-coverage').value;
-            const meshPrice = parseFloat(document.getElementById('price-mesh').value) || 0.35;
-            const rebar4Price = parseFloat(document.getElementById('price-rebar-4').value) || 0.85;
-            const rebar5Price = parseFloat(document.getElementById('price-rebar-5').value) || 1.15;
+            const meshPrice = (parseFloat(document.getElementById('price-mesh').value) || 0.35) * esc;
+            const rebar4Price = (parseFloat(document.getElementById('price-rebar-4').value) || 0.85) * esc;
+            const rebar5Price = (parseFloat(document.getElementById('price-rebar-5').value) || 1.15) * esc;
             const rebarSpacingIn = parseFloat(document.getElementById('rebar-spacing').value) || 12;
             
             // Show/hide rebar spacing row based on coverage type
@@ -5156,14 +5272,14 @@
                 rebarSpacingRow.style.display = 'none';
             }
             
-            const formsPrice = parseFloat(document.getElementById('price-forms').value) || 8.50;
+            const formsPrice = (parseFloat(document.getElementById('price-forms').value) || 8.50) * esc;
             
             const finishType = document.getElementById('finish-type').value;
-            const broomPrice = parseFloat(document.getElementById('price-finish-broom').value) || 0.75;
-            const stampPrice = parseFloat(document.getElementById('price-finish-stamp').value) || 4.50;
+            const broomPrice = (parseFloat(document.getElementById('price-finish-broom').value) || 0.75) * esc;
+            const stampPrice = (parseFloat(document.getElementById('price-finish-stamp').value) || 4.50) * esc;
             
-            const laborPrice = parseFloat(document.getElementById('price-labor').value) || 85;
-            const pumpPrice = parseFloat(document.getElementById('price-pump').value) || 45;
+            const laborPrice = (parseFloat(document.getElementById('price-labor').value) || 85) * esc;
+            const pumpPrice = (parseFloat(document.getElementById('price-pump').value) || 45) * esc;
             const includePump = document.getElementById('include-pump').value === 'yes';
             
             const overheadPct = parseFloat(document.getElementById('markup-overhead').value) || 10;
@@ -5172,9 +5288,9 @@
             
             // Calculate quantities
             // Get linear element forms prices
-            const linearFormsPrice = parseFloat(document.getElementById('price-forms-linear').value) || 7.00;
-            const wallFormsPrice = parseFloat(document.getElementById('price-forms-wall').value) || 18.00;
-            const pierFormsPrice = parseFloat(document.getElementById('price-forms-pier').value) || 25.00;
+            const linearFormsPrice = (parseFloat(document.getElementById('price-forms-linear').value) || 7.00) * esc;
+            const wallFormsPrice = (parseFloat(document.getElementById('price-forms-wall').value) || 18.00) * esc;
+            const pierFormsPrice = (parseFloat(document.getElementById('price-forms-pier').value) || 25.00) * esc;
             
             let totalYards = 0;
             let totalSF = 0;
@@ -5219,16 +5335,19 @@
                 }
             });
             
-            // Helper: get per-measurement concrete price (respects psiOverride + psiCustomPrice)
+            // Helper: get per-measurement concrete price (respects psiOverride + psiCustomPrice + escalation)
             const getPriceForMeasurement = (m) => {
-                if (m.psiCustomPrice && m.psiCustomPrice > 0) return m.psiCustomPrice;
+                if (m.psiCustomPrice && m.psiCustomPrice > 0) return m.psiCustomPrice * esc;
                 if (m.psiOverride) {
                     const overrideEl = document.getElementById(`price-concrete-${m.psiOverride}`);
-                    if (overrideEl) return parseFloat(overrideEl.value) || concretePrice;
-                    // 2500 PSI might not have a field — use global as fallback
-                    return concretePrice;
+                    if (overrideEl) {
+                        const rawPsiPrice = parseFloat(overrideEl.value);
+                        if (rawPsiPrice > 0) return rawPsiPrice * esc;
+                    }
+                    // PSI field missing or zero — fall back to global escalated price
+                    return concretePrice; // already includes esc
                 }
-                return concretePrice;
+                return concretePrice; // already includes esc
             };
 
             // Waste factor applies to concrete only (concrete is ordered with overage)
@@ -5495,8 +5614,11 @@
                     finish: finishType,
                     pump: includePump
                 },
-                markups: { waste: wastePct, overhead: overheadPct, profit: profitPct, contingency: contingencyPct }
+                markups: { waste: wastePct, overhead: overheadPct, profit: profitPct, contingency: contingencyPct, escalation: escalationPct }
             };
+
+            // Refresh CO summary in case base bid changed
+            if (_coVisible) renderChangeOrders();
 
             // Update element breakdown if visible
             updateElementBreakdown();
@@ -5870,9 +5992,26 @@
 
             if (meshSF > 0 || sfRebarLF > 0 || linRebarLF > 0) {
                 html += `<div style="color:#f5a623;font-size:0.72rem;font-weight:700;margin:8px 0 4px;letter-spacing:0.3px;">REINFORCEMENT</div>`;
-                if (meshSF > 0)   html += row('  WWF Mesh', `${meshSF.toFixed(0)} SF`, '');
-                if (sfRebarLF > 0) html += row(`  Rebar ${rebarGrade} (slab)`, `${sfRebarLF.toFixed(0)} LF`, '');
-                if (linRebarLF > 0) html += row(`  Rebar (linear elems)`, `${linRebarLF.toFixed(0)} LF`, `(${linearBarCount} bars)`);
+                if (meshSF > 0) {
+                    const meshLbs = meshSF * MESH_LB_PER_SF;
+                    html += row('  WWF Mesh', `${meshSF.toFixed(0)} SF`, `≈ ${meshLbs < 2000 ? meshLbs.toFixed(0) + ' lb' : (meshLbs/2000).toFixed(2) + ' tons'}`);
+                }
+                if (sfRebarLF > 0) {
+                    const barNum = rebarGrade.replace('#','');
+                    const lbPerFt = REBAR_LB_PER_FT[barNum] || 0.668;
+                    const totalLF = sfRebarLF + (linRebarLF || 0);
+                    const totalLbs = totalLF * lbPerFt;
+                    const tons = totalLbs / 2000;
+                    html += row(`  Rebar ${rebarGrade} (slab)`, `${sfRebarLF.toFixed(0)} LF`, `≈ ${(sfRebarLF * lbPerFt).toFixed(0)} lb`);
+                    if (linRebarLF > 0) {
+                        html += row(`  Rebar ${rebarGrade} (linear)`, `${linRebarLF.toFixed(0)} LF`, `≈ ${(linRebarLF * lbPerFt).toFixed(0)} lb (${linearBarCount} bars)`);
+                        html += row(`  Rebar TOTAL`, `${totalLF.toFixed(0)} LF`, `≈ ${totalLbs < 2000 ? totalLbs.toFixed(0) + ' lb' : tons.toFixed(2) + ' tons'}`);
+                    }
+                } else if (linRebarLF > 0) {
+                    const lbPerFt = REBAR_LB_PER_FT['4']; // linear bars use #4 pricing
+                    const lbs = linRebarLF * lbPerFt;
+                    html += row(`  Rebar (linear elems)`, `${linRebarLF.toFixed(0)} LF`, `≈ ${lbs < 2000 ? lbs.toFixed(0) + ' lb' : (lbs/2000).toFixed(2) + ' tons'} (${linearBarCount} bars)`);
+                }
             }
 
             if (slabFormLF > 0 || linearFormLF > 0 || wallFormLF > 0 || totalPierCount > 0) {
@@ -5892,7 +6031,10 @@
 
             // Store for copy
             window._buyoutData = { psiGroups, wastePct, meshSF, sfRebarLF, rebarGrade, linRebarLF, linearBarCount,
-                                   slabFormLF, linearFormLF, wallFormLF, totalPierCount, totalSF, totalOrderYd };
+                                   slabFormLF, linearFormLF, wallFormLF, totalPierCount, totalSF, totalOrderYd,
+                                   // rebar weights for clipboard copy
+                                   meshLbs: meshSF * MESH_LB_PER_SF,
+                                   rebarLbPerFt: REBAR_LB_PER_FT[(rebarGrade||'#4').replace('#','')] || 0.668 };
         }
 
         // ===== PHASE BREAKDOWN =====
@@ -6017,9 +6159,18 @@
             if (d.meshSF > 0 || d.sfRebarLF > 0 || d.linRebarLF > 0) {
                 lines.push('');
                 lines.push('REINFORCEMENT:');
-                if (d.meshSF > 0)    lines.push(`  WWF Mesh: ${d.meshSF.toFixed(0)} SF`);
-                if (d.sfRebarLF > 0) lines.push(`  Rebar ${d.rebarGrade} (slab): ${d.sfRebarLF.toFixed(0)} LF`);
-                if (d.linRebarLF > 0) lines.push(`  Rebar (linear elements, ${d.linearBarCount} bars): ${d.linRebarLF.toFixed(0)} LF`);
+                if (d.meshSF > 0) {
+                    const meshLbs = d.meshSF * MESH_LB_PER_SF;
+                    lines.push(`  WWF Mesh: ${d.meshSF.toFixed(0)} SF (≈ ${meshLbs < 2000 ? meshLbs.toFixed(0) + ' lb' : (meshLbs/2000).toFixed(2) + ' tons'})`);
+                }
+                if (d.sfRebarLF > 0 || d.linRebarLF > 0) {
+                    const totalLF = (d.sfRebarLF || 0) + (d.linRebarLF || 0);
+                    const totalLbs = totalLF * d.rebarLbPerFt;
+                    const tons = totalLbs / 2000;
+                    if (d.sfRebarLF > 0) lines.push(`  Rebar ${d.rebarGrade} (slab): ${d.sfRebarLF.toFixed(0)} LF (≈ ${(d.sfRebarLF * d.rebarLbPerFt).toFixed(0)} lb)`);
+                    if (d.linRebarLF > 0) lines.push(`  Rebar ${d.rebarGrade} (linear, ${d.linearBarCount} bars): ${d.linRebarLF.toFixed(0)} LF (≈ ${(d.linRebarLF * d.rebarLbPerFt).toFixed(0)} lb)`);
+                    if (d.sfRebarLF > 0 && d.linRebarLF > 0) lines.push(`  Rebar TOTAL: ${totalLF.toFixed(0)} LF — ${totalLbs < 2000 ? totalLbs.toFixed(0) + ' lb' : tons.toFixed(2) + ' tons'}`);
+                }
             }
 
             if (d.slabFormLF > 0 || d.linearFormLF > 0 || d.wallFormLF > 0 || d.totalPierCount > 0) {
@@ -6042,6 +6193,81 @@
                 if (btn) { const orig = btn.textContent; btn.textContent = '✅ Copied!'; setTimeout(() => btn.textContent = orig, 1500); }
             }).catch(() => alert(text));
         }
+
+        // ===== CHANGE ORDER LOG =====
+        let changeOrders = [];
+        let _coNextId = 1;
+        let _coVisible = false;
+
+        function toggleChangeOrderPanel() {
+            _coVisible = !_coVisible;
+            const panel = document.getElementById('changeOrderPanel');
+            const btn = document.getElementById('changeOrderToggleBtn');
+            if (panel) panel.style.display = _coVisible ? '' : 'none';
+            if (btn) btn.textContent = _coVisible ? '📝 Hide Change Order Log' : '📝 Show Change Order Log';
+            if (_coVisible) renderChangeOrders();
+        }
+
+        function addChangeOrder() {
+            const desc = (document.getElementById('coNewDesc').value || '').trim();
+            const amt = parseFloat(document.getElementById('coNewAmt').value) || 0;
+            if (!desc) { document.getElementById('coNewDesc').focus(); return; }
+            if (amt === 0) { document.getElementById('coNewAmt').focus(); return; }
+            changeOrders.push({ id: _coNextId++, desc, amount: amt, date: new Date().toISOString().split('T')[0] });
+            document.getElementById('coNewDesc').value = '';
+            document.getElementById('coNewAmt').value = '';
+            renderChangeOrders();
+        }
+
+        function removeChangeOrder(id) {
+            changeOrders = changeOrders.filter(c => c.id !== id);
+            renderChangeOrders();
+        }
+
+        function renderChangeOrders() {
+            const list = document.getElementById('coList');
+            const summary = document.getElementById('coSummary');
+            if (!list || !summary) return;
+
+            if (changeOrders.length === 0) {
+                list.innerHTML = '<div style="color:#555;font-size:0.75rem;text-align:center;padding:4px 0;">No change orders yet</div>';
+            } else {
+                list.innerHTML = changeOrders.map(c => {
+                    const color = c.amount >= 0 ? '#4ade80' : '#f87171';
+                    const sign = c.amount >= 0 ? '+' : '';
+                    return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:0.78rem;">
+                        <span style="flex:1;color:#ccc;">${c.desc}</span>
+                        <span style="color:#888;font-size:0.68rem;">${c.date}</span>
+                        <span style="color:${color};font-weight:700;min-width:70px;text-align:right;">${sign}${formatCurrency(c.amount)}</span>
+                        <button onclick="removeChangeOrder(${c.id})" style="background:none;border:none;color:#555;cursor:pointer;font-size:0.75rem;padding:0 2px;" title="Remove CO">✕</button>
+                    </div>`;
+                }).join('');
+            }
+
+            // Summary
+            const baseBid = window.lastEstimate ? window.lastEstimate.costs.total : 0;
+            const coTotal = changeOrders.reduce((s, c) => s + c.amount, 0);
+            const revisedBid = baseBid + coTotal;
+            const addCount = changeOrders.filter(c => c.amount > 0).length;
+            const dedCount = changeOrders.filter(c => c.amount < 0).length;
+            const coColor = coTotal > 0 ? '#4ade80' : coTotal < 0 ? '#f87171' : '#888';
+
+            summary.innerHTML = `
+                <div style="display:flex;justify-content:space-between;margin-bottom:3px;color:#888;font-size:0.72rem;">
+                    <span>${changeOrders.length} CO${changeOrders.length !== 1 ? 's' : ''} (${addCount > 0 ? '+' + addCount + ' add' : ''}${dedCount > 0 ? (addCount > 0 ? ', ' : '') + dedCount + ' ded' : ''})</span>
+                    <span style="color:${coColor};font-weight:700;">${coTotal >= 0 ? '+' : ''}${formatCurrency(coTotal)}</span>
+                </div>
+                ${baseBid > 0 ? `<div style="display:flex;justify-content:space-between;font-weight:700;font-size:0.8rem;">
+                    <span style="color:#aaa;">Revised Contract Value</span>
+                    <span style="color:#fb923c;">${formatCurrency(revisedBid)}</span>
+                </div>` : '<div style="color:#555;font-size:0.7rem;">Run Recalculate to see revised contract value</div>'}`;
+        }
+
+        // ===== REBAR WEIGHTS IN BUYOUT SHEET =====
+        // Rebar weights: #4 = 0.668 lb/ft, #5 = 1.043 lb/ft, #3 = 0.376 lb/ft
+        // WWF 6×6 W1.4×W1.4 ≈ 0.21 lb/SF; W2.9 ≈ 0.42 lb/SF; use 0.30 lb/SF as typical
+        const REBAR_LB_PER_FT = { '4': 0.668, '5': 1.043, '3': 0.376 };
+        const MESH_LB_PER_SF = 0.30; // typical 6×6 W2.0×W2.0 welded wire mesh
 
         // Auto-recalculate when measurements change + schedule auto-save
         const originalUpdateMeasurementsList = updateMeasurementsList;
