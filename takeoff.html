@@ -1443,6 +1443,11 @@
                         <div class="truck-count" id="truckCount" style="display:none; margin-top:10px; padding:8px 10px; background:rgba(0,0,0,0.3); border-radius:6px; font-size:0.8rem; color:#ccc;">
                             🚛 <span id="truckCountText">—</span>
                         </div>
+                        <!-- Sanity Check Warnings -->
+                        <div id="sanityWarnings" style="display:none;margin-top:8px;background:rgba(245,166,35,0.1);border:1px solid rgba(245,166,35,0.4);border-radius:6px;padding:8px 10px;font-size:0.78rem;">
+                            <div style="color:#f5a623;font-weight:700;margin-bottom:4px;">⚠️ Quantity Check</div>
+                            <div id="sanityWarningList" style="color:#fbbf24;line-height:1.6;"></div>
+                        </div>
                     </div>
                 </div>
                 
@@ -1622,6 +1627,10 @@
                                     <label>Waste Factor %</label>
                                     <input type="number" id="waste-factor" value="5" step="1">
                                 </div>
+                                <div class="pricing-row">
+                                    <label title="Risk/contingency % on top of profit. Applied after overhead+profit. Use 3-5% for typical unknowns, 0 when scope is fully defined.">Contingency %</label>
+                                    <input type="number" id="markup-contingency" value="0" min="0" step="1" title="0 = none. 3% for light unknowns, 5% for complex scope.">
+                                </div>
                                 <div style="display:flex;gap:5px;margin-top:8px;">
                                     <button onclick="applyMarkupPreset('competitive')" title="Competitive: 8% overhead, 10% profit — tight bid to win work" style="flex:1;background:rgba(245,166,35,0.12);border:1px solid rgba(245,166,35,0.35);color:#f5a623;border-radius:6px;padding:5px 3px;cursor:pointer;font-size:0.7rem;font-weight:600;">🏆 Win</button>
                                     <button onclick="applyMarkupPreset('standard')" title="Standard: 10% overhead, 15% profit — normal target margin" style="flex:1;background:rgba(78,205,196,0.12);border:1px solid rgba(78,205,196,0.35);color:#4ecdc4;border-radius:6px;padding:5px 3px;cursor:pointer;font-size:0.7rem;font-weight:600;">⚖️ Std</button>
@@ -1646,6 +1655,17 @@
                                     </select>
                                 </div>
                                 <div id="saw-cut-qty-hint" style="font-size:0.72rem;color:#666;margin-top:4px;"></div>
+                            </div>
+                            <div class="pricing-group">
+                                <div class="group-label">🔧 Specialty Sub / Vendor Items</div>
+                                <div style="font-size:0.7rem;color:#666;margin-bottom:6px;">Add-on costs for specialty subs (PT, epoxy dowels, coring, sealers, testing, etc.). Pass-through — not subject to markup.</div>
+                                <div id="subItemsList" style="margin-bottom:6px;"></div>
+                                <div style="display:flex;gap:4px;align-items:center;">
+                                    <input type="text" id="subItemDesc" placeholder="e.g. Post-tension strand" maxlength="40" style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:5px;padding:4px 6px;color:#e0e0e0;font-size:0.75rem;" onkeydown="if(event.key==='Enter'){addSubItem();event.preventDefault();}">
+                                    <input type="number" id="subItemAmt" placeholder="$" step="50" min="0" style="width:70px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:5px;padding:4px 6px;color:#e0e0e0;font-size:0.75rem;text-align:right;" onkeydown="if(event.key==='Enter'){addSubItem();event.preventDefault();}">
+                                    <button onclick="addSubItem()" style="background:rgba(251,146,60,0.15);border:1px solid rgba(251,146,60,0.3);color:#fb923c;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:0.8rem;" title="Add specialty item">+</button>
+                                </div>
+                                <div id="subItemsTotal" style="font-size:0.75rem;color:#fb923c;margin-top:5px;text-align:right;display:none;"></div>
                             </div>
                             <div class="pricing-group">
                                 <div class="group-label">➕ Add-Ons</div>
@@ -1723,6 +1743,10 @@
                             <span class="cost-label">Profit (<span id="profit-pct">15</span>%)</span>
                             <span class="cost-value" id="cost-profit">$0.00</span>
                         </div>
+                        <div class="cost-row" id="cost-contingency-row" style="display:none;">
+                            <span class="cost-label">Contingency (<span id="contingency-pct">0</span>%)</span>
+                            <span class="cost-value" id="cost-contingency">$0.00</span>
+                        </div>
                         <div class="cost-row" id="cost-mobilization-row" style="display:none;">
                             <span class="cost-label">Mobilization</span>
                             <span class="cost-value" id="cost-mobilization">$0.00</span>
@@ -1730,6 +1754,10 @@
                         <div class="cost-row" id="cost-misc-row" style="display:none;">
                             <span class="cost-label" id="cost-misc-label">Misc Allowance</span>
                             <span class="cost-value" id="cost-misc">$0.00</span>
+                        </div>
+                        <div class="cost-row" id="cost-subitems-row" style="display:none;">
+                            <span class="cost-label">Specialty / Sub Items <span class="cost-qty" id="cost-subitems-count"></span></span>
+                            <span class="cost-value" id="cost-subitems">$0.00</span>
                         </div>
                         <div class="cost-row grand-total-cost">
                             <span class="cost-label">TOTAL BID</span>
@@ -4059,7 +4087,8 @@
                 miscLabel: document.getElementById('price-misc-label').value,
                 controlJointSpacing: document.getElementById('control-joint-spacing').value,
                 sawCutPrice: document.getElementById('price-saw-cut').value,
-                includeSawCut: document.getElementById('include-saw-cut').value
+                includeSawCut: document.getElementById('include-saw-cut').value,
+                contingency: document.getElementById('markup-contingency').value
             };
             
             const data = {
@@ -4076,7 +4105,9 @@
                 totalYards: measurements.reduce((sum, m) => sum + m.volume, 0),
                 estimate: window.lastEstimate,
                 bidAlternates: bidAlternates,
-                altNextId: _altNextId
+                altNextId: _altNextId,
+                specialtySubItems: specialtySubItems,
+                subNextId: _subNextId
             };
             
             // Get existing projects
@@ -4147,11 +4178,14 @@
                     miscLabel: document.getElementById('price-misc-label').value,
                     controlJointSpacing: document.getElementById('control-joint-spacing').value,
                     sawCutPrice: document.getElementById('price-saw-cut').value,
-                    includeSawCut: document.getElementById('include-saw-cut').value
+                    includeSawCut: document.getElementById('include-saw-cut').value,
+                    contingency: document.getElementById('markup-contingency').value
                 },
                 estimate: window.lastEstimate,
                 bidAlternates: bidAlternates,
-                altNextId: _altNextId
+                altNextId: _altNextId,
+                specialtySubItems: specialtySubItems,
+                subNextId: _subNextId
             };
             const json = JSON.stringify(data, null, 2);
             const blob = new Blob([json], { type: 'application/json' });
@@ -4237,6 +4271,7 @@
                         setVal('control-joint-spacing', ps.controlJointSpacing);
                         setVal('price-saw-cut', ps.sawCutPrice);
                         setVal('include-saw-cut', ps.includeSawCut);
+                        setVal('markup-contingency', ps.contingency || 0);
                     }
 
                     // Restore bid alternates
@@ -4244,6 +4279,13 @@
                         bidAlternates = data.bidAlternates;
                         _altNextId = data.altNextId || (bidAlternates.length > 0 ? Math.max(...bidAlternates.map(a => a.id)) + 1 : 1);
                         if (_bidAlternatesVisible) renderAlternates();
+                    }
+
+                    // Restore specialty sub items
+                    if (data.specialtySubItems && Array.isArray(data.specialtySubItems)) {
+                        specialtySubItems = data.specialtySubItems;
+                        _subNextId = data.subNextId || (specialtySubItems.length > 0 ? Math.max(...specialtySubItems.map(s => s.id)) + 1 : 1);
+                        renderSubItems();
                     }
 
                     undoStack = [];
@@ -4356,6 +4398,7 @@
                     if (ps.controlJointSpacing) document.getElementById('control-joint-spacing').value = ps.controlJointSpacing;
                     if (ps.sawCutPrice) document.getElementById('price-saw-cut').value = ps.sawCutPrice;
                     if (ps.includeSawCut) document.getElementById('include-saw-cut').value = ps.includeSawCut;
+                    if (ps.contingency !== undefined) document.getElementById('markup-contingency').value = ps.contingency;
                 }
                 // Restore client name, estimator name, bid date/validity
                 document.getElementById('clientName').value  = project.client || '';
@@ -4368,6 +4411,17 @@
                     bidAlternates = project.bidAlternates;
                     _altNextId = project.altNextId || (bidAlternates.length > 0 ? Math.max(...bidAlternates.map(a => a.id)) + 1 : 1);
                     if (_bidAlternatesVisible) renderAlternates();
+                }
+
+                // Restore specialty sub items
+                if (project.specialtySubItems && Array.isArray(project.specialtySubItems)) {
+                    specialtySubItems = project.specialtySubItems;
+                    _subNextId = project.subNextId || (specialtySubItems.length > 0 ? Math.max(...specialtySubItems.map(s => s.id)) + 1 : 1);
+                    renderSubItems();
+                } else {
+                    specialtySubItems = [];
+                    _subNextId = 1;
+                    renderSubItems();
                 }
 
                 undoStack = []; // clear history on load
@@ -4601,6 +4655,9 @@
                 drawCostRow(`Concrete Overage (${estimate.markups?.waste || 5}%)`, estimate.costs.waste);
                 drawCostRow(`Overhead (${estimate.markups?.overhead || 10}%)`, estimate.costs.overhead);
                 drawCostRow(`Profit (${estimate.markups?.profit || 15}%)`, estimate.costs.profit);
+                if (estimate.costs.contingency > 0) {
+                    drawCostRow(`Contingency (${estimate.markups?.contingency || 0}%)`, estimate.costs.contingency);
+                }
                 if (estimate.costs.mobilization > 0) {
                     drawCostRow('Mobilization', estimate.costs.mobilization);
                 }
@@ -4609,6 +4666,15 @@
                 }
                 if (estimate.costs.sawCut > 0) {
                     drawCostRow(`Control Joints (${(estimate.costs.sawCutLF||0).toFixed(0)} LF saw cut)`, estimate.costs.sawCut);
+                }
+                if (estimate.costs.subItems > 0) {
+                    // List individual sub items in PDF
+                    specialtySubItems.forEach(s => {
+                        drawCostRow(`  ${s.desc}`, s.amount);
+                    });
+                    if (specialtySubItems.length > 1) {
+                        drawCostRow('Specialty / Sub Total', estimate.costs.subItems, true);
+                    }
                 }
                 
                 y += 3;
@@ -4926,9 +4992,14 @@
             lines.push(`  Labor:              ${formatCurrency(c.labor)}`);
             lines.push(`  Overhead & Profit:  ${formatCurrency(c.overhead + c.profit)}`);
             lines.push(`  Waste/Overage:      ${formatCurrency(c.waste)}`);
+            if (c.contingency > 0) lines.push(`  Contingency:        ${formatCurrency(c.contingency)}`);
             if (c.mobilization > 0) lines.push(`  Mobilization:       ${formatCurrency(c.mobilization)}`);
             if (c.misc > 0) lines.push(`  ${(c.miscLabel || 'Misc').padEnd(18)}${formatCurrency(c.misc)}`);
             if (c.sawCut > 0) lines.push(`  Control Joints:     ${formatCurrency(c.sawCut)}`);
+            if (c.subItems > 0) {
+                lines.push(`  Specialty / Subs:`);
+                specialtySubItems.forEach(s => lines.push(`    ${s.desc.padEnd(16)}${formatCurrency(s.amount)}`));
+            }
             lines.push('');
             lines.push(`  *** TOTAL BID:  ${formatCurrency(c.total)} ***`);
             const perYd = (q.yards || 0) > 0 ? c.total / q.yards : 0;
@@ -5024,6 +5095,9 @@
                 polygonPoints = [];
                 updateMeasurementsList();
                 redrawMeasurements();
+                // Hide sanity warnings
+                const sw = document.getElementById('sanityWarnings');
+                if (sw) sw.style.display = 'none';
             }
         }
         
@@ -5286,7 +5360,14 @@
                 }
             }
 
-            const totalBid = subtotal + wasteCost + overheadCost + profitCost + mobilizationCost + miscCost + sawCutCost;
+            // Contingency (applied after overhead+profit, before pass-through add-ons)
+            const contingencyPct = parseFloat(document.getElementById('markup-contingency').value) || 0;
+            const contingencyCost = (subtotal + wasteCost + overheadCost + profitCost) * (contingencyPct / 100);
+
+            // Specialty sub / vendor items (pass-through, no markup)
+            const subItemsTotal = specialtySubItems.reduce((sum, s) => sum + s.amount, 0);
+
+            const totalBid = subtotal + wasteCost + overheadCost + profitCost + contingencyCost + mobilizationCost + miscCost + sawCutCost + subItemsTotal;
             const perYard = totalYards > 0 ? totalBid / totalYards : 0;
             
             // Update display
@@ -5348,6 +5429,22 @@
                 document.getElementById('cost-sawcut-qty').textContent = `${sawCutLF.toFixed(0)} LF`;
             } else { sawCutRow.style.display = 'none'; }
 
+            // Contingency row
+            const contingencyRow = document.getElementById('cost-contingency-row');
+            if (contingencyCost > 0) {
+                contingencyRow.style.display = '';
+                document.getElementById('cost-contingency').textContent = formatCurrency(contingencyCost);
+                document.getElementById('contingency-pct').textContent = contingencyPct;
+            } else { contingencyRow.style.display = 'none'; }
+
+            // Specialty sub items row
+            const subItemsRow = document.getElementById('cost-subitems-row');
+            if (subItemsTotal > 0) {
+                subItemsRow.style.display = '';
+                document.getElementById('cost-subitems').textContent = formatCurrency(subItemsTotal);
+                document.getElementById('cost-subitems-count').textContent = `(${specialtySubItems.length} item${specialtySubItems.length !== 1 ? 's' : ''})`;
+            } else { subItemsRow.style.display = 'none'; }
+
             document.getElementById('cost-total').textContent = formatCurrency(totalBid);
             document.getElementById('cost-per-yard-label').textContent = `${formatCurrency(perYard)} per yd³ installed`;
             
@@ -5364,6 +5461,8 @@
             document.getElementById('waste-pct').textContent = wastePct;
             document.getElementById('overhead-pct').textContent = overheadPct;
             document.getElementById('profit-pct').textContent = profitPct;
+            const cpEl = document.getElementById('contingency-pct');
+            if (cpEl) cpEl.textContent = contingencyPct;
             
             // Store for PDF export
             window.lastEstimate = {
@@ -5386,6 +5485,8 @@
                     miscLabel,
                     sawCut: sawCutCost,
                     sawCutLF,
+                    contingency: contingencyCost,
+                    subItems: subItemsTotal,
                     total: totalBid
                 },
                 options: {
@@ -5394,7 +5495,7 @@
                     finish: finishType,
                     pump: includePump
                 },
-                markups: { waste: wastePct, overhead: overheadPct, profit: profitPct }
+                markups: { waste: wastePct, overhead: overheadPct, profit: profitPct, contingency: contingencyPct }
             };
 
             // Update element breakdown if visible
@@ -5442,6 +5543,9 @@
 
             // Refresh per-item cost chips in sidebar (lightweight DOM patch, no full re-render)
             refreshItemCostChips();
+
+            // Run sanity checks on quantities
+            runSanityChecks(totalYards, totalSF);
         }
 
         // Refresh just the cost chip badges on sidebar items without re-rendering the whole list
@@ -6844,6 +6948,9 @@
         // Load company settings on page load
         loadCompanySettings();
 
+        // Initialize specialty sub items list on page load
+        renderSubItems();
+
         // ===== SLAB THICKNESS BREAKDOWN =====
         function updateSlabThicknessBreakdown() {
             const el = document.getElementById('slabThicknessBreakdown');
@@ -7135,6 +7242,106 @@
         let bidAlternates = []; // [{id, desc, amount, included}]
         let _bidAlternatesVisible = false;
         let _altNextId = 1;
+
+        // ── Specialty Sub / Vendor Line Items ──────────────────────────────────
+        let specialtySubItems = []; // [{id, desc, amount}]
+        let _subNextId = 1;
+
+        function addSubItem() {
+            const desc = document.getElementById('subItemDesc').value.trim();
+            const amt = parseFloat(document.getElementById('subItemAmt').value);
+            if (!desc || isNaN(amt) || amt <= 0) {
+                alert('Enter a description and a positive dollar amount.');
+                return;
+            }
+            specialtySubItems.push({ id: _subNextId++, desc, amount: amt });
+            document.getElementById('subItemDesc').value = '';
+            document.getElementById('subItemAmt').value = '';
+            renderSubItems();
+            recalculateCosts();
+        }
+
+        function removeSubItem(id) {
+            specialtySubItems = specialtySubItems.filter(s => s.id !== id);
+            renderSubItems();
+            recalculateCosts();
+        }
+
+        function renderSubItems() {
+            const list = document.getElementById('subItemsList');
+            const totalEl = document.getElementById('subItemsTotal');
+            if (!list) return;
+            if (specialtySubItems.length === 0) {
+                list.innerHTML = '<div style="color:#555;font-size:0.75rem;font-style:italic;margin-bottom:4px;">No specialty items added yet.</div>';
+                if (totalEl) totalEl.style.display = 'none';
+            } else {
+                list.innerHTML = specialtySubItems.map(s => `
+                    <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.2);border-radius:5px;padding:4px 7px;">
+                        <span style="flex:1;font-size:0.75rem;color:#e0e0e0;">${s.desc}</span>
+                        <span style="color:#fb923c;font-weight:600;font-size:0.78rem;white-space:nowrap;">${formatCurrency(s.amount)}</span>
+                        <button onclick="removeSubItem(${s.id})" style="background:none;border:none;color:#555;cursor:pointer;font-size:0.8rem;padding:0 2px;" title="Remove">✕</button>
+                    </div>`).join('');
+                const total = specialtySubItems.reduce((sum, s) => sum + s.amount, 0);
+                if (totalEl) {
+                    totalEl.textContent = `Total: ${formatCurrency(total)}`;
+                    totalEl.style.display = '';
+                }
+            }
+        }
+
+        // ── Sanity Checks ──────────────────────────────────────────────────────
+        function runSanityChecks(totalYards, totalSF) {
+            const warnings = [];
+            const activeMeasurements = measurements.filter(m => !m.excluded);
+
+            // Check 1: scale not set but measurements exist
+            if (!scale && activeMeasurements.length > 0) {
+                warnings.push('Scale not calibrated — all volumes will be incorrect until you set scale.');
+            }
+
+            // Check 2: yd³/SF ratio for slabs (should be ~0.012 for 4" slab to ~0.031 for 8")
+            if (totalSF > 10) {
+                const slabMeasurements = activeMeasurements.filter(m => m.config.type === 'slab' && m.area && m.area > 0);
+                slabMeasurements.forEach(m => {
+                    const ratio = m.volume / m.area; // yd³ per SF
+                    const thkIn = m.config.thickness || 4;
+                    const thkUnit = m.config.thicknessUnit || 'in';
+                    const thkFt = thkUnit === 'ft' ? thkIn : thkIn / 12;
+                    const expectedRatio = thkFt / 3; // yd³/SF = thickness(ft) / 3
+                    const name = m.label || `${m.config.type.toUpperCase()} #${m.id}`;
+                    if (ratio < 0.004) {
+                        warnings.push(`"${name}": yd³/SF ratio looks very low (${ratio.toFixed(4)}). Check scale calibration or slab thickness.`);
+                    } else if (ratio > 0.15) {
+                        warnings.push(`"${name}": yd³/SF ratio looks very high (${ratio.toFixed(3)}). Expected ~${expectedRatio.toFixed(3)} for ${thkIn}${thkUnit} slab.`);
+                    }
+                });
+            }
+
+            // Check 3: total volume seems implausibly large
+            if (totalYards > 5000) {
+                warnings.push(`Total concrete (${totalYards.toFixed(0)} yd³) is unusually large — verify scale calibration.`);
+            }
+
+            // Check 4: single measurement with very large volume (>1000 yd³)
+            activeMeasurements.forEach(m => {
+                if (m.volume > 1000) {
+                    const name = m.label || `${m.config.type.toUpperCase()} #${m.id}`;
+                    warnings.push(`"${name}" = ${m.volume.toFixed(0)} yd³ — unusually large. Verify.`);
+                }
+            });
+
+            // Show or hide warning box
+            const box = document.getElementById('sanityWarnings');
+            const list = document.getElementById('sanityWarningList');
+            if (box && list) {
+                if (warnings.length > 0) {
+                    list.innerHTML = warnings.map(w => `• ${w}`).join('<br>');
+                    box.style.display = '';
+                } else {
+                    box.style.display = 'none';
+                }
+            }
+        }
 
         function toggleBidAlternates() {
             _bidAlternatesVisible = !_bidAlternatesVisible;
