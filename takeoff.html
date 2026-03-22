@@ -1152,6 +1152,12 @@
                     <textarea class="project-notes" id="projectNotes" placeholder="Scope inclusions/exclusions, special conditions, clarifications…"></textarea>
                 </div>
 
+                <!-- Private Estimator Notes (not in PDF/export) -->
+                <div class="section">
+                    <h3>🔒 Estimator Notes <span style="font-size:0.7rem;color:#555;font-weight:normal;">(private — not in PDF)</span></h3>
+                    <textarea class="project-notes" id="estimatorNotes" placeholder="Internal notes: site conditions, concerns, assumptions, questions to verify…" style="border-color:rgba(245,166,35,0.2);background:rgba(245,166,35,0.04);"></textarea>
+                </div>
+
                 <!-- Mix Design Requirements -->
                 <div class="section">
                     <h3 style="cursor:pointer;" onclick="toggleMixDesignPanel()">🧪 Mix Design <span id="mixDesignToggle" style="font-size:0.75rem;color:#666;margin-left:4px;">▶</span></h3>
@@ -2095,6 +2101,10 @@
                 <div class="action-row">
                     <button class="action-btn secondary" onclick="exportProjectJSON()" title="Export project as .json file for backup or sharing">📤 Export</button>
                     <button class="action-btn secondary" onclick="document.getElementById('importProjectInput').click()" title="Import a previously exported .json project file">📥 Import</button>
+                </div>
+                <div class="action-row">
+                    <button class="action-btn secondary" onclick="savePricingTemplate()" title="Save current pricing settings as your default template (no measurements saved)">📐 Save Template</button>
+                    <button class="action-btn secondary" onclick="loadPricingTemplate()" title="Load your saved pricing template into the current project">📐 Load Template</button>
                 </div>
                 <input type="file" id="importProjectInput" accept=".json,application/json" style="display:none" onchange="importProjectJSON(event)">
                 <div class="action-row">
@@ -4325,6 +4335,7 @@
                 bidDate: document.getElementById('bidDate').value || '',
                 bidValidDays: document.getElementById('bidValidDays').value || '45',
                 notes: document.getElementById('projectNotes').value || '',
+                estimatorNotes: document.getElementById('estimatorNotes').value || '',
                 mixDesign: getMixDesignData(),
                 timestamp: new Date().toISOString(),
                 scale,
@@ -4375,6 +4386,7 @@
                 bidDate: document.getElementById('bidDate').value || '',
                 bidValidDays: document.getElementById('bidValidDays').value || '45',
                 notes: document.getElementById('projectNotes').value || '',
+                estimatorNotes: document.getElementById('estimatorNotes').value || '',
                 mixDesign: getMixDesignData(),
                 payMilestones: payMilestones,
                 psNextId: _psNextId,
@@ -4457,6 +4469,7 @@
                     document.getElementById('bidDate').value      = data.bidDate || '';
                     document.getElementById('bidValidDays').value = data.bidValidDays || '45';
                     document.getElementById('projectNotes').value = data.notes || '';
+                    if (document.getElementById('estimatorNotes')) document.getElementById('estimatorNotes').value = data.estimatorNotes || '';
                     scale = data.scale || null;
                     measurements = data.measurements || [];
 
@@ -4670,6 +4683,7 @@
                 document.getElementById('estimatorName').value = project.estimator || '';
                 document.getElementById('bidDate').value     = project.bidDate || '';
                 document.getElementById('bidValidDays').value = project.bidValidDays || '45';
+                if (document.getElementById('estimatorNotes')) document.getElementById('estimatorNotes').value = project.estimatorNotes || '';
                 
                 // Restore bid alternates
                 if (project.bidAlternates && Array.isArray(project.bidAlternates)) {
@@ -8517,6 +8531,123 @@ ${(() => {
             }
 
             el.innerHTML = html;
+        }
+
+        // ============================================================
+        // PRICING TEMPLATE SAVE / LOAD
+        // Saves just the pricing inputs (no measurements, no project name)
+        // to localStorage as a reusable template. Load it anytime to
+        // initialize a new project with your standard pricing.
+        // ============================================================
+        const PRICING_TEMPLATE_KEY = 'oncor_pricing_template';
+
+        function collectPricingSettings() {
+            const getVal = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+            return {
+                psi: getVal('selected-psi'),
+                concrete2500: getVal('price-concrete-2500'),
+                concrete3000: getVal('price-concrete-3000'),
+                concrete4000: getVal('price-concrete-4000'),
+                concrete5000: getVal('price-concrete-5000'),
+                rebar4: getVal('price-rebar-4'),
+                rebar5: getVal('price-rebar-5'),
+                mesh: getVal('price-mesh'),
+                rebarCoverage: getVal('rebar-coverage'),
+                rebarSpacing: getVal('rebar-spacing'),
+                rebarLinearBars: getVal('rebar-linear-bars'),
+                fiber: getVal('price-fiber'),
+                includeFiber: getVal('include-fiber'),
+                baseCourse: getVal('price-base-course'),
+                includeBaseCourse: getVal('include-base-course'),
+                vaporBarrier: getVal('price-vapor-barrier'),
+                includeVaporBarrier: getVal('include-vapor-barrier'),
+                forms: getVal('price-forms'),
+                formsLinear: getVal('price-forms-linear'),
+                formsWall: getVal('price-forms-wall'),
+                formsPier: getVal('price-forms-pier'),
+                broomFinish: getVal('price-finish-broom'),
+                stampFinish: getVal('price-finish-stamp'),
+                finishType: getVal('finish-type'),
+                labor: getVal('price-labor'),
+                pump: getVal('price-pump'),
+                includePump: getVal('include-pump'),
+                wallHeightUnit: getVal('wall-height-unit'),
+                wallThicknessUnit: getVal('wall-thickness-unit'),
+                overhead: getVal('markup-overhead'),
+                profit: getVal('markup-profit'),
+                waste: getVal('waste-factor'),
+                mobilization: getVal('price-mobilization'),
+                misc: getVal('price-misc'),
+                miscLabel: getVal('price-misc-label'),
+                controlJointSpacing: getVal('control-joint-spacing'),
+                sawCutPrice: getVal('price-saw-cut'),
+                includeSawCut: getVal('include-saw-cut'),
+                contingency: getVal('markup-contingency'),
+                escalation: getVal('markup-escalation')
+            };
+        }
+
+        function savePricingTemplate() {
+            const settings = collectPricingSettings();
+            settings._savedAt = new Date().toISOString();
+            localStorage.setItem(PRICING_TEMPLATE_KEY, JSON.stringify(settings));
+            const btn = document.querySelector('button[onclick="savePricingTemplate()"]');
+            if (btn) { const o=btn.textContent; btn.textContent='✅ Saved!'; setTimeout(()=>{btn.textContent=o;},2000); }
+        }
+
+        function loadPricingTemplate() {
+            const raw = localStorage.getItem(PRICING_TEMPLATE_KEY);
+            if (!raw) { alert('No saved pricing template found. Set up your pricing first, then click "Save Template".'); return; }
+            try {
+                const ps = JSON.parse(raw);
+                const savedAt = ps._savedAt ? new Date(ps._savedAt).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : 'unknown date';
+                if (!confirm(`Load pricing template saved on ${savedAt}? This will update all pricing fields in the current project.`)) return;
+                const setVal = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined && val !== '') el.value = val; };
+                setVal('selected-psi', ps.psi);
+                setVal('price-concrete-2500', ps.concrete2500);
+                setVal('price-concrete-3000', ps.concrete3000);
+                setVal('price-concrete-4000', ps.concrete4000);
+                setVal('price-concrete-5000', ps.concrete5000);
+                setVal('price-rebar-4', ps.rebar4);
+                setVal('price-rebar-5', ps.rebar5);
+                setVal('price-mesh', ps.mesh);
+                setVal('rebar-coverage', ps.rebarCoverage);
+                setVal('rebar-spacing', ps.rebarSpacing);
+                setVal('rebar-linear-bars', ps.rebarLinearBars);
+                setVal('price-fiber', ps.fiber);
+                setVal('include-fiber', ps.includeFiber);
+                setVal('price-base-course', ps.baseCourse);
+                setVal('include-base-course', ps.includeBaseCourse);
+                setVal('price-vapor-barrier', ps.vaporBarrier);
+                setVal('include-vapor-barrier', ps.includeVaporBarrier);
+                setVal('price-forms', ps.forms);
+                setVal('price-forms-linear', ps.formsLinear);
+                setVal('price-forms-wall', ps.formsWall);
+                setVal('price-forms-pier', ps.formsPier);
+                setVal('price-finish-broom', ps.broomFinish);
+                setVal('price-finish-stamp', ps.stampFinish);
+                setVal('finish-type', ps.finishType);
+                setVal('price-labor', ps.labor);
+                setVal('price-pump', ps.pump);
+                setVal('include-pump', ps.includePump);
+                setVal('wall-height-unit', ps.wallHeightUnit);
+                setVal('wall-thickness-unit', ps.wallThicknessUnit);
+                setVal('markup-overhead', ps.overhead);
+                setVal('markup-profit', ps.profit);
+                setVal('waste-factor', ps.waste);
+                setVal('price-mobilization', ps.mobilization);
+                setVal('price-misc', ps.misc);
+                setVal('price-misc-label', ps.miscLabel);
+                setVal('control-joint-spacing', ps.controlJointSpacing);
+                setVal('price-saw-cut', ps.sawCutPrice);
+                setVal('include-saw-cut', ps.includeSawCut);
+                setVal('markup-contingency', ps.contingency || 0);
+                setVal('markup-escalation', ps.escalation || 0);
+                const btn = document.querySelector('button[onclick="loadPricingTemplate()"]');
+                if (btn) { const o=btn.textContent; btn.textContent='✅ Loaded!'; setTimeout(()=>{btn.textContent=o;},2000); }
+            } catch(e) {
+                alert('Failed to load template: ' + e.message);
+            }
         }
 
         // ============================================================
