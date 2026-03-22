@@ -1198,6 +1198,15 @@
                             <option value="none">Untagged</option>
                         </select>
                     </h3>
+                    <!-- Batch phase assign bar -->
+                    <div style="display:flex;gap:5px;align-items:center;padding:4px 0 2px 0;flex-wrap:wrap;">
+                        <span style="font-size:0.68rem;color:#555;">Batch assign:</span>
+                        <button onclick="batchAssignPhase('1')" title="Assign all visible/filtered measurements to Phase 1" style="background:rgba(99,179,237,0.12);border:1px solid rgba(99,179,237,0.3);color:#63b3ed;border-radius:4px;padding:2px 7px;font-size:0.68rem;cursor:pointer;">P1</button>
+                        <button onclick="batchAssignPhase('2')" title="Assign all visible/filtered measurements to Phase 2" style="background:rgba(104,211,145,0.12);border:1px solid rgba(104,211,145,0.3);color:#68d391;border-radius:4px;padding:2px 7px;font-size:0.68rem;cursor:pointer;">P2</button>
+                        <button onclick="batchAssignPhase('3')" title="Assign all visible/filtered measurements to Phase 3" style="background:rgba(246,173,85,0.12);border:1px solid rgba(246,173,85,0.3);color:#f6ad55;border-radius:4px;padding:2px 7px;font-size:0.68rem;cursor:pointer;">P3</button>
+                        <button onclick="batchAssignPhase('')" title="Clear phase from all visible/filtered measurements" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#666;border-radius:4px;padding:2px 7px;font-size:0.68rem;cursor:pointer;">✕ clr</button>
+                        <span id="batchAssignFeedback" style="font-size:0.68rem;color:#4ecdc4;"></span>
+                    </div>
                     <div class="measurements-list" id="measurementsList">
                         <p style="color: #666; text-align: center; padding: 20px; font-size: 0.85rem;">Draw on the plan to add measurements</p>
                     </div>
@@ -1640,6 +1649,20 @@
                 
                 <!-- Continuous scroll view -->
                 <div class="pages-container" id="pagesContainer" style="display: none;"></div>
+                
+                <!-- Canvas HUD: floating stats overlay -->
+                <div id="canvasHUD" style="display:none;position:absolute;bottom:12px;right:12px;background:rgba(10,12,30,0.82);backdrop-filter:blur(6px);border:1px solid rgba(78,205,196,0.3);border-radius:10px;padding:8px 14px;font-size:0.78rem;pointer-events:none;z-index:50;min-width:130px;">
+                    <div style="color:#888;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px;">Live Totals</div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;">
+                        <span style="color:#aaa;">Volume</span>
+                        <span id="hudYards" style="color:#4ecdc4;font-weight:700;">—</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;">
+                        <span style="color:#aaa;">Bid</span>
+                        <span id="hudBid" style="color:#f5a623;font-weight:700;">—</span>
+                    </div>
+                    <div id="hudPhaseRow" style="display:none;margin-top:4px;border-top:1px solid rgba(255,255,255,0.08);padding-top:4px;font-size:0.68rem;color:#63b3ed;" title="Phase breakdown"></div>
+                </div>
             </div>
             
             <div class="status-bar">
@@ -3373,6 +3396,29 @@
             const idx = phases.indexOf(m.phase || '');
             m.phase = phases[(idx + 1) % phases.length];
             updateMeasurementsList();
+            redrawMeasurements();
+        }
+
+        // Batch assign phase to all currently visible (filtered) measurements
+        function batchAssignPhase(phase) {
+            const phaseFilterEl = document.getElementById('phaseFilter');
+            const filterVal = phaseFilterEl ? phaseFilterEl.value : '';
+            // Determine which measurements are currently visible based on filter
+            let targets;
+            if (filterVal === '') targets = measurements;
+            else if (filterVal === 'none') targets = measurements.filter(m => !m.phase);
+            else targets = measurements.filter(m => m.phase === filterVal);
+            if (targets.length === 0) return;
+            snapshotHistory();
+            targets.forEach(m => { m.phase = phase; });
+            updateMeasurementsList();
+            redrawMeasurements();
+            // Show feedback
+            const fb = document.getElementById('batchAssignFeedback');
+            if (fb) {
+                fb.textContent = `${targets.length} updated`;
+                setTimeout(() => { fb.textContent = ''; }, 2000);
+            }
         }
         
         // Delete measurement
@@ -5001,6 +5047,8 @@
             if (_concreteOrderVisible) updateConcreteOrder();
             // Update phase breakdown if visible
             if (_phaseBreakdownVisible) updatePhaseBreakdown();
+            // Update canvas HUD
+            updateCanvasHUD(totalYards, totalBid);
             
             // Update quick bid banner
             const bidAmountEl = document.getElementById('quickBidAmount');
@@ -5436,6 +5484,37 @@
             </tr></tbody></table>`;
 
             rows.innerHTML = html;
+        }
+
+        // ===== CANVAS HUD =====
+        function updateCanvasHUD(yards, bid) {
+            const hud = document.getElementById('canvasHUD');
+            if (!hud) return;
+            // Show HUD only when there's a PDF and at least one measurement
+            if (measurements.length === 0) { hud.style.display = 'none'; return; }
+            hud.style.display = '';
+            const hudYards = document.getElementById('hudYards');
+            const hudBid = document.getElementById('hudBid');
+            const hudPhaseRow = document.getElementById('hudPhaseRow');
+            if (hudYards) hudYards.textContent = yards > 0 ? `${yards.toFixed(1)} yd³` : '—';
+            if (hudBid) hudBid.textContent = bid > 0 ? formatCurrency(bid) : '—';
+            // Phase summary in HUD
+            if (hudPhaseRow) {
+                const phaseHUD = {};
+                measurements.filter(m => !m.excluded && m.phase).forEach(m => {
+                    phaseHUD[m.phase] = (phaseHUD[m.phase] || 0) + m.volume;
+                });
+                const phKeys = Object.keys(phaseHUD).sort();
+                if (phKeys.length > 0) {
+                    hudPhaseRow.style.display = '';
+                    hudPhaseRow.innerHTML = phKeys.map(ph => {
+                        const c = phaseCanvasColors[ph] || '#63b3ed';
+                        return `<span style="color:${c};">P${ph}: ${phaseHUD[ph].toFixed(1)}</span>`;
+                    }).join(' &nbsp; ');
+                } else {
+                    hudPhaseRow.style.display = 'none';
+                }
+            }
         }
 
         function copyBuyoutSheet() {
