@@ -2233,6 +2233,9 @@
                     <button class="action-btn secondary" onclick="printFormalBidLetter()" title="Print a formal proposal letter to accompany your bid package">📜 Bid Letter</button>
                     <button class="action-btn secondary" onclick="printFieldVerifyChecklist()" title="Print a field verification checklist for the foreman to check before the pour">✅ Field Check</button>
                 </div>
+                <div class="action-row">
+                    <button class="action-btn secondary" onclick="printInvoice()" title="Generate an invoice based on your bid and approved change orders">🧾 Invoice</button>
+                </div>
                 <input type="file" id="importProjectInput" accept=".json,application/json" style="display:none" onchange="importProjectJSON(event)">
                 <div class="action-row">
                     <button class="action-btn secondary" onclick="copyBidSummary()" title="Copy bid summary text to clipboard for emailing or texting to GC">📋 Copy Bid Summary</button>
@@ -8922,6 +8925,206 @@ ${(() => {
             html += `<div style="font-size:0.68rem;color:#444;margin-top:4px;">Data is indicative only. Varies by site conditions, schedule, and market conditions.</div>`;
 
             el.innerHTML = html;
+        }
+
+        // ============================================================
+        // INVOICE GENERATOR
+        // Generates a professional invoice based on the bid.
+        // Supports: line items from bid, approved change orders,
+        // payment terms, partial billing (% complete).
+        // ============================================================
+        function printInvoice() {
+            const projectName = document.getElementById('projectName').value.trim() || 'Untitled Project';
+            const clientName  = document.getElementById('clientName').value.trim();
+            const estimatorName = document.getElementById('estimatorName').value.trim();
+            const est = window.lastEstimate;
+
+            if (!est || !est.costs || est.costs.total === 0) {
+                alert('Run the cost estimate first before generating an invoice.');
+                return;
+            }
+
+            const c = est.costs;
+            const q = est.quantities || {};
+            const today = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+            const invNum = 'INV-' + new Date().toISOString().replace(/[-:T.]/g,'').substring(0,12);
+
+            const company = (function() {
+                try { return JSON.parse(localStorage.getItem('oncor_company_settings') || '{}'); } catch { return {}; }
+            })();
+
+            const senderName = estimatorName || company.name || 'Oncor';
+            const companyName = company.name || 'Oncor';
+            const phone = company.phone || '';
+            const email = company.email || '';
+            const addr = company.address || '';
+
+            // Build line items from cost estimate
+            const costRows = [
+                { desc: `Concrete Material (${(q.yards||0).toFixed(1)} yd³ @ ${document.getElementById('selected-psi').value} PSI)`, amount: c.concrete },
+                { desc: 'Reinforcement (Rebar/Mesh)', amount: c.rebar },
+                { desc: 'Formwork', amount: c.forms },
+                { desc: 'Finishing', amount: c.finishing },
+            ];
+            if (c.fiber > 0) costRows.push({ desc: 'Fiber Reinforcement', amount: c.fiber });
+            if (c.baseCourse > 0) costRows.push({ desc: 'Base Course / Aggregate', amount: c.baseCourse });
+            if (c.vaporBarrier > 0) costRows.push({ desc: 'Vapor Barrier', amount: c.vaporBarrier });
+            costRows.push({ desc: 'Labor & Placement', amount: c.labor });
+            if (c.waste > 0) costRows.push({ desc: 'Material Overage Allowance', amount: c.waste });
+            if (c.sawCut > 0) costRows.push({ desc: `Control Joints (${c.sawCutLF?.toFixed(0) || 0} LF)`, amount: c.sawCut });
+            if (c.mobilization > 0) costRows.push({ desc: 'Mobilization', amount: c.mobilization });
+            if (c.misc > 0) costRows.push({ desc: c.miscLabel || 'Misc Allowance', amount: c.misc });
+            if (c.subItems > 0) {
+                specialtySubItems.forEach(s => costRows.push({ desc: s.desc + ' (specialty sub)', amount: s.amount }));
+            }
+            const subtotalBeforeOH = c.subtotal || (c.total - c.overhead - c.profit - c.waste - c.mobilization - c.misc - c.sawCut - (c.subItems||0));
+            costRows.push({ desc: 'Overhead & Project Management', amount: c.overhead + c.profit, bold: true });
+            if (c.contingency > 0) costRows.push({ desc: 'Contingency', amount: c.contingency });
+
+            // CO adjustments
+            const coTotal = changeOrders.reduce((s, co) => s + co.amount, 0);
+
+            // Totals
+            const contractTotal = c.total;
+            const revisedTotal = contractTotal + coTotal;
+
+            const win = window.open('', '_blank', 'width=840,height=720');
+            if (!win) { alert('Pop-up blocked.'); return; }
+
+            win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Invoice ${invNum} — ${projectName}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: Arial, sans-serif; color: #222; font-size: 10.5pt; padding: 20mm 18mm; max-width:840px; margin:0 auto; }
+  .letterhead { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; }
+  .co-name { font-size:20pt; font-weight:700; color:#1a1a1a; }
+  .co-sub { font-size:9pt; color:#888; margin-top:2px; }
+  .co-contact { text-align:right; font-size:9pt; color:#555; line-height:1.5; }
+  .invoice-header { background:#1a1a1a; color:#fff; padding:10px 16px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; }
+  .invoice-title { font-size:14pt; font-weight:700; letter-spacing:0.5px; }
+  .invoice-meta { text-align:right; font-size:9pt; line-height:1.6; }
+  .bill-to { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; font-size:9.5pt; }
+  .bill-block label { display:block; font-size:7.5pt; text-transform:uppercase; letter-spacing:0.5px; color:#888; margin-bottom:3px; }
+  table { width:100%; border-collapse:collapse; font-size:9.5pt; margin-bottom:12px; }
+  table th { background:#1a1a1a; color:#fff; padding:6px 10px; text-align:left; }
+  table th:last-child { text-align:right; }
+  table td { padding:7px 10px; border-bottom:1px solid #eee; vertical-align:top; }
+  table td:last-child { text-align:right; white-space:nowrap; }
+  table tr:nth-child(even) td { background:#fafafa; }
+  .total-section { display:flex; justify-content:flex-end; margin-bottom:12px; }
+  .total-table { width:260px; font-size:9.5pt; }
+  .total-table td { padding:4px 8px; }
+  .total-table tr:last-child td { font-weight:700; font-size:11pt; border-top:2px solid #1a1a1a; }
+  .payment-terms { background:#f5f5f5; border:1px solid #ddd; border-radius:3px; padding:10px 12px; font-size:9pt; margin-bottom:12px; }
+  .payment-terms h4 { margin-bottom:5px; font-size:9.5pt; }
+  .payment-schedule-table { width:100%; font-size:9pt; margin-top:6px; }
+  .payment-schedule-table td { padding:4px 6px; border-bottom:1px solid #eee; }
+  .sig-area { display:flex; gap:40px; margin-top:20px; }
+  .sig-block { flex:1; }
+  .sig-line { border-bottom:1px solid #333; margin:25px 0 4px; }
+  .sig-label { font-size:8pt; color:#888; }
+  .footer { text-align:center; font-size:7.5pt; color:#aaa; margin-top:16px; border-top:1px solid #eee; padding-top:8px; }
+  @media print { body { padding:10mm; } .print-btn { display:none !important; } }
+</style>
+</head>
+<body>
+<div style="text-align:right;margin-bottom:10px;">
+  <button class="print-btn" onclick="window.print()" style="background:#1a1a1a;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-size:9.5pt;">🖨️ Print / Save PDF</button>
+</div>
+
+<div class="letterhead">
+  <div>
+    <div class="co-name">${companyName}</div>
+    <div class="co-sub">Concrete Estimating &amp; Construction</div>
+    ${addr ? `<div style="font-size:8.5pt;color:#888;margin-top:3px;">${addr}</div>` : ''}
+  </div>
+  <div class="co-contact">
+    ${phone ? `<div>${phone}</div>` : ''}
+    ${email ? `<div>${email}</div>` : ''}
+  </div>
+</div>
+
+<div class="invoice-header">
+  <div class="invoice-title">INVOICE</div>
+  <div class="invoice-meta">
+    <div>Invoice #: ${invNum}</div>
+    <div>Date: ${today}</div>
+    <div>Due: Net 30</div>
+  </div>
+</div>
+
+<div class="bill-to">
+  <div class="bill-block">
+    <label>Bill To</label>
+    <div style="line-height:1.6;">${clientName || '[Client Name]'}<br>[Address]<br>[City, State ZIP]</div>
+  </div>
+  <div class="bill-block">
+    <label>Project</label>
+    <div style="font-weight:600;">${projectName}</div>
+    ${senderName ? `<div style="margin-top:4px;color:#666;">Submitted by: ${senderName}</div>` : ''}
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:60px;">Item</th>
+      <th>Description</th>
+      <th style="width:120px;">Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${costRows.filter(r => r.amount > 0).map((r, i) => `<tr>
+      <td style="color:#888;">${i + 1}</td>
+      <td style="${r.bold ? 'font-weight:600;' : ''}">${r.desc}</td>
+      <td style="${r.bold ? 'font-weight:600;' : ''}">$${Math.round(r.amount).toLocaleString('en-US')}</td>
+    </tr>`).join('')}
+    ${changeOrders.length > 0 ? `<tr><td colspan="3" style="background:#fff8e8;font-weight:700;padding:6px 10px;color:#92400e;">APPROVED CHANGE ORDERS</td></tr>` : ''}
+    ${changeOrders.map((co, i) => `<tr>
+      <td style="color:#888;">CO-${String(i+1).padStart(2,'0')}</td>
+      <td>${co.desc}</td>
+      <td style="color:${co.amount >= 0 ? '#166534' : '#991b1b'};">${co.amount >= 0 ? '+' : ''}$${Math.abs(Math.round(co.amount)).toLocaleString('en-US')}</td>
+    </tr>`).join('')}
+  </tbody>
+</table>
+
+<div class="total-section">
+  <table class="total-table">
+    <tr><td style="color:#888;">Base Contract:</td><td>$${Math.round(contractTotal).toLocaleString('en-US')}</td></tr>
+    ${coTotal !== 0 ? `<tr><td style="color:#888;">Change Orders:</td><td style="color:${coTotal >= 0 ? '#166534' : '#991b1b'};">${coTotal >= 0 ? '+' : ''}$${Math.abs(Math.round(coTotal)).toLocaleString('en-US')}</td></tr>` : ''}
+    <tr><td>TOTAL DUE:</td><td>$${Math.round(revisedTotal).toLocaleString('en-US')}</td></tr>
+  </table>
+</div>
+
+<div class="payment-terms">
+  <h4>Payment Terms</h4>
+  <p>Net 30 days from invoice date. Late payments subject to 1.5% monthly interest charge.</p>
+  ${payMilestones && payMilestones.length > 0 ? `
+  <div style="margin-top:8px;"><strong>Agreed Payment Schedule:</strong></div>
+  <table class="payment-schedule-table">
+    ${payMilestones.map(m => {
+        const amt = revisedTotal * m.pct / 100;
+        return `<tr><td>${m.desc}</td><td style="text-align:right;color:#555;">${m.pct}%</td><td style="text-align:right;font-weight:600;">$${Math.round(amt).toLocaleString('en-US')}</td></tr>`;
+    }).join('')}
+  </table>` : '<p style="margin-top:4px;">Please remit payment via check or bank transfer to the address above.</p>'}
+</div>
+
+<p style="font-size:9pt;color:#555;">Thank you for your business. Questions? Contact us at ${phone || email || 'the above contact information'}.</p>
+
+<div class="sig-area">
+  <div class="sig-block"><div class="sig-line"></div><div class="sig-label">Authorized Signature</div></div>
+  <div class="sig-block"><div class="sig-line"></div><div class="sig-label">Client Acceptance / Date</div></div>
+</div>
+
+<div class="footer">
+  ${companyName}${addr ? ' · ' + addr : ''}${phone ? ' · ' + phone : ''}${email ? ' · ' + email : ''}<br>
+  Generated by Oncor Takeoff Tool · Invoice ${invNum} · ${today}
+</div>
+</body></html>`);
+            win.document.close();
         }
 
         // ============================================================
