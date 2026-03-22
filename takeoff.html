@@ -2061,13 +2061,27 @@
                                 `${widthFt.toFixed(1)}' × ${heightFt.toFixed(1)}' = ${area.toFixed(1)} SF`;
                         }
                     } else if (currentTool === 'line') {
+                        // Shift-snap to nearest 15° angle
+                        let endPos = pos;
+                        if (e.shiftKey) {
+                            const dx = pos.x - drawStart.x;
+                            const dy = pos.y - drawStart.y;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            const rawAngle = Math.atan2(dy, dx);
+                            const snapAngle = Math.round(rawAngle / (Math.PI / 12)) * (Math.PI / 12);
+                            endPos = {
+                                x: drawStart.x + dist * Math.cos(snapAngle),
+                                y: drawStart.y + dist * Math.sin(snapAngle)
+                            };
+                        }
                         ctx.beginPath();
                         ctx.moveTo(drawStart.x, drawStart.y);
-                        ctx.lineTo(pos.x, pos.y);
+                        ctx.lineTo(endPos.x, endPos.y);
                         ctx.stroke();
                         if (scale) {
-                            const length = Math.sqrt(Math.pow(pos.x - drawStart.x, 2) + Math.pow(pos.y - drawStart.y, 2)) / scale;
-                            document.getElementById('measurementPreview').textContent = `Length: ${length.toFixed(1)}'`;
+                            const length = Math.sqrt(Math.pow(endPos.x - drawStart.x, 2) + Math.pow(endPos.y - drawStart.y, 2)) / scale;
+                            const snapNote = e.shiftKey ? ' (snapped)' : '';
+                            document.getElementById('measurementPreview').textContent = `Length: ${length.toFixed(1)}'${snapNote}`;
                         }
                     }
                     ctx.setLineDash([]);
@@ -2107,14 +2121,28 @@
                     measurements.push(measurement);
                 }
             } else if (currentTool === 'line') {
-                const length = Math.sqrt(Math.pow(pdfEnd.x - pdfStart.x, 2) + Math.pow(pdfEnd.y - pdfStart.y, 2)) / scale;
+                // Apply shift-snap to mouseup endpoint as well
+                let snapEnd = pos;
+                if (e.shiftKey) {
+                    const sdx = pos.x - drawStart.x;
+                    const sdy = pos.y - drawStart.y;
+                    const sdist = Math.sqrt(sdx * sdx + sdy * sdy);
+                    const rawAngle = Math.atan2(sdy, sdx);
+                    const snapAngle = Math.round(rawAngle / (Math.PI / 12)) * (Math.PI / 12);
+                    snapEnd = {
+                        x: drawStart.x + sdist * Math.cos(snapAngle),
+                        y: drawStart.y + sdist * Math.sin(snapAngle)
+                    };
+                }
+                const snapPdfEnd = screenToPdf(snapEnd);
+                const length = Math.sqrt(Math.pow(snapPdfEnd.x - pdfStart.x, 2) + Math.pow(snapPdfEnd.y - pdfStart.y, 2)) / scale;
                 
                 if (length > 0.5) {
                     const measurement = {
                         id: Date.now(),
                         type: 'line',
                         config,
-                        points: [pdfStart, pdfEnd],
+                        points: [pdfStart, snapPdfEnd],
                         length,
                         page: pageNum
                     };
