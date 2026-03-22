@@ -213,6 +213,18 @@
         .measurement-item .dims { font-size: 0.8rem; color: #888; }
         .measurement-item .value { font-weight: bold; color: #fff; }
         .measurement-item .volume { font-size: 0.85rem; color: #4ecdc4; }
+        .measurement-item .item-cost-chip {
+            display: inline-block;
+            font-size: 0.72rem;
+            color: #a3e635;
+            background: rgba(163,230,53,0.12);
+            border: 1px solid rgba(163,230,53,0.25);
+            border-radius: 4px;
+            padding: 1px 5px;
+            margin-top: 2px;
+            letter-spacing: 0.2px;
+        }
+        .measurement-item.excluded .item-cost-chip { opacity: 0.35; text-decoration: line-through; }
         .measurement-item .delete-btn {
             background: none;
             border: none;
@@ -898,6 +910,7 @@
                 <div style="display:flex;flex-direction:column;gap:4px;">
                     <input type="text" class="project-name" id="projectName" placeholder="Project Name" value="Untitled">
                     <input type="text" class="project-name" id="clientName" placeholder="Client Name" style="font-size:0.75rem;opacity:0.7;">
+                    <input type="text" class="project-name" id="estimatorName" placeholder="Estimator" style="font-size:0.75rem;opacity:0.55;">
                 </div>
             </div>
             
@@ -1478,6 +1491,9 @@
                     <button class="action-btn secondary" onclick="document.getElementById('importProjectInput').click()" title="Import a previously exported .json project file">📥 Import</button>
                 </div>
                 <input type="file" id="importProjectInput" accept=".json,application/json" style="display:none" onchange="importProjectJSON(event)">
+                <div class="action-row">
+                    <button class="action-btn secondary" onclick="copyBidSummary()" title="Copy bid summary text to clipboard for emailing or texting to GC">📋 Copy Bid Summary</button>
+                </div>
                 <button class="action-btn secondary" onclick="clearAll()">🗑️ Clear All</button>
             </div>
         </div>
@@ -3157,6 +3173,11 @@
                     
                     const pageTag = m.page ? `<span style="font-size:0.7rem;color:#888;margin-left:4px;">pg ${m.page}</span>` : '';
                     const psiTag = m.psiOverride ? `<span style="font-size:0.65rem;background:rgba(168,85,247,0.25);color:#c084fc;border-radius:3px;padding:1px 4px;margin-left:4px;" title="PSI override: ${m.psiOverride}">${m.psiOverride}</span>` : '';
+                    // Per-item cost chip
+                    const itemCost = getItemEstimatedCost(m);
+                    const costChip = itemCost != null
+                        ? `<span class="item-cost-chip" title="Estimated cost contribution for this item">~${formatCurrency(itemCost)}</span>`
+                        : '';
                     return `
                         <div class="measurement-item${m.id === selectedMeasurementId ? ' selected' : ''}${m.excluded ? ' excluded' : ''}" data-type="${m.config.type}" data-id="${m.id}" onclick="selectAndScrollTo(${m.id}, event)">
                             <div class="info">
@@ -3169,7 +3190,7 @@
                                        onclick="event.stopPropagation()">
                                 <div class="dims">${dims}</div>
                                 <div class="value">${displayValue}</div>
-                                <div class="volume">${m.volume.toFixed(2)} yd³</div>
+                                <div class="volume">${m.volume.toFixed(2)} yd³${costChip ? ' ' + costChip : ''}</div>
                             </div>
                             <div style="display:flex;flex-direction:column;gap:4px;">
                                 <button class="delete-btn" onclick="deleteMeasurement(${m.id})" title="Delete">×</button>
@@ -3185,6 +3206,40 @@
             updateTotals();
         }
         
+        // ===== PER-ITEM COST ESTIMATE =====
+        // Returns estimated cost for a single measurement.
+        // Uses window.lastEstimate for total allocations, falls back gracefully when not yet computed.
+        function getItemEstimatedCost(m) {
+            if (m.excluded) return null;
+            const est = window.lastEstimate;
+            if (!est || !est.costs || !est.quantities) return null;
+            const totalYd = est.quantities.yards || 0;
+            if (totalYd === 0) return null;
+            const share = m.volume / totalYd;
+            // Per-item concrete: use item's own PSI override price if set
+            let unitConcretePrice;
+            if (m.psiCustomPrice && m.psiCustomPrice > 0) {
+                unitConcretePrice = m.psiCustomPrice;
+            } else if (m.psiOverride) {
+                const el = document.getElementById(`price-concrete-${m.psiOverride}`);
+                unitConcretePrice = el ? (parseFloat(el.value) || 155) : 155;
+            } else {
+                // Use global PSI price
+                const psiEl = document.getElementById('selected-psi');
+                const psi = psiEl ? psiEl.value : '4000';
+                const priceEl = document.getElementById(`price-concrete-${psi}`);
+                unitConcretePrice = priceEl ? (parseFloat(priceEl.value) || 155) : 155;
+            }
+            const itemConcrete = m.volume * unitConcretePrice;
+            // Other costs: allocated proportionally by yd³ share
+            const itemOther = (est.costs.rebar + est.costs.forms + est.costs.finishing + est.costs.labor) * share;
+            const itemSubtotal = itemConcrete + itemOther;
+            // Apply the same markup ratio as the overall estimate (waste+overhead+profit+addons)
+            // markupFactor maps subtotal → total bid
+            const markupFactor = est.costs.subtotal > 0 ? est.costs.total / est.costs.subtotal : 1;
+            return itemSubtotal * markupFactor;
+        }
+
         function setMeasurementLabel(id, label) {
             const m = measurements.find(m => m.id === id);
             if (m) m.label = label;
@@ -3546,6 +3601,7 @@
             const data = {
                 name: projectName,
                 client: document.getElementById('clientName').value || '',
+                estimator: document.getElementById('estimatorName').value || '',
                 notes: document.getElementById('projectNotes').value || '',
                 timestamp: new Date().toISOString(),
                 scale,
@@ -3584,6 +3640,7 @@
                 _format: 'oncor-takeoff-v1',
                 name: projectName,
                 client: document.getElementById('clientName').value || '',
+                estimator: document.getElementById('estimatorName').value || '',
                 notes: document.getElementById('projectNotes').value || '',
                 timestamp: new Date().toISOString(),
                 scale,
@@ -3652,6 +3709,7 @@
                     // Restore project data
                     document.getElementById('projectName').value = data.name || 'Untitled';
                     document.getElementById('clientName').value = data.client || '';
+                    document.getElementById('estimatorName').value = data.estimator || '';
                     document.getElementById('projectNotes').value = data.notes || '';
                     scale = data.scale || null;
                     measurements = data.measurements || [];
@@ -3806,8 +3864,9 @@
                     if (ps.sawCutPrice) document.getElementById('price-saw-cut').value = ps.sawCutPrice;
                     if (ps.includeSawCut) document.getElementById('include-saw-cut').value = ps.includeSawCut;
                 }
-                // Restore client name
+                // Restore client name and estimator name
                 document.getElementById('clientName').value = project.client || '';
+                document.getElementById('estimatorName').value = project.estimator || '';
                 
                 undoStack = []; // clear history on load
                 redoStack = [];
@@ -3838,6 +3897,7 @@
             
             const projectName = document.getElementById('projectName').value || 'Untitled';
             const clientName = document.getElementById('clientName').value.trim();
+            const estimatorName = document.getElementById('estimatorName').value.trim();
             const estimate = window.lastEstimate || {};
             
             // ===== PAGE 1: TAKEOFF SUMMARY =====
@@ -3858,16 +3918,22 @@
             doc.setFontSize(12);
             doc.setFont('helvetica', 'bold');
             doc.text(projectName, pageWidth - margin, 20, { align: 'right' });
-            if (clientName) {
-                doc.setFont('helvetica', 'normal');
+            doc.setFont('helvetica', 'normal');
+            {
+                // Right-side header: client, estimator, date — stack from top
+                let ry = 20;
                 doc.setFontSize(10);
-                doc.text(`Prepared for: ${clientName}`, pageWidth - margin, 28, { align: 'right' });
+                if (clientName) {
+                    doc.text(`Prepared for: ${clientName}`, pageWidth - margin, ry, { align: 'right' });
+                    ry += 7;
+                }
+                if (estimatorName) {
+                    doc.setFontSize(9);
+                    doc.text(`Estimator: ${estimatorName}`, pageWidth - margin, ry, { align: 'right' });
+                    ry += 6;
+                }
                 doc.setFontSize(9);
-                doc.text(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), pageWidth - margin, 35, { align: 'right' });
-            } else {
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(10);
-                doc.text(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), pageWidth - margin, 32, { align: 'right' });
+                doc.text(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), pageWidth - margin, ry, { align: 'right' });
             }
             
             y = 55;
@@ -4071,7 +4137,10 @@
             doc.setTextColor(150, 150, 150);
             doc.setFontSize(8);
             doc.setFont('helvetica', 'normal');
-            doc.text('Generated by Oncor Takeoff Tool', margin, pageHeight - 8);
+            const footerLeft = estimatorName
+                ? `Generated by Oncor Takeoff Tool — Estimator: ${estimatorName}`
+                : 'Generated by Oncor Takeoff Tool';
+            doc.text(footerLeft, margin, pageHeight - 8);
             doc.text('oncor.ai', pageWidth - margin, pageHeight - 8, { align: 'right' });
             
             doc.save(`Oncor_Estimate_${projectName.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
@@ -4135,6 +4204,82 @@
             URL.revokeObjectURL(url);
         }
         
+        // ===== COPY BID SUMMARY TO CLIPBOARD =====
+        function copyBidSummary() {
+            const projectName = document.getElementById('projectName').value || 'Untitled';
+            const clientName = document.getElementById('clientName').value.trim();
+            const estimatorName = document.getElementById('estimatorName').value.trim();
+            const est = window.lastEstimate;
+            const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+            if (!est || !est.costs || est.costs.total === 0) {
+                alert('Run the cost estimate first before copying bid summary.');
+                return;
+            }
+
+            const q = est.quantities || {};
+            const c = est.costs;
+            const psi = est.options?.psi || '4000';
+            const rebarDesc = est.options?.rebar === 'mesh' ? 'WWF Mesh' : est.options?.rebar === 'none' ? 'No Rebar' : `#${est.options?.rebar} Rebar`;
+            const finishDesc = est.options?.finish === 'stamp' ? 'Stamped Finish' : est.options?.finish === 'broom' ? 'Broom Finish' : 'No Finish';
+
+            const lines = [
+                `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+                `⚡ ONCOR — CONCRETE BID SUMMARY`,
+                `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+                `Project: ${projectName}`,
+            ];
+            if (clientName) lines.push(`Client:  ${clientName}`);
+            if (estimatorName) lines.push(`Estimator: ${estimatorName}`);
+            lines.push(`Date:    ${today}`);
+            lines.push('');
+            lines.push('SCOPE:');
+            lines.push(`  Concrete: ${(q.yards || 0).toFixed(1)} yd³ @ ${psi} PSI`);
+            if (q.sf > 0) lines.push(`  Slab area: ${q.sf.toFixed(0)} SF`);
+            lines.push(`  Rebar: ${rebarDesc}`);
+            lines.push(`  Finish: ${finishDesc}`);
+            if (est.options?.pump) lines.push(`  Pump: Included`);
+            lines.push('');
+            lines.push('COST BREAKDOWN:');
+            lines.push(`  Concrete Material:  ${formatCurrency(c.concrete)}`);
+            lines.push(`  Rebar / Mesh:       ${formatCurrency(c.rebar)}`);
+            lines.push(`  Formwork:           ${formatCurrency(c.forms)}`);
+            lines.push(`  Finishing:          ${formatCurrency(c.finishing)}`);
+            lines.push(`  Labor:              ${formatCurrency(c.labor)}`);
+            lines.push(`  Overhead & Profit:  ${formatCurrency(c.overhead + c.profit)}`);
+            lines.push(`  Waste/Overage:      ${formatCurrency(c.waste)}`);
+            if (c.mobilization > 0) lines.push(`  Mobilization:       ${formatCurrency(c.mobilization)}`);
+            if (c.misc > 0) lines.push(`  ${(c.miscLabel || 'Misc').padEnd(18)}${formatCurrency(c.misc)}`);
+            if (c.sawCut > 0) lines.push(`  Control Joints:     ${formatCurrency(c.sawCut)}`);
+            lines.push('');
+            lines.push(`  *** TOTAL BID:  ${formatCurrency(c.total)} ***`);
+            const perYd = (q.yards || 0) > 0 ? c.total / q.yards : 0;
+            lines.push(`  (${formatCurrency(perYd)}/yd³ installed)`);
+            if (q.sf > 0) {
+                lines.push(`  (${formatCurrency(c.total / q.sf)}/SF slab)`);
+            }
+            lines.push('');
+            lines.push('This quote is valid for 30 days. Excludes permits, engineering, and excavation unless noted.');
+            lines.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+
+            const text = lines.join('\n');
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    const btn = document.querySelector('button[onclick="copyBidSummary()"]');
+                    if (btn) {
+                        const orig = btn.textContent;
+                        btn.textContent = '✅ Copied!';
+                        setTimeout(() => { btn.textContent = orig; }, 2000);
+                    }
+                }).catch(() => {
+                    prompt('Copy this bid summary:', text);
+                });
+            } else {
+                prompt('Copy this bid summary:', text);
+            }
+        }
+
         // Shortcuts modal toggle
         function toggleShortcuts() {
             const modal = document.getElementById('shortcutsModal');
@@ -4509,6 +4654,37 @@
                     bidYardsEl.textContent = yardsText;
                 }
             }
+
+            // Refresh per-item cost chips in sidebar (lightweight DOM patch, no full re-render)
+            refreshItemCostChips();
+        }
+
+        // Refresh just the cost chip badges on sidebar items without re-rendering the whole list
+        function refreshItemCostChips() {
+            const list = document.getElementById('measurementsList');
+            if (!list) return;
+            list.querySelectorAll('.measurement-item').forEach(el => {
+                const id = parseInt(el.getAttribute('data-id'), 10);
+                const m = measurements.find(m => m.id === id);
+                if (!m) return;
+                // Find or create the cost chip inside the .volume div
+                const volumeDiv = el.querySelector('.volume');
+                if (!volumeDiv) return;
+                let chip = volumeDiv.querySelector('.item-cost-chip');
+                const itemCost = getItemEstimatedCost(m);
+                if (itemCost != null) {
+                    if (!chip) {
+                        chip = document.createElement('span');
+                        chip.className = 'item-cost-chip';
+                        chip.title = 'Estimated cost contribution for this item';
+                        volumeDiv.appendChild(document.createTextNode(' '));
+                        volumeDiv.appendChild(chip);
+                    }
+                    chip.textContent = `~${formatCurrency(itemCost)}`;
+                } else if (chip) {
+                    chip.remove();
+                }
+            });
         }
         
         function formatCurrency(amount) {
@@ -5242,6 +5418,8 @@
                     const label = m.label || '';
                     const pageTag = m.page ? `<span style="font-size:0.65rem;color:#666;margin-left:3px;">pg ${m.page}</span>` : '';
                     const psiTag = m.psiOverride ? `<span style="font-size:0.65rem;background:rgba(168,85,247,0.25);color:#c084fc;border-radius:3px;padding:1px 4px;margin-left:4px;">${m.psiOverride}</span>` : '';
+                    const itemCostG = getItemEstimatedCost(m);
+                    const costChipG = itemCostG != null ? `<span class="item-cost-chip" title="Estimated cost for this item">~${formatCurrency(itemCostG)}</span>` : '';
 
                     html += `<div class="measurement-item${m.id === selectedMeasurementId ? ' selected' : ''}${m.excluded ? ' excluded' : ''}" data-type="${m.config.type}" data-id="${m.id}" onclick="selectAndScrollTo(${m.id}, event)" style="border-radius:0;border-top:1px solid rgba(255,255,255,0.04);">
                         <div class="info">
@@ -5250,7 +5428,7 @@
                                    onchange="setMeasurementLabel(${m.id}, this.value)" onclick="event.stopPropagation()">
                             <div class="dims">${dims}</div>
                             <div class="value">${displayValue}</div>
-                            <div class="volume">${m.volume.toFixed(2)} yd³</div>
+                            <div class="volume">${m.volume.toFixed(2)} yd³${costChipG ? ' ' + costChipG : ''}</div>
                         </div>
                         <div style="display:flex;flex-direction:column;gap:4px;">
                             <button class="delete-btn" onclick="deleteMeasurement(${m.id})" title="Delete">×</button>
