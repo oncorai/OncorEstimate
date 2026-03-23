@@ -22978,6 +22978,507 @@ ${f.co}${f.phone ? '\n' + f.phone : ''}${f.email ? '\n' + f.email : ''}`;
         });
     })();
 
+    // ============================================================
+    //  FEATURE: FORMWORK PRESSURE CALCULATOR (📐) [ACI 347R]
+    //  Lateral concrete pressure for walls & columns.
+    //  Tie/snap tie spacing from allowable form pressure.
+    // ============================================================
+    (function(){
+        const ANCHOR = 'qtyFieldBtn';
+        document.addEventListener('DOMContentLoaded', () => {
+            const anchor = document.getElementById(ANCHOR);
+            if (!anchor) return;
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'margin-bottom:4px;';
+
+            // ---- calc function exposed globally ----
+            window.calcFormPressure = function(){
+                const T = parseFloat(document.getElementById('fp_temp').value) || 70;
+                const R = parseFloat(document.getElementById('fp_rate').value) || 5;
+                const H = parseFloat(document.getElementById('fp_height').value) || 10;
+                const wc = parseFloat(document.getElementById('fp_wc').value) || 150;
+                const etype = document.getElementById('fp_type').value;
+                const allowable = parseFloat(document.getElementById('fp_allow').value) || 400;
+                const tieSpacing = parseFloat(document.getElementById('fp_tie').value) || 12;
+
+                // ACI 347R-14 Eq. 2 & 3
+                let p; // psf
+                if(etype === 'column'){
+                    // Columns (or walls R > 7 ft/h): p = Cw·Cc·[150+9000R/T]
+                    const Cw = wc <= 140 ? 0.5*(1+wc/145) : (wc >= 155 ? (wc/145) : 1.0);
+                    const Cc = (R <= 7) ? 1.0 : 1.2;
+                    p = Cw * Cc * (150 + 9000 * R / T);
+                } else {
+                    // Walls R ≤ 7 ft/hr: p = Cw·Cc·[150+9000R/T]
+                    const Cw = wc <= 140 ? 0.5*(1+wc/145) : (wc >= 155 ? (wc/145) : 1.0);
+                    const Cc = 1.0;
+                    p = Cw * Cc * (150 + 9000 * R / T);
+                }
+                // Cap at hydrostatic: wc × H
+                const hydro = wc * H;
+                const pMax = Math.min(p, hydro);
+                // Minimum 600 psf
+                const pFinal = Math.max(pMax, 600);
+
+                // Tie load: force per tie = p × tieSpacingH × tieSpacingV (assume square spacing)
+                // tieSpacing in inches → ft
+                const tsf = tieSpacing / 12;
+                const tieForce = pFinal * tsf * tsf; // lbs per tie
+                // Tie capacity check
+                const snapCapacity = 2500; // lbs (standard 2500# snap tie)
+                const walTieOK = tieForce <= snapCapacity;
+
+                // Max allowable tie spacing (solving: allowable = p × s²  → s = sqrt(allow/p))
+                const maxTieIn = Math.sqrt(allowable / pFinal) * 12;
+
+                const div = document.getElementById('fp_result');
+                div.innerHTML = `
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:0.8rem;">
+                        <div style="background:rgba(0,0,0,0.3);border-radius:6px;padding:8px;text-align:center;">
+                            <div style="color:#94a3b8;font-size:0.68rem;margin-bottom:2px;">Design Pressure</div>
+                            <div style="font-size:1.3rem;font-weight:700;color:#fbbf24;">${Math.round(pFinal).toLocaleString()} psf</div>
+                            ${p > hydro ? '<div style="font-size:0.68rem;color:#94a3b8;">capped at hydrostatic</div>' : ''}
+                        </div>
+                        <div style="background:rgba(0,0,0,0.3);border-radius:6px;padding:8px;text-align:center;">
+                            <div style="color:#94a3b8;font-size:0.68rem;margin-bottom:2px;">Max Tie Spacing</div>
+                            <div style="font-size:1.3rem;font-weight:700;color:${maxTieIn>=12?'#4ade80':'#f87171'};">${maxTieIn.toFixed(1)}"</div>
+                            <div style="font-size:0.68rem;color:#94a3b8;">@ ${allowable} lb/SF allowable</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:6px;font-size:0.78rem;padding:6px 8px;border-radius:6px;background:${walTieOK?'rgba(74,222,128,0.1)':'rgba(248,113,113,0.1)'};border:1px solid ${walTieOK?'rgba(74,222,128,0.2)':'rgba(248,113,113,0.2)'};">
+                        Your ${tieSpacing}" tie spacing → <strong>${Math.round(tieForce).toLocaleString()} lbs/tie</strong>
+                        ${walTieOK ? '✅ OK for 2,500# snap tie' : '⚠️ EXCEEDS 2,500# snap tie capacity — tighten spacing or use heavier hardware'}
+                    </div>
+                    <div style="margin-top:4px;font-size:0.68rem;color:#64748b;">ACI 347R-14 Eq. 2/3 | Cw unit weight factor, Cc chemistry factor | Hydrostatic = ${wc}×${H}=${Math.round(hydro).toLocaleString()} psf</div>
+                `;
+            };
+
+            window.printFormPressure = function(){
+                const T=document.getElementById('fp_temp').value, R=document.getElementById('fp_rate').value,
+                      H=document.getElementById('fp_height').value, etype=document.getElementById('fp_type').value,
+                      allow=document.getElementById('fp_allow').value, tie=document.getElementById('fp_tie').value;
+                const res=document.getElementById('fp_result').innerText||'(run calculation first)';
+                const w=window.open('','_blank');
+                w.document.write(`<html><head><title>Formwork Pressure Calc</title><style>
+                    body{font-family:Arial,sans-serif;font-size:12px;margin:30px}
+                    h2{font-size:16px;margin-bottom:4px} .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+                    .box{border:1px solid #ccc;border-radius:4px;padding:12px} table{border-collapse:collapse;width:100%}
+                    td,th{border:1px solid #ccc;padding:6px;text-align:left} .sig{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:30px}
+                    .sig-line{border-top:1px solid #000;margin-top:30px;padding-top:4px}
+                </style></head><body>
+                <h2>FORMWORK LATERAL PRESSURE CALCULATION</h2>
+                <p>ACI 347R-14 | Prepared: ${new Date().toLocaleDateString()}</p>
+                <table>
+                    <tr><th>Parameter</th><th>Value</th></tr>
+                    <tr><td>Element Type</td><td>${etype==='wall'?'Wall':'Column'}</td></tr>
+                    <tr><td>Concrete Temp at Point of Discharge</td><td>${T} °F</td></tr>
+                    <tr><td>Pour Rate</td><td>${R} ft/hr</td></tr>
+                    <tr><td>Wall/Column Height</td><td>${H} ft</td></tr>
+                    <tr><td>Allowable Form Pressure</td><td>${allow} psf</td></tr>
+                    <tr><td>Proposed Tie Spacing</td><td>${tie} in.</td></tr>
+                </table>
+                <br><div style="border:1px solid #ccc;padding:12px;border-radius:4px;font-size:13px;">${res}</div>
+                <div class="sig"><div><div class="sig-line">Estimator / Form Designer</div></div><div><div class="sig-line">PM / Superintendent</div></div></div>
+                <p style="font-size:10px;margin-top:20px;">Reference: ACI 347R-14 Guide to Formwork for Concrete. Verify against local design requirements. Consult engineer of record for high-load or engineered form systems.</p>
+                </body></html>`);
+                w.document.close(); w.print();
+            };
+
+            wrapper.innerHTML = `
+                <div id="fpWrap" style="display:none;background:rgba(0,0,0,0.3);border:1px solid rgba(255,213,79,0.2);border-radius:6px;padding:10px;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px;">
+                        <span style="font-weight:700;color:#fbbf24;">📐 Formwork Pressure Calculator</span>
+                        <span style="font-size:0.7rem;color:#64748b;">ACI 347R-14 | lateral pressure + tie spacing</span>
+                    </div>
+                    <div style="font-size:0.78rem;color:#94a3b8;margin-bottom:10px;line-height:1.5;">
+                        Computes design lateral pressure for wall or column formwork using ACI 347R-14. Verifies snap tie capacity and calculates maximum allowable tie spacing. Critical for deep walls, fast pours, or hot-weather high-slump mixes.<br>
+                        <strong style="color:#fbbf24;">Rule of thumb:</strong> 5 ft/hr @ 70°F → ~885 psf for walls. Doubling pour rate nearly doubles pressure.
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+                        <label style="font-size:0.75rem;color:#94a3b8;">Element Type
+                            <select id="fp_type" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:4px;font-size:0.8rem;margin-top:2px;">
+                                <option value="wall">Wall</option>
+                                <option value="column">Column</option>
+                            </select>
+                        </label>
+                        <label style="font-size:0.75rem;color:#94a3b8;">Concrete Temp at Discharge (°F)
+                            <input id="fp_temp" type="number" value="75" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:4px;font-size:0.8rem;margin-top:2px;">
+                        </label>
+                        <label style="font-size:0.75rem;color:#94a3b8;">Pour Rate (ft/hr)
+                            <input id="fp_rate" type="number" value="5" step="0.5" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:4px;font-size:0.8rem;margin-top:2px;">
+                        </label>
+                        <label style="font-size:0.75rem;color:#94a3b8;">Wall/Column Height (ft)
+                            <input id="fp_height" type="number" value="10" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:4px;font-size:0.8rem;margin-top:2px;">
+                        </label>
+                        <label style="font-size:0.75rem;color:#94a3b8;">Unit Weight of Concrete (pcf)
+                            <input id="fp_wc" type="number" value="150" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:4px;font-size:0.8rem;margin-top:2px;">
+                        </label>
+                        <label style="font-size:0.75rem;color:#94a3b8;">Allowable Form Pressure (psf)
+                            <input id="fp_allow" type="number" value="400" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:4px;font-size:0.8rem;margin-top:2px;">
+                        </label>
+                    </div>
+                    <label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:8px;">Your Proposed Tie Spacing (inches) — checks vs. 2,500# snap tie capacity
+                        <input id="fp_tie" type="number" value="12" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:4px;font-size:0.8rem;margin-top:2px;">
+                    </label>
+                    <button onclick="calcFormPressure()" style="width:100%;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:6px;padding:7px;cursor:pointer;font-size:0.82rem;font-weight:600;margin-bottom:8px;">⚡ Calculate Pressure</button>
+                    <div id="fp_result" style="font-size:0.8rem;color:#e2e8f0;"></div>
+                    <div style="display:flex;gap:5px;margin-top:8px;">
+                        <button onclick="printFormPressure()" style="flex:1;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.2);color:#fbbf24;border-radius:6px;padding:6px;cursor:pointer;font-size:0.78rem;">🖨️ Print Calc Sheet</button>
+                    </div>
+                    <div style="font-size:0.68rem;color:#475569;margin-top:8px;">ACI 347R-14 Eq. 2 & 3 · Min 600 psf · Hydrostatic cap = wc×H · 2,500# snap tie assumed (Dayton Superior or equal). For engineered form systems, consult form manufacturer's rated pressure.</div>
+                </div>
+                <button onclick="(function(){const w=document.getElementById('fpWrap'),b=document.getElementById('fpBtn'),show=w.style.display==='none';w.style.display=show?'block':'none';b.textContent=show?'📐 Hide Formwork Pressure Calc':'📐 Show Formwork Pressure Calc';})()" id="fpBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fbbf24;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;">📐 Show Formwork Pressure Calc</button>`;
+            anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+        });
+    })();
+
+    // ============================================================
+    //  FEATURE: CONCRETE TRUCK SCHEDULE PLANNER (🚛)
+    //  Plan pour-day truck ordering: intervals, dispatch times,
+    //  cold-joint window, pump prime/wash accounting.
+    // ============================================================
+    (function(){
+        const ANCHOR = 'fpBtn';
+        document.addEventListener('DOMContentLoaded', () => {
+            const anchor = document.getElementById(ANCHOR);
+            if (!anchor) return;
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'margin-bottom:4px;';
+
+            window.calcTruckSchedule = function(){
+                const startStr = document.getElementById('ts_start').value || '06:00';
+                const totalYd = parseFloat(document.getElementById('ts_yd').value) || 0;
+                const truckYd = parseFloat(document.getElementById('ts_truck').value) || 10;
+                const prodYdHr = parseFloat(document.getElementById('ts_prod').value) || 8;
+                const coldJointMin = parseFloat(document.getElementById('ts_cold').value) || 30;
+                const primeYd = parseFloat(document.getElementById('ts_prime').value) || 0.5;
+                const washYd = parseFloat(document.getElementById('ts_wash').value) || 0.5;
+
+                if(totalYd <= 0){ document.getElementById('ts_result').innerHTML='<span style="color:#f87171">Enter total yd³ first.</span>'; return; }
+
+                // Trucks
+                const payloadYd = truckYd; // net per truck
+                const orderYd = totalYd + primeYd + washYd;
+                const truckCount = Math.ceil(orderYd / payloadYd);
+                const lastTruckYd = orderYd - (truckCount-1)*payloadYd;
+                const shortLoad = lastTruckYd < 3;
+
+                // Pour duration (total yd at placement rate, not incl prime/wash)
+                const pourHr = totalYd / prodYdHr;
+                const pourMin = pourHr * 60;
+
+                // Interval between trucks (minutes) based on placement rate
+                const intervalMin = (payloadYd / prodYdHr) * 60;
+
+                // Cold joint check
+                const coldJointOK = intervalMin <= coldJointMin;
+
+                // Build schedule
+                const [hh, mm] = startStr.split(':').map(Number);
+                const startTotalMin = hh*60 + mm;
+
+                let trucks = [];
+                for(let i=0; i<truckCount; i++){
+                    const dispatchMin = startTotalMin + i * intervalMin;
+                    const dh = Math.floor(dispatchMin/60) % 24;
+                    const dm = Math.round(dispatchMin % 60);
+                    const eta = `${String(dh).padStart(2,'0')}:${String(dm).padStart(2,'0')}`;
+                    const yd = (i===0 ? primeYd+payloadYd : (i===truckCount-1 ? lastTruckYd : payloadYd));
+                    const note = i===0 ? `Incl. ${primeYd} yd³ prime` : (i===truckCount-1 ? (shortLoad?'⚠️ SHORT LOAD':'Final') : '');
+                    trucks.push({num:i+1, eta, yd, note});
+                }
+
+                // End time
+                const endMin = startTotalMin + pourMin;
+                const eh = Math.floor(endMin/60)%24, em = Math.round(endMin%60);
+                const endStr = `${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')}`;
+
+                const rows = trucks.map(t=>`<tr style="font-size:0.75rem;">
+                    <td style="padding:4px 6px;border:1px solid rgba(255,255,255,0.06);">#${t.num}</td>
+                    <td style="padding:4px 6px;border:1px solid rgba(255,255,255,0.06);font-weight:600;color:#7dd3fc;">${t.eta}</td>
+                    <td style="padding:4px 6px;border:1px solid rgba(255,255,255,0.06);">${t.yd.toFixed(1)}</td>
+                    <td style="padding:4px 6px;border:1px solid rgba(255,255,255,0.06);color:${t.note.includes('⚠️')?'#f87171':'#94a3b8'}">${t.note}</td>
+                </tr>`).join('');
+
+                document.getElementById('ts_result').innerHTML = `
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:8px;font-size:0.78rem;text-align:center;">
+                        <div style="background:rgba(0,0,0,0.3);border-radius:5px;padding:6px;"><div style="color:#94a3b8;font-size:0.68rem;">Trucks</div><div style="font-weight:700;color:#7dd3fc;font-size:1.1rem;">${truckCount}</div></div>
+                        <div style="background:rgba(0,0,0,0.3);border-radius:5px;padding:6px;"><div style="color:#94a3b8;font-size:0.68rem;">Order Qty</div><div style="font-weight:700;color:#7dd3fc;font-size:1.1rem;">${orderYd.toFixed(1)} yd³</div></div>
+                        <div style="background:rgba(0,0,0,0.3);border-radius:5px;padding:6px;"><div style="color:#94a3b8;font-size:0.68rem;">Interval</div><div style="font-weight:700;color:${coldJointOK?'#4ade80':'#f87171'};font-size:1.1rem;">${Math.round(intervalMin)} min</div></div>
+                    </div>
+                    ${!coldJointOK ? `<div style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);border-radius:5px;padding:6px;margin-bottom:8px;font-size:0.78rem;color:#f87171;">⚠️ Truck interval (${Math.round(intervalMin)} min) exceeds cold joint window (${coldJointMin} min). Increase crew size / placement rate or reduce truck size.</div>` : `<div style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);border-radius:5px;padding:6px;margin-bottom:8px;font-size:0.78rem;color:#4ade80;">✅ Truck intervals within cold joint window. Pour start: ${startStr} → Est. finish: ${endStr}</div>`}
+                    ${shortLoad ? `<div style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.2);border-radius:5px;padding:5px;margin-bottom:6px;font-size:0.75rem;color:#fbbf24;">⚠️ Short load on truck #${truckCount} (${lastTruckYd.toFixed(1)} yd³ < 3 yd³). Expect short-load charge from plant.</div>` : ''}
+                    <table style="width:100%;border-collapse:collapse;font-size:0.75rem;">
+                        <thead><tr style="background:rgba(255,255,255,0.06);">
+                            <th style="padding:4px 6px;border:1px solid rgba(255,255,255,0.06);text-align:left;color:#64748b;">Truck</th>
+                            <th style="padding:4px 6px;border:1px solid rgba(255,255,255,0.06);text-align:left;color:#64748b;">Call/Arrival</th>
+                            <th style="padding:4px 6px;border:1px solid rgba(255,255,255,0.06);text-align:left;color:#64748b;">yd³</th>
+                            <th style="padding:4px 6px;border:1px solid rgba(255,255,255,0.06);text-align:left;color:#64748b;">Note</th>
+                        </tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                    <button onclick="copyTruckSchedule()" style="margin-top:8px;width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#7dd3fc;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;">📋 Copy Schedule</button>
+                    <button onclick="printTruckSchedule()" style="margin-top:4px;width:100%;background:rgba(125,211,252,0.08);border:1px solid rgba(125,211,252,0.2);color:#7dd3fc;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;">🖨️ Print Pour Day Schedule</button>
+                `;
+
+                // store for copy/print
+                window._truckScheduleData = { trucks, totalYd, orderYd, truckCount, intervalMin, coldJointOK, coldJointMin, startStr, endStr, shortLoad, primeYd, washYd, prodYdHr };
+            };
+
+            window.copyTruckSchedule = function(){
+                const d = window._truckScheduleData;
+                if(!d){ alert('Run calculation first.'); return; }
+                let txt = `CONCRETE TRUCK SCHEDULE\nGenerated: ${new Date().toLocaleString()}\n`;
+                txt += `Total yd³: ${d.totalYd} | Order qty: ${d.orderYd.toFixed(1)} | Trucks: ${d.truckCount}\n`;
+                txt += `Interval: ${Math.round(d.intervalMin)} min | Pour: ${d.startStr} → ${d.endStr}\n`;
+                txt += `Cold joint window: ${d.coldJointMin} min — ${d.coldJointOK?'OK':'VIOLATION'}\n\n`;
+                txt += `Truck\tArrival\tyd³\tNote\n`;
+                d.trucks.forEach(t=>txt+=`#${t.num}\t${t.eta}\t${t.yd.toFixed(1)}\t${t.note}\n`);
+                navigator.clipboard?.writeText(txt).then(()=>{ const b=event.target; b.textContent='✅ Copied!'; setTimeout(()=>b.textContent='📋 Copy Schedule',1500); });
+            };
+
+            window.printTruckSchedule = function(){
+                const d = window._truckScheduleData;
+                if(!d){ alert('Run calculation first.'); return; }
+                const rows = d.trucks.map(t=>`<tr><td>${t.num}</td><td>${t.eta}</td><td>${t.yd.toFixed(1)}</td><td>${t.note}</td></tr>`).join('');
+                const w=window.open('','_blank');
+                w.document.write(`<html><head><title>Pour Day Truck Schedule</title><style>
+                    body{font-family:Arial,sans-serif;font-size:12px;margin:30px}
+                    h2{font-size:16px} table{border-collapse:collapse;width:100%}
+                    td,th{border:1px solid #ccc;padding:6px} thead tr{background:#f0f0f0}
+                    .alert{background:#fff3cd;border:1px solid #ffc107;padding:8px;border-radius:4px;margin:10px 0}
+                    .ok{background:#d4edda;border:1px solid #28a745;padding:8px;border-radius:4px;margin:10px 0}
+                    .sig{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:40px}
+                    .sig-line{border-top:1px solid #000;margin-top:28px;padding-top:4px;font-size:11px}
+                </style></head><body>
+                <h2>POUR DAY CONCRETE TRUCK SCHEDULE</h2>
+                <p>Date: _________________ | Project: ___________________ | Generated: ${new Date().toLocaleDateString()}</p>
+                <p>Total yd³: <strong>${d.totalYd}</strong> | Order qty: <strong>${d.orderYd.toFixed(1)} yd³</strong> | Trucks: <strong>${d.truckCount}</strong> | Interval: <strong>${Math.round(d.intervalMin)} min</strong></p>
+                <p>Pour start: <strong>${d.startStr}</strong> | Est. finish: <strong>${d.endStr}</strong> | Placement rate: ${d.prodYdHr} yd³/hr</p>
+                ${d.coldJointOK?`<div class="ok">✅ Truck intervals within ${d.coldJointMin}-min cold joint window.</div>`:`<div class="alert">⚠️ Interval (${Math.round(d.intervalMin)} min) exceeds cold joint window (${d.coldJointMin} min). Adjust crew or truck size.</div>`}
+                <table><thead><tr><th>#</th><th>Call/Arrival Time</th><th>yd³</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table>
+                <div class="sig">
+                    <div><div class="sig-line">Foreman</div></div>
+                    <div><div class="sig-line">Ready-Mix Contact / Driver</div></div>
+                    <div><div class="sig-line">PM / Superintendent</div></div>
+                </div>
+                <p style="font-size:10px;margin-top:20px;">Prime/wash allowance: ${d.primeYd+d.washYd} yd³. Cold joint window per ACI 304R §5.3. Short loads (<3 yd³) may incur additional charge from plant.</p>
+                </body></html>`);
+                w.document.close(); w.print();
+            };
+
+            wrapper.innerHTML = `
+                <div id="tsWrap" style="display:none;background:rgba(0,0,0,0.3);border:1px solid rgba(125,211,252,0.2);border-radius:6px;padding:10px;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px;">
+                        <span style="font-weight:700;color:#7dd3fc;">🚛 Concrete Truck Schedule Planner</span>
+                        <span style="font-size:0.7rem;color:#64748b;">pour-day ordering + cold joint check</span>
+                    </div>
+                    <div style="font-size:0.78rem;color:#94a3b8;margin-bottom:10px;line-height:1.5;">
+                        Plan pour-day truck ordering — calculates how many trucks, at what intervals, and generates a timestamped dispatch schedule. Checks against cold joint window (ACI 304R) so trucks arrive fast enough to maintain a continuous pour.<br>
+                        <strong style="color:#7dd3fc;">Why it matters:</strong> A cold joint (concrete sets before next batch bonds) is a structural defect. GCs hold you liable. 30 minutes is typical allowable window.
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+                        <label style="font-size:0.75rem;color:#94a3b8;">Pour Start Time
+                            <input id="ts_start" type="time" value="06:00" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:4px;font-size:0.8rem;margin-top:2px;">
+                        </label>
+                        <label style="font-size:0.75rem;color:#94a3b8;">Total yd³ (from takeoff)
+                            <div style="display:flex;gap:4px;margin-top:2px;">
+                                <input id="ts_yd" type="number" value="" placeholder="yd³" style="flex:1;background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:4px;font-size:0.8rem;">
+                                <button onclick="(function(){const t=document.getElementById('ts_yd');if(window.currentTotals&&window.currentTotals.totalYd){t.value=window.currentTotals.totalYd.toFixed(1);}else{alert('Recalculate takeoff first.');}})();" style="background:rgba(125,211,252,0.1);border:1px solid rgba(125,211,252,0.2);color:#7dd3fc;border-radius:4px;padding:3px 6px;cursor:pointer;font-size:0.7rem;">↙ Proj</button>
+                            </div>
+                        </label>
+                        <label style="font-size:0.75rem;color:#94a3b8;">Truck Capacity (yd³)
+                            <input id="ts_truck" type="number" value="10" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:4px;font-size:0.8rem;margin-top:2px;">
+                        </label>
+                        <label style="font-size:0.75rem;color:#94a3b8;">Placement Rate (yd³/hr)
+                            <input id="ts_prod" type="number" value="8" step="0.5" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:4px;font-size:0.8rem;margin-top:2px;">
+                        </label>
+                        <label style="font-size:0.75rem;color:#94a3b8;">Cold Joint Window (min) [ACI 304R]
+                            <input id="ts_cold" type="number" value="30" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:4px;font-size:0.8rem;margin-top:2px;">
+                        </label>
+                        <label style="font-size:0.75rem;color:#94a3b8;">Pump Prime Allowance (yd³)
+                            <input id="ts_prime" type="number" value="0.5" step="0.25" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:4px;font-size:0.8rem;margin-top:2px;">
+                        </label>
+                    </div>
+                    <label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:8px;">Pump Wash / Return Allowance (yd³)
+                        <input id="ts_wash" type="number" value="0.5" step="0.25" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:4px;font-size:0.8rem;margin-top:2px;">
+                    </label>
+                    <button onclick="calcTruckSchedule()" style="width:100%;background:rgba(125,211,252,0.15);border:1px solid rgba(125,211,252,0.3);color:#7dd3fc;border-radius:6px;padding:7px;cursor:pointer;font-size:0.82rem;font-weight:600;margin-bottom:8px;">⚡ Generate Schedule</button>
+                    <div id="ts_result" style="font-size:0.8rem;color:#e2e8f0;"></div>
+                    <div style="font-size:0.68rem;color:#475569;margin-top:8px;">Placement rate typical ranges: line pump slab 6-10 yd³/hr, boom pump slab 8-15 yd³/hr, walls 4-8 yd³/hr. Cold joint per ACI 304R §5.3 (typically 30-45 min depending on mix + ambient temp). Prime/wash allowance billed by plant — add to order.</div>
+                </div>
+                <button onclick="(function(){const w=document.getElementById('tsWrap'),b=document.getElementById('tsBtn'),show=w.style.display==='none';w.style.display=show?'block':'none';b.textContent=show?'🚛 Hide Truck Schedule Planner':'🚛 Show Truck Schedule Planner';})()" id="tsBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#7dd3fc;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;">🚛 Show Concrete Truck Schedule Planner</button>`;
+            anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+        });
+    })();
+
+    // ============================================================
+    //  FEATURE: GC / OWNER OUTREACH CRM (📣)
+    //  Track outreach attempts: call, email, text, visit.
+    //  Follow-up due alerts. Pipeline focus.
+    // ============================================================
+    (function(){
+        const ANCHOR = 'tsBtn';
+        const LS_KEY = 'oncor_outreach_crm';
+        document.addEventListener('DOMContentLoaded', () => {
+            const anchor = document.getElementById(ANCHOR);
+            if (!anchor) return;
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'margin-bottom:4px;';
+
+            function loadEntries(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)||'[]'); }catch(e){ return []; } }
+            function saveEntries(arr){ localStorage.setItem(LS_KEY, JSON.stringify(arr)); }
+
+            window.addOutreachEntry = function(){
+                const contact = document.getElementById('crm_contact').value.trim();
+                const company = document.getElementById('crm_company').value.trim();
+                const type = document.getElementById('crm_type').value;
+                const date = document.getElementById('crm_date').value || new Date().toISOString().split('T')[0];
+                const notes = document.getElementById('crm_notes').value.trim();
+                const followup = document.getElementById('crm_followup').value;
+                const status = document.getElementById('crm_status').value;
+                if(!contact && !company){ alert('Enter at least a contact or company name.'); return; }
+                const entries = loadEntries();
+                entries.unshift({ id: Date.now(), contact, company, type, date, notes, followup, status });
+                saveEntries(entries);
+                document.getElementById('crm_contact').value=''; document.getElementById('crm_company').value='';
+                document.getElementById('crm_notes').value=''; document.getElementById('crm_followup').value='';
+                document.getElementById('crm_status').value='Active';
+                renderOutreachLog();
+            };
+
+            window.deleteOutreachEntry = function(id){
+                saveEntries(loadEntries().filter(e=>e.id!==id));
+                renderOutreachLog();
+            };
+
+            window.cycleOutreachStatus = function(id){
+                const statuses = ['Active','Follow-Up Due','Quoted','Won','Lost','No Response','On Hold'];
+                const entries = loadEntries();
+                const idx = entries.findIndex(e=>e.id===id);
+                if(idx<0) return;
+                const cur = statuses.indexOf(entries[idx].status);
+                entries[idx].status = statuses[(cur+1)%statuses.length];
+                saveEntries(entries);
+                renderOutreachLog();
+            };
+
+            const statusColor = { 'Active':'#7dd3fc', 'Follow-Up Due':'#f87171', 'Quoted':'#fbbf24', 'Won':'#4ade80', 'Lost':'#94a3b8', 'No Response':'#fb923c', 'On Hold':'#a78bfa' };
+
+            function renderOutreachLog(){
+                const entries = loadEntries();
+                const today = new Date().toISOString().split('T')[0];
+                const overdue = entries.filter(e=>e.followup && e.followup < today && !['Won','Lost'].includes(e.status));
+                const dueSoon = entries.filter(e=>e.followup && e.followup >= today && e.followup <= new Date(Date.now()+3*86400000).toISOString().split('T')[0] && !['Won','Lost'].includes(e.status));
+                const total = entries.length;
+                const active = entries.filter(e=>!['Won','Lost'].includes(e.status)).length;
+
+                let html = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:8px;font-size:0.75rem;text-align:center;">
+                    <div style="background:rgba(0,0,0,0.3);border-radius:5px;padding:5px;"><div style="color:#94a3b8;font-size:0.65rem;">Total</div><div style="font-weight:700;color:#e2e8f0;">${total}</div></div>
+                    <div style="background:rgba(0,0,0,0.3);border-radius:5px;padding:5px;"><div style="color:#94a3b8;font-size:0.65rem;">Active</div><div style="font-weight:700;color:#7dd3fc;">${active}</div></div>
+                    <div style="background:rgba(${overdue.length?'248,113,113':'0,0,0'},0.${overdue.length?'15':'3'});border-radius:5px;padding:5px;"><div style="color:#94a3b8;font-size:0.65rem;">Overdue</div><div style="font-weight:700;color:${overdue.length?'#f87171':'#94a3b8'};">${overdue.length}</div></div>
+                    <div style="background:rgba(0,0,0,0.3);border-radius:5px;padding:5px;"><div style="color:#94a3b8;font-size:0.65rem;">Due Soon</div><div style="font-weight:700;color:${dueSoon.length?'#fbbf24':'#94a3b8'};">${dueSoon.length}</div></div>
+                </div>`;
+
+                if(entries.length===0){ html += '<div style="font-size:0.78rem;color:#475569;text-align:center;padding:12px;">No outreach logged yet.</div>'; }
+                else {
+                    html += `<div style="max-height:280px;overflow-y:auto;">`;
+                    entries.slice(0,30).forEach(e=>{
+                        const isOverdue = e.followup && e.followup < today && !['Won','Lost'].includes(e.status);
+                        const isDueSoon = !isOverdue && e.followup && e.followup <= new Date(Date.now()+3*86400000).toISOString().split('T')[0] && !['Won','Lost'].includes(e.status);
+                        const borderColor = isOverdue ? '#f87171' : isDueSoon ? '#fbbf24' : 'rgba(255,255,255,0.08)';
+                        const sc = statusColor[e.status] || '#94a3b8';
+                        html += `<div style="border:1px solid ${borderColor};border-radius:6px;padding:7px;margin-bottom:5px;background:rgba(0,0,0,0.2);">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:4px;flex-wrap:wrap;">
+                                <div>
+                                    <span style="font-weight:600;color:#e2e8f0;font-size:0.82rem;">${e.contact||'—'}</span>
+                                    ${e.company?`<span style="color:#94a3b8;font-size:0.75rem;"> · ${e.company}</span>`:''}
+                                    <span style="margin-left:6px;font-size:0.68rem;background:rgba(255,255,255,0.05);color:#94a3b8;padding:1px 5px;border-radius:3px;">${e.type}</span>
+                                    <span style="margin-left:4px;font-size:0.68rem;color:#64748b;">${e.date}</span>
+                                </div>
+                                <div style="display:flex;gap:4px;align-items:center;">
+                                    <button onclick="cycleOutreachStatus(${e.id})" style="font-size:0.65rem;padding:2px 6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:${sc};border-radius:3px;cursor:pointer;">${e.status}</button>
+                                    <button onclick="deleteOutreachEntry(${e.id})" style="font-size:0.65rem;padding:2px 5px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:3px;cursor:pointer;">✕</button>
+                                </div>
+                            </div>
+                            ${e.notes?`<div style="font-size:0.72rem;color:#94a3b8;margin-top:3px;">${e.notes}</div>`:''}
+                            ${e.followup?`<div style="font-size:0.7rem;margin-top:3px;color:${isOverdue?'#f87171':isDueSoon?'#fbbf24':'#64748b'};">Follow-up: ${e.followup}${isOverdue?' — OVERDUE':isDueSoon?' — DUE SOON':''}</div>`:''}
+                        </div>`;
+                    });
+                    html += `</div>`;
+                }
+                html += `<div style="display:flex;gap:5px;margin-top:6px;">
+                    <button onclick="copyOutreachLog()" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.73rem;">📋 Copy Log</button>
+                    <button onclick="printOutreachLog()" style="flex:1;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);color:#a78bfa;border-radius:4px;padding:4px;cursor:pointer;font-size:0.73rem;">🖨️ Print Report</button>
+                </div>`;
+                document.getElementById('crmLog').innerHTML = html;
+            }
+
+            window.copyOutreachLog = function(){
+                const entries = loadEntries();
+                let txt = `OUTREACH CRM LOG — ${new Date().toLocaleDateString()}\n${'='.repeat(50)}\n`;
+                entries.forEach(e=>{
+                    txt += `${e.date} | ${e.type} | ${e.contact||'—'} / ${e.company||'—'} | ${e.status}\n`;
+                    if(e.notes) txt += `  Notes: ${e.notes}\n`;
+                    if(e.followup) txt += `  Follow-up: ${e.followup}\n`;
+                });
+                navigator.clipboard?.writeText(txt).then(()=>{ const b=event.target; b.textContent='✅ Copied!'; setTimeout(()=>b.textContent='📋 Copy Log',1500); });
+            };
+
+            window.printOutreachLog = function(){
+                const entries = loadEntries();
+                const rows = entries.map(e=>`<tr>
+                    <td>${e.date}</td><td>${e.type}</td><td>${e.contact||'—'}</td><td>${e.company||'—'}</td>
+                    <td>${e.notes||''}</td><td>${e.followup||''}</td><td>${e.status}</td>
+                </tr>`).join('');
+                const w=window.open('','_blank');
+                w.document.write(`<html><head><title>Outreach CRM Report</title><style>
+                    body{font-family:Arial,sans-serif;font-size:11px;margin:30px}
+                    h2{font-size:15px} table{border-collapse:collapse;width:100%}
+                    td,th{border:1px solid #ccc;padding:5px;text-align:left} thead tr{background:#f0f0f0}
+                    .sig{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:40px}
+                    .sig-line{border-top:1px solid #000;margin-top:28px;padding-top:4px;font-size:10px}
+                </style></head><body>
+                <h2>OUTREACH CRM REPORT</h2>
+                <p>Generated: ${new Date().toLocaleString()} | Total entries: ${entries.length}</p>
+                <table><thead><tr><th>Date</th><th>Type</th><th>Contact</th><th>Company</th><th>Notes</th><th>Follow-Up</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
+                <div class="sig"><div><div class="sig-line">Estimator / Sales</div></div><div><div class="sig-line">Principal / PM Review</div></div></div>
+                </body></html>`);
+                w.document.close(); w.print();
+            };
+
+            wrapper.innerHTML = `
+                <div id="crmWrap" style="display:none;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.2);border-radius:6px;padding:10px;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px;">
+                        <span style="font-weight:700;color:#a78bfa;">📣 GC / Owner Outreach CRM</span>
+                        <span style="font-size:0.7rem;color:#64748b;">track calls, emails, follow-ups</span>
+                    </div>
+                    <div style="font-size:0.78rem;color:#94a3b8;margin-bottom:10px;line-height:1.5;">
+                        Log every GC and owner outreach attempt — call, email, text, site visit. Follow-up due alerts catch slipped conversations before they go cold. Separate from the Proposal Follow-Up Tracker (which is bid-centric); this is contact-centric for relationship building.<br>
+                        <strong style="color:#a78bfa;">Rule:</strong> Touch a GC contact every 2-4 weeks when not actively bidding. Every 3-5 days when you have an open bid.
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:6px;">
+                        <input id="crm_contact" type="text" placeholder="Contact name" style="background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:5px;font-size:0.8rem;">
+                        <input id="crm_company" type="text" placeholder="Company / GC name" style="background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:5px;font-size:0.8rem;">
+                        <select id="crm_type" style="background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:5px;font-size:0.8rem;">
+                            <option>Call</option><option>Email</option><option>Text</option><option>Site Visit</option><option>Meeting</option><option>LinkedIn</option><option>Other</option>
+                        </select>
+                        <input id="crm_date" type="date" style="background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:5px;font-size:0.8rem;">
+                        <select id="crm_status" style="background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:5px;font-size:0.8rem;">
+                            <option>Active</option><option>Follow-Up Due</option><option>Quoted</option><option>Won</option><option>Lost</option><option>No Response</option><option>On Hold</option>
+                        </select>
+                        <input id="crm_followup" type="date" placeholder="Follow-up date" style="background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:5px;font-size:0.8rem;">
+                    </div>
+                    <input id="crm_notes" type="text" placeholder="Notes (left message, sent proposal, they're bidding X job...)" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:5px;font-size:0.8rem;margin-bottom:6px;box-sizing:border-box;">
+                    <button onclick="addOutreachEntry()" style="width:100%;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:6px;padding:7px;cursor:pointer;font-size:0.82rem;font-weight:600;margin-bottom:8px;">+ Log Outreach</button>
+                    <div id="crmLog"></div>
+                    <div style="font-size:0.68rem;color:#475569;margin-top:6px;">Global localStorage — shared across all projects. Click status badge to cycle. Last 30 entries shown. Overdue follow-ups shown with red border.</div>
+                </div>
+                <button onclick="(function(){const w=document.getElementById('crmWrap'),b=document.getElementById('crmBtn'),show=w.style.display==='none';w.style.display=show?'block':'none';b.textContent=show?'📣 Hide Outreach CRM':'📣 Show Outreach CRM';if(show)renderOutreachLog();})()" id="crmBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#a78bfa;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;">📣 Show GC / Owner Outreach CRM</button>`;
+            anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+        });
+    })();
+
     </script>
 
 </body>
