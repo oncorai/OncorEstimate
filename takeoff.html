@@ -24838,6 +24838,996 @@ ${f.co}${f.phone ? '\n' + f.phone : ''}${f.email ? '\n' + f.email : ''}`;
         renderPmRows(); renderPmDiagram();
     })();
 
+    // ============================================================
+    // READY-MIX SUPPLIER DIRECTORY (🏭)
+    // ============================================================
+    (function(){
+        const BTN_ID = 'rmsdToggleBtn';
+        const WRAP_ID = 'rmsdWrap';
+        const KEY = 'oncor_rmsd_v1';
+
+        function getSuppliers(){ try{ return JSON.parse(localStorage.getItem(KEY))||[]; }catch(e){ return []; } }
+        function saveSuppliers(arr){ localStorage.setItem(KEY, JSON.stringify(arr)); }
+
+        function createButton(){
+            const container = document.getElementById('actionsRow') || document.querySelector('.actions-row');
+            const btn = document.createElement('button');
+            btn.id = BTN_ID;
+            btn.className = 'action-btn';
+            btn.style.cssText = 'background:#0f766e;color:#fff;border:none;padding:7px 13px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;margin:4px;';
+            btn.textContent = '🏭 Ready-Mix Suppliers';
+            btn.onclick = togglePanel;
+
+            // Find a good place to inject — after pour zone planner btn or at end of actions
+            const pzBtn = document.getElementById('pmToggleBtn');
+            if(pzBtn && pzBtn.parentNode){
+                pzBtn.parentNode.insertBefore(btn, pzBtn.nextSibling);
+            } else {
+                document.body.appendChild(btn);
+            }
+
+            const wrap = document.createElement('div');
+            wrap.id = WRAP_ID;
+            wrap.style.cssText = 'display:none;background:#f0fdfa;border:1.5px solid #99f6e4;border-radius:10px;padding:18px;margin:10px 0;';
+            wrap.innerHTML = buildPanelHTML();
+            btn.parentNode && btn.parentNode.after ? btn.parentNode.insertBefore(wrap, btn.nextSibling) : document.body.appendChild(wrap);
+            attachEvents(wrap);
+        }
+
+        function buildPanelHTML(){
+            return `
+            <div style="font-weight:700;font-size:14px;color:#0f766e;margin-bottom:12px;">🏭 Ready-Mix Supplier Directory</div>
+            <p style="font-size:11px;color:#475569;margin:0 0 12px;">Track local ready-mix plants — quotes, PSI ranges, lead times, quality notes. Pick preferred supplier per PSI grade at bid time.</p>
+
+            <!-- Add supplier form -->
+            <div style="background:#fff;border-radius:8px;padding:12px;margin-bottom:14px;border:1px solid #d1fae5;">
+                <div style="font-weight:600;font-size:12px;color:#065f46;margin-bottom:8px;">Add / Edit Supplier</div>
+                <input type="hidden" id="rmsd_edit_idx" value="-1">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                    <div><label style="font-size:11px;font-weight:600;color:#374151;">Company Name</label><br>
+                    <input id="rmsd_name" type="text" placeholder="ABC Ready Mix" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;"></div>
+                    <div><label style="font-size:11px;font-weight:600;color:#374151;">City / Location</label><br>
+                    <input id="rmsd_city" type="text" placeholder="El Paso, TX" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;"></div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                    <div><label style="font-size:11px;font-weight:600;color:#374151;">Contact Name</label><br>
+                    <input id="rmsd_contact" type="text" placeholder="Sales rep name" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;"></div>
+                    <div><label style="font-size:11px;font-weight:600;color:#374151;">Phone</label><br>
+                    <input id="rmsd_phone" type="text" placeholder="(915) 555-1234" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;"></div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+                    <div><label style="font-size:11px;font-weight:600;color:#374151;">3000 PSI ($/yd³)</label><br>
+                    <input id="rmsd_p3000" type="number" placeholder="145" step="0.5" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;"></div>
+                    <div><label style="font-size:11px;font-weight:600;color:#374151;">4000 PSI ($/yd³)</label><br>
+                    <input id="rmsd_p4000" type="number" placeholder="158" step="0.5" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;"></div>
+                    <div><label style="font-size:11px;font-weight:600;color:#374151;">5000 PSI ($/yd³)</label><br>
+                    <input id="rmsd_p5000" type="number" placeholder="175" step="0.5" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;"></div>
+                    <div><label style="font-size:11px;font-weight:600;color:#374151;">Lead Time (days)</label><br>
+                    <input id="rmsd_lead" type="number" placeholder="1" min="0" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;"></div>
+                </div>
+                <div style="margin-bottom:8px;">
+                    <label style="font-size:11px;font-weight:600;color:#374151;">Rating</label><br>
+                    <select id="rmsd_rating" style="padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+                        <option value="5">⭐⭐⭐⭐⭐ Excellent</option>
+                        <option value="4">⭐⭐⭐⭐ Good</option>
+                        <option value="3" selected>⭐⭐⭐ Average</option>
+                        <option value="2">⭐⭐ Below Average</option>
+                        <option value="1">⭐ Poor</option>
+                    </select>
+                </div>
+                <div style="margin-bottom:8px;">
+                    <label style="font-size:11px;font-weight:600;color:#374151;">Notes (mix quality, reliability, admixture options, max PSI available)</label><br>
+                    <textarea id="rmsd_notes" rows="2" placeholder="On-time delivery, handles high-temp mixes, offers fiber..." style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;"></textarea>
+                </div>
+                <button id="rmsd_save_btn" style="background:#0f766e;color:#fff;border:none;padding:7px 16px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;">💾 Save Supplier</button>
+                <button id="rmsd_clear_btn" style="background:#6b7280;color:#fff;border:none;padding:7px 12px;border-radius:5px;cursor:pointer;font-size:12px;margin-left:8px;">✕ Clear</button>
+            </div>
+
+            <!-- Supplier table -->
+            <div id="rmsd_list" style="margin-bottom:14px;"></div>
+
+            <!-- Comparison tool -->
+            <div style="background:#fff;border-radius:8px;padding:12px;border:1px solid #d1fae5;margin-bottom:10px;">
+                <div style="font-weight:600;font-size:12px;color:#065f46;margin-bottom:8px;">📊 Price Comparison — Select PSI Grade</div>
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+                    <select id="rmsd_cmp_psi" style="padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+                        <option value="p3000">3000 PSI</option>
+                        <option value="p4000">4000 PSI</option>
+                        <option value="p5000">5000 PSI</option>
+                    </select>
+                    <button id="rmsd_cmp_btn" style="background:#0369a1;color:#fff;border:none;padding:6px 14px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;">Compare Prices</button>
+                </div>
+                <div id="rmsd_cmp_out"></div>
+            </div>
+
+            <!-- Actions -->
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button id="rmsd_copy_btn" style="background:#0369a1;color:#fff;border:none;padding:7px 13px;border-radius:5px;cursor:pointer;font-size:11px;">📋 Copy Directory</button>
+                <button id="rmsd_print_btn" style="background:#7c3aed;color:#fff;border:none;padding:7px 13px;border-radius:5px;cursor:pointer;font-size:11px;">🖨️ Print</button>
+            </div>
+            `;
+        }
+
+        function renderList(wrap){
+            const suppliers = getSuppliers();
+            const listEl = wrap.querySelector('#rmsd_list');
+            if(!listEl) return;
+            if(!suppliers.length){
+                listEl.innerHTML = '<p style="color:#94a3b8;font-size:11px;text-align:center;">No suppliers saved yet. Add your ready-mix contacts above.</p>';
+                return;
+            }
+            const stars = (n) => '⭐'.repeat(parseInt(n)||3);
+            listEl.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:11px;">
+                <thead><tr style="background:#0f766e;color:#fff;">
+                    <th style="padding:6px;text-align:left;">Company</th>
+                    <th style="padding:6px;text-align:left;">City</th>
+                    <th style="padding:6px;text-align:left;">Contact</th>
+                    <th style="padding:6px;text-align:right;">3k PSI</th>
+                    <th style="padding:6px;text-align:right;">4k PSI</th>
+                    <th style="padding:6px;text-align:right;">5k PSI</th>
+                    <th style="padding:6px;text-align:center;">Lead</th>
+                    <th style="padding:6px;text-align:center;">Rating</th>
+                    <th style="padding:6px;text-align:center;">Actions</th>
+                </tr></thead>
+                <tbody>
+                ${suppliers.map((s,i)=>`<tr style="border-bottom:1px solid #e2e8f0;background:${i%2===0?'#f0fdfa':'#fff'};">
+                    <td style="padding:6px;font-weight:600;">${s.name||'—'}<br><span style="font-weight:400;color:#64748b;font-size:10px;">${s.phone||''}</span></td>
+                    <td style="padding:6px;">${s.city||'—'}</td>
+                    <td style="padding:6px;">${s.contact||'—'}</td>
+                    <td style="padding:6px;text-align:right;">${s.p3000?'$'+parseFloat(s.p3000).toFixed(0):'—'}</td>
+                    <td style="padding:6px;text-align:right;">${s.p4000?'$'+parseFloat(s.p4000).toFixed(0):'—'}</td>
+                    <td style="padding:6px;text-align:right;">${s.p5000?'$'+parseFloat(s.p5000).toFixed(0):'—'}</td>
+                    <td style="padding:6px;text-align:center;">${s.lead?s.lead+'d':'—'}</td>
+                    <td style="padding:6px;text-align:center;font-size:10px;" title="${['','Poor','Below Avg','Average','Good','Excellent'][parseInt(s.rating)||3]}">${stars(s.rating)}</td>
+                    <td style="padding:6px;text-align:center;">
+                        <button onclick="rmsdEdit(${i})" style="background:#0369a1;color:#fff;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:10px;margin:1px;">✏️</button>
+                        <button onclick="rmsdDel(${i})" style="background:#dc2626;color:#fff;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:10px;margin:1px;">🗑</button>
+                    </td>
+                </tr>${s.notes?`<tr style="background:${i%2===0?'#f0fdfa':'#fff'};border-bottom:1px solid #e2e8f0;"><td colspan="9" style="padding:3px 6px 6px 6px;font-size:10px;color:#475569;font-style:italic;">📝 ${s.notes}</td></tr>`:''}`).join('')}
+                </tbody>
+            </table>`;
+        }
+
+        function attachEvents(wrap){
+            // Global edit/delete helpers
+            window.rmsdEdit = function(idx){
+                const suppliers = getSuppliers();
+                const s = suppliers[idx];
+                if(!s) return;
+                wrap.querySelector('#rmsd_edit_idx').value = idx;
+                wrap.querySelector('#rmsd_name').value = s.name||'';
+                wrap.querySelector('#rmsd_city').value = s.city||'';
+                wrap.querySelector('#rmsd_contact').value = s.contact||'';
+                wrap.querySelector('#rmsd_phone').value = s.phone||'';
+                wrap.querySelector('#rmsd_p3000').value = s.p3000||'';
+                wrap.querySelector('#rmsd_p4000').value = s.p4000||'';
+                wrap.querySelector('#rmsd_p5000').value = s.p5000||'';
+                wrap.querySelector('#rmsd_lead').value = s.lead||'';
+                wrap.querySelector('#rmsd_rating').value = s.rating||3;
+                wrap.querySelector('#rmsd_notes').value = s.notes||'';
+                wrap.querySelector('#rmsd_save_btn').textContent = '💾 Update Supplier';
+            };
+            window.rmsdDel = function(idx){
+                if(!confirm('Remove this supplier?')) return;
+                const suppliers = getSuppliers();
+                suppliers.splice(idx,1);
+                saveSuppliers(suppliers);
+                renderList(wrap);
+            };
+
+            wrap.querySelector('#rmsd_save_btn').onclick = function(){
+                const idx = parseInt(wrap.querySelector('#rmsd_edit_idx').value);
+                const obj = {
+                    name: wrap.querySelector('#rmsd_name').value.trim(),
+                    city: wrap.querySelector('#rmsd_city').value.trim(),
+                    contact: wrap.querySelector('#rmsd_contact').value.trim(),
+                    phone: wrap.querySelector('#rmsd_phone').value.trim(),
+                    p3000: wrap.querySelector('#rmsd_p3000').value,
+                    p4000: wrap.querySelector('#rmsd_p4000').value,
+                    p5000: wrap.querySelector('#rmsd_p5000').value,
+                    lead: wrap.querySelector('#rmsd_lead').value,
+                    rating: wrap.querySelector('#rmsd_rating').value,
+                    notes: wrap.querySelector('#rmsd_notes').value.trim(),
+                };
+                if(!obj.name){ alert('Supplier name is required.'); return; }
+                const suppliers = getSuppliers();
+                if(idx >= 0 && idx < suppliers.length){ suppliers[idx] = obj; }
+                else { suppliers.push(obj); }
+                saveSuppliers(suppliers);
+                wrap.querySelector('#rmsd_edit_idx').value = -1;
+                wrap.querySelector('#rmsd_save_btn').textContent = '💾 Save Supplier';
+                ['rmsd_name','rmsd_city','rmsd_contact','rmsd_phone','rmsd_p3000','rmsd_p4000','rmsd_p5000','rmsd_lead','rmsd_notes'].forEach(id=>{
+                    const el = wrap.querySelector('#'+id); if(el) el.value='';
+                });
+                wrap.querySelector('#rmsd_rating').value = 3;
+                renderList(wrap);
+            };
+
+            wrap.querySelector('#rmsd_clear_btn').onclick = function(){
+                wrap.querySelector('#rmsd_edit_idx').value = -1;
+                ['rmsd_name','rmsd_city','rmsd_contact','rmsd_phone','rmsd_p3000','rmsd_p4000','rmsd_p5000','rmsd_lead','rmsd_notes'].forEach(id=>{
+                    const el = wrap.querySelector('#'+id); if(el) el.value='';
+                });
+                wrap.querySelector('#rmsd_rating').value = 3;
+                wrap.querySelector('#rmsd_save_btn').textContent = '💾 Save Supplier';
+            };
+
+            wrap.querySelector('#rmsd_cmp_btn').onclick = function(){
+                const psiKey = wrap.querySelector('#rmsd_cmp_psi').value;
+                const psiLabel = {'p3000':'3000 PSI','p4000':'4000 PSI','p5000':'5000 PSI'}[psiKey];
+                const suppliers = getSuppliers().filter(s=>s[psiKey]).sort((a,b)=>parseFloat(a[psiKey])-parseFloat(b[psiKey]));
+                const out = wrap.querySelector('#rmsd_cmp_out');
+                if(!suppliers.length){ out.innerHTML='<p style="color:#94a3b8;font-size:11px;">No suppliers with '+psiLabel+' pricing saved.</p>'; return; }
+                const low = parseFloat(suppliers[0][psiKey]);
+                out.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:11px;">
+                    <thead><tr style="background:#0369a1;color:#fff;">
+                        <th style="padding:5px;text-align:left;">Rank</th>
+                        <th style="padding:5px;text-align:left;">Company</th>
+                        <th style="padding:5px;text-align:right;">${psiLabel} $/yd³</th>
+                        <th style="padding:5px;text-align:right;">vs Lowest</th>
+                        <th style="padding:5px;text-align:center;">Lead</th>
+                        <th style="padding:5px;text-align:center;">Rating</th>
+                    </tr></thead>
+                    <tbody>
+                    ${suppliers.map((s,i)=>{
+                        const price = parseFloat(s[psiKey]);
+                        const delta = price - low;
+                        const isBest = i===0;
+                        return `<tr style="background:${isBest?'#dcfce7':i%2===0?'#f8fafc':'#fff'};border-bottom:1px solid #e2e8f0;">
+                            <td style="padding:5px;text-align:center;">${isBest?'🏆':i+1}</td>
+                            <td style="padding:5px;font-weight:${isBest?'700':'400'};">${s.name}</td>
+                            <td style="padding:5px;text-align:right;font-weight:${isBest?'700':'400'};color:${isBest?'#16a34a':'inherit'};">$${price.toFixed(2)}</td>
+                            <td style="padding:5px;text-align:right;color:${delta>0?'#dc2626':'#16a34a'};">${delta>0?'+$'+delta.toFixed(2):'Best Price'}</td>
+                            <td style="padding:5px;text-align:center;">${s.lead?s.lead+'d':'—'}</td>
+                            <td style="padding:5px;text-align:center;font-size:10px;">${'⭐'.repeat(parseInt(s.rating)||3)}</td>
+                        </tr>`;
+                    }).join('')}
+                    </tbody>
+                </table>
+                <p style="font-size:10px;color:#94a3b8;margin-top:6px;">💡 Price spread: $${(parseFloat(suppliers[suppliers.length-1][psiKey])-low).toFixed(2)}/yd³ between lowest and highest. On 100 yd³ order, that's $${((parseFloat(suppliers[suppliers.length-1][psiKey])-low)*100).toFixed(0)} difference.</p>`;
+            };
+
+            wrap.querySelector('#rmsd_copy_btn').onclick = function(){
+                const suppliers = getSuppliers();
+                if(!suppliers.length){ alert('No suppliers to copy.'); return; }
+                let txt = 'READY-MIX SUPPLIER DIRECTORY\n' + '='.repeat(40) + '\n';
+                suppliers.forEach((s,i)=>{
+                    txt += `\n${i+1}. ${s.name} — ${s.city}\n`;
+                    txt += `   Contact: ${s.contact||'—'} | ${s.phone||'—'}\n`;
+                    txt += `   3000 PSI: ${s.p3000?'$'+parseFloat(s.p3000).toFixed(2):'—'} | 4000 PSI: ${s.p4000?'$'+parseFloat(s.p4000).toFixed(2):'—'} | 5000 PSI: ${s.p5000?'$'+parseFloat(s.p5000).toFixed(2):'—'}\n`;
+                    txt += `   Lead Time: ${s.lead?s.lead+' days':'—'} | Rating: ${'★'.repeat(parseInt(s.rating)||3)}\n`;
+                    if(s.notes) txt += `   Notes: ${s.notes}\n`;
+                });
+                navigator.clipboard.writeText(txt).then(()=>{ wrap.querySelector('#rmsd_copy_btn').textContent='✅ Copied!'; setTimeout(()=>{ wrap.querySelector('#rmsd_copy_btn').textContent='📋 Copy Directory'; },2000); });
+            };
+
+            wrap.querySelector('#rmsd_print_btn').onclick = function(){
+                const suppliers = getSuppliers();
+                const co = document.getElementById('companyName')?.value||'Oncor Concrete';
+                const w = window.open('','_blank');
+                const rows = suppliers.map((s,i)=>`<tr>
+                    <td>${i+1}</td>
+                    <td><strong>${s.name||'—'}</strong><br><small>${s.city||''}</small></td>
+                    <td>${s.contact||'—'}<br><small>${s.phone||''}</small></td>
+                    <td style="text-align:right;">${s.p3000?'$'+parseFloat(s.p3000).toFixed(2):'—'}</td>
+                    <td style="text-align:right;">${s.p4000?'$'+parseFloat(s.p4000).toFixed(2):'—'}</td>
+                    <td style="text-align:right;">${s.p5000?'$'+parseFloat(s.p5000).toFixed(2):'—'}</td>
+                    <td style="text-align:center;">${s.lead?s.lead+'d':'—'}</td>
+                    <td style="text-align:center;">${'★'.repeat(parseInt(s.rating)||3)}</td>
+                    <td>${s.notes||''}</td>
+                </tr>`).join('');
+                w.document.write(`<!DOCTYPE html><html><head><title>Ready-Mix Supplier Directory</title><style>
+                    body{font-family:Arial,sans-serif;font-size:10pt;margin:24px;}
+                    h2{font-size:13pt;margin:0 0 2px;}
+                    table{border-collapse:collapse;width:100%;margin:10px 0;}
+                    td,th{border:1px solid #ccc;padding:5px 7px;font-size:9pt;}
+                    thead tr{background:#0f766e;color:#fff;}
+                    tr:nth-child(even){background:#f0fdfa;}
+                    .sig{margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+                    .sig div{border-top:1px solid #333;padding-top:4px;font-size:8pt;color:#555;}
+                </style></head><body>
+                <h2>${co} — Ready-Mix Supplier Directory</h2>
+                <p style="font-size:9pt;margin:2px 0 8px;">Printed: ${new Date().toLocaleDateString()}</p>
+                <table>
+                    <thead><tr><th>#</th><th>Company</th><th>Contact</th><th>3000 PSI</th><th>4000 PSI</th><th>5000 PSI</th><th>Lead</th><th>Rating</th><th>Notes</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                <div class="sig">
+                    <div>Prepared by: _______________</div>
+                    <div>Date: _______________</div>
+                </div>
+                <script>window.onload=function(){window.print();};<\/script></body></html>`);
+                w.document.close();
+            };
+
+            renderList(wrap);
+        }
+
+        function togglePanel(){
+            const wrap = document.getElementById(WRAP_ID);
+            const btn = document.getElementById(BTN_ID);
+            if(!wrap || !btn) return;
+            const show = wrap.style.display === 'none';
+            wrap.style.display = show ? 'block' : 'none';
+            btn.textContent = show ? '🏭 Hide Supplier Directory' : '🏭 Ready-Mix Suppliers';
+        }
+
+        // Inject after DOM ready
+        if(document.readyState === 'loading'){
+            document.addEventListener('DOMContentLoaded', createButton);
+        } else {
+            createButton();
+        }
+    })();
+
+    // ============================================================
+    // SUBCONTRACTOR BID COVERAGE TRACKER (🗂️)
+    // ============================================================
+    (function(){
+        const BTN_ID  = 'sbctToggleBtn';
+        const WRAP_ID = 'sbctWrap';
+
+        // Default scopes common to concrete work
+        const DEFAULT_SCOPES = [
+            { scope: 'Concrete Pump', required: true },
+            { scope: 'Rebar Fabrication / Supply', required: false },
+            { scope: 'Forming Sub', required: false },
+            { scope: 'Saw Cutting', required: false },
+            { scope: 'Post-Tension Strand', required: false },
+            { scope: 'Special Inspections / Testing Lab', required: false },
+            { scope: 'Earthwork / Excavation', required: false },
+            { scope: 'Vapor Barrier Supply', required: false },
+        ];
+
+        function getKey(){ return 'oncor_sbct_' + (document.getElementById('projectName')?.value||'default'); }
+        function getData(){ try{ return JSON.parse(localStorage.getItem(getKey()))||{scopes:[]}; }catch(e){ return {scopes:[]}; } }
+        function saveData(d){ localStorage.setItem(getKey(), JSON.stringify(d)); }
+
+        function createButton(){
+            const btn = document.createElement('button');
+            btn.id = BTN_ID;
+            btn.style.cssText = 'background:#7c3aed;color:#fff;border:none;padding:7px 13px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;margin:4px;';
+            btn.textContent = '🗂️ Bid Coverage';
+            btn.onclick = togglePanel;
+
+            const rmsdBtn = document.getElementById('rmsdToggleBtn');
+            if(rmsdBtn && rmsdBtn.parentNode){
+                rmsdBtn.parentNode.insertBefore(btn, rmsdBtn.nextSibling);
+            } else {
+                document.body.appendChild(btn);
+            }
+
+            const wrap = document.createElement('div');
+            wrap.id = WRAP_ID;
+            wrap.style.cssText = 'display:none;background:#faf5ff;border:1.5px solid #c4b5fd;border-radius:10px;padding:18px;margin:10px 0;';
+            wrap.innerHTML = buildHTML();
+            btn.parentNode.insertBefore(wrap, btn.nextSibling);
+            attachEvents(wrap);
+        }
+
+        function buildHTML(){
+            return `
+            <div style="font-weight:700;font-size:14px;color:#7c3aed;margin-bottom:8px;">🗂️ Subcontractor Bid Coverage Tracker</div>
+            <p style="font-size:11px;color:#475569;margin:0 0 12px;">Track which scope items have confirmed sub/vendor coverage. Uncovered required scopes flagged red.</p>
+
+            <!-- Load defaults -->
+            <div style="margin-bottom:10px;">
+                <button id="sbct_defaults_btn" style="background:#7c3aed;color:#fff;border:none;padding:6px 14px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;">⚡ Load Default Concrete Scopes</button>
+                <span style="font-size:10px;color:#94a3b8;margin-left:8px;">(loads 8 standard concrete sub scopes)</span>
+            </div>
+
+            <!-- Add scope form -->
+            <div style="background:#fff;border-radius:8px;padding:12px;margin-bottom:14px;border:1px solid #ede9fe;">
+                <div style="font-weight:600;font-size:12px;color:#5b21b6;margin-bottom:8px;">Add Scope Item</div>
+                <div style="display:grid;grid-template-columns:2fr 2fr 1fr 1fr auto;gap:8px;align-items:end;">
+                    <div>
+                        <label style="font-size:11px;font-weight:600;color:#374151;">Scope / Trade</label><br>
+                        <input id="sbct_scope" type="text" placeholder="e.g. Concrete Pump" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+                    </div>
+                    <div>
+                        <label style="font-size:11px;font-weight:600;color:#374151;">Sub / Vendor Name</label><br>
+                        <input id="sbct_sub" type="text" placeholder="Company name" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+                    </div>
+                    <div>
+                        <label style="font-size:11px;font-weight:600;color:#374151;">Quote $</label><br>
+                        <input id="sbct_quote" type="number" placeholder="0" step="100" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+                    </div>
+                    <div>
+                        <label style="font-size:11px;font-weight:600;color:#374151;">Required?</label><br>
+                        <select id="sbct_req" style="padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;width:100%;">
+                            <option value="1">Yes</option>
+                            <option value="0">Optional</option>
+                        </select>
+                    </div>
+                    <div style="display:flex;gap:4px;">
+                        <button id="sbct_add_btn" style="background:#7c3aed;color:#fff;border:none;padding:7px 12px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;">+ Add</button>
+                    </div>
+                </div>
+                <div style="margin-top:8px;">
+                    <label style="font-size:11px;font-weight:600;color:#374151;">Exclusions / Conditions</label><br>
+                    <input id="sbct_excl" type="text" placeholder="e.g. Mob not included, 48hr notice required" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+                </div>
+            </div>
+
+            <!-- Coverage table -->
+            <div id="sbct_table"></div>
+
+            <!-- Summary -->
+            <div id="sbct_summary" style="margin:10px 0;"></div>
+
+            <!-- Actions -->
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+                <button id="sbct_copy_btn" style="background:#0369a1;color:#fff;border:none;padding:7px 13px;border-radius:5px;cursor:pointer;font-size:11px;">📋 Copy Coverage Report</button>
+                <button id="sbct_print_btn" style="background:#7c3aed;color:#fff;border:none;padding:7px 13px;border-radius:5px;cursor:pointer;font-size:11px;">🖨️ Print Bid Coverage Sheet</button>
+                <button id="sbct_clear_all_btn" style="background:#dc2626;color:#fff;border:none;padding:7px 13px;border-radius:5px;cursor:pointer;font-size:11px;">🗑 Clear All</button>
+            </div>
+            `;
+        }
+
+        function renderTable(wrap){
+            const d = getData();
+            const scopes = d.scopes || [];
+            const tbl = wrap.querySelector('#sbct_table');
+            const sumEl = wrap.querySelector('#sbct_summary');
+            if(!tbl) return;
+
+            if(!scopes.length){
+                tbl.innerHTML = '<p style="color:#94a3b8;font-size:11px;text-align:center;">No scope items. Load defaults or add manually.</p>';
+                if(sumEl) sumEl.innerHTML='';
+                return;
+            }
+
+            const covered = scopes.filter(s=>s.confirmed && s.sub);
+            const uncoveredRequired = scopes.filter(s=>s.required && (!s.confirmed || !s.sub));
+            const totalQuoted = scopes.filter(s=>s.quote).reduce((a,b)=>a+parseFloat(b.quote||0),0);
+
+            tbl.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px;">
+                <thead><tr style="background:#7c3aed;color:#fff;">
+                    <th style="padding:6px;text-align:left;">Scope / Trade</th>
+                    <th style="padding:6px;text-align:left;">Sub / Vendor</th>
+                    <th style="padding:6px;text-align:right;">Quote</th>
+                    <th style="padding:6px;text-align:center;">Required</th>
+                    <th style="padding:6px;text-align:center;">Confirmed</th>
+                    <th style="padding:6px;text-align:left;">Exclusions</th>
+                    <th style="padding:6px;text-align:center;">Del</th>
+                </tr></thead>
+                <tbody>
+                ${scopes.map((s,i)=>{
+                    const isMissing = s.required && (!s.confirmed || !s.sub);
+                    const bg = isMissing ? '#fef2f2' : (i%2===0?'#faf5ff':'#fff');
+                    const border = isMissing ? 'border-left:3px solid #dc2626;' : '';
+                    return `<tr style="border-bottom:1px solid #e2e8f0;background:${bg};${border}">
+                        <td style="padding:6px;font-weight:600;">${s.scope||'—'}${isMissing?' <span style="color:#dc2626;font-weight:700;">⚠ UNCOVERED</span>':''}</td>
+                        <td style="padding:6px;">${s.sub||'<em style="color:#94a3b8;">None yet</em>'}</td>
+                        <td style="padding:6px;text-align:right;">${s.quote?'$'+parseFloat(s.quote).toLocaleString():'—'}</td>
+                        <td style="padding:6px;text-align:center;">${s.required?'<span style="color:#dc2626;font-weight:600;">Required</span>':'Optional'}</td>
+                        <td style="padding:6px;text-align:center;">
+                            <button onclick="sbctToggle(${i})" style="border:none;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:600;background:${s.confirmed?'#16a34a':'#6b7280'};color:#fff;">
+                                ${s.confirmed?'✓ YES':'✗ NO'}
+                            </button>
+                        </td>
+                        <td style="padding:6px;font-size:10px;color:#475569;">${s.exclusions||'—'}</td>
+                        <td style="padding:6px;text-align:center;">
+                            <button onclick="sbctDel(${i})" style="background:#dc2626;color:#fff;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;font-size:10px;">🗑</button>
+                        </td>
+                    </tr>`;
+                }).join('')}
+                </tbody>
+            </table>`;
+
+            if(sumEl){
+                const coverPct = scopes.length ? Math.round(covered.length/scopes.length*100) : 0;
+                sumEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px;">
+                    <div style="background:#f0fdf4;border-radius:6px;padding:8px;text-align:center;border:1px solid #bbf7d0;">
+                        <div style="font-size:18px;font-weight:700;color:#16a34a;">${covered.length}</div>
+                        <div style="font-size:10px;color:#374151;">Covered</div>
+                    </div>
+                    <div style="background:${uncoveredRequired.length?'#fef2f2':'#f0fdf4'};border-radius:6px;padding:8px;text-align:center;border:1px solid ${uncoveredRequired.length?'#fecaca':'#bbf7d0'};">
+                        <div style="font-size:18px;font-weight:700;color:${uncoveredRequired.length?'#dc2626':'#16a34a'};">${uncoveredRequired.length}</div>
+                        <div style="font-size:10px;color:#374151;">Uncovered Required</div>
+                    </div>
+                    <div style="background:#f0f9ff;border-radius:6px;padding:8px;text-align:center;border:1px solid #bae6fd;">
+                        <div style="font-size:18px;font-weight:700;color:#0369a1;">${coverPct}%</div>
+                        <div style="font-size:10px;color:#374151;">Coverage Rate</div>
+                    </div>
+                    <div style="background:#faf5ff;border-radius:6px;padding:8px;text-align:center;border:1px solid #ddd6fe;">
+                        <div style="font-size:14px;font-weight:700;color:#7c3aed;">$${totalQuoted.toLocaleString()}</div>
+                        <div style="font-size:10px;color:#374151;">Total Sub Quotes</div>
+                    </div>
+                </div>
+                ${uncoveredRequired.length ? `<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:8px;font-size:11px;color:#991b1b;font-weight:600;">
+                    ⚠️ COVERAGE GAPS — The following required scopes have NO confirmed sub bid:<br>
+                    ${uncoveredRequired.map(s=>'&nbsp;• '+s.scope).join('<br>')}
+                </div>` : `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px;font-size:11px;color:#15803d;font-weight:600;">✅ ALL REQUIRED SCOPES COVERED — Safe to submit bid.</div>`}`;
+            }
+        }
+
+        function attachEvents(wrap){
+            window.sbctToggle = function(idx){
+                const d = getData();
+                if(!d.scopes[idx]) return;
+                d.scopes[idx].confirmed = !d.scopes[idx].confirmed;
+                saveData(d);
+                renderTable(wrap);
+            };
+            window.sbctDel = function(idx){
+                const d = getData();
+                d.scopes.splice(idx,1);
+                saveData(d);
+                renderTable(wrap);
+            };
+
+            wrap.querySelector('#sbct_defaults_btn').onclick = function(){
+                const d = getData();
+                DEFAULT_SCOPES.forEach(ds=>{
+                    if(!d.scopes.find(s=>s.scope===ds.scope)){
+                        d.scopes.push({scope:ds.scope, sub:'', quote:'', required:ds.required, confirmed:false, exclusions:''});
+                    }
+                });
+                saveData(d);
+                renderTable(wrap);
+            };
+
+            wrap.querySelector('#sbct_add_btn').onclick = function(){
+                const scope = wrap.querySelector('#sbct_scope').value.trim();
+                if(!scope){ alert('Enter a scope name.'); return; }
+                const d = getData();
+                d.scopes.push({
+                    scope,
+                    sub: wrap.querySelector('#sbct_sub').value.trim(),
+                    quote: wrap.querySelector('#sbct_quote').value,
+                    required: wrap.querySelector('#sbct_req').value==='1',
+                    confirmed: false,
+                    exclusions: wrap.querySelector('#sbct_excl').value.trim(),
+                });
+                saveData(d);
+                ['sbct_scope','sbct_sub','sbct_quote','sbct_excl'].forEach(id=>{ const e=wrap.querySelector('#'+id); if(e) e.value=''; });
+                wrap.querySelector('#sbct_req').value='1';
+                renderTable(wrap);
+            };
+
+            wrap.querySelector('#sbct_copy_btn').onclick = function(){
+                const d = getData();
+                const scopes = d.scopes||[];
+                const proj = document.getElementById('projectName')?.value||'—';
+                let txt = `BID COVERAGE REPORT — ${proj}\n${'='.repeat(40)}\n\n`;
+                scopes.forEach(s=>{
+                    txt += `[${s.confirmed?'✓':'✗'}] ${s.scope} — ${s.required?'REQUIRED':'Optional'}\n`;
+                    txt += `     Sub: ${s.sub||'NONE'} | Quote: ${s.quote?'$'+parseFloat(s.quote).toLocaleString():'—'}\n`;
+                    if(s.exclusions) txt += `     Exclusions: ${s.exclusions}\n`;
+                });
+                const uncov = scopes.filter(s=>s.required&&(!s.confirmed||!s.sub));
+                if(uncov.length) txt += `\n⚠️ UNCOVERED REQUIRED SCOPES:\n${uncov.map(s=>'  - '+s.scope).join('\n')}`;
+                else txt += '\n✅ All required scopes confirmed.';
+                navigator.clipboard.writeText(txt).then(()=>{ wrap.querySelector('#sbct_copy_btn').textContent='✅ Copied!'; setTimeout(()=>{ wrap.querySelector('#sbct_copy_btn').textContent='📋 Copy Coverage Report'; },2000); });
+            };
+
+            wrap.querySelector('#sbct_print_btn').onclick = function(){
+                const d = getData();
+                const scopes = d.scopes||[];
+                const proj = document.getElementById('projectName')?.value||'—';
+                const co = document.getElementById('companyName')?.value||'Oncor Concrete';
+                const uncov = scopes.filter(s=>s.required&&(!s.confirmed||!s.sub));
+                const rows = scopes.map((s,i)=>`<tr style="${s.required&&(!s.confirmed||!s.sub)?'background:#fef2f2;':''}">
+                    <td style="text-align:center;font-size:13px;">${s.confirmed?'☑':'☐'}</td>
+                    <td><strong>${s.scope}</strong></td>
+                    <td>${s.sub||'—'}</td>
+                    <td style="text-align:right;">${s.quote?'$'+parseFloat(s.quote).toLocaleString():'—'}</td>
+                    <td style="text-align:center;">${s.required?'<strong>Required</strong>':'Optional'}</td>
+                    <td style="font-size:9pt;">${s.exclusions||'—'}</td>
+                </tr>`).join('');
+                const w = window.open('','_blank');
+                w.document.write(`<!DOCTYPE html><html><head><title>Bid Coverage Sheet</title><style>
+                    body{font-family:Arial,sans-serif;font-size:10pt;margin:24px;}
+                    h2{font-size:13pt;margin:0 0 4px;}
+                    table{border-collapse:collapse;width:100%;margin:10px 0;}
+                    td,th{border:1px solid #ccc;padding:5px 8px;font-size:9pt;}
+                    thead tr{background:#7c3aed;color:#fff;}
+                    .alert{background:#fef2f2;border-left:3px solid #dc2626;padding:8px 12px;font-size:9pt;margin:10px 0;}
+                    .ok{background:#f0fdf4;border-left:3px solid #16a34a;padding:8px 12px;font-size:9pt;margin:10px 0;}
+                    .sig{margin-top:24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;}
+                    .sig div{border-top:1px solid #333;padding-top:4px;font-size:8pt;color:#555;}
+                </style></head><body>
+                <h2>${co} — Bid Coverage Sheet</h2>
+                <p style="font-size:9pt;margin:2px 0 8px;"><strong>Project:</strong> ${proj} &nbsp;|&nbsp; <strong>Printed:</strong> ${new Date().toLocaleDateString()}</p>
+                <table>
+                    <thead><tr><th>✓</th><th>Scope / Trade</th><th>Sub / Vendor</th><th>Quote</th><th>Required?</th><th>Exclusions / Notes</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                ${uncov.length ? `<div class="alert">⚠️ COVERAGE GAPS — ${uncov.length} required scope(s) without confirmed coverage:<br>${uncov.map(s=>'• '+s.scope).join(' &nbsp; ')}</div>` : '<div class="ok">✅ ALL REQUIRED SCOPES COVERED</div>'}
+                <p style="font-size:9pt;font-style:italic;">Note: "Confirmed" means verbal or written quote received and sub committed to cover scope on bid day. Obtain written confirmation before project award.</p>
+                <div class="sig">
+                    <div>Estimator: _______________</div>
+                    <div>PM: _______________</div>
+                    <div>Date: _______________</div>
+                </div>
+                <script>window.onload=function(){window.print();};<\/script></body></html>`);
+                w.document.close();
+            };
+
+            wrap.querySelector('#sbct_clear_all_btn').onclick = function(){
+                if(!confirm('Clear all scope items for this project?')) return;
+                saveData({scopes:[]});
+                renderTable(wrap);
+            };
+
+            renderTable(wrap);
+        }
+
+        function togglePanel(){
+            const wrap = document.getElementById(WRAP_ID);
+            const btn  = document.getElementById(BTN_ID);
+            if(!wrap||!btn) return;
+            const show = wrap.style.display==='none';
+            wrap.style.display = show ? 'block' : 'none';
+            btn.textContent = show ? '🗂️ Hide Bid Coverage' : '🗂️ Bid Coverage';
+        }
+
+        if(document.readyState==='loading'){
+            document.addEventListener('DOMContentLoaded', createButton);
+        } else {
+            createButton();
+        }
+    })();
+
+    // ============================================================
+    // CONCRETE WASHOUT & WASTE COMPLIANCE LOG (♻️)
+    // ============================================================
+    (function(){
+        const BTN_ID  = 'cwclToggleBtn';
+        const WRAP_ID = 'cwclWrap';
+        const KEY     = 'oncor_cwcl_v1';  // global — not per-project
+
+        // SWPPP checklist items
+        const CHECKLIST_ITEMS = [
+            { id:'cw1', label:'Washout area lined or containerized (EPA 40 CFR §122.26)', checked:false },
+            { id:'cw2', label:'No washout water discharged to storm drain or waterbody', checked:false },
+            { id:'cw3', label:'Washout location signed and marked on site map', checked:false },
+            { id:'cw4', label:'All truck drivers directed to washout area at job briefing', checked:false },
+            { id:'cw5', label:'Washout capacity sufficient for remainder of pour (min 10% over)', checked:false },
+            { id:'cw6', label:'Hardened washout material disposed at approved site (not landfilled)', checked:false },
+            { id:'cw7', label:'Washout log maintained on-site (this form)', checked:false },
+            { id:'cw8', label:'SWPPP updated if washout location changes', checked:false },
+            { id:'cw9', label:'Washout area inspected after each rain event (>0.5" per TCEQ)', checked:false },
+            { id:'cw10', label:'TX CGP NOI filed (if disturbance ≥1 acre)', checked:false },
+        ];
+
+        function getData(){ try{ return JSON.parse(localStorage.getItem(KEY))||{events:[],checklist:[]}; }catch(e){ return {events:[],checklist:[]}; } }
+        function saveData(d){ localStorage.setItem(KEY, JSON.stringify(d)); }
+
+        function createButton(){
+            const btn = document.createElement('button');
+            btn.id = BTN_ID;
+            btn.style.cssText = 'background:#059669;color:#fff;border:none;padding:7px 13px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;margin:4px;';
+            btn.textContent = '♻️ Washout Log';
+            btn.onclick = togglePanel;
+
+            const sbctBtn = document.getElementById('sbctToggleBtn');
+            if(sbctBtn && sbctBtn.parentNode){
+                sbctBtn.parentNode.insertBefore(btn, sbctBtn.nextSibling);
+            } else {
+                document.body.appendChild(btn);
+            }
+
+            const wrap = document.createElement('div');
+            wrap.id = WRAP_ID;
+            wrap.style.cssText = 'display:none;background:#ecfdf5;border:1.5px solid #6ee7b7;border-radius:10px;padding:18px;margin:10px 0;';
+            wrap.innerHTML = buildHTML();
+            btn.parentNode.insertBefore(wrap, btn.nextSibling);
+            attachEvents(wrap);
+        }
+
+        function buildHTML(){
+            const d = getData();
+            const checklistState = d.checklist || [];
+            const checklistHTML = CHECKLIST_ITEMS.map(item=>{
+                const saved = checklistState.find(c=>c.id===item.id);
+                const checked = saved ? saved.checked : false;
+                return `<label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;cursor:pointer;font-size:11px;">
+                    <input type="checkbox" id="${item.id}" ${checked?'checked':''} onchange="cwclSaveChecklist()" style="margin-top:1px;flex-shrink:0;">
+                    <span style="color:#374151;">${item.label}</span>
+                </label>`;
+            }).join('');
+
+            return `
+            <div style="font-weight:700;font-size:14px;color:#059669;margin-bottom:8px;">♻️ Concrete Washout &amp; Waste Compliance Log</div>
+            <p style="font-size:11px;color:#475569;margin:0 0 12px;">SWPPP/BMP compliance log for concrete washout events. Required on commercial sites disturbing ≥1 acre (TX CGP) and most GC-managed projects. Keep on-site and available to inspector.</p>
+
+            <!-- SWPPP Compliance Checklist -->
+            <div style="background:#fff;border-radius:8px;padding:12px;margin-bottom:14px;border:1px solid #a7f3d0;">
+                <div style="font-weight:600;font-size:12px;color:#065f46;margin-bottom:8px;">📋 SWPPP Compliance Checklist (EPA/TCEQ)</div>
+                <div id="cwcl_checklist">
+                    ${checklistHTML}
+                </div>
+                <div id="cwcl_progress" style="margin-top:8px;"></div>
+            </div>
+
+            <!-- Log event form -->
+            <div style="background:#fff;border-radius:8px;padding:12px;margin-bottom:14px;border:1px solid #a7f3d0;">
+                <div style="font-weight:600;font-size:12px;color:#065f46;margin-bottom:8px;">Add Washout Event</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+                    <div>
+                        <label style="font-size:11px;font-weight:600;color:#374151;">Date</label><br>
+                        <input id="cwcl_date" type="date" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+                    </div>
+                    <div>
+                        <label style="font-size:11px;font-weight:600;color:#374151;">Project / Site</label><br>
+                        <input id="cwcl_proj" type="text" placeholder="Job name / address" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+                    </div>
+                    <div>
+                        <label style="font-size:11px;font-weight:600;color:#374151;">Washout Location on Site</label><br>
+                        <input id="cwcl_loc" type="text" placeholder="e.g. NW corner, designated area" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+                    <div>
+                        <label style="font-size:11px;font-weight:600;color:#374151;">Est. Volume (gal)</label><br>
+                        <input id="cwcl_vol" type="number" placeholder="0" min="0" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+                    </div>
+                    <div>
+                        <label style="font-size:11px;font-weight:600;color:#374151;">Disposal Method</label><br>
+                        <select id="cwcl_disp" style="width:100%;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+                            <option>Allow to harden / haul</option>
+                            <option>Portable washout container</option>
+                            <option>Licensed disposal facility</option>
+                            <option>Lined pit / evaporation</option>
+                            <option>Other</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:11px;font-weight:600;color:#374151;">Trucks Washed</label><br>
+                        <input id="cwcl_trucks" type="number" placeholder="0" min="0" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+                    </div>
+                    <div>
+                        <label style="font-size:11px;font-weight:600;color:#374151;">Logged By</label><br>
+                        <input id="cwcl_by" type="text" placeholder="Initials" style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+                    </div>
+                </div>
+                <div style="margin-bottom:8px;">
+                    <label style="font-size:11px;font-weight:600;color:#374151;">Notes / Observations</label><br>
+                    <input id="cwcl_notes" type="text" placeholder="Any spills, issues, inspector present, etc." style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+                </div>
+                <button id="cwcl_add_btn" style="background:#059669;color:#fff;border:none;padding:7px 16px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;">+ Log Event</button>
+            </div>
+
+            <!-- Events table -->
+            <div id="cwcl_table" style="margin-bottom:10px;"></div>
+
+            <!-- Summary strip -->
+            <div id="cwcl_summary" style="margin-bottom:10px;"></div>
+
+            <!-- Actions -->
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button id="cwcl_copy_btn" style="background:#0369a1;color:#fff;border:none;padding:7px 13px;border-radius:5px;cursor:pointer;font-size:11px;">📋 Copy Log</button>
+                <button id="cwcl_print_btn" style="background:#7c3aed;color:#fff;border:none;padding:7px 13px;border-radius:5px;cursor:pointer;font-size:11px;">🖨️ Print Compliance Log</button>
+            </div>
+
+            <p style="font-size:10px;color:#94a3b8;margin-top:10px;">⚠️ Reference: EPA 40 CFR §122.26 (NPDES), TCEQ Texas CGP (TXR150000), ACI 301. Always verify requirements with GC/owner SWPPP and local stormwater authority. This tool is a logging aid — not a substitute for professional SWPPP compliance review.</p>
+            `;
+        }
+
+        function renderProgress(wrap){
+            const d = getData();
+            const checklistState = d.checklist || [];
+            const checked = CHECKLIST_ITEMS.filter(item=>{
+                const saved = checklistState.find(c=>c.id===item.id);
+                return saved && saved.checked;
+            }).length;
+            const total = CHECKLIST_ITEMS.length;
+            const pct = Math.round(checked/total*100);
+            const el = wrap.querySelector('#cwcl_progress');
+            if(!el) return;
+            el.innerHTML = `<div style="display:flex;align-items:center;gap:8px;">
+                <div style="flex:1;background:#e2e8f0;border-radius:4px;height:8px;overflow:hidden;">
+                    <div style="background:${pct===100?'#16a34a':pct>=60?'#d97706':'#6b7280'};width:${pct}%;height:100%;border-radius:4px;transition:width 0.3s;"></div>
+                </div>
+                <span style="font-size:11px;font-weight:600;color:${pct===100?'#16a34a':'#374151'};">${checked}/${total} (${pct}%)</span>
+                ${pct===100 ? '<span style="font-size:11px;color:#16a34a;font-weight:700;">✅ COMPLIANT</span>' : ''}
+            </div>`;
+        }
+
+        function renderTable(wrap){
+            const d = getData();
+            const events = (d.events||[]).slice().reverse();
+            const tbl = wrap.querySelector('#cwcl_table');
+            const sumEl = wrap.querySelector('#cwcl_summary');
+            if(!tbl) return;
+
+            if(!events.length){
+                tbl.innerHTML = '<p style="color:#94a3b8;font-size:11px;text-align:center;">No washout events logged.</p>';
+                if(sumEl) sumEl.innerHTML='';
+                return;
+            }
+
+            tbl.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:11px;">
+                <thead><tr style="background:#059669;color:#fff;">
+                    <th style="padding:6px;text-align:left;">Date</th>
+                    <th style="padding:6px;text-align:left;">Project</th>
+                    <th style="padding:6px;text-align:left;">Location</th>
+                    <th style="padding:6px;text-align:right;">Volume (gal)</th>
+                    <th style="padding:6px;text-align:center;">Trucks</th>
+                    <th style="padding:6px;text-align:left;">Disposal</th>
+                    <th style="padding:6px;text-align:left;">Logged By</th>
+                    <th style="padding:6px;text-align:left;">Notes</th>
+                    <th style="padding:6px;text-align:center;">Del</th>
+                </tr></thead>
+                <tbody>
+                ${events.map((e,i)=>`<tr style="border-bottom:1px solid #d1fae5;background:${i%2===0?'#ecfdf5':'#fff'};">
+                    <td style="padding:6px;">${e.date||'—'}</td>
+                    <td style="padding:6px;">${e.proj||'—'}</td>
+                    <td style="padding:6px;">${e.loc||'—'}</td>
+                    <td style="padding:6px;text-align:right;">${e.vol?parseFloat(e.vol).toLocaleString():'—'}</td>
+                    <td style="padding:6px;text-align:center;">${e.trucks||'—'}</td>
+                    <td style="padding:6px;font-size:10px;">${e.disp||'—'}</td>
+                    <td style="padding:6px;text-align:center;">${e.by||'—'}</td>
+                    <td style="padding:6px;font-size:10px;color:#475569;">${e.notes||'—'}</td>
+                    <td style="padding:6px;text-align:center;">
+                        <button onclick="cwclDel(${(d.events||[]).length-1-i})" style="background:#dc2626;color:#fff;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;font-size:10px;">🗑</button>
+                    </td>
+                </tr>`).join('')}
+                </tbody>
+            </table>`;
+
+            if(sumEl){
+                const totalVol = (d.events||[]).reduce((a,e)=>a+parseFloat(e.vol||0),0);
+                const totalTrucks = (d.events||[]).reduce((a,e)=>a+parseInt(e.trucks||0),0);
+                sumEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:8px 0;">
+                    <div style="background:#fff;border-radius:6px;padding:8px;text-align:center;border:1px solid #a7f3d0;">
+                        <div style="font-size:18px;font-weight:700;color:#059669;">${(d.events||[]).length}</div>
+                        <div style="font-size:10px;color:#374151;">Events Logged</div>
+                    </div>
+                    <div style="background:#fff;border-radius:6px;padding:8px;text-align:center;border:1px solid #a7f3d0;">
+                        <div style="font-size:14px;font-weight:700;color:#059669;">${totalVol.toLocaleString()} gal</div>
+                        <div style="font-size:10px;color:#374151;">Total Washout Volume</div>
+                    </div>
+                    <div style="background:#fff;border-radius:6px;padding:8px;text-align:center;border:1px solid #a7f3d0;">
+                        <div style="font-size:18px;font-weight:700;color:#059669;">${totalTrucks}</div>
+                        <div style="font-size:10px;color:#374151;">Total Trucks Washed</div>
+                    </div>
+                </div>`;
+            }
+        }
+
+        function attachEvents(wrap){
+            window.cwclSaveChecklist = function(){
+                const d = getData();
+                d.checklist = CHECKLIST_ITEMS.map(item=>({
+                    id: item.id,
+                    checked: !!document.getElementById(item.id)?.checked
+                }));
+                saveData(d);
+                renderProgress(wrap);
+            };
+            window.cwclDel = function(idx){
+                const d = getData();
+                d.events.splice(idx,1);
+                saveData(d);
+                renderTable(wrap);
+            };
+
+            // Set default date
+            const dateEl = wrap.querySelector('#cwcl_date');
+            if(dateEl) dateEl.value = new Date().toISOString().split('T')[0];
+            // Pre-fill project from active project name
+            const projEl = wrap.querySelector('#cwcl_proj');
+            if(projEl) projEl.value = document.getElementById('projectName')?.value||'';
+
+            wrap.querySelector('#cwcl_add_btn').onclick = function(){
+                const date = wrap.querySelector('#cwcl_date').value;
+                if(!date){ alert('Date is required.'); return; }
+                const d = getData();
+                d.events = d.events || [];
+                d.events.push({
+                    date,
+                    proj: wrap.querySelector('#cwcl_proj').value.trim(),
+                    loc: wrap.querySelector('#cwcl_loc').value.trim(),
+                    vol: wrap.querySelector('#cwcl_vol').value,
+                    disp: wrap.querySelector('#cwcl_disp').value,
+                    trucks: wrap.querySelector('#cwcl_trucks').value,
+                    by: wrap.querySelector('#cwcl_by').value.trim(),
+                    notes: wrap.querySelector('#cwcl_notes').value.trim(),
+                    ts: Date.now(),
+                });
+                saveData(d);
+                ['cwcl_loc','cwcl_vol','cwcl_trucks','cwcl_by','cwcl_notes'].forEach(id=>{ const e=wrap.querySelector('#'+id); if(e) e.value=''; });
+                wrap.querySelector('#cwcl_disp').value = 'Allow to harden / haul';
+                wrap.querySelector('#cwcl_date').value = new Date().toISOString().split('T')[0];
+                renderTable(wrap);
+            };
+
+            wrap.querySelector('#cwcl_copy_btn').onclick = function(){
+                const d = getData();
+                const events = d.events||[];
+                let txt = 'CONCRETE WASHOUT & WASTE COMPLIANCE LOG\n' + '='.repeat(42) + '\n';
+                txt += `Printed: ${new Date().toLocaleString()}\n\n`;
+                if(!events.length){ txt += 'No events logged.\n'; }
+                else {
+                    events.forEach((e,i)=>{
+                        txt += `${i+1}. ${e.date} — ${e.proj||'Project N/A'}\n`;
+                        txt += `   Location: ${e.loc||'—'} | Volume: ${e.vol?e.vol+' gal':'—'} | Trucks: ${e.trucks||'—'}\n`;
+                        txt += `   Disposal: ${e.disp||'—'} | Logged By: ${e.by||'—'}\n`;
+                        if(e.notes) txt += `   Notes: ${e.notes}\n`;
+                        txt += '\n';
+                    });
+                }
+                const checked = (d.checklist||[]).filter(c=>c.checked).length;
+                txt += `\nSWPPP COMPLIANCE: ${checked}/${CHECKLIST_ITEMS.length} items complete`;
+                navigator.clipboard.writeText(txt).then(()=>{ wrap.querySelector('#cwcl_copy_btn').textContent='✅ Copied!'; setTimeout(()=>{ wrap.querySelector('#cwcl_copy_btn').textContent='📋 Copy Log'; },2000); });
+            };
+
+            wrap.querySelector('#cwcl_print_btn').onclick = function(){
+                const d = getData();
+                const events = d.events||[];
+                const co = document.getElementById('companyName')?.value||'Oncor Concrete';
+                const checklistState = d.checklist||[];
+                const checklistRows = CHECKLIST_ITEMS.map(item=>{
+                    const saved = checklistState.find(c=>c.id===item.id);
+                    return `<tr><td style="text-align:center;">${saved&&saved.checked?'☑':'☐'}</td><td>${item.label}</td></tr>`;
+                }).join('');
+                const evtRows = events.map((e,i)=>`<tr>
+                    <td>${e.date||'—'}</td>
+                    <td>${e.proj||'—'}</td>
+                    <td>${e.loc||'—'}</td>
+                    <td style="text-align:right;">${e.vol?parseFloat(e.vol).toLocaleString():'—'}</td>
+                    <td style="text-align:center;">${e.trucks||'—'}</td>
+                    <td>${e.disp||'—'}</td>
+                    <td style="text-align:center;">${e.by||'—'}</td>
+                    <td>${e.notes||'—'}</td>
+                </tr>`).join('');
+                const w = window.open('','_blank');
+                w.document.write(`<!DOCTYPE html><html><head><title>Washout Compliance Log</title><style>
+                    body{font-family:Arial,sans-serif;font-size:10pt;margin:24px;color:#1e293b;}
+                    h2{font-size:13pt;margin:0 0 4px;} h3{font-size:11pt;margin:14px 0 6px;}
+                    table{border-collapse:collapse;width:100%;margin:8px 0;}
+                    td,th{border:1px solid #ccc;padding:5px 7px;font-size:8.5pt;}
+                    thead tr{background:#059669;color:#fff;}
+                    tr:nth-child(even){background:#ecfdf5;}
+                    .disclaimer{background:#fef9c3;border:1px solid #d97706;border-radius:4px;padding:8px;font-size:8pt;margin:10px 0;}
+                    .sig{margin-top:24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;}
+                    .sig div{border-top:1px solid #333;padding-top:4px;font-size:8pt;color:#555;}
+                </style></head><body>
+                <h2>${co} — Concrete Washout &amp; Waste Compliance Log</h2>
+                <p style="font-size:9pt;margin:2px 0 8px;"><strong>Printed:</strong> ${new Date().toLocaleString()} &nbsp;|&nbsp; Reference: EPA 40 CFR §122.26 | TCEQ Texas CGP (TXR150000)</p>
+                <div class="disclaimer">⚠️ This log must be maintained on-site and available to the stormwater inspector at all times. Keep for a minimum of 3 years (TCEQ requirement). Falsification of compliance records is a federal and state violation.</div>
+                <h3>Section 1: SWPPP Compliance Checklist</h3>
+                <table>
+                    <thead><tr><th style="width:40px;">✓</th><th>Requirement</th></tr></thead>
+                    <tbody>${checklistRows}</tbody>
+                </table>
+                <h3>Section 2: Washout Event Log</h3>
+                ${events.length ? `<table>
+                    <thead><tr><th>Date</th><th>Project</th><th>Location</th><th>Vol (gal)</th><th>Trucks</th><th>Disposal Method</th><th>By</th><th>Notes</th></tr></thead>
+                    <tbody>${evtRows}</tbody>
+                </table>` : '<p style="font-size:9pt;color:#94a3b8;">No events logged.</p>'}
+                <div class="sig">
+                    <div>Site Foreman: _______________</div>
+                    <div>SWPPP Manager: _______________</div>
+                    <div>Inspector Review: _______________</div>
+                </div>
+                <script>window.onload=function(){window.print();};<\/script></body></html>`);
+                w.document.close();
+            };
+
+            renderProgress(wrap);
+            renderTable(wrap);
+        }
+
+        function togglePanel(){
+            const wrap = document.getElementById(WRAP_ID);
+            const btn  = document.getElementById(BTN_ID);
+            if(!wrap||!btn) return;
+            const show = wrap.style.display==='none';
+            wrap.style.display = show ? 'block' : 'none';
+            btn.textContent = show ? '♻️ Hide Washout Log' : '♻️ Washout Log';
+        }
+
+        if(document.readyState==='loading'){
+            document.addEventListener('DOMContentLoaded', createButton);
+        } else {
+            createButton();
+        }
+    })();
+
     </script>
 
 </body>
