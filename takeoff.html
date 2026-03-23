@@ -20229,5 +20229,597 @@ ${f.co}${f.phone ? '\n' + f.phone : ''}${f.email ? '\n' + f.email : ''}`;
     })();
     </script>
 
+    <!-- ============================================================
+         WEEKLY BID GOAL TRACKER (🎯)
+         Track weekly bid submissions vs. goal. Monthly stats.
+         Global localStorage.
+    ============================================================ -->
+    <script>
+    (function(){
+        'use strict';
+
+        /* ---- state ---- */
+        function loadBidGoal(){ try{ return JSON.parse(localStorage.getItem('oncor_bidGoal')||'null'); } catch(e){ return null; } }
+        function saveBidGoal(d){ localStorage.setItem('oncor_bidGoal', JSON.stringify(d)); }
+        function defaultBidGoal(){
+            return { weeklyCountGoal:5, weeklyValueGoal:250000, bids:[] };
+        }
+        function getBidGoal(){ return loadBidGoal() || defaultBidGoal(); }
+
+        function getWeekKey(d){ // ISO week string YYYY-Www
+            const dt = d ? new Date(d) : new Date();
+            const jan4 = new Date(dt.getFullYear(), 0, 4);
+            const week = Math.ceil(((dt - jan4)/86400000 + jan4.getDay()+1)/7);
+            return `${dt.getFullYear()}-W${String(week).padStart(2,'0')}`;
+        }
+        function getMonthKey(d){ const dt = d ? new Date(d) : new Date(); return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`; }
+        function fmt$(n){ return '$'+Number(n||0).toLocaleString(); }
+
+        /* ---- render ---- */
+        function renderBidGoal(){
+            const state = getBidGoal();
+            const thisWeek = getWeekKey();
+            const thisMonth = getMonthKey();
+            const weekBids = state.bids.filter(b=>getWeekKey(b.date)===thisWeek);
+            const monthBids = state.bids.filter(b=>getMonthKey(b.date)===thisMonth);
+            const wCount = weekBids.length;
+            const wValue = weekBids.reduce((s,b)=>s+(b.value||0),0);
+            const mCount = monthBids.length;
+            const mValue = monthBids.reduce((s,b)=>s+(b.value||0),0);
+            const pCount = Math.min(100, Math.round(wCount/Math.max(1,state.weeklyCountGoal)*100));
+            const pValue = Math.min(100, Math.round(wValue/Math.max(1,state.weeklyValueGoal)*100));
+            const el = document.getElementById('bidGoalPanel');
+            if(!el) return;
+            const bar = (pct, color)=>`<div style="background:rgba(255,255,255,0.08);border-radius:3px;height:8px;overflow:hidden;flex:1;"><div style="width:${pct}%;background:${color};height:100%;transition:width .3s;"></div></div>`;
+            el.innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                <div>
+                    <div style="font-size:0.7rem;color:#94a3b8;margin-bottom:2px;">Bids Submitted</div>
+                    <div style="font-weight:700;font-size:1.1rem;color:${wCount>=state.weeklyCountGoal?'#4ade80':'#f8fafc'};">${wCount} <span style="font-size:0.7rem;color:#64748b;">/ ${state.weeklyCountGoal} goal</span></div>
+                    <div style="display:flex;align-items:center;gap:4px;">${bar(pCount,'#4ade80')}<span style="font-size:0.65rem;color:#64748b;">${pCount}%</span></div>
+                </div>
+                <div>
+                    <div style="font-size:0.7rem;color:#94a3b8;margin-bottom:2px;">Pipeline Value</div>
+                    <div style="font-weight:700;font-size:1.1rem;color:${wValue>=state.weeklyValueGoal?'#4ade80':'#f8fafc'};">${fmt$(wValue)} <span style="font-size:0.7rem;color:#64748b;">/ ${fmt$(state.weeklyValueGoal)}</span></div>
+                    <div style="display:flex;align-items:center;gap:4px;">${bar(pValue,'#60a5fa')}<span style="font-size:0.65rem;color:#64748b;">${pValue}%</span></div>
+                </div>
+            </div>
+            <div style="background:rgba(255,255,255,0.03);border-radius:4px;padding:6px;font-size:0.7rem;color:#94a3b8;margin-bottom:8px;">
+                📅 This Month: <b style="color:#f1f5f9;">${mCount} bids</b> · ${fmt$(mValue)} pipeline
+            </div>
+            <div style="margin-bottom:8px;">
+                <div style="font-size:0.7rem;color:#94a3b8;margin-bottom:4px;font-weight:600;">Weekly Goals</div>
+                <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                    <label style="font-size:0.72rem;color:#cbd5e1;">Count:</label>
+                    <input id="bgCountGoal" type="number" min="1" value="${state.weeklyCountGoal}" style="width:55px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#f1f5f9;padding:3px 6px;font-size:0.75rem;">
+                    <label style="font-size:0.72rem;color:#cbd5e1;">Value $:</label>
+                    <input id="bgValueGoal" type="number" min="0" step="10000" value="${state.weeklyValueGoal}" style="width:90px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#f1f5f9;padding:3px 6px;font-size:0.75rem;">
+                    <button onclick="saveBidGoalSettings()" style="background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:0.72rem;">Save Goals</button>
+                </div>
+            </div>
+            <div style="margin-bottom:8px;">
+                <div style="font-size:0.7rem;color:#94a3b8;margin-bottom:4px;font-weight:600;">Log a Bid</div>
+                <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                    <input id="bgBidGC" type="text" placeholder="GC / Client" style="flex:1;min-width:90px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#f1f5f9;padding:4px 6px;font-size:0.75rem;">
+                    <input id="bgBidProject" type="text" placeholder="Project name" style="flex:1;min-width:90px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#f1f5f9;padding:4px 6px;font-size:0.75rem;">
+                    <input id="bgBidValue" type="number" min="0" placeholder="Bid $" style="width:90px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#f1f5f9;padding:4px 6px;font-size:0.75rem;">
+                    <input id="bgBidDate" type="date" value="${new Date().toISOString().slice(0,10)}" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#f1f5f9;padding:4px 6px;font-size:0.75rem;">
+                    <button onclick="logBidEntry()" style="background:rgba(34,197,94,0.2);border:1px solid rgba(34,197,94,0.4);color:#4ade80;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.75rem;">+ Log</button>
+                    <button onclick="prefillBidFromProject()" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;border-radius:4px;padding:4px 7px;cursor:pointer;font-size:0.72rem;" title="Pull from active project">↙ From Project</button>
+                </div>
+            </div>
+            ${state.bids.length?`<div style="max-height:180px;overflow-y:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.72rem;">
+                    <thead><tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+                        <th style="text-align:left;padding:3px 4px;color:#94a3b8;">Date</th>
+                        <th style="text-align:left;padding:3px 4px;color:#94a3b8;">GC</th>
+                        <th style="text-align:left;padding:3px 4px;color:#94a3b8;">Project</th>
+                        <th style="text-align:right;padding:3px 4px;color:#94a3b8;">Bid</th>
+                        <th style="padding:3px 4px;"></th>
+                    </tr></thead>
+                    <tbody>${state.bids.slice().reverse().map((b,ri)=>{
+                        const i = state.bids.length-1-ri;
+                        const isThisWeek = getWeekKey(b.date)===thisWeek;
+                        return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);background:${isThisWeek?'rgba(34,197,94,0.05)':'transparent'};">
+                            <td style="padding:3px 4px;color:${isThisWeek?'#4ade80':'#94a3b8'};">${b.date||''}</td>
+                            <td style="padding:3px 4px;color:#e2e8f0;">${b.gc||''}</td>
+                            <td style="padding:3px 4px;color:#cbd5e1;">${b.project||''}</td>
+                            <td style="padding:3px 4px;text-align:right;color:#60a5fa;">${fmt$(b.value)}</td>
+                            <td style="padding:3px 4px;"><button onclick="deleteBidEntry(${i})" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:0.7rem;">✕</button></td>
+                        </tr>`;
+                    }).join('')}</tbody>
+                </table>
+            </div>`:'<div style="font-size:0.72rem;color:#475569;text-align:center;padding:8px 0;">No bids logged yet. Log your first bid above.</div>'}
+            <div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;">
+                <button onclick="copyBidGoalReport()" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">📋 Copy Report</button>
+                <button onclick="printBidGoalReport()" style="background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.25);color:#7dd3fc;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">🖨️ Print</button>
+            </div>`;
+        }
+
+        window.saveBidGoalSettings = function(){
+            const s = getBidGoal();
+            s.weeklyCountGoal = parseInt(document.getElementById('bgCountGoal').value)||5;
+            s.weeklyValueGoal = parseFloat(document.getElementById('bgValueGoal').value)||250000;
+            saveBidGoal(s);
+            renderBidGoal();
+        };
+        window.logBidEntry = function(){
+            const gc = (document.getElementById('bgBidGC').value||'').trim();
+            const project = (document.getElementById('bgBidProject').value||'').trim();
+            const value = parseFloat(document.getElementById('bgBidValue').value)||0;
+            const date = document.getElementById('bgBidDate').value || new Date().toISOString().slice(0,10);
+            if(!gc && !project){ alert('Enter a GC or project name.'); return; }
+            const s = getBidGoal();
+            s.bids.push({ gc, project, value, date });
+            saveBidGoal(s);
+            document.getElementById('bgBidGC').value='';
+            document.getElementById('bgBidProject').value='';
+            document.getElementById('bgBidValue').value='';
+            renderBidGoal();
+        };
+        window.deleteBidEntry = function(i){
+            if(!confirm('Delete this bid entry?')) return;
+            const s = getBidGoal();
+            s.bids.splice(i,1);
+            saveBidGoal(s);
+            renderBidGoal();
+        };
+        window.prefillBidFromProject = function(){
+            const pname = document.getElementById('projectName')?.value || '';
+            const client = document.getElementById('clientName')?.value || '';
+            const tot = document.getElementById('totalBidResult')?.textContent?.replace(/[^0-9.]/g,'')||'';
+            if(pname) document.getElementById('bgBidProject').value = pname;
+            if(client) document.getElementById('bgBidGC').value = client;
+            if(tot) document.getElementById('bgBidValue').value = tot;
+        };
+        window.copyBidGoalReport = function(){
+            const s = getBidGoal();
+            const tw = getWeekKey(); const tm = getMonthKey();
+            const wb = s.bids.filter(b=>getWeekKey(b.date)===tw);
+            const mb = s.bids.filter(b=>getMonthKey(b.date)===tm);
+            let r = `ONCOR BID ACTIVITY REPORT\n${'='.repeat(40)}\n`;
+            r += `Generated: ${new Date().toLocaleDateString()}\n\n`;
+            r += `THIS WEEK (${tw})\n`;
+            r += `  Bids: ${wb.length} / ${s.weeklyCountGoal} goal\n`;
+            r += `  Value: ${fmt$(wb.reduce((a,b)=>a+(b.value||0),0))} / ${fmt$(s.weeklyValueGoal)} goal\n\n`;
+            r += `THIS MONTH (${tm})\n`;
+            r += `  Bids: ${mb.length}\n`;
+            r += `  Value: ${fmt$(mb.reduce((a,b)=>a+(b.value||0),0))}\n\n`;
+            r += `WEEKLY BID LOG\n${'-'.repeat(40)}\n`;
+            wb.forEach(b=>{ r+=`${b.date} | ${b.gc||'—'} | ${b.project||'—'} | ${fmt$(b.value)}\n`; });
+            if(!wb.length) r += '(none this week)\n';
+            navigator.clipboard.writeText(r).then(()=>alert('Copied!')).catch(()=>alert(r));
+        };
+        window.printBidGoalReport = function(){
+            const s = getBidGoal();
+            const tw = getWeekKey(); const tm = getMonthKey();
+            const wb = s.bids.filter(b=>getWeekKey(b.date)===tw);
+            const mb = s.bids.filter(b=>getMonthKey(b.date)===tm);
+            const co = typeof getCompanyInfo === 'function' ? getCompanyInfo() : {};
+            const rows = s.bids.slice().reverse().map(b=>`
+                <tr><td>${b.date||''}</td><td>${b.gc||''}</td><td>${b.project||''}</td><td style="text-align:right">${fmt$(b.value)}</td><td>${getWeekKey(b.date)}</td></tr>`).join('');
+            const html = `<!DOCTYPE html><html><head><title>Bid Activity Report</title><style>
+                body{font-family:Arial,sans-serif;font-size:11pt;margin:40px;}
+                h1{font-size:16pt;}h2{font-size:12pt;margin-top:20px;}
+                table{border-collapse:collapse;width:100%;margin-top:10px;}
+                th,td{border:1px solid #ccc;padding:5px 8px;font-size:10pt;}
+                th{background:#f0f0f0;font-weight:bold;}
+                .stat{display:inline-block;background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:8px 14px;margin:4px;min-width:140px;text-align:center;}
+                .stat-val{font-size:16pt;font-weight:bold;}
+                .stat-lbl{font-size:9pt;color:#555;}
+            </style></head><body>
+            <h1>Oncor Bid Activity Report</h1>
+            <p>${co.name||'Oncor'} · ${new Date().toLocaleDateString()}</p>
+            <h2>This Week (${tw})</h2>
+            <div>
+                <div class="stat"><div class="stat-val">${wb.length}</div><div class="stat-lbl">Bids Submitted</div><div class="stat-lbl">Goal: ${s.weeklyCountGoal}</div></div>
+                <div class="stat"><div class="stat-val">${fmt$(wb.reduce((a,b)=>a+(b.value||0),0))}</div><div class="stat-lbl">Pipeline Value</div><div class="stat-lbl">Goal: ${fmt$(s.weeklyValueGoal)}</div></div>
+            </div>
+            <h2>This Month (${tm})</h2>
+            <div>
+                <div class="stat"><div class="stat-val">${mb.length}</div><div class="stat-lbl">Bids Submitted</div></div>
+                <div class="stat"><div class="stat-val">${fmt$(mb.reduce((a,b)=>a+(b.value||0),0))}</div><div class="stat-lbl">Pipeline Value</div></div>
+            </div>
+            <h2>All Bids Log</h2>
+            <table><thead><tr><th>Date</th><th>GC / Client</th><th>Project</th><th>Bid Value</th><th>Week</th></tr></thead>
+            <tbody>${rows||'<tr><td colspan="5" style="text-align:center">No bids logged</td></tr>'}</tbody>
+            <tfoot><tr><th colspan="3">Total</th><th style="text-align:right">${fmt$(s.bids.reduce((a,b)=>a+(b.value||0),0))}</th><th></th></tr></tfoot>
+            </table>
+            </body></html>`;
+            const w = window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+        };
+        window.toggleBidGoalPanel = function(){
+            const p = document.getElementById('bidGoalPanel');
+            const b = document.getElementById('bidGoalBtn');
+            if(!p) return;
+            const show = p.style.display==='none';
+            p.style.display = show?'block':'none';
+            b.textContent = show?'🎯 Hide Bid Goal Tracker':'🎯 Show Bid Goal Tracker';
+            if(show) renderBidGoal();
+        };
+
+        /* ---- inject DOM ---- */
+        document.addEventListener('DOMContentLoaded', function(){
+            setTimeout(function(){
+                const anchor = document.getElementById('prepourBtn');
+                if(!anchor) return;
+                const wrapper = document.createElement('div');
+                wrapper.style.cssText = 'margin-top:6px;';
+                wrapper.innerHTML = `
+                <div id="bidGoalPanel" style="display:none;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px;">
+                        <span style="font-weight:700;color:#4ade80;">🎯 Weekly Bid Goal Tracker</span>
+                        <span style="font-size:0.7rem;color:#64748b;">Hold yourself accountable</span>
+                    </div>
+                    <div id="bidGoalPanel" style=""></div>
+                </div>
+                <button onclick="toggleBidGoalPanel()" id="bidGoalBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#4ade80;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;">🎯 Show Bid Goal Tracker</button>`;
+                anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+            }, 1500);
+        });
+    })();
+    </script>
+
+    <!-- ============================================================
+         CONCRETE ADMIXTURE CALCULATOR (💊)
+         Compute admixture dosage for a pour by yd³.
+         El Paso heat = retarders are critical.
+         Global usage (no project scope).
+    ============================================================ -->
+    <script>
+    (function(){
+        'use strict';
+
+        const ADMIXTURES = [
+            { id:'wr', name:'Water Reducer (ASTM C494 Type A)', unit:'oz/cwt', defaultDose:3.0, note:'Reduces w/c ratio ~10-15%. Standard for most mixes.' },
+            { id:'retarder', name:'Retarder (ASTM C494 Type B/D)', unit:'oz/cwt', defaultDose:2.0, note:'Extends set time. ⚠️ Essential in El Paso summers >90°F. Typ. 1-4 oz/cwt.' },
+            { id:'accel', name:'Accelerator (ASTM C494 Type C/E)', unit:'oz/cwt', defaultDose:16.0, note:'Speeds set. Use for cold weather pours (El Paso winter). Non-chloride preferred.' },
+            { id:'sp', name:'Superplasticizer (ASTM C494 Type F)', unit:'oz/cwt', defaultDose:6.0, note:'High-range water reducer. 4-8 oz/cwt. Needed for pump mixes (5"+ slump without w/c increase).' },
+            { id:'ae', name:'Air Entrainer (ASTM C260)', unit:'oz/cwt', defaultDose:0.5, note:'Freeze-thaw resistance. Typ. 0.25-2 oz/cwt. Less critical in El Paso but req\'d by some specs.' },
+            { id:'fsa', name:'Fly Ash (Class F) — % replacement', unit:'% of cement', defaultDose:20, note:'15-25% replacement reduces heat of hydration. Good for mass pours in El Paso heat.' },
+            { id:'sil', name:'Silica Fume', unit:'% of cement', defaultDose:7.5, note:'5-10% replacement. Increases strength + reduces permeability. Common in bridge decks/industrial.' },
+        ];
+        // Cement content assumptions by PSI (lbs/yd³)
+        const CEMENT_LBS = { 2500:470, 3000:517, 3500:564, 4000:611, 5000:705 };
+
+        function renderAdmix(){
+            const el = document.getElementById('admixPanel');
+            if(!el) return;
+            const yds = parseFloat(document.getElementById('admixYds').value)||0;
+            const psi = parseInt(document.getElementById('admixPsi').value)||4000;
+            const cementLbs = (CEMENT_LBS[psi]||611) * yds; // total cement in batch
+            const cwt = cementLbs / 100; // hundredweight
+
+            let rows = '';
+            let warnings = [];
+            ADMIXTURES.forEach(a=>{
+                const doseEl = document.getElementById('admix_dose_'+a.id);
+                const enEl = document.getElementById('admix_en_'+a.id);
+                const enabled = enEl ? enEl.checked : false;
+                const dose = doseEl ? parseFloat(doseEl.value)||a.defaultDose : a.defaultDose;
+                let qty='', cost='';
+                if(enabled && yds > 0){
+                    if(a.unit==='oz/cwt'){
+                        const totalOz = dose * cwt;
+                        const totalGal = totalOz / 128;
+                        qty = `${totalOz.toFixed(1)} oz (${totalGal.toFixed(2)} gal)`;
+                    } else { // % of cement
+                        const pctLbs = dose/100 * cementLbs;
+                        qty = `${pctLbs.toFixed(0)} lbs`;
+                    }
+                } else {
+                    qty = yds>0 ? '—' : 'Enter yd³';
+                }
+                const warn = (a.id==='retarder'&&enabled&&dose<1.5) ? '⚠️ Low dose for El Paso summer' : '';
+                if(warn) warnings.push(warn);
+                rows += `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);${enabled?'':'opacity:0.5'}">
+                    <td style="padding:4px;">
+                        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+                            <input type="checkbox" id="admix_en_${a.id}" ${enabled?'checked':''} onchange="renderAdmixPanel()" style="cursor:pointer;">
+                            <span style="font-size:0.75rem;color:#e2e8f0;">${a.name}</span>
+                        </label>
+                        <div style="font-size:0.65rem;color:#64748b;margin-left:20px;">${a.note}</div>
+                    </td>
+                    <td style="padding:4px;white-space:nowrap;">
+                        <input type="number" id="admix_dose_${a.id}" value="${dose}" step="0.25" min="0" onchange="renderAdmixPanel()" style="width:60px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:3px;color:#f1f5f9;padding:2px 4px;font-size:0.72rem;">
+                        <span style="font-size:0.65rem;color:#94a3b8;">${a.unit}</span>
+                    </td>
+                    <td style="padding:4px;font-size:0.75rem;color:${enabled?'#60a5fa':'#475569'};white-space:nowrap;">${qty} ${warn?`<br><span style="color:#fb923c;font-size:0.65rem;">${warn}</span>`:''}</td>
+                </tr>`;
+            });
+
+            const cementSummary = yds>0 ? `Cement: ~${(CEMENT_LBS[psi]||611)} lbs/yd³ × ${yds} yd³ = ${(cementLbs/100).toFixed(1)} cwt` : 'Enter yd³ to calculate';
+
+            el.innerHTML = `
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+                <label style="font-size:0.75rem;color:#94a3b8;">Volume:</label>
+                <input type="number" id="admixYds" value="${document.getElementById('admixYds')?.value||''}" min="0" step="0.5" placeholder="yd³" onchange="renderAdmixPanel()" style="width:70px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#f1f5f9;padding:4px 6px;font-size:0.75rem;">
+                <label style="font-size:0.75rem;color:#94a3b8;">Design PSI:</label>
+                <select id="admixPsi" onchange="renderAdmixPanel()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#f1f5f9;padding:4px 6px;font-size:0.75rem;">
+                    ${[2500,3000,3500,4000,5000].map(p=>`<option value="${p}" ${(document.getElementById('admixPsi')?.value==p||(!document.getElementById('admixPsi')&&p===4000))?'selected':''}>${p} PSI</option>`).join('')}
+                </select>
+                <button onclick="admixFromProject()" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;border-radius:4px;padding:4px 7px;cursor:pointer;font-size:0.72rem;">↙ From Project</button>
+            </div>
+            <div style="font-size:0.7rem;color:#64748b;margin-bottom:6px;">${cementSummary}</div>
+            <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.75rem;">
+                <thead><tr style="border-bottom:1px solid rgba(255,255,255,0.15);">
+                    <th style="text-align:left;padding:4px;color:#94a3b8;">Admixture</th>
+                    <th style="text-align:left;padding:4px;color:#94a3b8;">Dose</th>
+                    <th style="text-align:left;padding:4px;color:#94a3b8;">Qty for Pour</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table></div>
+            ${warnings.length?`<div style="margin-top:6px;font-size:0.72rem;color:#fb923c;">${warnings.join('<br>')}</div>`:''}
+            <div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;">
+                <button onclick="copyAdmixReport()" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">📋 Copy Report</button>
+                <button onclick="printAdmixReport()" style="background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.25);color:#7dd3fc;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">🖨️ Print Mix Ticket</button>
+            </div>
+            <div style="font-size:0.65rem;color:#475569;margin-top:5px;">ASTM C494/C260 dosage rates. Always confirm with your ready-mix plant and project mix design. Dosages are per 100 lbs cement (cwt).</div>`;
+        }
+
+        window.renderAdmixPanel = function(){ renderAdmix(); };
+        window.admixFromProject = function(){
+            // pull yd³ from main takeoff totals
+            const ydsEl = document.getElementById('totalYardsValue') || document.getElementById('totalCubicYards');
+            if(ydsEl){
+                const v = parseFloat(ydsEl.textContent?.replace(/[^0-9.]/g,'')||0);
+                if(v>0){ document.getElementById('admixYds').value=v.toFixed(1); }
+            }
+            renderAdmix();
+        };
+        window.copyAdmixReport = function(){
+            const yds = parseFloat(document.getElementById('admixYds')?.value)||0;
+            const psi = document.getElementById('admixPsi')?.value||4000;
+            const cementLbs = (CEMENT_LBS[parseInt(psi)]||611)*yds;
+            const cwt = cementLbs/100;
+            let r = `ADMIXTURE DOSAGE REPORT\n${'='.repeat(40)}\n`;
+            r += `Volume: ${yds} yd³ | Design: ${psi} PSI | Date: ${new Date().toLocaleDateString()}\n`;
+            r += `Cement Content: ~${(CEMENT_LBS[parseInt(psi)]||611)} lbs/yd³ = ${cwt.toFixed(1)} cwt total\n\n`;
+            ADMIXTURES.forEach(a=>{
+                const en = document.getElementById('admix_en_'+a.id)?.checked;
+                if(!en) return;
+                const dose = parseFloat(document.getElementById('admix_dose_'+a.id)?.value)||a.defaultDose;
+                let qty='';
+                if(a.unit==='oz/cwt'){ const oz=dose*cwt; qty=`${oz.toFixed(1)} oz (${(oz/128).toFixed(2)} gal)`; }
+                else { qty=`${(dose/100*cementLbs).toFixed(0)} lbs`; }
+                r += `${a.name}: ${dose} ${a.unit} → ${qty}\n`;
+            });
+            navigator.clipboard.writeText(r).then(()=>alert('Copied!')).catch(()=>alert(r));
+        };
+        window.printAdmixReport = function(){
+            const yds = parseFloat(document.getElementById('admixYds')?.value)||0;
+            const psi = document.getElementById('admixPsi')?.value||4000;
+            const cementLbs = (CEMENT_LBS[parseInt(psi)]||611)*yds;
+            const cwt = cementLbs/100;
+            const co = typeof getCompanyInfo==='function'?getCompanyInfo():{};
+            let rows='';
+            ADMIXTURES.forEach(a=>{
+                const en = document.getElementById('admix_en_'+a.id)?.checked;
+                const dose = parseFloat(document.getElementById('admix_dose_'+a.id)?.value)||a.defaultDose;
+                let qty='—'; if(en&&yds>0){ if(a.unit==='oz/cwt'){const oz=dose*cwt;qty=`${oz.toFixed(1)} oz / ${(oz/128).toFixed(2)} gal`;}else{qty=`${(dose/100*cementLbs).toFixed(0)} lbs`;} }
+                rows+=`<tr><td>${a.name}</td><td>${dose} ${a.unit}</td><td>${en?qty:'Not used'}</td></tr>`;
+            });
+            const html=`<!DOCTYPE html><html><head><title>Admixture Dosage Sheet</title><style>body{font-family:Arial,sans-serif;font-size:11pt;margin:40px;}h1{font-size:15pt;}table{width:100%;border-collapse:collapse;margin-top:10px;}th,td{border:1px solid #ccc;padding:6px 8px;}th{background:#f0f0f0;}tfoot td{font-weight:bold;}</style></head><body>
+            <h1>Concrete Admixture Dosage Sheet</h1>
+            <p>${co.name||'Oncor'} · Project: ${document.getElementById('projectName')?.value||'—'} · ${new Date().toLocaleDateString()}</p>
+            <p><b>Pour Volume:</b> ${yds} yd³ &nbsp;|&nbsp; <b>Design:</b> ${psi} PSI &nbsp;|&nbsp; <b>Cement:</b> ~${(CEMENT_LBS[parseInt(psi)]||611)} lbs/yd³ · ${cwt.toFixed(1)} cwt total</p>
+            <table><thead><tr><th>Admixture</th><th>Dose Rate</th><th>Quantity for Pour</th></tr></thead>
+            <tbody>${rows}</tbody></table>
+            <p style="font-size:9pt;color:#666;margin-top:20px;">Dosage rates per ASTM C494 / ASTM C260. Confirm all dosages with your ready-mix plant and approved mix design prior to batching.</p>
+            <table style="margin-top:20px;"><tr><th style="width:33%">Prepared by</th><th style="width:33%">Reviewed by</th><th>Date</th></tr><tr><td style="height:40px;"></td><td></td><td></td></tr></table>
+            </body></html>`;
+            const w=window.open('','_blank');if(w){w.document.write(html);w.document.close();}
+        };
+        window.toggleAdmixPanel = function(){
+            const p=document.getElementById('admixPanelWrap');
+            const b=document.getElementById('admixBtn');
+            if(!p) return;
+            const show=p.style.display==='none';
+            p.style.display=show?'block':'none';
+            b.textContent=show?'💊 Hide Admixture Calculator':'💊 Show Admixture Calculator';
+            if(show) renderAdmix();
+        };
+
+        document.addEventListener('DOMContentLoaded', function(){
+            setTimeout(function(){
+                const anchor = document.getElementById('bidGoalBtn');
+                if(!anchor) return;
+                const wrapper = document.createElement('div');
+                wrapper.style.cssText='margin-top:6px;';
+                wrapper.innerHTML=`
+                <div id="admixPanelWrap" style="display:none;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px;">
+                        <span style="font-weight:700;color:#a78bfa;">💊 Admixture Dosage Calculator</span>
+                        <span style="font-size:0.7rem;color:#64748b;">ASTM C494 / C260</span>
+                    </div>
+                    <div id="admixPanel"></div>
+                </div>
+                <button onclick="toggleAdmixPanel()" id="admixBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#a78bfa;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;">💊 Show Admixture Calculator</button>`;
+                anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+            }, 1700);
+        });
+    })();
+    </script>
+
+    <!-- ============================================================
+         JOB PROFITABILITY CALCULATOR (💹)
+         Actual revenue vs actual costs → net margin.
+         Compare to bid. Project-scoped localStorage.
+    ============================================================ -->
+    <script>
+    (function(){
+        'use strict';
+
+        function getProfitKey(){ return 'oncor_profit_'+(window._currentProjectId||'default'); }
+        function loadProfit(){ try{ return JSON.parse(localStorage.getItem(getProfitKey())||'null'); }catch(e){ return null; } }
+        function saveProfit(d){ localStorage.setItem(getProfitKey(), JSON.stringify(d)); }
+        function defaultProfit(){
+            return {
+                revenue:0,
+                costs:{ concrete:0, rebar:0, forms:0, labor:0, pump:0, subs:0, equipment:0, overhead:0, misc:0 },
+                notes:''
+            };
+        }
+        function getProfit(){ return loadProfit()||defaultProfit(); }
+        function fmt$(n){ return '$'+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0}); }
+
+        const COST_CATS = [
+            {id:'concrete',label:'Concrete (ready-mix)'},
+            {id:'rebar',label:'Rebar / Reinforcement'},
+            {id:'forms',label:'Formwork'},
+            {id:'labor',label:'Labor (all in)'},
+            {id:'pump',label:'Pump / Equipment rental'},
+            {id:'subs',label:'Subs (saw, post-tension, etc.)'},
+            {id:'equipment',label:'Equipment (company-owned)'},
+            {id:'overhead',label:'Overhead allocation'},
+            {id:'misc',label:'Misc / Contingency spent'},
+        ];
+
+        function renderProfit(){
+            const el=document.getElementById('profitPanel');
+            if(!el) return;
+            const s=getProfit();
+            const totalCost=Object.values(s.costs).reduce((a,b)=>a+(b||0),0);
+            const grossProfit=s.revenue-totalCost;
+            const margin=s.revenue>0?grossProfit/s.revenue*100:0;
+            const marginColor=margin>=15?'#4ade80':margin>=8?'#facc15':margin>=0?'#fb923c':'#ef4444';
+            // Try to get bid total from main UI
+            const bidEl=document.getElementById('totalBidResult');
+            const bidTotal=bidEl?parseFloat(bidEl.textContent?.replace(/[^0-9.]/g,''))||0:0;
+            const bidVariance=bidTotal>0?grossProfit-(bidTotal*0.1):null; // rough: bid should have ~10% built in
+
+            let costRows='';
+            COST_CATS.forEach(cat=>{
+                costRows+=`<tr>
+                    <td style="padding:3px 6px;font-size:0.75rem;color:#cbd5e1;">${cat.label}</td>
+                    <td style="padding:3px 4px;"><input type="number" id="pc_${cat.id}" value="${s.costs[cat.id]||0}" min="0" step="100" onchange="saveAndRenderProfit()" style="width:90px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:3px;color:#f1f5f9;padding:2px 5px;font-size:0.75rem;"></td>
+                    <td style="padding:3px 6px;font-size:0.75rem;color:#94a3b8;text-align:right;">${fmt$(s.costs[cat.id]||0)}</td>
+                </tr>`;
+            });
+
+            el.innerHTML=`
+            <div style="margin-bottom:8px;">
+                <label style="font-size:0.75rem;color:#94a3b8;">Actual Revenue Collected ($):</label>
+                <div style="display:flex;gap:5px;align-items:center;margin-top:3px;">
+                    <input type="number" id="pc_revenue" value="${s.revenue||0}" min="0" step="1000" onchange="saveAndRenderProfit()" style="width:120px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#f1f5f9;padding:5px 8px;font-size:0.85rem;font-weight:700;">
+                    ${bidTotal>0?`<span style="font-size:0.7rem;color:#64748b;">Bid was ${fmt$(bidTotal)}</span>`:''}
+                    <button onclick="syncRevenueFromBid()" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;border-radius:4px;padding:3px 7px;cursor:pointer;font-size:0.7rem;">↙ Use Bid</button>
+                </div>
+            </div>
+            <div style="margin-bottom:6px;">
+                <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:3px;font-weight:600;">Actual Costs by Category:</div>
+                <table style="width:100%;border-collapse:collapse;">${costRows}</table>
+            </div>
+            <div style="background:rgba(0,0,0,0.3);border-radius:5px;padding:8px;margin-top:4px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center;">
+                    <div><div style="font-size:0.65rem;color:#94a3b8;">Revenue</div><div style="font-weight:700;font-size:1rem;color:#60a5fa;">${fmt$(s.revenue)}</div></div>
+                    <div><div style="font-size:0.65rem;color:#94a3b8;">Total Cost</div><div style="font-weight:700;font-size:1rem;color:#f87171;">${fmt$(totalCost)}</div></div>
+                    <div><div style="font-size:0.65rem;color:#94a3b8;">Net Profit</div><div style="font-weight:700;font-size:1rem;color:${grossProfit>=0?'#4ade80':'#ef4444'};">${fmt$(grossProfit)}</div></div>
+                </div>
+                <div style="text-align:center;margin-top:6px;">
+                    <span style="font-size:1.2rem;font-weight:700;color:${marginColor};">${margin.toFixed(1)}% Margin</span>
+                    ${margin<8?'<div style="font-size:0.7rem;color:#fb923c;margin-top:2px;">⚠️ Below target (aim for 10-15%+ on concrete work)</div>':''}
+                    ${margin>=15?'<div style="font-size:0.7rem;color:#4ade80;margin-top:2px;">✅ Strong margin</div>':''}
+                </div>
+                ${bidTotal>0?`<div style="text-align:center;margin-top:4px;font-size:0.7rem;color:#64748b;">Bid total: ${fmt$(bidTotal)} · ${s.revenue>0?((s.revenue/bidTotal-1)*100).toFixed(1)+'% vs bid':'enter revenue'}</div>`:''}
+            </div>
+            <div style="margin-top:6px;">
+                <textarea id="profitNotes" onchange="saveAndRenderProfit()" placeholder="Notes (e.g. what drove over/under on cost categories)" style="width:100%;min-height:48px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#cbd5e1;padding:5px;font-size:0.72rem;box-sizing:border-box;">${s.notes||''}</textarea>
+            </div>
+            <div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;">
+                <button onclick="copyProfitReport()" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">📋 Copy Report</button>
+                <button onclick="printProfitReport()" style="background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.25);color:#7dd3fc;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">🖨️ Print</button>
+                <button onclick="resetProfit()" style="background:rgba(255,0,0,0.08);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">↺ Reset</button>
+            </div>
+            <div style="font-size:0.65rem;color:#475569;margin-top:4px;">Per-project. Enter final numbers after closeout to build bidding intelligence.</div>`;
+        }
+
+        window.saveAndRenderProfit = function(){
+            const s=getProfit();
+            s.revenue=parseFloat(document.getElementById('pc_revenue')?.value)||0;
+            COST_CATS.forEach(cat=>{ s.costs[cat.id]=parseFloat(document.getElementById('pc_'+cat.id)?.value)||0; });
+            s.notes=document.getElementById('profitNotes')?.value||'';
+            saveProfit(s);
+            renderProfit();
+        };
+        window.syncRevenueFromBid = function(){
+            const bidEl=document.getElementById('totalBidResult');
+            const v=bidEl?parseFloat(bidEl.textContent?.replace(/[^0-9.]/g,''))||0:0;
+            if(v>0){ const s=getProfit(); s.revenue=v; saveProfit(s); renderProfit(); }
+        };
+        window.resetProfit = function(){
+            if(!confirm('Reset all profitability data for this project?')) return;
+            saveProfit(defaultProfit()); renderProfit();
+        };
+        window.copyProfitReport = function(){
+            const s=getProfit();
+            const totalCost=Object.values(s.costs).reduce((a,b)=>a+(b||0),0);
+            const gp=s.revenue-totalCost;
+            const m=s.revenue>0?gp/s.revenue*100:0;
+            let r=`JOB PROFITABILITY REPORT\n${'='.repeat(40)}\n`;
+            r+=`Project: ${document.getElementById('projectName')?.value||'—'}\n`;
+            r+=`Date: ${new Date().toLocaleDateString()}\n\n`;
+            r+=`Revenue: ${fmt$(s.revenue)}\n\nCosts:\n`;
+            COST_CATS.forEach(c=>{ if(s.costs[c.id]) r+=`  ${c.label}: ${fmt$(s.costs[c.id])}\n`; });
+            r+=`  TOTAL COST: ${fmt$(totalCost)}\n\n`;
+            r+=`Gross Profit: ${fmt$(gp)}\nNet Margin: ${m.toFixed(1)}%\n`;
+            if(s.notes) r+=`\nNotes:\n${s.notes}\n`;
+            navigator.clipboard.writeText(r).then(()=>alert('Copied!')).catch(()=>alert(r));
+        };
+        window.printProfitReport = function(){
+            const s=getProfit();
+            const totalCost=Object.values(s.costs).reduce((a,b)=>a+(b||0),0);
+            const gp=s.revenue-totalCost;
+            const m=s.revenue>0?gp/s.revenue*100:0;
+            const co=typeof getCompanyInfo==='function'?getCompanyInfo():{};
+            let costRows='';
+            COST_CATS.forEach(c=>{costRows+=`<tr><td>${c.label}</td><td style="text-align:right">${fmt$(s.costs[c.id]||0)}</td></tr>`;});
+            const html=`<!DOCTYPE html><html><head><title>Job Profitability Report</title><style>body{font-family:Arial,sans-serif;font-size:11pt;margin:40px;}h1{font-size:15pt;}table{width:100%;border-collapse:collapse;margin:10px 0;}th,td{border:1px solid #ccc;padding:5px 8px;}th{background:#f0f0f0;}.total{font-weight:bold;}.profit{background:#d1fae5;}.margin{font-size:16pt;font-weight:bold;color:${m>=10?'green':m>=0?'orange':'red'};}</style></head><body>
+            <h1>Job Profitability Report</h1>
+            <p>${co.name||'Oncor'} · Project: ${document.getElementById('projectName')?.value||'—'} · ${new Date().toLocaleDateString()}</p>
+            <table>
+                <tr><th>Description</th><th style="text-align:right">Amount</th></tr>
+                <tr class="profit"><td><b>Revenue (actual collected)</b></td><td style="text-align:right"><b>${fmt$(s.revenue)}</b></td></tr>
+                ${costRows}
+                <tr class="total"><td>TOTAL COSTS</td><td style="text-align:right">${fmt$(totalCost)}</td></tr>
+                <tr class="profit"><td><b>GROSS PROFIT</b></td><td style="text-align:right"><b>${fmt$(gp)}</b></td></tr>
+            </table>
+            <p class="margin">Net Margin: ${m.toFixed(1)}%</p>
+            ${s.notes?`<p><b>Notes:</b> ${s.notes}</p>`:''}
+            <table style="margin-top:30px;"><tr><th style="width:40%">PM Sign-Off</th><th>Owner Review</th><th>Date</th></tr><tr><td style="height:40px;"></td><td></td><td></td></tr></table>
+            </body></html>`;
+            const w=window.open('','_blank');if(w){w.document.write(html);w.document.close();}
+        };
+        window.toggleProfitPanel = function(){
+            const p=document.getElementById('profitPanelWrap');
+            const b=document.getElementById('profitBtn');
+            if(!p) return;
+            const show=p.style.display==='none';
+            p.style.display=show?'block':'none';
+            b.textContent=show?'💹 Hide Profitability Calc':'💹 Show Profitability Calc';
+            if(show) renderProfit();
+        };
+
+        document.addEventListener('DOMContentLoaded',function(){
+            setTimeout(function(){
+                const anchor=document.getElementById('admixBtn');
+                if(!anchor) return;
+                const wrapper=document.createElement('div');
+                wrapper.style.cssText='margin-top:6px;';
+                wrapper.innerHTML=`
+                <div id="profitPanelWrap" style="display:none;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px;">
+                        <span style="font-weight:700;color:#4ade80;">💹 Job Profitability Calculator</span>
+                        <span style="font-size:0.7rem;color:#64748b;">Actual revenue vs. actual cost</span>
+                    </div>
+                    <div id="profitPanel"></div>
+                </div>
+                <button onclick="toggleProfitPanel()" id="profitBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#4ade80;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;">💹 Show Profitability Calc</button>`;
+                anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+            }, 1900);
+        });
+    })();
+    </script>
+
 </body>
 </html>
