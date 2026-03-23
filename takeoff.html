@@ -23989,6 +23989,855 @@ ${f.co}${f.phone ? '\n' + f.phone : ''}${f.email ? '\n' + f.email : ''}`;
         });
     })();
 
+    // =========================================================
+    // FEATURE: LABOR BURDEN CALCULATOR (💼)
+    // True loaded labor cost from base wage: FICA, FUTA/SUTA,
+    // workers comp, GL allocation, health insurance, tools/PPE.
+    // Most small contractors underestimate burden by 30-40%.
+    // =========================================================
+    (function(){
+        const anchor = document.querySelector('.script-anchor') || document.body;
+
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'margin-bottom:8px;';
+
+        const inner = document.createElement('div');
+        inner.id = 'lbWrap';
+        inner.style.display = 'none';
+        inner.style.cssText = 'display:none;background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.2);border-radius:8px;padding:12px;margin-bottom:6px;';
+
+        inner.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span style="font-weight:700;color:#fbbf24;">💼 Labor Burden Calculator</span>
+                <span style="font-size:0.68rem;color:#64748b;">True loaded cost per hour</span>
+            </div>
+
+            <!-- Base wage -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+                <div>
+                    <div style="font-size:0.7rem;color:#94a3b8;margin-bottom:2px;">Base Wage ($/hr)</div>
+                    <input id="lb_base" type="number" value="22" min="10" step="0.50"
+                        oninput="calcLaborBurden()"
+                        style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);color:#f1f5f9;border-radius:4px;padding:4px 6px;font-size:0.82rem;">
+                </div>
+                <div>
+                    <div style="font-size:0.7rem;color:#94a3b8;margin-bottom:2px;">Role / Classification</div>
+                    <select id="lb_role" onchange="applyLbPreset()" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.12);color:#f1f5f9;border-radius:4px;padding:4px 6px;font-size:0.78rem;">
+                        <option value="">Custom</option>
+                        <option value="18">Laborer ($18/hr)</option>
+                        <option value="20">Rebar Hand ($20/hr)</option>
+                        <option value="22">Finisher ($22/hr)</option>
+                        <option value="25">Form Carpenter ($25/hr)</option>
+                        <option value="30">Lead Finisher ($30/hr)</option>
+                        <option value="32">Pump Operator ($32/hr)</option>
+                        <option value="35">Foreman ($35/hr)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Burden inputs -->
+            <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:5px;font-weight:600;">Burden Components</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+                <div>
+                    <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">FICA (employer, %)</div>
+                    <input id="lb_fica" type="number" value="7.65" step="0.01" oninput="calcLaborBurden()"
+                        style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#f1f5f9;border-radius:4px;padding:3px 6px;font-size:0.78rem;">
+                </div>
+                <div>
+                    <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">FUTA+SUTA (%, ~3.5%)</div>
+                    <input id="lb_futa" type="number" value="3.5" step="0.1" oninput="calcLaborBurden()"
+                        style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#f1f5f9;border-radius:4px;padding:3px 6px;font-size:0.78rem;">
+                </div>
+                <div>
+                    <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Workers Comp (%, ~10%)</div>
+                    <input id="lb_wc" type="number" value="10" step="0.5" oninput="calcLaborBurden()"
+                        style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#f1f5f9;border-radius:4px;padding:3px 6px;font-size:0.78rem;">
+                </div>
+                <div>
+                    <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">GL Alloc (%, ~3%)</div>
+                    <input id="lb_gl" type="number" value="3" step="0.25" oninput="calcLaborBurden()"
+                        style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#f1f5f9;border-radius:4px;padding:3px 6px;font-size:0.78rem;">
+                </div>
+                <div>
+                    <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Health Ins ($/hr, ~$3)</div>
+                    <input id="lb_health" type="number" value="3.00" step="0.25" oninput="calcLaborBurden()"
+                        style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#f1f5f9;border-radius:4px;padding:3px 6px;font-size:0.78rem;">
+                </div>
+                <div>
+                    <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Tools/PPE ($/hr, ~$1)</div>
+                    <input id="lb_tools" type="number" value="1.00" step="0.25" oninput="calcLaborBurden()"
+                        style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#f1f5f9;border-radius:4px;padding:3px 6px;font-size:0.78rem;">
+                </div>
+            </div>
+
+            <!-- Results -->
+            <div id="lb_result" style="background:rgba(0,0,0,0.3);border-radius:6px;padding:10px;margin-bottom:8px;"></div>
+
+            <!-- What-if: hours in a project -->
+            <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:5px;font-weight:600;">Project Cost What-If</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+                <div>
+                    <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Workers on job</div>
+                    <input id="lb_workers" type="number" value="4" min="1" oninput="calcLaborBurden()"
+                        style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#f1f5f9;border-radius:4px;padding:3px 6px;font-size:0.78rem;">
+                </div>
+                <div>
+                    <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Hours per worker</div>
+                    <input id="lb_hours" type="number" value="10" min="1" oninput="calcLaborBurden()"
+                        style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#f1f5f9;border-radius:4px;padding:3px 6px;font-size:0.78rem;">
+                </div>
+            </div>
+            <div id="lb_project" style="background:rgba(0,0,0,0.2);border-radius:5px;padding:8px;margin-bottom:8px;font-size:0.8rem;color:#e2e8f0;"></div>
+
+            <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <button onclick="copyLaborBurden()" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">📋 Copy</button>
+                <button onclick="printLaborBurden()" style="flex:1;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.2);color:#fbbf24;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">🖨️ Print</button>
+            </div>
+            <div style="font-size:0.68rem;color:#475569;margin-top:6px;">TX WC code 5027 (concrete work) typically runs 8–14% EMR-adjusted. SUTA varies by experience rating. GL allocation assumes ~3% premium. Health benefit varies by plan — $3/hr assumes basic plan or ACA subsidy. True loaded cost is commonly 35–50% above base wage.</div>
+        `;
+
+        wrapper.appendChild(inner);
+
+        const btn = document.createElement('button');
+        btn.id = 'lbBtn';
+        btn.textContent = '💼 Show Labor Burden Calculator';
+        btn.style.cssText = 'width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fbbf24;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;';
+        btn.onclick = function(){
+            const w = document.getElementById('lbWrap');
+            const show = w.style.display === 'none';
+            w.style.display = show ? 'block' : 'none';
+            btn.textContent = show ? '💼 Hide Labor Burden Calculator' : '💼 Show Labor Burden Calculator';
+            if(show) calcLaborBurden();
+        };
+        wrapper.appendChild(btn);
+
+        anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+
+        window.applyLbPreset = function(){
+            const v = document.getElementById('lb_role').value;
+            if(v) { document.getElementById('lb_base').value = v; calcLaborBurden(); }
+        };
+
+        window.calcLaborBurden = function(){
+            const base = parseFloat(document.getElementById('lb_base')?.value)||0;
+            const fica = parseFloat(document.getElementById('lb_fica')?.value)||0;
+            const futa = parseFloat(document.getElementById('lb_futa')?.value)||0;
+            const wc   = parseFloat(document.getElementById('lb_wc')?.value)||0;
+            const gl   = parseFloat(document.getElementById('lb_gl')?.value)||0;
+            const health = parseFloat(document.getElementById('lb_health')?.value)||0;
+            const tools  = parseFloat(document.getElementById('lb_tools')?.value)||0;
+
+            const ficaAmt   = base * fica/100;
+            const futaAmt   = base * futa/100;
+            const wcAmt     = base * wc/100;
+            const glAmt     = base * gl/100;
+            const totalPct  = fica+futa+wc+gl;
+            const totalAdd  = ficaAmt + futaAmt + wcAmt + glAmt + health + tools;
+            const loaded    = base + totalAdd;
+            const burden    = totalAdd / base * 100;
+
+            const res = document.getElementById('lb_result');
+            if(!res) return;
+            const fmt = (n)=>'$'+n.toFixed(2);
+            const pctColor = burden > 45 ? '#f87171' : burden > 35 ? '#fb923c' : '#4ade80';
+            res.innerHTML = `
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:0.78rem;">
+                    <div style="color:#94a3b8;">Base wage</div><div style="color:#f1f5f9;text-align:right;">${fmt(base)}/hr</div>
+                    <div style="color:#94a3b8;">FICA (${fica}%)</div><div style="color:#fbbf24;text-align:right;">+ ${fmt(ficaAmt)}/hr</div>
+                    <div style="color:#94a3b8;">FUTA/SUTA (${futa}%)</div><div style="color:#fbbf24;text-align:right;">+ ${fmt(futaAmt)}/hr</div>
+                    <div style="color:#94a3b8;">Workers Comp (${wc}%)</div><div style="color:#fbbf24;text-align:right;">+ ${fmt(wcAmt)}/hr</div>
+                    <div style="color:#94a3b8;">GL Alloc (${gl}%)</div><div style="color:#fbbf24;text-align:right;">+ ${fmt(glAmt)}/hr</div>
+                    <div style="color:#94a3b8;">Health Ins</div><div style="color:#fbbf24;text-align:right;">+ ${fmt(health)}/hr</div>
+                    <div style="color:#94a3b8;">Tools/PPE</div><div style="color:#fbbf24;text-align:right;">+ ${fmt(tools)}/hr</div>
+                </div>
+                <div style="border-top:1px solid rgba(255,255,255,0.1);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-weight:700;color:#f1f5f9;font-size:0.92rem;">Loaded Cost: ${fmt(loaded)}/hr</span>
+                    <span style="font-weight:700;color:${pctColor};font-size:0.88rem;">+${burden.toFixed(1)}% burden</span>
+                </div>
+                <div style="font-size:0.72rem;color:#64748b;margin-top:4px;">Annual cost (2000 hrs): ${fmt(loaded*2000)} | Daily (10 hrs): ${fmt(loaded*10)}</div>
+            `;
+
+            // what-if
+            const workers = parseInt(document.getElementById('lb_workers')?.value)||1;
+            const hours   = parseFloat(document.getElementById('lb_hours')?.value)||0;
+            const baseTotal   = base * workers * hours;
+            const loadedTotal = loaded * workers * hours;
+            const diff = loadedTotal - baseTotal;
+            const proj = document.getElementById('lb_project');
+            if(proj) proj.innerHTML = `
+                <div style="font-size:0.78rem;font-weight:600;color:#fbbf24;margin-bottom:4px;">${workers} workers × ${hours} hrs each</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:0.78rem;">
+                    <div style="text-align:center;background:rgba(0,0,0,0.2);border-radius:4px;padding:6px;">
+                        <div style="color:#94a3b8;font-size:0.68rem;">Base wage total</div>
+                        <div style="color:#f1f5f9;font-weight:600;">$${baseTotal.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
+                    </div>
+                    <div style="text-align:center;background:rgba(0,0,0,0.2);border-radius:4px;padding:6px;">
+                        <div style="color:#94a3b8;font-size:0.68rem;">Loaded total</div>
+                        <div style="color:#fbbf24;font-weight:600;">$${loadedTotal.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
+                    </div>
+                    <div style="text-align:center;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:4px;padding:6px;">
+                        <div style="color:#f87171;font-size:0.68rem;">Under-bid risk</div>
+                        <div style="color:#f87171;font-weight:600;">$${diff.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
+                    </div>
+                </div>
+                <div style="font-size:0.7rem;color:#64748b;margin-top:5px;">If you bid using base wage only, you leave $${diff.toLocaleString('en-US',{maximumFractionDigits:0})} of burden costs unrecovered on this crew configuration.</div>
+            `;
+        };
+
+        window.copyLaborBurden = function(){
+            const base   = parseFloat(document.getElementById('lb_base')?.value)||0;
+            const fica   = parseFloat(document.getElementById('lb_fica')?.value)||0;
+            const futa   = parseFloat(document.getElementById('lb_futa')?.value)||0;
+            const wc     = parseFloat(document.getElementById('lb_wc')?.value)||0;
+            const gl     = parseFloat(document.getElementById('lb_gl')?.value)||0;
+            const health = parseFloat(document.getElementById('lb_health')?.value)||0;
+            const tools  = parseFloat(document.getElementById('lb_tools')?.value)||0;
+            const total  = base*(1+(fica+futa+wc+gl)/100)+health+tools;
+            const burden = (total-base)/base*100;
+            const workers= parseInt(document.getElementById('lb_workers')?.value)||1;
+            const hours  = parseFloat(document.getElementById('lb_hours')?.value)||0;
+            let txt = `LABOR BURDEN ANALYSIS\n${'='.repeat(40)}\nBase Wage: $${base.toFixed(2)}/hr\nFICA: ${fica}% = $${(base*fica/100).toFixed(2)}/hr\nFUTA/SUTA: ${futa}% = $${(base*futa/100).toFixed(2)}/hr\nWorkers Comp: ${wc}% = $${(base*wc/100).toFixed(2)}/hr\nGL Alloc: ${gl}% = $${(base*gl/100).toFixed(2)}/hr\nHealth Ins: $${health.toFixed(2)}/hr\nTools/PPE: $${tools.toFixed(2)}/hr\n\nLoaded Cost: $${total.toFixed(2)}/hr (+${burden.toFixed(1)}% burden)\n\nProject: ${workers} workers × ${hours} hrs\n  Base total: $${(base*workers*hours).toLocaleString()}\n  Loaded total: $${(total*workers*hours).toLocaleString()}\n  Unrecovered if bid at base: $${((total-base)*workers*hours).toLocaleString()}`;
+            navigator.clipboard?.writeText(txt).then(()=>{ const b=event.target; b.textContent='✅ Copied!'; setTimeout(()=>b.textContent='📋 Copy',1500); });
+        };
+
+        window.printLaborBurden = function(){
+            const base   = parseFloat(document.getElementById('lb_base')?.value)||0;
+            const fica   = parseFloat(document.getElementById('lb_fica')?.value)||0;
+            const futa   = parseFloat(document.getElementById('lb_futa')?.value)||0;
+            const wc     = parseFloat(document.getElementById('lb_wc')?.value)||0;
+            const gl     = parseFloat(document.getElementById('lb_gl')?.value)||0;
+            const health = parseFloat(document.getElementById('lb_health')?.value)||0;
+            const tools  = parseFloat(document.getElementById('lb_tools')?.value)||0;
+            const loaded = base*(1+(fica+futa+wc+gl)/100)+health+tools;
+            const burden = (loaded-base)/base*100;
+            const workers= parseInt(document.getElementById('lb_workers')?.value)||1;
+            const hours  = parseFloat(document.getElementById('lb_hours')?.value)||0;
+            const co     = document.getElementById('companyName')?.value||'Oncor Concrete';
+            const today  = new Date().toLocaleDateString();
+            const w=window.open('','_blank');
+            w.document.write(`<!DOCTYPE html><html><head><title>Labor Burden Analysis</title><style>
+                body{font-family:Arial,sans-serif;font-size:10pt;margin:24px;color:#1e293b;}
+                h2{font-size:13pt;margin:0 0 2px;} table{border-collapse:collapse;width:100%;margin:10px 0;}
+                td,th{border:1px solid #ccc;padding:5px 8px;font-size:9pt;}
+                thead tr{background:#1e293b;color:#fff;}
+                .highlight{background:#fef9c3;font-weight:bold;}
+                .sig{margin-top:24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;}
+                .sig div{border-top:1px solid #333;padding-top:4px;font-size:8pt;color:#555;}
+            </style></head><body>
+            <h2>${co} — Labor Burden Analysis</h2>
+            <div style="font-size:9pt;color:#555;margin-bottom:10px;">Prepared: ${today}</div>
+            <table>
+                <thead><tr><th>Component</th><th>Rate</th><th>$/hr Added</th></tr></thead>
+                <tbody>
+                    <tr><td>Base Wage</td><td>—</td><td>$${base.toFixed(2)}</td></tr>
+                    <tr><td>FICA (Employer SS+Medicare)</td><td>${fica}%</td><td>$${(base*fica/100).toFixed(2)}</td></tr>
+                    <tr><td>FUTA + SUTA (Unemployment)</td><td>${futa}%</td><td>$${(base*futa/100).toFixed(2)}</td></tr>
+                    <tr><td>Workers Compensation (TX code 5027)</td><td>${wc}%</td><td>$${(base*wc/100).toFixed(2)}</td></tr>
+                    <tr><td>General Liability (allocation)</td><td>${gl}%</td><td>$${(base*gl/100).toFixed(2)}</td></tr>
+                    <tr><td>Health Insurance</td><td>Fixed</td><td>$${health.toFixed(2)}</td></tr>
+                    <tr><td>Tools &amp; PPE Allowance</td><td>Fixed</td><td>$${tools.toFixed(2)}</td></tr>
+                    <tr class="highlight"><td colspan="2"><strong>LOADED LABOR COST</strong></td><td><strong>$${loaded.toFixed(2)}/hr (+${burden.toFixed(1)}%)</strong></td></tr>
+                </tbody>
+            </table>
+            <h3 style="margin-top:16px;font-size:11pt;">Project What-If: ${workers} Workers × ${hours} Hours</h3>
+            <table>
+                <thead><tr><th>Scenario</th><th>Total Cost</th></tr></thead>
+                <tbody>
+                    <tr><td>Base wage only (underestimate)</td><td>$${(base*workers*hours).toLocaleString()}</td></tr>
+                    <tr class="highlight"><td>Loaded cost (correct)</td><td>$${(loaded*workers*hours).toLocaleString()}</td></tr>
+                    <tr style="background:#fef2f2;"><td>Unrecovered burden if bid at base</td><td style="color:#b91c1c;font-weight:bold;">$${((loaded-base)*workers*hours).toLocaleString()}</td></tr>
+                </tbody>
+            </table>
+            <p style="font-size:8pt;color:#555;margin-top:12px;"><em>Note: TX WC rates vary by EMR (experience modifier). SUTA rate varies by employer history. Rates shown are typical — verify with your insurance broker and CPA.</em></p>
+            <div class="sig">
+                <div>Prepared by: _______________</div>
+                <div>Reviewed by: _______________</div>
+                <div>Date: ${today}</div>
+            </div>
+            </body></html>`);
+            w.document.close(); w.print();
+        };
+
+        // initialize on first show
+        calcLaborBurden();
+    })();
+
+    // =========================================================
+    // FEATURE: SUBCONTRACTOR INVOICE REVIEWER (📑)
+    // Compare sub invoice vs. contract: flag overcharges,
+    // compute retainage held, generate payment authorization.
+    // =========================================================
+    (function(){
+        const anchor = document.querySelector('.script-anchor') || document.body;
+
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'margin-bottom:8px;';
+
+        const inner = document.createElement('div');
+        inner.id = 'irWrap';
+        inner.style.display = 'none';
+        inner.style.cssText = 'display:none;background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.2);border-radius:8px;padding:12px;margin-bottom:6px;';
+
+        inner.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span style="font-weight:700;color:#a78bfa;">📑 Sub Invoice Reviewer</span>
+                <span style="font-size:0.68rem;color:#64748b;">Verify before you pay</span>
+            </div>
+
+            <!-- Header -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+                <div>
+                    <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Sub / Vendor Name</div>
+                    <input id="ir_sub" type="text" placeholder="Acme Rebar Co." style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);color:#f1f5f9;border-radius:4px;padding:4px 6px;font-size:0.8rem;">
+                </div>
+                <div>
+                    <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Invoice #</div>
+                    <input id="ir_inv" type="text" placeholder="INV-2026-042" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);color:#f1f5f9;border-radius:4px;padding:4px 6px;font-size:0.8rem;">
+                </div>
+                <div>
+                    <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Invoice Date</div>
+                    <input id="ir_date" type="date" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);color:#f1f5f9;border-radius:4px;padding:4px 6px;font-size:0.8rem;">
+                </div>
+                <div>
+                    <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Retainage % to Hold</div>
+                    <input id="ir_ret" type="number" value="10" min="0" max="20" step="0.5"
+                        oninput="calcIrTotals()"
+                        style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);color:#f1f5f9;border-radius:4px;padding:4px 6px;font-size:0.8rem;">
+                </div>
+            </div>
+
+            <!-- Line items table -->
+            <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;margin-bottom:4px;">Line Items — Contract vs. Invoice</div>
+            <div style="overflow-x:auto;margin-bottom:6px;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.74rem;">
+                    <thead>
+                        <tr style="background:rgba(0,0,0,0.3);">
+                            <th style="padding:4px 6px;text-align:left;color:#94a3b8;font-weight:600;border-bottom:1px solid rgba(255,255,255,0.1);">Description</th>
+                            <th style="padding:4px 6px;text-align:right;color:#94a3b8;font-weight:600;border-bottom:1px solid rgba(255,255,255,0.1);white-space:nowrap;">Contract $</th>
+                            <th style="padding:4px 6px;text-align:right;color:#94a3b8;font-weight:600;border-bottom:1px solid rgba(255,255,255,0.1);white-space:nowrap;">Invoice $</th>
+                            <th style="padding:4px 6px;text-align:right;color:#94a3b8;font-weight:600;border-bottom:1px solid rgba(255,255,255,0.1);white-space:nowrap;">Δ</th>
+                            <th style="padding:4px 4px;border-bottom:1px solid rgba(255,255,255,0.1);"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="ir_rows"></tbody>
+                </table>
+            </div>
+            <button onclick="addIrRow()" style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:0.75rem;font-weight:600;margin-bottom:8px;">+ Add Line</button>
+
+            <!-- Notes -->
+            <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Dispute Notes / Backup Required</div>
+            <textarea id="ir_notes" rows="2" placeholder="Rebar delivery ticket #4421 missing. Slump charge not in contract." style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#f1f5f9;border-radius:4px;padding:5px 6px;font-size:0.78rem;resize:vertical;margin-bottom:8px;"></textarea>
+
+            <!-- Totals -->
+            <div id="ir_totals" style="background:rgba(0,0,0,0.3);border-radius:6px;padding:10px;margin-bottom:8px;"></div>
+
+            <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <button onclick="copyIrReport()" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">📋 Copy</button>
+                <button onclick="printIrReport()" style="flex:1;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);color:#a78bfa;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">🖨️ Print Auth</button>
+            </div>
+            <div style="font-size:0.68rem;color:#475569;margin-top:6px;">Tip: Add one row per scope item — mobilization, concrete, pump charges, extras. Any invoice item that exceeds contract = overcharge flag. Retainage is held on net approved amount. Global localStorage.</div>
+        `;
+
+        wrapper.appendChild(inner);
+
+        const btn = document.createElement('button');
+        btn.id = 'irBtn';
+        btn.textContent = '📑 Show Sub Invoice Reviewer';
+        btn.style.cssText = 'width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#a78bfa;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;';
+        btn.onclick = function(){
+            const w = document.getElementById('irWrap');
+            const show = w.style.display === 'none';
+            w.style.display = show ? 'block' : 'none';
+            btn.textContent = show ? '📑 Hide Sub Invoice Reviewer' : '📑 Show Sub Invoice Reviewer';
+            if(show){ loadIrData(); renderIrRows(); calcIrTotals(); }
+        };
+        wrapper.appendChild(btn);
+
+        anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+
+        // Storage
+        let irRows = [];
+        const IR_KEY = 'oncor_ir_rows';
+
+        function saveIrData(){ try{ localStorage.setItem(IR_KEY, JSON.stringify(irRows)); }catch(e){} }
+        window.loadIrData = function(){
+            try{ irRows = JSON.parse(localStorage.getItem(IR_KEY)||'[]'); }catch(e){ irRows=[]; }
+            if(!irRows.length) irRows = [
+                {id:1,desc:'Base Scope / Contract Amount',contract:0,invoice:0},
+                {id:2,desc:'Mobilization',contract:0,invoice:0},
+                {id:3,desc:'Extras / Change Orders',contract:0,invoice:0}
+            ];
+        };
+        loadIrData();
+
+        window.addIrRow = function(){
+            irRows.push({id:Date.now(),desc:'',contract:0,invoice:0});
+            saveIrData(); renderIrRows(); calcIrTotals();
+        };
+        window.deleteIrRow = function(id){
+            irRows = irRows.filter(r=>r.id!==id);
+            saveIrData(); renderIrRows(); calcIrTotals();
+        };
+        window.updateIrRow = function(id, field, val){
+            const r = irRows.find(r=>r.id===id);
+            if(r){ r[field] = field==='desc' ? val : (parseFloat(val)||0); saveIrData(); calcIrTotals(); }
+        };
+
+        window.renderIrRows = function(){
+            const tbody = document.getElementById('ir_rows');
+            if(!tbody) return;
+            tbody.innerHTML = irRows.map(r=>{
+                const delta = r.invoice - r.contract;
+                const overcharge = delta > 0.01;
+                const deltaColor = overcharge ? '#f87171' : delta < -0.01 ? '#4ade80' : '#94a3b8';
+                const deltaStr = overcharge ? `+$${delta.toFixed(2)}` : delta < -0.01 ? `-$${Math.abs(delta).toFixed(2)}` : '—';
+                return `<tr style="${overcharge?'background:rgba(239,68,68,0.06);':''}">
+                    <td style="padding:3px 5px;"><input onchange="updateIrRow(${r.id},'desc',this.value)" value="${r.desc||''}" style="width:100%;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.08);color:#f1f5f9;font-size:0.74rem;padding:1px 2px;" placeholder="Description"></td>
+                    <td style="padding:3px 5px;"><input type="number" onchange="updateIrRow(${r.id},'contract',this.value)" oninput="calcIrTotals()" value="${r.contract||''}" style="width:80px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.08);color:#f1f5f9;font-size:0.74rem;text-align:right;padding:1px 2px;" placeholder="0"></td>
+                    <td style="padding:3px 5px;"><input type="number" onchange="updateIrRow(${r.id},'invoice',this.value)" oninput="calcIrTotals()" value="${r.invoice||''}" style="width:80px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.08);color:#f1f5f9;font-size:0.74rem;text-align:right;padding:1px 2px;" placeholder="0"></td>
+                    <td style="padding:3px 5px;text-align:right;color:${deltaColor};font-weight:${overcharge?'700':'400'};white-space:nowrap;">${deltaStr}${overcharge?' ⚠️':''}</td>
+                    <td style="padding:3px 4px;"><button onclick="deleteIrRow(${r.id})" style="font-size:0.6rem;padding:1px 4px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:2px;cursor:pointer;">✕</button></td>
+                </tr>`;
+            }).join('');
+        };
+
+        window.calcIrTotals = function(){
+            // sync in-progress edits from DOM
+            const tds = document.querySelectorAll('#ir_rows tr');
+            tds.forEach((tr, i) => {
+                if(irRows[i]){
+                    const inputs = tr.querySelectorAll('input');
+                    if(inputs[0]) irRows[i].desc = inputs[0].value;
+                    if(inputs[1]) irRows[i].contract = parseFloat(inputs[1].value)||0;
+                    if(inputs[2]) irRows[i].invoice = parseFloat(inputs[2].value)||0;
+                }
+            });
+            saveIrData();
+
+            const totalContract = irRows.reduce((s,r)=>s+r.contract,0);
+            const totalInvoice  = irRows.reduce((s,r)=>s+r.invoice,0);
+            const overcharges   = irRows.filter(r=>r.invoice > r.contract+0.01);
+            const overAmt       = irRows.reduce((s,r)=>s+Math.max(0,r.invoice-r.contract),0);
+            const approved      = totalContract; // only approve up to contract
+            const retPct        = parseFloat(document.getElementById('ir_ret')?.value)||0;
+            const retAmt        = approved * retPct/100;
+            const netDue        = approved - retAmt;
+            const dispute       = totalInvoice - approved;
+
+            const totDiv = document.getElementById('ir_totals');
+            if(!totDiv) return;
+            const dispColor = dispute > 0 ? '#f87171' : '#4ade80';
+            const fmt = (n) => '$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+            totDiv.innerHTML = `
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:0.78rem;margin-bottom:8px;">
+                    <div style="color:#94a3b8;">Total Contract</div><div style="color:#f1f5f9;text-align:right;">${fmt(totalContract)}</div>
+                    <div style="color:#94a3b8;">Total Invoiced</div><div style="color:#f1f5f9;text-align:right;">${fmt(totalInvoice)}</div>
+                    <div style="color:#94a3b8;">Approved Amount</div><div style="color:#4ade80;text-align:right;font-weight:600;">${fmt(approved)}</div>
+                    ${dispute > 0.01 ? `<div style="color:#f87171;">In Dispute / Overcharge</div><div style="color:#f87171;text-align:right;font-weight:700;">${fmt(dispute)} ⚠️</div>` : ''}
+                    <div style="color:#94a3b8;">Retainage (${retPct}%)</div><div style="color:#f87171;text-align:right;">(${fmt(retAmt)})</div>
+                </div>
+                <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-weight:700;color:#f1f5f9;font-size:0.95rem;">Net Due: ${fmt(netDue)}</span>
+                    ${overcharges.length ? `<span style="color:#f87171;font-size:0.75rem;font-weight:600;">${overcharges.length} overcharge item${overcharges.length>1?'s':''}</span>` : '<span style="color:#4ade80;font-size:0.72rem;">✓ No overcharges</span>'}
+                </div>
+            `;
+        };
+
+        window.copyIrReport = function(){
+            const sub   = document.getElementById('ir_sub')?.value||'—';
+            const inv   = document.getElementById('ir_inv')?.value||'—';
+            const date  = document.getElementById('ir_date')?.value||'—';
+            const ret   = parseFloat(document.getElementById('ir_ret')?.value)||0;
+            const totalC= irRows.reduce((s,r)=>s+r.contract,0);
+            const totalI= irRows.reduce((s,r)=>s+r.invoice,0);
+            const appv  = totalC;
+            const retAmt= appv*ret/100;
+            const net   = appv-retAmt;
+            const notes = document.getElementById('ir_notes')?.value||'';
+            let txt = `SUB INVOICE REVIEW — ${sub}\n${'='.repeat(50)}\nInvoice #: ${inv} | Date: ${date}\n\nLINE ITEMS:\n`;
+            irRows.forEach(r=>{
+                const d = r.invoice-r.contract;
+                txt += `  ${r.desc||'(no desc)'}: Contract $${r.contract.toFixed(2)} | Invoice $${r.invoice.toFixed(2)} ${d>0.01?'⚠️ OVER $'+d.toFixed(2):''}\n`;
+            });
+            txt += `\nContract Total: $${totalC.toFixed(2)}\nInvoice Total:  $${totalI.toFixed(2)}\nApproved:       $${appv.toFixed(2)}\nRetainage (${ret}%): ($${retAmt.toFixed(2)})\nNET DUE:        $${net.toFixed(2)}`;
+            if(notes) txt += `\n\nNotes: ${notes}`;
+            navigator.clipboard?.writeText(txt).then(()=>{ const b=event.target; b.textContent='✅ Copied!'; setTimeout(()=>b.textContent='📋 Copy',1500); });
+        };
+
+        window.printIrReport = function(){
+            const sub   = document.getElementById('ir_sub')?.value||'—';
+            const inv   = document.getElementById('ir_inv')?.value||'—';
+            const date  = document.getElementById('ir_date')?.value||'—';
+            const ret   = parseFloat(document.getElementById('ir_ret')?.value)||0;
+            const totalC= irRows.reduce((s,r)=>s+r.contract,0);
+            const totalI= irRows.reduce((s,r)=>s+r.invoice,0);
+            const appv  = totalC;
+            const retAmt= appv*ret/100;
+            const net   = appv-retAmt;
+            const dispute = totalI - appv;
+            const notes = document.getElementById('ir_notes')?.value||'';
+            const co    = document.getElementById('companyName')?.value||'Oncor Concrete';
+            const today = new Date().toLocaleDateString();
+            const rows  = irRows.map(r=>{
+                const d = r.invoice-r.contract;
+                const over = d > 0.01;
+                return `<tr style="${over?'background:#fef2f2;':''}">
+                    <td>${r.desc||'—'}</td>
+                    <td style="text-align:right;">$${r.contract.toFixed(2)}</td>
+                    <td style="text-align:right;">$${r.invoice.toFixed(2)}</td>
+                    <td style="text-align:right;color:${over?'#b91c1c':'#166534'};font-weight:${over?'bold':'normal'};">${over?'⚠️ +$'+d.toFixed(2):'OK'}</td>
+                </tr>`;
+            }).join('');
+            const w=window.open('','_blank');
+            w.document.write(`<!DOCTYPE html><html><head><title>Sub Invoice Review — ${sub}</title><style>
+                body{font-family:Arial,sans-serif;font-size:10pt;margin:24px;color:#1e293b;}
+                h2{font-size:13pt;margin:0 0 2px;}
+                table{border-collapse:collapse;width:100%;margin:10px 0;}
+                td,th{border:1px solid #ccc;padding:5px 8px;font-size:9pt;}
+                thead tr{background:#1e293b;color:#fff;}
+                .highlight{background:#f0fdf4;font-weight:bold;}
+                .dispute{background:#fef2f2;font-weight:bold;color:#b91c1c;}
+                .sig{margin-top:24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;}
+                .sig div{border-top:1px solid #333;padding-top:4px;font-size:8pt;color:#555;}
+            </style></head><body>
+            <h2>${co} — Subcontractor Invoice Review &amp; Payment Authorization</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;font-size:9pt;">
+                <div><strong>Sub/Vendor:</strong> ${sub}</div>
+                <div><strong>Invoice #:</strong> ${inv}</div>
+                <div><strong>Invoice Date:</strong> ${date}</div>
+            </div>
+            <table>
+                <thead><tr><th>Description</th><th>Contract $</th><th>Invoiced $</th><th>Status</th></tr></thead>
+                <tbody>${rows}
+                    <tr style="background:#f8fafc;font-weight:bold;">
+                        <td>TOTALS</td>
+                        <td style="text-align:right;">$${totalC.toFixed(2)}</td>
+                        <td style="text-align:right;">$${totalI.toFixed(2)}</td>
+                        <td style="text-align:right;${dispute>0.01?'color:#b91c1c;':''}">${dispute>0.01?'⚠️ $'+dispute.toFixed(2)+' in dispute':'✓ Matches'}</td>
+                    </tr>
+                </tbody>
+            </table>
+            <table style="width:50%;margin-left:auto;">
+                <tr><td>Approved Amount</td><td style="text-align:right;">$${appv.toFixed(2)}</td></tr>
+                <tr><td>Retainage Held (${ret}%)</td><td style="text-align:right;color:#b91c1c;">($${retAmt.toFixed(2)})</td></tr>
+                <tr class="highlight"><td><strong>NET AMOUNT AUTHORIZED</strong></td><td style="text-align:right;"><strong>$${net.toFixed(2)}</strong></td></tr>
+            </table>
+            ${notes?`<p style="font-size:9pt;margin-top:10px;"><strong>Notes / Disputes:</strong> ${notes}</p>`:''}
+            <p style="font-size:8pt;color:#555;margin-top:10px;border-top:1px solid #ccc;padding-top:8px;">Pay-when-paid clause applies per subcontract. Retainage released upon final completion and owner acceptance. Any disputed line items must be resolved before payment authorization is complete.</p>
+            <div class="sig">
+                <div>Authorized By (PM): _______________</div>
+                <div>Sub Representative: _______________</div>
+                <div>Date Approved: ${today}</div>
+            </div>
+            </body></html>`);
+            w.document.close(); w.print();
+        };
+
+        // Init
+        renderIrRows(); calcIrTotals();
+    })();
+
+    // =========================================================
+    // FEATURE: CONCRETE PLACEMENT SEQUENCE DIAGRAM (🗺️ POUR MAP)
+    // Text-based pour zone planner for multi-area pours:
+    // Define zones (A, B, C...), specify yardage + placement
+    // order, crew assignments, cold joint risk between zones,
+    // and auto-generate a numbered pour sequence summary.
+    // Helps foremen visualize and communicate the pour plan.
+    // =========================================================
+    (function(){
+        const anchor = document.querySelector('.script-anchor') || document.body;
+
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'margin-bottom:8px;';
+
+        const inner = document.createElement('div');
+        inner.id = 'pmWrap';
+        inner.style.display = 'none';
+        inner.style.cssText = 'display:none;background:rgba(14,165,233,0.06);border:1px solid rgba(14,165,233,0.2);border-radius:8px;padding:12px;margin-bottom:6px;';
+
+        inner.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span style="font-weight:700;color:#38bdf8;">🗺️ Pour Zone Planner</span>
+                <span style="font-size:0.68rem;color:#64748b;">Multi-zone pour sequence</span>
+            </div>
+
+            <!-- Project context -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
+                <div>
+                    <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Pour Date</div>
+                    <input id="pm_date" type="date" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);color:#f1f5f9;border-radius:4px;padding:4px 6px;font-size:0.78rem;">
+                </div>
+                <div>
+                    <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Element Type</div>
+                    <select id="pm_etype" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.12);color:#f1f5f9;border-radius:4px;padding:4px 6px;font-size:0.78rem;">
+                        <option>Slab-on-Grade</option>
+                        <option>Elevated Deck</option>
+                        <option>Foundation Mat</option>
+                        <option>Grade Beam</option>
+                        <option>Tilt-Up Bed</option>
+                        <option>Other</option>
+                    </select>
+                </div>
+                <div>
+                    <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Cold Joint Window (min)</div>
+                    <input id="pm_cj" type="number" value="45" min="15" max="120" step="5"
+                        oninput="renderPmDiagram()"
+                        style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);color:#f1f5f9;border-radius:4px;padding:4px 6px;font-size:0.78rem;">
+                </div>
+            </div>
+
+            <!-- Zone table -->
+            <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;margin-bottom:4px;">Pour Zones</div>
+            <div style="overflow-x:auto;margin-bottom:6px;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.74rem;">
+                    <thead>
+                        <tr style="background:rgba(0,0,0,0.3);">
+                            <th style="padding:4px 5px;text-align:left;color:#94a3b8;font-weight:600;border-bottom:1px solid rgba(255,255,255,0.1);">Zone</th>
+                            <th style="padding:4px 5px;text-align:left;color:#94a3b8;font-weight:600;border-bottom:1px solid rgba(255,255,255,0.1);">Description</th>
+                            <th style="padding:4px 5px;text-align:right;color:#94a3b8;font-weight:600;border-bottom:1px solid rgba(255,255,255,0.1);">yd³</th>
+                            <th style="padding:4px 5px;text-align:center;color:#94a3b8;font-weight:600;border-bottom:1px solid rgba(255,255,255,0.1);">Seq #</th>
+                            <th style="padding:4px 5px;text-align:left;color:#94a3b8;font-weight:600;border-bottom:1px solid rgba(255,255,255,0.1);">Crew</th>
+                            <th style="padding:4px 5px;text-align:left;color:#94a3b8;font-weight:600;border-bottom:1px solid rgba(255,255,255,0.1);">Borders</th>
+                            <th style="padding:4px 4px;border-bottom:1px solid rgba(255,255,255,0.1);"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="pm_rows"></tbody>
+                </table>
+            </div>
+            <div style="display:flex;gap:5px;margin-bottom:8px;">
+                <button onclick="addPmZone()" style="background:rgba(14,165,233,0.15);border:1px solid rgba(14,165,233,0.3);color:#38bdf8;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:0.75rem;font-weight:600;">+ Add Zone</button>
+                <button onclick="loadPmFromTakeoff()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">↙ From Takeoff</button>
+            </div>
+
+            <!-- Sequence diagram (text-based ASCII art) -->
+            <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;margin-bottom:4px;">Pour Sequence Summary</div>
+            <div id="pm_diagram" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08);border-radius:5px;padding:10px;font-family:monospace;font-size:0.72rem;color:#e2e8f0;white-space:pre-wrap;min-height:80px;margin-bottom:8px;"></div>
+
+            <!-- Totals strip -->
+            <div id="pm_totals" style="background:rgba(0,0,0,0.2);border-radius:5px;padding:8px;margin-bottom:8px;"></div>
+
+            <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <button onclick="copyPmPlan()" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">📋 Copy Plan</button>
+                <button onclick="printPmPlan()" style="flex:1;background:rgba(14,165,233,0.08);border:1px solid rgba(14,165,233,0.2);color:#38bdf8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">🖨️ Print Pour Plan</button>
+            </div>
+            <div style="font-size:0.68rem;color:#475569;margin-top:6px;">Set sequence # (order of placement). Borders field = which zones share a cold joint risk edge (e.g. "A,C"). Cold joint window from ACI 304R §5.3 — exceeding it between adjacent zones = structural defect, GC holds you liable. Project-scoped localStorage.</div>
+        `;
+
+        wrapper.appendChild(inner);
+
+        const btn = document.createElement('button');
+        btn.id = 'pmBtn';
+        btn.textContent = '🗺️ Show Pour Zone Planner';
+        btn.style.cssText = 'width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#38bdf8;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;';
+        btn.onclick = function(){
+            const w = document.getElementById('pmWrap');
+            const show = w.style.display === 'none';
+            w.style.display = show ? 'block' : 'none';
+            btn.textContent = show ? '🗺️ Hide Pour Zone Planner' : '🗺️ Show Pour Zone Planner';
+            if(show){ loadPmData(); renderPmRows(); renderPmDiagram(); }
+        };
+        wrapper.appendChild(btn);
+
+        anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+
+        // Data
+        let pmZones = [];
+        function getPmKey(){ return 'oncor_pm_' + (document.getElementById('projectName')?.value||'default'); }
+        function savePmData(){ try{ localStorage.setItem(getPmKey(), JSON.stringify(pmZones)); }catch(e){} }
+        window.loadPmData = function(){
+            try{ pmZones = JSON.parse(localStorage.getItem(getPmKey())||'[]'); }catch(e){ pmZones=[]; }
+            if(!pmZones.length) pmZones = [
+                {id:1,zone:'A',desc:'North Bay',yds:0,seq:1,crew:'Crew 1',borders:'B'},
+                {id:2,zone:'B',desc:'South Bay',yds:0,seq:2,crew:'Crew 1',borders:'A'},
+            ];
+        };
+        loadPmData();
+
+        window.addPmZone = function(){
+            const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            const next = letters[pmZones.length % 26];
+            pmZones.push({id:Date.now(),zone:next,desc:'',yds:0,seq:pmZones.length+1,crew:'',borders:''});
+            savePmData(); renderPmRows(); renderPmDiagram();
+        };
+        window.deletePmZone = function(id){
+            pmZones = pmZones.filter(z=>z.id!==id);
+            savePmData(); renderPmRows(); renderPmDiagram();
+        };
+        window.updatePmZone = function(id, field, val){
+            const z = pmZones.find(z=>z.id===id);
+            if(z){ z[field] = (field==='yds'||field==='seq') ? (parseFloat(val)||0) : val; savePmData(); renderPmDiagram(); }
+        };
+
+        window.loadPmFromTakeoff = function(){
+            // Try to read window.measurements if available
+            if(typeof window.measurements !== 'undefined' && window.measurements.length){
+                const grouped = {};
+                window.measurements.forEach(m=>{
+                    const t = m.type||'Unknown';
+                    if(!grouped[t]) grouped[t]={yds:0,count:0};
+                    grouped[t].yds += (m.cubicYards||0);
+                    grouped[t].count++;
+                });
+                const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                pmZones = Object.entries(grouped).map(([type,d],i)=>({
+                    id:Date.now()+i, zone:letters[i%26], desc:type,
+                    yds:parseFloat(d.yds.toFixed(2)), seq:i+1, crew:'', borders:''
+                }));
+            } else {
+                alert('No measurements found in active takeoff. Add some measurements first, then recalculate.');
+            }
+            savePmData(); renderPmRows(); renderPmDiagram();
+        };
+
+        window.renderPmRows = function(){
+            const tbody = document.getElementById('pm_rows');
+            if(!tbody) return;
+            tbody.innerHTML = pmZones.map(z=>`
+                <tr>
+                    <td style="padding:3px 4px;"><input value="${z.zone}" maxlength="3" onchange="updatePmZone(${z.id},'zone',this.value)"
+                        style="width:32px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.1);color:#38bdf8;font-size:0.78rem;font-weight:700;text-align:center;padding:1px 2px;text-transform:uppercase;"></td>
+                    <td style="padding:3px 4px;"><input value="${z.desc}" onchange="updatePmZone(${z.id},'desc',this.value)"
+                        style="width:100%;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.08);color:#f1f5f9;font-size:0.74rem;padding:1px 2px;" placeholder="Area / description"></td>
+                    <td style="padding:3px 4px;"><input type="number" value="${z.yds||''}" onchange="updatePmZone(${z.id},'yds',this.value)" oninput="renderPmDiagram()"
+                        style="width:60px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.08);color:#f1f5f9;font-size:0.74rem;text-align:right;padding:1px 2px;" placeholder="0"></td>
+                    <td style="padding:3px 4px;text-align:center;"><input type="number" value="${z.seq}" min="1" onchange="updatePmZone(${z.id},'seq',this.value)" oninput="renderPmDiagram()"
+                        style="width:36px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.08);color:#fbbf24;font-size:0.74rem;text-align:center;padding:1px 2px;"></td>
+                    <td style="padding:3px 4px;"><input value="${z.crew}" onchange="updatePmZone(${z.id},'crew',this.value)"
+                        style="width:70px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.08);color:#f1f5f9;font-size:0.74rem;padding:1px 2px;" placeholder="Crew 1"></td>
+                    <td style="padding:3px 4px;"><input value="${z.borders}" onchange="updatePmZone(${z.id},'borders',this.value)" oninput="renderPmDiagram()"
+                        style="width:50px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.08);color:#f87171;font-size:0.74rem;padding:1px 2px;" placeholder="B,C"></td>
+                    <td style="padding:3px 3px;"><button onclick="deletePmZone(${z.id})" style="font-size:0.6rem;padding:1px 4px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:2px;cursor:pointer;">✕</button></td>
+                </tr>
+            `).join('');
+        };
+
+        window.renderPmDiagram = function(){
+            // sync from DOM
+            const rows = document.querySelectorAll('#pm_rows tr');
+            rows.forEach((tr, i)=>{
+                if(pmZones[i]){
+                    const inp = tr.querySelectorAll('input');
+                    if(inp[0]) pmZones[i].zone = inp[0].value.toUpperCase();
+                    if(inp[1]) pmZones[i].desc = inp[1].value;
+                    if(inp[2]) pmZones[i].yds  = parseFloat(inp[2].value)||0;
+                    if(inp[3]) pmZones[i].seq  = parseInt(inp[3].value)||1;
+                    if(inp[4]) pmZones[i].crew = inp[4].value;
+                    if(inp[5]) pmZones[i].borders = inp[5].value;
+                }
+            });
+            savePmData();
+
+            const cjWin = parseInt(document.getElementById('pm_cj')?.value)||45;
+            const sorted = [...pmZones].sort((a,b)=>a.seq-b.seq);
+            const totalYds = pmZones.reduce((s,z)=>s+z.yds,0);
+
+            // Build diagram text
+            const BAR_W = 20;
+            let diagram = `POUR SEQUENCE — ${document.getElementById('pm_etype')?.value||'Slab'}\n`;
+            diagram += `${'─'.repeat(52)}\n`;
+            diagram += `${'Seq'.padEnd(5)}${'Zone'.padEnd(5)}${'Description'.padEnd(18)}${'yd³'.padStart(7)}  ${'Crew'.padEnd(10)} Adj.Zones\n`;
+            diagram += `${'─'.repeat(52)}\n`;
+            sorted.forEach(z=>{
+                const adj = z.borders ? z.borders.split(',').map(s=>s.trim()).filter(Boolean).join(',') : '—';
+                diagram += `[${z.seq}]   ${(z.zone||'?').padEnd(5)}${(z.desc||'—').substring(0,17).padEnd(18)}${(z.yds||0).toFixed(1).padStart(7)}  ${(z.crew||'—').padEnd(10)} ${adj}\n`;
+            });
+            diagram += `${'─'.repeat(52)}\n`;
+            diagram += `TOTAL:${' '.repeat(23)}${totalYds.toFixed(1).padStart(7)} yd³\n`;
+
+            // Cold joint risk
+            const risky = [];
+            sorted.forEach((z,i)=>{
+                if(i===0) return;
+                const prev = sorted[i-1];
+                // if this zone borders the previous one, cold joint risk exists
+                const bordering = z.borders && z.borders.toUpperCase().split(',').map(s=>s.trim()).includes(prev.zone.toUpperCase());
+                if(bordering) risky.push(`${prev.zone}→${z.zone}`);
+            });
+            if(risky.length){
+                diagram += `\n⚠️  COLD JOINT RISK (${cjWin}min window): ${risky.join(', ')}\n`;
+                diagram += `   Ensure sequential zones are placed within the cold joint window.\n`;
+            } else {
+                diagram += `\n✓  No sequential cold joint risk flagged.\n`;
+            }
+
+            const diagramEl = document.getElementById('pm_diagram');
+            if(diagramEl) diagramEl.textContent = diagram;
+
+            // Totals
+            const tot = document.getElementById('pm_totals');
+            if(tot) tot.innerHTML = `
+                <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:0.78rem;">
+                    <div><span style="color:#64748b;">Zones: </span><span style="color:#38bdf8;font-weight:600;">${pmZones.length}</span></div>
+                    <div><span style="color:#64748b;">Total yd³: </span><span style="color:#f1f5f9;font-weight:600;">${totalYds.toFixed(1)}</span></div>
+                    <div><span style="color:#64748b;">CJ Window: </span><span style="color:#fbbf24;font-weight:600;">${cjWin} min</span></div>
+                    ${risky.length ? `<div style="color:#f87171;font-weight:600;">⚠️ ${risky.length} CJ risk pair${risky.length>1?'s':''}</div>` : `<div style="color:#4ade80;">✓ CJ risk clear</div>`}
+                </div>
+            `;
+        };
+
+        window.copyPmPlan = function(){
+            const diag = document.getElementById('pm_diagram')?.textContent || '';
+            navigator.clipboard?.writeText(diag).then(()=>{ const b=event.target; b.textContent='✅ Copied!'; setTimeout(()=>b.textContent='📋 Copy Plan',1500); });
+        };
+
+        window.printPmPlan = function(){
+            const co    = document.getElementById('companyName')?.value||'Oncor Concrete';
+            const proj  = document.getElementById('projectName')?.value||'—';
+            const date  = document.getElementById('pm_date')?.value||new Date().toISOString().split('T')[0];
+            const etype = document.getElementById('pm_etype')?.value||'Slab';
+            const cjWin = parseInt(document.getElementById('pm_cj')?.value)||45;
+            const sorted= [...pmZones].sort((a,b)=>a.seq-b.seq);
+            const totalYds = pmZones.reduce((s,z)=>s+z.yds,0);
+            const rows  = sorted.map(z=>`<tr>
+                <td style="text-align:center;">${z.seq}</td>
+                <td style="text-align:center;font-weight:bold;color:#0369a1;">${z.zone}</td>
+                <td>${z.desc||'—'}</td>
+                <td style="text-align:right;">${(z.yds||0).toFixed(1)}</td>
+                <td>${z.crew||'—'}</td>
+                <td>${z.borders||'—'}</td>
+            </tr>`).join('');
+            const w=window.open('','_blank');
+            w.document.write(`<!DOCTYPE html><html><head><title>Pour Zone Plan — ${proj}</title><style>
+                body{font-family:Arial,sans-serif;font-size:10pt;margin:24px;color:#1e293b;}
+                h2{font-size:13pt;margin:0 0 2px;}
+                table{border-collapse:collapse;width:100%;margin:10px 0;}
+                td,th{border:1px solid #ccc;padding:5px 8px;font-size:9pt;}
+                thead tr{background:#1e293b;color:#fff;}
+                .highlight{background:#f0f9ff;font-weight:bold;}
+                .alert{background:#fef9c3;border-left:3px solid #d97706;padding:8px 12px;font-size:9pt;margin-top:10px;}
+                .sig{margin-top:24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;}
+                .sig div{border-top:1px solid #333;padding-top:4px;font-size:8pt;color:#555;}
+            </style></head><body>
+            <h2>${co} — Pour Zone Plan &amp; Placement Sequence</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px;font-size:9pt;">
+                <div><strong>Project:</strong> ${proj}</div>
+                <div><strong>Element:</strong> ${etype}</div>
+                <div><strong>Pour Date:</strong> ${date}</div>
+                <div><strong>CJ Window:</strong> ${cjWin} min (ACI 304R)</div>
+            </div>
+            <table>
+                <thead><tr><th>Seq</th><th>Zone</th><th>Description / Area</th><th>yd³</th><th>Crew</th><th>Adjacent Zones</th></tr></thead>
+                <tbody>${rows}
+                    <tr class="highlight"><td colspan="3"><strong>TOTAL</strong></td><td style="text-align:right;"><strong>${totalYds.toFixed(1)}</strong></td><td colspan="2"></td></tr>
+                </tbody>
+            </table>
+            <div class="alert">⚠️ Cold Joint Note: ACI 304R §5.3 — placement between adjacent zones must occur within the cold joint window (${cjWin} min). Coordinate truck dispatch and crew transitions accordingly. Cold joints = structural defect and potential GC back-charge.</div>
+            <div style="margin-top:12px;font-size:9pt;"><strong>Pre-Pour Notes / Zone-Specific Instructions:</strong></div>
+            <div style="border:1px solid #ccc;min-height:60px;margin-top:4px;padding:6px;"></div>
+            <div class="sig">
+                <div>Foreman: _______________</div>
+                <div>PM: _______________</div>
+                <div>GC Inspector: _______________</div>
+            </div>
+            </body></html>`);
+            w.document.close(); w.print();
+        };
+
+        // Init
+        renderPmRows(); renderPmDiagram();
+    })();
+
     </script>
 
 </body>
