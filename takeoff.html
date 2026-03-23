@@ -21230,5 +21230,516 @@ ${f.co}${f.phone ? '\n' + f.phone : ''}${f.email ? '\n' + f.email : ''}`;
     })();
     </script>
 
+    <!-- ============================================================
+         FEATURE: DAILY TIME CARD SYSTEM (🕐)
+         Per-employee time tracking per pour/day. Payroll export.
+         ============================================================ -->
+    <script>
+    (function(){
+        const TC_KEY_PREFIX = 'oc_timecards_';
+        const CREW_ROLES = ['Foreman','Finisher','Laborer','Iron Worker','Operator','Driver','Apprentice','Other'];
+
+        function getTcKey(){
+            const pn = document.getElementById('projectName');
+            return TC_KEY_PREFIX + (pn ? pn.value.trim().replace(/\s+/g,'_') : 'default');
+        }
+        function loadCards(){ try{return JSON.parse(localStorage.getItem(getTcKey())||'[]');}catch{return[];} }
+        function saveCards(arr){ localStorage.setItem(getTcKey(), JSON.stringify(arr)); }
+
+        function calcHours(start, end, lunch){
+            if(!start||!end) return 0;
+            const [sh,sm]=start.split(':').map(Number);
+            const [eh,em]=end.split(':').map(Number);
+            let mins=(eh*60+em)-(sh*60+sm);
+            if(mins<0) mins+=24*60;
+            mins -= (parseFloat(lunch)||0)*60;
+            return Math.max(0, Math.round(mins*100/60)/100);
+        }
+
+        function renderCards(){
+            const panel = document.getElementById('timeCardPanel');
+            if(!panel) return;
+            const cards = loadCards();
+            if(!cards.length){
+                panel.innerHTML='<div style="color:#64748b;font-size:0.8rem;padding:8px;">No time cards yet. Add an entry below.</div>';
+                return;
+            }
+            // group by date
+            const byDate = {};
+            cards.forEach((c,i)=>{ (byDate[c.date]=byDate[c.date]||[]).push({...c,idx:i}); });
+            const dates = Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
+            let totalCost=0, totalHours=0;
+            cards.forEach(c=>{ totalHours+=c.hours||0; totalCost+=(c.hours||0)*(c.rate||0); });
+            let html=`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+                <div style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);border-radius:6px;padding:4px 10px;font-size:0.8rem;"><b style="color:#a5b4fc;">${cards.length}</b> <span style="color:#94a3b8;">entries</span></div>
+                <div style="background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.2);border-radius:6px;padding:4px 10px;font-size:0.8rem;"><b style="color:#86efac;">${totalHours.toFixed(1)} hrs</b></div>
+                <div style="background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.2);border-radius:6px;padding:4px 10px;font-size:0.8rem;"><b style="color:#fde68a;">$${totalCost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</b> <span style="color:#94a3b8;">labor</span></div>
+            </div>`;
+            dates.forEach(d=>{
+                const dayCards=byDate[d];
+                const dayHrs=dayCards.reduce((s,c)=>s+(c.hours||0),0);
+                const dayCost=dayCards.reduce((s,c)=>s+(c.hours||0)*(c.rate||0),0);
+                html+=`<div style="margin-bottom:8px;border:1px solid rgba(255,255,255,0.08);border-radius:6px;overflow:hidden;">
+                    <div style="background:rgba(99,102,241,0.15);padding:4px 8px;display:flex;justify-content:space-between;font-size:0.78rem;">
+                        <b style="color:#c7d2fe;">${d}</b>
+                        <span style="color:#94a3b8;">${dayHrs.toFixed(1)} hrs · $${dayCost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+                    </div>`;
+                dayCards.forEach(c=>{
+                    const isOT = c.hours>8;
+                    html+=`<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;border-top:1px solid rgba(255,255,255,0.05);flex-wrap:wrap;">
+                        <span style="font-size:0.8rem;color:#e2e8f0;min-width:100px;">${c.name||'—'}</span>
+                        <span style="font-size:0.75rem;color:#94a3b8;min-width:70px;">${c.role||'—'}</span>
+                        <span style="font-size:0.75rem;color:#7dd3fc;">${c.start||'?'}–${c.end||'?'}${c.lunch?` -${c.lunch}h lunch`:''}</span>
+                        <span style="font-size:0.8rem;font-weight:700;color:${isOT?'#fbbf24':'#86efac'};">${(c.hours||0).toFixed(2)} hrs${isOT?' OT':''}</span>
+                        <span style="font-size:0.75rem;color:#94a3b8;">@$${c.rate||0}/hr</span>
+                        <span style="font-size:0.78rem;color:#fde68a;">= $${((c.hours||0)*(c.rate||0)).toFixed(2)}</span>
+                        ${c.element?`<span style="font-size:0.7rem;color:#64748b;background:rgba(255,255,255,0.05);border-radius:4px;padding:1px 5px;">${c.element}</span>`:''}
+                        <button onclick="deleteTimeCard(${c.idx})" style="background:rgba(239,68,68,0.2);border:none;color:#f87171;border-radius:4px;padding:1px 6px;cursor:pointer;font-size:0.7rem;margin-left:auto;">✕</button>
+                    </div>`;
+                });
+                html+=`</div>`;
+            });
+            panel.innerHTML=html;
+        }
+
+        window.addTimeCard = function(){
+            const name=document.getElementById('tc_name')?.value.trim();
+            const role=document.getElementById('tc_role')?.value;
+            const date=document.getElementById('tc_date')?.value;
+            const start=document.getElementById('tc_start')?.value;
+            const end=document.getElementById('tc_end')?.value;
+            const lunch=document.getElementById('tc_lunch')?.value||'0';
+            const rate=parseFloat(document.getElementById('tc_rate')?.value)||0;
+            const element=document.getElementById('tc_element')?.value.trim();
+            if(!name||!date||!start||!end){ alert('Name, date, start, and end time are required.'); return; }
+            const hours=calcHours(start,end,lunch);
+            const cards=loadCards();
+            cards.unshift({name,role,date,start,end,lunch:parseFloat(lunch)||0,hours,rate,element,added:Date.now()});
+            saveCards(cards);
+            renderCards();
+            // clear entry fields
+            ['tc_name','tc_element'].forEach(id=>{ const el=document.getElementById(id); if(el)el.value=''; });
+        };
+
+        window.deleteTimeCard = function(i){ if(!confirm('Delete this entry?'))return; const c=loadCards(); c.splice(i,1); saveCards(c); renderCards(); };
+        window.clearTimeCards = function(){ if(!confirm('Clear ALL time cards for this project?'))return; saveCards([]); renderCards(); };
+
+        window.copyTimeCards = function(){
+            const cards=loadCards(); if(!cards.length){alert('No time cards.'); return;}
+            const pn=document.getElementById('projectName')?.value||'Project';
+            let txt=`TIME CARD EXPORT\nProject: ${pn}\nGenerated: ${new Date().toLocaleString()}\n${'='.repeat(55)}\n`;
+            const byDate={};
+            cards.forEach(c=>{ (byDate[c.date]=byDate[c.date]||[]).push(c); });
+            let totalHrs=0, totalCost=0;
+            Object.keys(byDate).sort((a,b)=>a.localeCompare(b)).forEach(d=>{
+                txt+=`\n${d}\n${'-'.repeat(40)}\n`;
+                byDate[d].forEach(c=>{
+                    const cost=(c.hours||0)*(c.rate||0);
+                    totalHrs+=c.hours||0; totalCost+=cost;
+                    txt+=`  ${c.name||'?'} (${c.role||'?'}) | ${c.start}–${c.end}${c.lunch?' -'+c.lunch+'h':''} | ${(c.hours||0).toFixed(2)} hrs @ $${c.rate}/hr = $${cost.toFixed(2)}${c.element?' ['+c.element+']':''}\n`;
+                });
+            });
+            txt+=`\nTOTAL HOURS: ${totalHrs.toFixed(2)}\nTOTAL LABOR COST: $${totalCost.toFixed(2)}`;
+            navigator.clipboard.writeText(txt).then(()=>alert('Copied!')).catch(()=>alert(txt));
+        };
+
+        window.printTimeCards = function(){
+            const cards=loadCards(); if(!cards.length){alert('No time cards to print.'); return;}
+            const co=typeof getCompanyInfo==='function'?getCompanyInfo():{};
+            const pn=document.getElementById('projectName')?.value||'Project';
+            const byDate={};
+            cards.forEach(c=>{ (byDate[c.date]=byDate[c.date]||[]).push(c); });
+            let totalHrs=0, totalCost=0;
+            let rows='';
+            Object.keys(byDate).sort((a,b)=>a.localeCompare(b)).forEach(d=>{
+                const dayCards=byDate[d];
+                const dayHrs=dayCards.reduce((s,c)=>s+(c.hours||0),0);
+                const dayCost=dayCards.reduce((s,c)=>s+(c.hours||0)*(c.rate||0),0);
+                totalHrs+=dayHrs; totalCost+=dayCost;
+                rows+=`<tr style="background:#e8eaf6;"><td colspan="8"><b>${d}</b> — ${dayCards.length} workers, ${dayHrs.toFixed(2)} hrs, $${dayCost.toFixed(2)}</td></tr>`;
+                dayCards.forEach(c=>{
+                    const cost=(c.hours||0)*(c.rate||0);
+                    rows+=`<tr><td>${c.name||'—'}</td><td>${c.role||'—'}</td><td>${c.start||''}–${c.end||''}</td><td>${c.lunch?c.lunch+' hr':''}</td><td>${(c.hours||0).toFixed(2)}</td><td>$${c.rate||0}/hr</td><td>$${cost.toFixed(2)}</td><td>${c.element||''}</td></tr>`;
+                });
+            });
+            const html=`<!DOCTYPE html><html><head><title>Time Cards - ${pn}</title><style>body{font-family:Arial,sans-serif;font-size:9pt;margin:24px;}h2{font-size:13pt;margin-bottom:4px;}p{margin:2px 0;font-size:9pt;}table{width:100%;border-collapse:collapse;margin-top:12px;}th,td{border:1px solid #ccc;padding:3px 6px;font-size:8pt;}th{background:#e8eaf6;}.total{background:#fff9c4;font-weight:bold;}</style></head><body>
+            <h2>Daily Time Cards</h2>
+            <p>${co.name||'Oncor'} · Project: ${pn} · Printed: ${new Date().toLocaleString()}</p>
+            <table><thead><tr><th>Employee</th><th>Role</th><th>Hours</th><th>Lunch</th><th>Total Hrs</th><th>Rate</th><th>Cost</th><th>Element/Area</th></tr></thead>
+            <tbody>${rows}<tr class="total"><td colspan="4">TOTALS</td><td>${totalHrs.toFixed(2)} hrs</td><td></td><td>$${totalCost.toFixed(2)}</td><td></td></tr></tbody></table>
+            <table style="margin-top:20px;"><tr><th>Foreman Signature</th><th>PM / Superintendent</th><th>Payroll Approval</th><th>Date</th></tr><tr style="height:35px;"><td></td><td></td><td></td><td></td></tr></table>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`;
+            const w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+        };
+
+        window.toggleTimeCards = function(){
+            const p=document.getElementById('timeCardPanelWrap');
+            const b=document.getElementById('timeCardBtn');
+            if(!p)return;
+            const show=p.style.display==='none';
+            p.style.display=show?'block':'none';
+            b.textContent=show?'🕐 Hide Time Cards':'🕐 Show Time Cards';
+            if(show)renderCards();
+        };
+
+        document.addEventListener('DOMContentLoaded',function(){
+            setTimeout(function(){
+                const anchor=document.getElementById('fieldNotesBtn');
+                if(!anchor)return;
+                const today=new Date().toISOString().split('T')[0];
+                const roleOptions=CREW_ROLES.map(r=>`<option>${r}</option>`).join('');
+                const wrapper=document.createElement('div');
+                wrapper.style.cssText='margin-top:6px;';
+                wrapper.innerHTML=`
+                <div id="timeCardPanelWrap" style="display:none;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px;">
+                        <span style="font-weight:700;color:#c7d2fe;">🕐 Daily Time Cards</span>
+                        <span style="font-size:0.7rem;color:#64748b;">Track employee hours per day/pour · payroll export</span>
+                    </div>
+                    <div id="timeCardPanel"></div>
+                    <!-- Add Entry Form -->
+                    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:8px;margin-top:8px;">
+                        <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:6px;font-weight:600;">ADD ENTRY</div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px;">
+                            <input id="tc_name" placeholder="Employee name" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" />
+                            <select id="tc_role" style="background:#1e293b;border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;">${roleOptions}</select>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:5px;">
+                            <div><div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">Date</div><input type="date" id="tc_date" value="${today}" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" /></div>
+                            <div><div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">Start</div><input type="time" id="tc_start" value="07:00" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" /></div>
+                            <div><div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">End</div><input type="time" id="tc_end" value="16:00" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" /></div>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:6px;">
+                            <div><div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">Lunch (hrs)</div><input type="number" id="tc_lunch" value="0.5" min="0" max="2" step="0.5" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" /></div>
+                            <div><div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">Rate ($/hr)</div><input type="number" id="tc_rate" value="28" min="0" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" /></div>
+                            <div><div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">Element/Area</div><input id="tc_element" placeholder="e.g. Footing N" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" /></div>
+                        </div>
+                        <button onclick="addTimeCard()" style="background:rgba(99,102,241,0.3);border:1px solid rgba(99,102,241,0.5);color:#c7d2fe;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:0.78rem;">+ Add Entry</button>
+                    </div>
+                    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;">
+                        <button onclick="copyTimeCards()" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#7dd3fc;border-radius:6px;padding:4px;cursor:pointer;font-size:0.75rem;">📋 Copy Export</button>
+                        <button onclick="printTimeCards()" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#7dd3fc;border-radius:6px;padding:4px;cursor:pointer;font-size:0.75rem;">🖨️ Print Payroll</button>
+                        <button onclick="clearTimeCards()" style="flex:1;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:6px;padding:4px;cursor:pointer;font-size:0.75rem;">🗑 Clear</button>
+                    </div>
+                </div>
+                <button onclick="toggleTimeCards()" id="timeCardBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#c7d2fe;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;">🕐 Show Time Cards</button>`;
+                anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+            }, 3000);
+        });
+    })();
+    </script>
+
+    <!-- ============================================================
+         FEATURE: WIP SCHEDULE (Work In Progress Accounting) (📒)
+         AIA-style WIP report for bonding, banking, and financial review.
+         ============================================================ -->
+    <script>
+    (function(){
+        const WIP_KEY = 'oc_wip_global';
+        function loadWIP(){ try{return JSON.parse(localStorage.getItem(WIP_KEY)||'[]');}catch{return[];} }
+        function saveWIP(arr){ localStorage.setItem(WIP_KEY, JSON.stringify(arr)); }
+
+        function renderWIP(){
+            const panel = document.getElementById('wipPanel');
+            if(!panel) return;
+            const jobs = loadWIP();
+            if(!jobs.length){
+                panel.innerHTML='<div style="color:#64748b;font-size:0.8rem;padding:8px;">No jobs in WIP schedule. Add jobs below.</div>';
+                return;
+            }
+            let totalContract=0,totalBilled=0,totalCost=0,totalEarned=0;
+            let rows='';
+            jobs.forEach((j,i)=>{
+                const pctComplete = Math.min(100,Math.max(0,parseFloat(j.pctComplete)||0));
+                const earnedRevenue = j.contract * pctComplete/100;
+                const overBilled = j.billed > earnedRevenue;
+                const underBilled = j.billed < earnedRevenue;
+                const overbilledAmt = overBilled ? j.billed - earnedRevenue : 0;
+                const underbilledAmt = underBilled ? earnedRevenue - j.billed : 0;
+                totalContract+=j.contract||0;
+                totalBilled+=j.billed||0;
+                totalCost+=j.costToDate||0;
+                totalEarned+=earnedRevenue;
+                const statusColor = pctComplete>=100?'#86efac':pctComplete>=50?'#7dd3fc':'#94a3b8';
+                rows+=`<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:8px;margin-bottom:6px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:6px;">
+                        <span style="font-weight:700;color:#e2e8f0;font-size:0.85rem;">${j.name||'—'}</span>
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            <span style="font-size:0.75rem;color:${statusColor};font-weight:700;">${pctComplete}% done</span>
+                            <button onclick="editWIPJob(${i})" style="background:rgba(99,102,241,0.2);border:none;color:#c7d2fe;border-radius:4px;padding:1px 7px;cursor:pointer;font-size:0.7rem;">edit</button>
+                            <button onclick="deleteWIPJob(${i})" style="background:rgba(239,68,68,0.2);border:none;color:#f87171;border-radius:4px;padding:1px 6px;cursor:pointer;font-size:0.7rem;">✕</button>
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;font-size:0.75rem;">
+                        <div><span style="color:#64748b;">Contract</span><br><b style="color:#e2e8f0;">$${(j.contract||0).toLocaleString()}</b></div>
+                        <div><span style="color:#64748b;">Billed</span><br><b style="color:#7dd3fc;">$${(j.billed||0).toLocaleString()}</b></div>
+                        <div><span style="color:#64748b;">Cost to Date</span><br><b style="color:#e2e8f0;">$${(j.costToDate||0).toLocaleString()}</b></div>
+                        <div><span style="color:#64748b;">Earned Revenue</span><br><b style="color:#86efac;">$${Math.round(earnedRevenue).toLocaleString()}</b></div>
+                        <div><span style="color:#64748b;">${overBilled?'Overbilled (BIE)':'Underbilled (CIE)'}</span><br>
+                            <b style="color:${overBilled?'#fbbf24':underbilledAmt>0?'#f87171':'#64748b'};">
+                                ${overBilled?'+$'+Math.round(overbilledAmt).toLocaleString():underbilledAmt>0?'-$'+Math.round(underbilledAmt).toLocaleString():'—'}
+                            </b>
+                        </div>
+                        <div><span style="color:#64748b;">GC / Client</span><br><b style="color:#94a3b8;font-size:0.7rem;">${j.client||'—'}</b></div>
+                    </div>
+                    <div style="margin-top:5px;background:rgba(255,255,255,0.06);border-radius:3px;height:5px;overflow:hidden;">
+                        <div style="width:${pctComplete}%;height:100%;background:${pctComplete>=100?'#22c55e':pctComplete>=50?'#3b82f6':'#64748b'};border-radius:3px;transition:width 0.3s;"></div>
+                    </div>
+                </div>`;
+            });
+            const totalOverbilled = Math.max(0,totalBilled-totalEarned);
+            const totalUnderbilled = Math.max(0,totalEarned-totalBilled);
+            panel.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">
+                <div style="background:rgba(255,255,255,0.05);border-radius:6px;padding:6px 10px;font-size:0.78rem;"><div style="color:#64748b;">Total Contract</div><b style="color:#e2e8f0;">$${Math.round(totalContract).toLocaleString()}</b></div>
+                <div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2);border-radius:6px;padding:6px 10px;font-size:0.78rem;"><div style="color:#64748b;">Total Earned</div><b style="color:#86efac;">$${Math.round(totalEarned).toLocaleString()}</b></div>
+                <div style="background:rgba(251,191,36,${totalOverbilled>0?'0.15':'0.05'});border:1px solid rgba(251,191,36,${totalOverbilled>0?'0.3':'0.1'});border-radius:6px;padding:6px 10px;font-size:0.78rem;"><div style="color:#64748b;">Overbilled (BIE)</div><b style="color:${totalOverbilled>0?'#fbbf24':'#64748b'};">$${Math.round(totalOverbilled).toLocaleString()}</b></div>
+                <div style="background:rgba(239,68,68,${totalUnderbilled>0?'0.12':'0.05'});border:1px solid rgba(239,68,68,${totalUnderbilled>0?'0.2':'0.1'});border-radius:6px;padding:6px 10px;font-size:0.78rem;"><div style="color:#64748b;">Underbilled (CIE)</div><b style="color:${totalUnderbilled>0?'#f87171':'#64748b'};">$${Math.round(totalUnderbilled).toLocaleString()}</b></div>
+            </div>${rows}`;
+        }
+
+        window.addWIPJob = function(){
+            const name=document.getElementById('wip_name')?.value.trim();
+            const client=document.getElementById('wip_client')?.value.trim();
+            const contract=parseFloat(document.getElementById('wip_contract')?.value)||0;
+            const billed=parseFloat(document.getElementById('wip_billed')?.value)||0;
+            const costToDate=parseFloat(document.getElementById('wip_cost')?.value)||0;
+            const pctComplete=parseFloat(document.getElementById('wip_pct')?.value)||0;
+            if(!name||!contract){ alert('Job name and contract value required.'); return; }
+            const jobs=loadWIP();
+            jobs.push({name,client,contract,billed,costToDate,pctComplete,added:Date.now()});
+            saveWIP(jobs);
+            renderWIP();
+            ['wip_name','wip_client','wip_contract','wip_billed','wip_cost','wip_pct'].forEach(id=>{ const el=document.getElementById(id); if(el){el.value=id.includes('pct')?'0':id.includes('billed')||id.includes('cost')?'0':'';} });
+        };
+
+        window.editWIPJob = function(i){
+            const jobs=loadWIP(); const j=jobs[i];
+            const name=prompt('Job name:',j.name);if(name===null)return;
+            const contract=parseFloat(prompt('Contract value:',j.contract));
+            const billed=parseFloat(prompt('Amount billed to date:',j.billed));
+            const costToDate=parseFloat(prompt('Cost to date:',j.costToDate));
+            const pctComplete=parseFloat(prompt('% complete (0-100):',j.pctComplete));
+            jobs[i]={...j,name,contract:isNaN(contract)?j.contract:contract,billed:isNaN(billed)?j.billed:billed,costToDate:isNaN(costToDate)?j.costToDate:costToDate,pctComplete:isNaN(pctComplete)?j.pctComplete:pctComplete};
+            saveWIP(jobs); renderWIP();
+        };
+        window.deleteWIPJob = function(i){ if(!confirm('Remove this job from WIP schedule?'))return; const j=loadWIP(); j.splice(i,1); saveWIP(j); renderWIP(); };
+
+        window.printWIP = function(){
+            const jobs=loadWIP(); if(!jobs.length){alert('No jobs in WIP schedule.');return;}
+            const co=typeof getCompanyInfo==='function'?getCompanyInfo():{};
+            let totalContract=0,totalBilled=0,totalCost=0,totalEarned=0,totalBIE=0,totalCIE=0;
+            let rows='';
+            jobs.forEach(j=>{
+                const pct=Math.min(100,Math.max(0,parseFloat(j.pctComplete)||0));
+                const earned=j.contract*pct/100;
+                const bie=Math.max(0,j.billed-earned);
+                const cie=Math.max(0,earned-j.billed);
+                totalContract+=j.contract||0; totalBilled+=j.billed||0; totalCost+=j.costToDate||0; totalEarned+=earned; totalBIE+=bie; totalCIE+=cie;
+                rows+=`<tr><td>${j.name||'—'}</td><td>${j.client||'—'}</td><td style="text-align:right;">$${(j.contract||0).toLocaleString()}</td><td style="text-align:center;">${pct}%</td><td style="text-align:right;">$${Math.round(earned).toLocaleString()}</td><td style="text-align:right;">$${(j.billed||0).toLocaleString()}</td><td style="text-align:right;">$${(j.costToDate||0).toLocaleString()}</td><td style="text-align:right;color:${bie>0?'#b45309':'#333'};">${bie>0?'$'+Math.round(bie).toLocaleString():'—'}</td><td style="text-align:right;color:${cie>0?'#b91c1c':'#333'};">${cie>0?'$'+Math.round(cie).toLocaleString():'—'}</td></tr>`;
+            });
+            const html=`<!DOCTYPE html><html><head><title>WIP Schedule</title><style>body{font-family:Arial,sans-serif;font-size:9pt;margin:20px;}h2{font-size:13pt;}p{margin:2px 0;font-size:8pt;}table{width:100%;border-collapse:collapse;margin-top:10px;}th,td{border:1px solid #ccc;padding:3px 5px;font-size:8pt;}.totrow{background:#f5f5f5;font-weight:bold;}.note{font-size:7.5pt;color:#666;margin-top:8px;}.warn{color:#b91c1c;}</style></head><body>
+            <h2>WIP (Work In Progress) Schedule</h2>
+            <p>${co.name||'Oncor'} · Prepared: ${new Date().toLocaleDateString()} · Prepared by: ${co.name||'__________'}</p>
+            <table><thead><tr><th>Job Name</th><th>GC/Client</th><th>Contract $</th><th>% Done</th><th>Earned Rev</th><th>Billed</th><th>Cost to Date</th><th>Overbilled (BIE)</th><th>Underbilled (CIE)</th></tr></thead>
+            <tbody>${rows}
+            <tr class="totrow"><td colspan="2">TOTALS</td><td style="text-align:right;">$${Math.round(totalContract).toLocaleString()}</td><td></td><td style="text-align:right;">$${Math.round(totalEarned).toLocaleString()}</td><td style="text-align:right;">$${Math.round(totalBilled).toLocaleString()}</td><td style="text-align:right;">$${Math.round(totalCost).toLocaleString()}</td><td style="text-align:right;">${totalBIE>0?'$'+Math.round(totalBIE).toLocaleString():'—'}</td><td style="text-align:right;${totalCIE>0?'color:#b91c1c;':''}">${totalCIE>0?'$'+Math.round(totalCIE).toLocaleString():'—'}</td></tr>
+            </tbody></table>
+            <p class="note">BIE = Billings in Excess of Earned Revenue (liability). CIE = Costs/Earnings in Excess of Billings (asset / underbilling risk).</p>
+            ${totalCIE>0?`<p class="warn">⚠ UNDERBILLING: $${Math.round(totalCIE).toLocaleString()} not yet billed. Review and issue pay apps promptly.</p>`:''}
+            <table style="margin-top:18px;"><tr><th>Controller / Accountant</th><th>Owner / PM</th><th>Surety / Bank Reviewer</th><th>Date</th></tr><tr style="height:35px;"><td></td><td></td><td></td><td></td></tr></table>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`;
+            const w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+        };
+
+        window.toggleWIP = function(){
+            const p=document.getElementById('wipPanelWrap');
+            const b=document.getElementById('wipBtn');
+            if(!p)return;
+            const show=p.style.display==='none';
+            p.style.display=show?'block':'none';
+            b.textContent=show?'📒 Hide WIP Schedule':'📒 Show WIP Schedule';
+            if(show)renderWIP();
+        };
+
+        document.addEventListener('DOMContentLoaded',function(){
+            setTimeout(function(){
+                const anchor=document.getElementById('timeCardBtn');
+                if(!anchor)return;
+                const wrapper=document.createElement('div');
+                wrapper.style.cssText='margin-top:6px;';
+                wrapper.innerHTML=`
+                <div id="wipPanelWrap" style="display:none;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px;">
+                        <span style="font-weight:700;color:#fde68a;">📒 WIP Schedule</span>
+                        <span style="font-size:0.7rem;color:#64748b;">Work In Progress — bonding/banking/accounting</span>
+                    </div>
+                    <div id="wipPanel"></div>
+                    <!-- Add Job -->
+                    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:8px;margin-top:8px;">
+                        <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:6px;font-weight:600;">ADD JOB</div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px;">
+                            <input id="wip_name" placeholder="Job name" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" />
+                            <input id="wip_client" placeholder="GC / Client" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" />
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px;">
+                            <div><div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">Contract Value ($)</div><input type="number" id="wip_contract" value="0" min="0" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" /></div>
+                            <div><div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">Billed to Date ($)</div><input type="number" id="wip_billed" value="0" min="0" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" /></div>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:6px;">
+                            <div><div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">Cost to Date ($)</div><input type="number" id="wip_cost" value="0" min="0" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" /></div>
+                            <div><div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">% Complete</div><input type="number" id="wip_pct" value="0" min="0" max="100" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" /></div>
+                        </div>
+                        <button onclick="addWIPJob()" style="background:rgba(251,191,36,0.2);border:1px solid rgba(251,191,36,0.3);color:#fde68a;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:0.78rem;">+ Add Job</button>
+                    </div>
+                    <div style="display:flex;gap:5px;margin-top:6px;">
+                        <button onclick="printWIP()" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fde68a;border-radius:6px;padding:4px;cursor:pointer;font-size:0.75rem;">🖨️ Print WIP Report</button>
+                    </div>
+                    <div style="font-size:0.7rem;color:#475569;margin-top:6px;padding:4px 6px;background:rgba(255,255,255,0.03);border-radius:4px;">BIE = Billings in Excess of Earnings (liability, overbilled). CIE = Costs/Earnings in Excess of Billings (underbilled asset). Surety bonds require this schedule quarterly.</div>
+                </div>
+                <button onclick="toggleWIP()" id="wipBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fde68a;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;">📒 Show WIP Schedule</button>`;
+                anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+            }, 3500);
+        });
+    })();
+    </script>
+
+    <!-- ============================================================
+         FEATURE: AGGREGATE & FILL MATERIAL ESTIMATOR (🪨)
+         Earthwork: base course, fill, subgrade, gravel — tons/loads.
+         ============================================================ -->
+    <script>
+    (function(){
+        const FILL_MATS = [
+            {name:'Compacted Base Course (4" typical)',density:1.35,unit:'ton/CY',defaultDepth:4,unitLabel:'in'},
+            {name:'Compacted Base Course (6" typical)',density:1.35,unit:'ton/CY',defaultDepth:6,unitLabel:'in'},
+            {name:'Road Base / Caliche (compacted)',density:1.45,unit:'ton/CY',defaultDepth:6,unitLabel:'in'},
+            {name:'Select Fill / Subgrade Prep',density:1.30,unit:'ton/CY',defaultDepth:12,unitLabel:'in'},
+            {name:'Structural Fill (engineered)',density:1.40,unit:'ton/CY',defaultDepth:24,unitLabel:'in'},
+            {name:'Sand (washed, loose)',density:1.20,unit:'ton/CY',defaultDepth:4,unitLabel:'in'},
+            {name:'Crushed Rock (#57 stone)',density:1.50,unit:'ton/CY',defaultDepth:4,unitLabel:'in'},
+            {name:'Pea Gravel',density:1.45,unit:'ton/CY',defaultDepth:4,unitLabel:'in'},
+            {name:'Topsoil (loose)',density:0.85,unit:'ton/CY',defaultDepth:6,unitLabel:'in'},
+            {name:'Concrete Rubble (broken)',density:1.60,unit:'ton/CY',defaultDepth:0,unitLabel:'in'},
+            {name:'Custom material...',density:1.35,unit:'ton/CY',defaultDepth:0,unitLabel:'in'},
+        ];
+
+        function calcFill(sf, depth_in, density, swell){
+            const cy_bank = sf * (depth_in/12) / 27;
+            const cy_loose = cy_bank * (1 + (swell||0)/100);
+            const tons = cy_bank * density;
+            const truck14 = Math.ceil(tons / 14);
+            const truck20 = Math.ceil(cy_loose / 20);
+            return {cy_bank, cy_loose, tons, truck14, truck20};
+        }
+
+        window.calcAggregate = function(){
+            const result = document.getElementById('aggResult');
+            if(!result) return;
+            const sf = parseFloat(document.getElementById('agg_sf')?.value)||0;
+            const depth = parseFloat(document.getElementById('agg_depth')?.value)||0;
+            const matSel = parseInt(document.getElementById('agg_mat')?.value)||0;
+            const mat = FILL_MATS[matSel] || FILL_MATS[0];
+            const density = matSel===FILL_MATS.length-1 ? (parseFloat(document.getElementById('agg_custom_density')?.value)||1.35) : mat.density;
+            const price = parseFloat(document.getElementById('agg_price')?.value)||0;
+            const swell = parseFloat(document.getElementById('agg_swell')?.value)||15;
+            if(!sf||!depth){ result.innerHTML='<div style="color:#64748b;font-size:0.8rem;padding:6px;">Enter area and depth to calculate.</div>'; return; }
+            const {cy_bank, cy_loose, tons, truck14, truck20} = calcFill(sf, depth, density, swell);
+            const cost = price>0 ? tons*price : 0;
+            const costPerSF = sf>0 && cost>0 ? cost/sf : 0;
+            result.innerHTML=`
+                <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:10px;margin-top:8px;">
+                    <div style="font-weight:700;color:#fcd34d;font-size:0.85rem;margin-bottom:8px;">📊 Results — ${mat.name}</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:0.8rem;">
+                        <div><span style="color:#64748b;">Bank CY (in-place)</span><br><b style="color:#e2e8f0;">${cy_bank.toFixed(1)} CY</b></div>
+                        <div><span style="color:#64748b;">Loose CY (w/ ${swell}% swell)</span><br><b style="color:#e2e8f0;">${cy_loose.toFixed(1)} CY</b></div>
+                        <div><span style="color:#64748b;">Tons (@ ${density} ton/CY)</span><br><b style="color:#fcd34d;font-size:1rem;">${tons.toFixed(1)} tons</b></div>
+                        <div><span style="color:#64748b;">Coverage</span><br><b style="color:#e2e8f0;">${sf.toLocaleString()} SF @ ${depth}"</b></div>
+                        <div><span style="color:#64748b;">Dump Trucks (14T/load)</span><br><b style="color:#7dd3fc;">${truck14} loads</b></div>
+                        <div><span style="color:#64748b;">Belly Dumps (20CY/load)</span><br><b style="color:#7dd3fc;">${truck20} loads</b></div>
+                        ${cost>0?`<div><span style="color:#64748b;">Material Cost (@ $${price}/ton)</span><br><b style="color:#86efac;">$${Math.round(cost).toLocaleString()}</b></div>
+                        <div><span style="color:#64748b;">$/SF installed</span><br><b style="color:#86efac;">$${costPerSF.toFixed(2)}/SF</b></div>`:''}
+                    </div>
+                    ${tons>500?`<div style="margin-top:6px;font-size:0.75rem;color:#fbbf24;">⚠ Large order: Confirm with supplier — may need scheduling window for delivery. Consider multiple trucks in rotation.</div>`:''}
+                    <button onclick="copyAggResult(${sf},${depth_in||depth},${tons.toFixed(1)},${cost.toFixed(0)},${cy_bank.toFixed(1)},${truck14})" style="margin-top:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#7dd3fc;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:0.75rem;">📋 Copy Result</button>
+                </div>`;
+        };
+
+        window.copyAggResult = function(sf,depth,tons,cost,cy,trucks){
+            const pn=document.getElementById('projectName')?.value||'Project';
+            const mat=FILL_MATS[parseInt(document.getElementById('agg_mat')?.value)||0].name;
+            let txt=`AGGREGATE ESTIMATE\nProject: ${pn}\nMaterial: ${mat}\nArea: ${sf.toLocaleString()} SF @ ${depth}" depth\nBank CY: ${cy}\nTons: ${tons}\nTrucks (14T): ${trucks}\n`;
+            if(cost>0) txt+=`Material Cost: $${Number(cost).toLocaleString()}\n`;
+            navigator.clipboard.writeText(txt).then(()=>alert('Copied!')).catch(()=>alert(txt));
+        };
+
+        window.toggleAggregate = function(){
+            const p=document.getElementById('aggPanelWrap');
+            const b=document.getElementById('aggBtn');
+            if(!p)return;
+            const show=p.style.display==='none';
+            p.style.display=show?'block':'none';
+            b.textContent=show?'🪨 Hide Fill/Aggregate Estimator':'🪨 Show Fill/Aggregate Estimator';
+        };
+
+        window.onAggMatChange = function(){
+            const matSel = parseInt(document.getElementById('agg_mat')?.value)||0;
+            const customRow = document.getElementById('agg_custom_row');
+            const depthEl = document.getElementById('agg_depth');
+            if(customRow) customRow.style.display = matSel===FILL_MATS.length-1?'grid':'none';
+            if(depthEl && FILL_MATS[matSel].defaultDepth>0) depthEl.value = FILL_MATS[matSel].defaultDepth;
+        };
+
+        document.addEventListener('DOMContentLoaded',function(){
+            setTimeout(function(){
+                const anchor=document.getElementById('wipBtn');
+                if(!anchor)return;
+                const matOptions = FILL_MATS.map((m,i)=>`<option value="${i}">${m.name}</option>`).join('');
+                const wrapper=document.createElement('div');
+                wrapper.style.cssText='margin-top:6px;';
+                wrapper.innerHTML=`
+                <div id="aggPanelWrap" style="display:none;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px;">
+                        <span style="font-weight:700;color:#fcd34d;">🪨 Fill / Aggregate Estimator</span>
+                        <span style="font-size:0.7rem;color:#64748b;">Base course, fill, gravel — tons, loads, cost</span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px;">
+                        <div>
+                            <div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">Area (SF)</div>
+                            <input type="number" id="agg_sf" value="0" min="0" oninput="calcAggregate()" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" />
+                        </div>
+                        <div>
+                            <div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">Depth (inches)</div>
+                            <input type="number" id="agg_depth" value="4" min="0.5" step="0.5" oninput="calcAggregate()" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" />
+                        </div>
+                    </div>
+                    <div style="margin-bottom:5px;">
+                        <div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">Material</div>
+                        <select id="agg_mat" onchange="onAggMatChange();calcAggregate();" style="background:#1e293b;border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;">${matOptions}</select>
+                    </div>
+                    <div id="agg_custom_row" style="display:none;grid-template-columns:1fr;gap:5px;margin-bottom:5px;">
+                        <div><div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">Custom density (ton/CY)</div>
+                        <input type="number" id="agg_custom_density" value="1.35" step="0.05" min="0.5" max="3" oninput="calcAggregate()" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" /></div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:6px;">
+                        <div>
+                            <div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">Price ($/ton, optional)</div>
+                            <input type="number" id="agg_price" value="0" min="0" oninput="calcAggregate()" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" />
+                        </div>
+                        <div>
+                            <div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">Swell factor (%)</div>
+                            <input type="number" id="agg_swell" value="15" min="0" max="50" oninput="calcAggregate()" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 7px;font-size:0.78rem;width:100%;box-sizing:border-box;" />
+                        </div>
+                    </div>
+                    <button onclick="calcAggregate()" style="width:100%;background:rgba(251,191,36,0.2);border:1px solid rgba(251,191,36,0.3);color:#fcd34d;border-radius:6px;padding:6px;cursor:pointer;font-size:0.8rem;font-weight:600;">🔢 Calculate</button>
+                    <div id="aggResult"></div>
+                    <div style="font-size:0.7rem;color:#475569;margin-top:8px;padding:4px 6px;background:rgba(255,255,255,0.03);border-radius:4px;">Swell = loose volume increase when excavated. Typical: base course 10-15%, select fill 15-25%. Truck loads based on 14-ton dump or 20-CY belly dump. Always order 5-10% extra for grade tolerance.</div>
+                </div>
+                <button onclick="toggleAggregate()" id="aggBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fcd34d;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;">🪨 Show Fill/Aggregate Estimator</button>`;
+                anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+            }, 4000);
+        });
+    })();
+    </script>
+
 </body>
 </html>
