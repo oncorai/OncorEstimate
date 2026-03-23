@@ -15287,5 +15287,805 @@ ${bidTotal > 0 ? `
         })();
     </script>
 
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         FEATURE: PAY APPLICATION GENERATOR (AIA G702/G703 STYLE) 💵
+         Schedule of Values + progressive billing for commercial jobs
+    ═══════════════════════════════════════════════════════════════════ -->
+    <script>
+        /* ── Pay Application data helpers ── */
+        function getPayAppSOV() {
+            const raw = localStorage.getItem('oncor_payapp_sov');
+            return raw ? JSON.parse(raw) : [];
+        }
+        function savePayAppSOV(rows) {
+            localStorage.setItem('oncor_payapp_sov', JSON.stringify(rows));
+        }
+        function getPayAppHistory() {
+            const raw = localStorage.getItem('oncor_payapp_history');
+            return raw ? JSON.parse(raw) : [];
+        }
+        function savePayAppHistory(arr) {
+            localStorage.setItem('oncor_payapp_history', JSON.stringify(arr));
+        }
+
+        function togglePayApp() {
+            const panel = document.getElementById('payAppPanel');
+            const btn   = document.getElementById('payAppBtn');
+            if (!panel || !btn) return;
+            const open = panel.style.display !== 'none';
+            panel.style.display = open ? 'none' : 'block';
+            btn.textContent = open ? '💵 Show Pay Application' : '💵 Hide Pay Application';
+            if (!open) renderPayAppSOV();
+        }
+
+        function renderPayAppSOV() {
+            const rows    = getPayAppSOV();
+            const history = getPayAppHistory();
+            const container = document.getElementById('payAppSOVRows');
+            if (!container) return;
+
+            // Compute prev billed per line
+            const prevBilled = {};
+            history.forEach(app => {
+                (app.lines || []).forEach(l => {
+                    prevBilled[l.id] = (prevBilled[l.id] || 0) + (l.thisPeriod || 0);
+                });
+            });
+
+            if (rows.length === 0) {
+                container.innerHTML = '<div style="color:#64748b;font-size:0.78rem;text-align:center;padding:12px;">No schedule of values yet. Add line items below or auto-populate from bid.</div>';
+            } else {
+                let totalScheduled = 0, totalPrev = 0, totalThis = 0;
+                rows.forEach(r => {
+                    totalScheduled += r.amount || 0;
+                    totalPrev += prevBilled[r.id] || 0;
+                    const thisEl = document.getElementById('payapp_this_' + r.id);
+                    totalThis += thisEl ? (parseFloat(thisEl.value) || 0) : 0;
+                });
+                container.innerHTML = rows.map(r => {
+                    const prev = prevBilled[r.id] || 0;
+                    const balance = (r.amount || 0) - prev;
+                    const pct = r.amount > 0 ? Math.round((prev / r.amount) * 100) : 0;
+                    return `<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 60px 24px;gap:4px;align-items:center;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+                        <span style="font-size:0.75rem;color:#cbd5e1;">${r.desc}</span>
+                        <span style="font-size:0.75rem;color:#94a3b8;text-align:right;">$${(r.amount||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}</span>
+                        <span style="font-size:0.75rem;color:#64748b;text-align:right;">$${prev.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})} <span style="font-size:0.65rem;">(${pct}%)</span></span>
+                        <input id="payapp_this_${r.id}" type="number" value="${Math.max(0,balance)}" min="0" max="${r.amount}"
+                            style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.15);border-radius:3px;padding:2px 5px;color:#fff;font-size:0.75rem;text-align:right;"
+                            oninput="updatePayAppTotals()">
+                        <span id="payapp_bal_${r.id}" style="font-size:0.72rem;color:${balance<=0?'#22c55e':'#f59e0b'};text-align:right;">$${balance.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}</span>
+                        <button onclick="deleteSOVRow('${r.id}')" style="background:rgba(239,68,68,0.15);border:none;color:#ef4444;border-radius:3px;cursor:pointer;font-size:0.7rem;padding:1px 4px;">✕</button>
+                    </div>`;
+                }).join('');
+            }
+            updatePayAppTotals();
+        }
+
+        function updatePayAppTotals() {
+            const rows    = getPayAppSOV();
+            const history = getPayAppHistory();
+            const prevBilled = {};
+            history.forEach(app => {
+                (app.lines || []).forEach(l => {
+                    prevBilled[l.id] = (prevBilled[l.id] || 0) + (l.thisPeriod || 0);
+                });
+            });
+
+            let totalScheduled = 0, totalPrev = 0, totalThis = 0, totalBalance = 0;
+            rows.forEach(r => {
+                totalScheduled += r.amount || 0;
+                totalPrev += prevBilled[r.id] || 0;
+                const thisEl = document.getElementById('payapp_this_' + r.id);
+                const thisAmt = thisEl ? (parseFloat(thisEl.value) || 0) : 0;
+                totalThis += thisAmt;
+                totalBalance += (r.amount || 0) - (prevBilled[r.id] || 0) - thisAmt;
+            });
+
+            const retPct = parseFloat(document.getElementById('payAppRetPct')?.value || 10) / 100;
+            const retention = totalThis * retPct;
+            const net       = totalThis - retention;
+            const completePct = totalScheduled > 0 ? ((totalPrev + totalThis) / totalScheduled * 100).toFixed(1) : '0.0';
+
+            const totEl = document.getElementById('payAppTotals');
+            if (totEl) {
+                totEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;">
+                    <div style="background:rgba(0,0,0,0.2);border-radius:5px;padding:6px;">
+                        <div style="font-size:0.7rem;color:#64748b;">Contract Value</div>
+                        <div style="font-size:0.9rem;font-weight:700;color:#e2e8f0;">$${totalScheduled.toLocaleString('en-US',{minimumFractionDigits:0})}</div>
+                    </div>
+                    <div style="background:rgba(0,0,0,0.2);border-radius:5px;padding:6px;">
+                        <div style="font-size:0.7rem;color:#64748b;">This Application</div>
+                        <div style="font-size:0.9rem;font-weight:700;color:#60a5fa;">$${totalThis.toLocaleString('en-US',{minimumFractionDigits:0})}</div>
+                    </div>
+                    <div style="background:rgba(0,0,0,0.2);border-radius:5px;padding:6px;">
+                        <div style="font-size:0.7rem;color:#64748b;">Retention (${Math.round(retPct*100)}%)</div>
+                        <div style="font-size:0.9rem;font-weight:700;color:#f87171;">-$${retention.toLocaleString('en-US',{minimumFractionDigits:0})}</div>
+                    </div>
+                    <div style="background:rgba(34,197,94,0.1);border-radius:5px;padding:6px;border:1px solid rgba(34,197,94,0.25);">
+                        <div style="font-size:0.7rem;color:#64748b;">Net Due</div>
+                        <div style="font-size:0.9rem;font-weight:700;color:#22c55e;">$${net.toLocaleString('en-US',{minimumFractionDigits:0})}</div>
+                    </div>
+                </div>
+                <div style="font-size:0.72rem;color:#64748b;text-align:center;margin-top:5px;">
+                    Prev billed: $${totalPrev.toLocaleString('en-US',{minimumFractionDigits:0})} · Balance to complete: $${totalBalance.toLocaleString('en-US',{minimumFractionDigits:0})} · Overall: ${completePct}% complete
+                </div>`;
+            }
+        }
+
+        function autoPopulateSOVFromBid() {
+            /* Pull cost estimate line items from the page */
+            const proj = document.getElementById('projectName')?.value || 'Project';
+            const existing = getPayAppSOV();
+            if (existing.length > 0 && !confirm('This will replace your current Schedule of Values. Continue?')) return;
+
+            const newRows = [];
+            // Attempt to read from window.lastCalc if available
+            const lc = window.lastCalcResult;
+            if (lc && lc.rows && lc.rows.length > 0) {
+                lc.rows.forEach((r, i) => {
+                    newRows.push({ id: 'sov_' + Date.now() + '_' + i, desc: r.label, amount: Math.round(r.cost) });
+                });
+            } else {
+                // Fallback: pull grand total as single line
+                const grandEl = document.getElementById('grandTotal') || document.getElementById('totalBidDisplay');
+                const totalText = grandEl ? grandEl.textContent.replace(/[^0-9.]/g,'') : '0';
+                const total = parseFloat(totalText) || 0;
+                if (total > 0) {
+                    newRows.push({ id: 'sov_auto_conc', desc: 'Concrete Work — ' + proj, amount: Math.round(total) });
+                } else {
+                    alert('Run Recalculate first to generate a bid total, then auto-populate.');
+                    return;
+                }
+            }
+            savePayAppSOV(newRows);
+            renderPayAppSOV();
+        }
+
+        function addSOVRow() {
+            const desc   = (document.getElementById('sovDesc')?.value  || '').trim();
+            const amount = parseFloat(document.getElementById('sovAmt')?.value  || 0);
+            if (!desc) { alert('Enter a description.'); return; }
+            if (!amount) { alert('Enter a dollar amount.'); return; }
+            const rows = getPayAppSOV();
+            rows.push({ id: 'sov_' + Date.now(), desc, amount });
+            savePayAppSOV(rows);
+            document.getElementById('sovDesc').value = '';
+            document.getElementById('sovAmt').value  = '';
+            renderPayAppSOV();
+        }
+
+        function deleteSOVRow(id) {
+            const rows = getPayAppSOV().filter(r => r.id !== id);
+            savePayAppSOV(rows);
+            renderPayAppSOV();
+        }
+
+        function submitPayApplication() {
+            const rows    = getPayAppSOV();
+            const history = getPayAppHistory();
+            if (rows.length === 0) { alert('Add SOV line items first.'); return; }
+
+            const prevBilled = {};
+            history.forEach(app => {
+                (app.lines || []).forEach(l => {
+                    prevBilled[l.id] = (prevBilled[l.id] || 0) + (l.thisPeriod || 0);
+                });
+            });
+
+            const appNum = history.length + 1;
+            const lines  = rows.map(r => {
+                const thisEl = document.getElementById('payapp_this_' + r.id);
+                return { id: r.id, desc: r.desc, scheduled: r.amount, thisPeriod: thisEl ? (parseFloat(thisEl.value) || 0) : 0, prevBilled: prevBilled[r.id] || 0 };
+            });
+
+            const retPct = parseFloat(document.getElementById('payAppRetPct')?.value || 10) / 100;
+            const totalThis = lines.reduce((s,l) => s + l.thisPeriod, 0);
+            const retention = totalThis * retPct;
+            const net       = totalThis - retention;
+
+            const app = {
+                appNum,
+                date:      new Date().toISOString().slice(0,10),
+                project:   document.getElementById('projectName')?.value || '—',
+                lines,
+                totalThis,
+                retention,
+                net,
+                retPct:    Math.round(retPct * 100)
+            };
+            history.push(app);
+            savePayAppHistory(history);
+            alert(`Pay Application #${appNum} saved — $${net.toLocaleString('en-US',{minimumFractionDigits:0})} net due. Use Print Pay App to generate the form.`);
+            renderPayAppSOV();
+        }
+
+        function printPayApplication() {
+            const rows    = getPayAppSOV();
+            const history = getPayAppHistory();
+            if (rows.length === 0) { alert('Add SOV line items first.'); return; }
+
+            const prevBilled = {};
+            history.forEach(app => {
+                (app.lines || []).forEach(l => {
+                    prevBilled[l.id] = (prevBilled[l.id] || 0) + (l.thisPeriod || 0);
+                });
+            });
+
+            const appNum  = history.length + 1;
+            const retPct  = parseFloat(document.getElementById('payAppRetPct')?.value || 10) / 100;
+            const proj    = document.getElementById('projectName')?.value || '—';
+            const client  = document.getElementById('clientName')?.value || '—';
+            const co      = localStorage.getItem('oncor_company_name') || 'Oncor Concrete';
+            const addr    = localStorage.getItem('oncor_company_address') || '';
+            const phone   = localStorage.getItem('oncor_company_phone') || '';
+            const email   = localStorage.getItem('oncor_company_email') || '';
+            const today   = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+            const period  = document.getElementById('payAppPeriod')?.value || today;
+
+            let totalScheduled = 0, totalPrev = 0, totalThis = 0;
+            const lineRows = rows.map((r, i) => {
+                const prev    = prevBilled[r.id] || 0;
+                const thisEl  = document.getElementById('payapp_this_' + r.id);
+                const thisAmt = thisEl ? (parseFloat(thisEl.value) || 0) : 0;
+                const cumul   = prev + thisAmt;
+                const balance = (r.amount || 0) - cumul;
+                const pct     = r.amount > 0 ? Math.round((cumul / r.amount) * 100) : 0;
+                totalScheduled += r.amount || 0;
+                totalPrev += prev;
+                totalThis += thisAmt;
+                return `<tr style="border-bottom:1px solid #eee;">
+                    <td style="padding:4px 6px;font-size:8pt;">${String.fromCharCode(65+i)}</td>
+                    <td style="padding:4px 6px;font-size:8.5pt;">${r.desc}</td>
+                    <td style="padding:4px 6px;font-size:8.5pt;text-align:right;">$${(r.amount||0).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                    <td style="padding:4px 6px;font-size:8.5pt;text-align:right;">$${prev.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                    <td style="padding:4px 6px;font-size:8.5pt;text-align:right;font-weight:600;color:#1d4ed8;">$${thisAmt.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                    <td style="padding:4px 6px;font-size:8.5pt;text-align:right;">$${cumul.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                    <td style="padding:4px 6px;font-size:8pt;text-align:center;">${pct}%</td>
+                    <td style="padding:4px 6px;font-size:8.5pt;text-align:right;">$${balance.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                </tr>`;
+            }).join('');
+
+            const retention  = totalThis * retPct;
+            const net        = totalThis - retention;
+            const prevRetHeld = totalPrev * retPct; // approx
+
+            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Pay Application #${appNum} — ${proj}</title>
+            <style>body{font-family:Arial,sans-serif;font-size:9pt;max-width:900px;margin:0 auto;padding:16px;color:#111;}
+            h1{font-size:12pt;margin:0 0 2px;}h2{font-size:9pt;color:#555;font-weight:normal;margin:0;}
+            table{width:100%;border-collapse:collapse;}th{background:#1d4ed8;color:#fff;padding:5px 6px;text-align:right;font-size:7.5pt;}th:nth-child(1),th:nth-child(2){text-align:left;}
+            .sum-row{background:#f0f9ff;font-weight:700;border-top:2px solid #1d4ed8;}
+            .cert-box{border:1px solid #ddd;border-radius:4px;padding:10px;margin-top:12px;}
+            .sig-line{border-top:1px solid #333;display:inline-block;width:220px;margin-top:28px;}
+            @media print{body{padding:8px;}.no-print{display:none;}}</style></head><body>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1d4ed8;padding-bottom:8px;margin-bottom:10px;">
+                <div>
+                    <h1>APPLICATION FOR PAYMENT</h1>
+                    <h2>Application No.: <strong>${appNum}</strong> &nbsp;·&nbsp; Period To: <strong>${period}</strong></h2>
+                </div>
+                <div style="text-align:right;font-size:8.5pt;">
+                    <strong>${co}</strong><br>${addr ? addr+'<br>' : ''}${phone} ${email ? '· '+email : ''}<br>
+                    <em>Application Date: ${today}</em>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;font-size:8.5pt;">
+                <div><strong>Project:</strong> ${proj}<br><strong>Owner / GC:</strong> ${client}</div>
+                <div><strong>Contract For:</strong> Concrete Work<br><strong>Contract Date:</strong> _______________</div>
+            </div>
+            <table>
+                <thead><tr>
+                    <th style="text-align:left;width:32px;">#</th>
+                    <th style="text-align:left;">Description of Work</th>
+                    <th>Scheduled Value</th>
+                    <th>Work Previously Completed</th>
+                    <th>Work This Period</th>
+                    <th>Total Completed</th>
+                    <th>% Complete</th>
+                    <th>Balance to Finish</th>
+                </tr></thead>
+                <tbody>${lineRows}
+                <tr class="sum-row"><td colspan="2" style="padding:5px 6px;font-size:8.5pt;">TOTALS</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;text-align:right;">$${totalScheduled.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;text-align:right;">$${totalPrev.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;text-align:right;color:#1d4ed8;">$${totalThis.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;text-align:right;">$${(totalPrev+totalThis).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;text-align:center;">${totalScheduled>0?Math.round((totalPrev+totalThis)/totalScheduled*100):0}%</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;text-align:right;">$${(totalScheduled-totalPrev-totalThis).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                </tr></tbody>
+            </table>
+            <div class="cert-box" style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:14px;font-size:8.5pt;">
+                <div>
+                    <div style="font-weight:700;border-bottom:1px solid #ddd;padding-bottom:4px;margin-bottom:6px;">SUMMARY</div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span>Original Contract Sum:</span><span>$${totalScheduled.toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span>Total Completed to Date:</span><span>$${(totalPrev+totalThis).toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:3px;color:#ef4444;"><span>Retention (${Math.round(retPct*100)}%) This Period:</span><span>-$${retention.toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:3px;color:#92400e;"><span>Retention Previously Held:</span><span>-$${prevRetHeld.toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span>Less Previous Payments:</span><span>-$${totalPrev.toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
+                    <div style="display:flex;justify-content:space-between;font-size:10pt;font-weight:700;border-top:2px solid #111;padding-top:5px;margin-top:5px;color:#15803d;"><span>CURRENT PAYMENT DUE:</span><span>$${net.toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
+                </div>
+                <div>
+                    <div style="font-weight:700;border-bottom:1px solid #ddd;padding-bottom:4px;margin-bottom:6px;">CERTIFICATION</div>
+                    <div style="font-size:7.5pt;color:#555;margin-bottom:8px;">The undersigned contractor certifies that the work covered by this Application for Payment has been completed in accordance with the Contract Documents, that all amounts previously paid have been applied to discharge in full all obligations of the Contractor incurred in connection with the work covered by prior Applications for Payment.</div>
+                    <div><div class="sig-line"></div><br><span style="font-size:7.5pt;">Contractor Signature &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</span></div>
+                    <div style="margin-top:12px;"><div class="sig-line"></div><br><span style="font-size:7.5pt;">GC / Owner Approval &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</span></div>
+                </div>
+            </div>
+            <div style="text-align:center;font-size:7pt;color:#bbb;margin-top:14px;">Generated by Oncor Takeoff Tool · ${today} · Application #${appNum}</div>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`;
+            const w = window.open('', '_blank');
+            if (w) { w.document.write(html); w.document.close(); }
+        }
+
+        /* ── Pay App toggle init ── */
+        (function() {
+            const changeLogBtn = document.getElementById('changeLogBtn');
+            if (!changeLogBtn) return;
+
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'margin-bottom:6px;';
+            wrapper.innerHTML = `
+            <div id="payAppPanel" style="display:none;background:rgba(0,0,0,0.25);border:1px solid rgba(96,165,250,0.25);border-radius:8px;padding:10px;font-size:0.82rem;margin-bottom:6px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span style="font-weight:700;color:#e2e8f0;">💵 Pay Application (G702/G703 Style)</span>
+                    <span style="font-size:0.68rem;color:#888;">Schedule of Values · progressive billing</span>
+                </div>
+
+                <!-- SOV table header -->
+                <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 60px 24px;gap:4px;margin-bottom:4px;">
+                    <span style="font-size:0.7rem;color:#64748b;">Description</span>
+                    <span style="font-size:0.7rem;color:#64748b;text-align:right;">Scheduled $</span>
+                    <span style="font-size:0.7rem;color:#64748b;text-align:right;">Prev Billed</span>
+                    <span style="font-size:0.7rem;color:#60a5fa;text-align:right;">This Period</span>
+                    <span style="font-size:0.7rem;color:#64748b;text-align:right;">Balance</span>
+                    <span></span>
+                </div>
+                <div id="payAppSOVRows" style="max-height:200px;overflow-y:auto;margin-bottom:8px;"></div>
+                <div id="payAppTotals" style="margin-bottom:8px;"></div>
+
+                <!-- Add SOV row -->
+                <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px;margin-bottom:8px;">
+                    <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:4px;font-weight:600;">Add SOV Line Item</div>
+                    <div style="display:grid;grid-template-columns:2fr 1fr 80px;gap:4px;">
+                        <input id="sovDesc" placeholder="Description (e.g. Slab on Grade)" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.75rem;">
+                        <input id="sovAmt" type="number" placeholder="$ Amount" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.75rem;">
+                        <button onclick="addSOVRow()" style="background:#3b4a6b;border:none;color:#e2e8f0;border-radius:4px;padding:4px;cursor:pointer;font-size:0.75rem;font-weight:600;">+ Add</button>
+                    </div>
+                    <div style="display:flex;gap:4px;margin-top:5px;align-items:center;">
+                        <button onclick="autoPopulateSOVFromBid()" style="flex:1;background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:4px;padding:4px;cursor:pointer;font-size:0.73rem;">⚡ Auto-Populate from Bid</button>
+                        <label style="font-size:0.72rem;color:#94a3b8;white-space:nowrap;">Retention:</label>
+                        <input id="payAppRetPct" type="number" value="10" min="0" max="20" style="width:45px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:3px 5px;color:#fff;font-size:0.75rem;" oninput="updatePayAppTotals()">
+                        <span style="font-size:0.72rem;color:#64748b;">%</span>
+                    </div>
+                </div>
+
+                <!-- Period field -->
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+                    <label style="font-size:0.72rem;color:#94a3b8;white-space:nowrap;">Period through:</label>
+                    <input id="payAppPeriod" type="date" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:3px 6px;color:#fff;font-size:0.75rem;flex:1;">
+                </div>
+
+                <!-- Actions -->
+                <div style="display:flex;gap:4px;">
+                    <button onclick="submitPayApplication()" style="flex:1;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3);color:#22c55e;border-radius:4px;padding:5px;cursor:pointer;font-size:0.75rem;font-weight:600;">✔ Record Application</button>
+                    <button onclick="printPayApplication()" style="flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:5px;cursor:pointer;font-size:0.75rem;">🖨️ Print Pay App</button>
+                </div>
+                <div style="font-size:0.7rem;color:#64748b;margin-top:6px;padding:4px 2px;">
+                    💡 GCs require AIA G702/G703-style pay apps on commercial work. Build your Schedule of Values from the bid line items, track billed vs remaining, and print a professional pay app each billing period. Retention releases on final billing.
+                </div>
+            </div>
+            <button onclick="togglePayApp()" id="payAppBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#60a5fa;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;">💵 Show Pay Application</button>`;
+            changeLogBtn.parentNode.insertBefore(wrapper, changeLogBtn.nextSibling);
+            // Set default period to today
+            const now = new Date();
+            const pd = wrapper.querySelector('#payAppPeriod');
+            if (pd) pd.value = now.toISOString().slice(0,10);
+        })();
+    </script>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         FEATURE: BOND & INSURANCE TRACKER 🛡️
+         Track bid bonds, performance bonds, payment bonds, certs
+    ═══════════════════════════════════════════════════════════════════ -->
+    <script>
+        function getBondItems() {
+            const raw = localStorage.getItem('oncor_bond_items');
+            return raw ? JSON.parse(raw) : [];
+        }
+        function saveBondItems(arr) {
+            localStorage.setItem('oncor_bond_items', JSON.stringify(arr));
+        }
+
+        function toggleBondTracker() {
+            const panel = document.getElementById('bondPanel');
+            const btn   = document.getElementById('bondTrackerBtn');
+            if (!panel || !btn) return;
+            const open = panel.style.display !== 'none';
+            panel.style.display = open ? 'none' : 'block';
+            btn.textContent = open ? '🛡️ Show Bond & Insurance' : '🛡️ Hide Bond & Insurance';
+            if (!open) renderBondItems();
+        }
+
+        function renderBondItems() {
+            const items = getBondItems();
+            const container = document.getElementById('bondItemRows');
+            if (!container) return;
+            const today = new Date(); today.setHours(0,0,0,0);
+
+            if (items.length === 0) {
+                container.innerHTML = '<div style="color:#64748b;font-size:0.78rem;text-align:center;padding:10px;">No bonds or certificates tracked yet.</div>';
+                return;
+            }
+
+            const html = items.map(item => {
+                const exp = item.expiry ? new Date(item.expiry + 'T00:00:00') : null;
+                let statusColor = '#22c55e', statusLabel = 'Active';
+                if (exp) {
+                    const daysLeft = Math.ceil((exp - today) / 86400000);
+                    if (daysLeft < 0) { statusColor = '#ef4444'; statusLabel = 'EXPIRED'; }
+                    else if (daysLeft <= 30) { statusColor = '#f59e0b'; statusLabel = `${daysLeft}d left`; }
+                    else { statusLabel = `${daysLeft}d`; }
+                }
+                return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px 60px 24px;gap:4px;align-items:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+                    <span style="font-size:0.75rem;color:#cbd5e1;">${item.type}</span>
+                    <span style="font-size:0.73rem;color:#94a3b8;">${item.project || '—'}</span>
+                    <span style="font-size:0.73rem;color:#94a3b8;">${item.carrier || '—'}</span>
+                    <span style="font-size:0.73rem;color:#94a3b8;">${item.expiry || '—'}</span>
+                    <span style="font-size:0.73rem;color:${statusColor};font-weight:600;">${statusLabel}</span>
+                    <button onclick="deleteBondItem('${item.id}')" style="background:rgba(239,68,68,0.15);border:none;color:#ef4444;border-radius:3px;cursor:pointer;font-size:0.7rem;padding:1px 4px;">✕</button>
+                </div>`;
+            }).join('');
+            container.innerHTML = html;
+
+            // Alert counts
+            const expired = items.filter(i => { const e = i.expiry ? new Date(i.expiry+'T00:00:00') : null; return e && e < today; }).length;
+            const expiring = items.filter(i => { const e = i.expiry ? new Date(i.expiry+'T00:00:00') : null; if (!e) return false; const d = Math.ceil((e-today)/86400000); return d>=0 && d<=30; }).length;
+            const sumEl = document.getElementById('bondSummary');
+            if (sumEl) {
+                sumEl.textContent = expired > 0 ? `⚠️ ${expired} expired · ${expiring} expiring soon` : expiring > 0 ? `⚠️ ${expiring} expiring within 30 days` : `✅ ${items.length} tracked · all current`;
+                sumEl.style.color = expired > 0 ? '#ef4444' : expiring > 0 ? '#f59e0b' : '#22c55e';
+            }
+        }
+
+        function addBondItem() {
+            const type    = (document.getElementById('bondType')?.value  || '').trim();
+            const project = (document.getElementById('bondProject')?.value || '').trim();
+            const carrier = (document.getElementById('bondCarrier')?.value || '').trim();
+            const expiry  = document.getElementById('bondExpiry')?.value  || '';
+            const amount  = document.getElementById('bondAmount')?.value  || '';
+            if (!type) { alert('Select a type.'); return; }
+            const items = getBondItems();
+            items.push({ id: 'bond_' + Date.now(), type, project, carrier, expiry, amount });
+            saveBondItems(items);
+            document.getElementById('bondProject').value = '';
+            document.getElementById('bondCarrier').value = '';
+            document.getElementById('bondExpiry').value  = '';
+            document.getElementById('bondAmount').value  = '';
+            renderBondItems();
+        }
+
+        function deleteBondItem(id) {
+            const items = getBondItems().filter(i => i.id !== id);
+            saveBondItems(items);
+            renderBondItems();
+        }
+
+        function printBondReport() {
+            const items = getBondItems();
+            if (items.length === 0) { alert('No items to print.'); return; }
+            const co    = localStorage.getItem('oncor_company_name') || 'Oncor Concrete';
+            const today = new Date(); today.setHours(0,0,0,0);
+            const todayStr = today.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+
+            const rows = items.map(item => {
+                const exp = item.expiry ? new Date(item.expiry+'T00:00:00') : null;
+                let statusColor = '#166534', statusLabel = 'Active';
+                if (exp) {
+                    const d = Math.ceil((exp-today)/86400000);
+                    if (d < 0) { statusColor='#991b1b'; statusLabel='EXPIRED'; }
+                    else if (d<=30) { statusColor='#92400e'; statusLabel=d+'d left'; }
+                    else statusLabel = d+'d';
+                }
+                return `<tr style="border-bottom:1px solid #eee;">
+                    <td style="padding:5px 6px;font-size:8.5pt;">${item.type}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;">${item.project||'—'}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;">${item.carrier||'—'}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;">${item.amount ? '$'+parseFloat(item.amount).toLocaleString('en-US') : '—'}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;">${item.expiry||'—'}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;color:${statusColor};font-weight:600;">${statusLabel}</td>
+                </tr>`;
+            }).join('');
+
+            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Bond & Insurance Summary — ${co}</title>
+            <style>body{font-family:Arial,sans-serif;font-size:9.5pt;max-width:800px;margin:0 auto;padding:20px;color:#111;}
+            h1{font-size:12pt;margin:0 0 2px;}table{width:100%;border-collapse:collapse;}
+            th{background:#1e3a5f;color:#fff;padding:5px 6px;text-align:left;font-size:8pt;}
+            .note{font-size:7.5pt;color:#666;margin-top:14px;border-top:1px solid #ddd;padding-top:8px;}
+            @media print{body{padding:8px;}}</style></head><body>
+            <div style="display:flex;justify-content:space-between;border-bottom:2px solid #1e3a5f;padding-bottom:8px;margin-bottom:12px;">
+                <div><h1>🛡️ Bond &amp; Insurance Summary</h1><div style="font-size:9pt;color:#555;">${co}</div></div>
+                <div style="text-align:right;font-size:8.5pt;color:#555;">As of: <strong>${todayStr}</strong></div>
+            </div>
+            <table><thead><tr><th>Type</th><th>Project</th><th>Carrier / Issuer</th><th>Amount</th><th>Expiry</th><th>Status</th></tr></thead>
+            <tbody>${rows}</tbody></table>
+            <div class="note">Review bond and insurance expiration dates regularly. Expired coverage can result in disqualification from bids, contract termination, or uninsured liability exposure. Contact your surety/broker at least 30 days before expiration to renew.</div>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`;
+            const w = window.open('', '_blank');
+            if (w) { w.document.write(html); w.document.close(); }
+        }
+
+        /* ── Bond Tracker init ── */
+        (function() {
+            const payAppBtn = document.getElementById('payAppBtn');
+            if (!payAppBtn) return;
+
+            const bondTypes = ['Bid Bond','Performance Bond','Payment Bond','General Liability Cert','Workers Comp Cert','Auto Liability Cert','Umbrella/Excess','License Bond','Builder\'s Risk','Other'].map(t=>`<option value="${t}">${t}</option>`).join('');
+
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'margin-bottom:6px;';
+            wrapper.innerHTML = `
+            <div id="bondPanel" style="display:none;background:rgba(0,0,0,0.25);border:1px solid rgba(148,163,184,0.2);border-radius:8px;padding:10px;font-size:0.82rem;margin-bottom:6px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                    <span style="font-weight:700;color:#e2e8f0;">🛡️ Bond &amp; Insurance Tracker</span>
+                    <span id="bondSummary" style="font-size:0.7rem;color:#22c55e;"></span>
+                </div>
+                <!-- Column headers -->
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px 60px 24px;gap:4px;margin-bottom:3px;">
+                    <span style="font-size:0.68rem;color:#64748b;">Type</span>
+                    <span style="font-size:0.68rem;color:#64748b;">Project</span>
+                    <span style="font-size:0.68rem;color:#64748b;">Carrier</span>
+                    <span style="font-size:0.68rem;color:#64748b;">Expiry</span>
+                    <span style="font-size:0.68rem;color:#64748b;">Status</span>
+                    <span></span>
+                </div>
+                <div id="bondItemRows" style="max-height:180px;overflow-y:auto;margin-bottom:8px;"></div>
+
+                <!-- Add item -->
+                <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px;margin-bottom:6px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">
+                        <select id="bondType" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 5px;color:#fff;font-size:0.75rem;">${bondTypes}</select>
+                        <input id="bondProject" placeholder="Project (optional)" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.75rem;">
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:4px;">
+                        <input id="bondCarrier" placeholder="Carrier / Issuer" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.75rem;">
+                        <input id="bondAmount" type="number" placeholder="Amount $" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.75rem;">
+                        <input id="bondExpiry" type="date" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.75rem;">
+                    </div>
+                    <button onclick="addBondItem()" style="width:100%;background:#374151;border:none;color:#e2e8f0;border-radius:4px;padding:5px;cursor:pointer;font-size:0.78rem;font-weight:600;">+ Add Bond / Certificate</button>
+                </div>
+                <button onclick="printBondReport()" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.73rem;">🖨️ Print Summary</button>
+                <div style="font-size:0.7rem;color:#64748b;margin-top:6px;padding:4px 2px;">
+                    💡 Track bid bonds, performance/payment bonds, and insurance cert expiry dates in one place. You'll be disqualified from bids if certs are expired — set calendar reminders 30 days out. Stored globally across all projects.
+                </div>
+            </div>
+            <button onclick="toggleBondTracker()" id="bondTrackerBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;">🛡️ Show Bond &amp; Insurance</button>`;
+            payAppBtn.parentNode.insertBefore(wrapper, payAppBtn.nextSibling);
+        })();
+    </script>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         FEATURE: LABOR PRODUCTIVITY TRACKER 📈
+         Track actual vs estimated labor hours per element, improve future bids
+    ═══════════════════════════════════════════════════════════════════ -->
+    <script>
+        function getLaborEntries() {
+            const raw = localStorage.getItem('oncor_labor_entries');
+            return raw ? JSON.parse(raw) : [];
+        }
+        function saveLaborEntries(arr) {
+            localStorage.setItem('oncor_labor_entries', JSON.stringify(arr));
+        }
+
+        function toggleLaborTracker() {
+            const panel = document.getElementById('laborTrackerPanel');
+            const btn   = document.getElementById('laborTrackerBtn');
+            if (!panel || !btn) return;
+            const open = panel.style.display !== 'none';
+            panel.style.display = open ? 'none' : 'block';
+            btn.textContent = open ? '📈 Show Labor Tracker' : '📈 Hide Labor Tracker';
+            if (!open) renderLaborEntries();
+        }
+
+        function renderLaborEntries() {
+            const entries = getLaborEntries();
+            const container = document.getElementById('laborEntryRows');
+            const statsEl   = document.getElementById('laborStats');
+            if (!container) return;
+
+            if (entries.length === 0) {
+                container.innerHTML = '<div style="color:#64748b;font-size:0.78rem;text-align:center;padding:10px;">No labor entries yet. Log pours below to build your productivity history.</div>';
+                if (statsEl) statsEl.innerHTML = '';
+                return;
+            }
+
+            const html = entries.map(e => {
+                const estimated = parseFloat(e.estHours) || 0;
+                const actual    = parseFloat(e.actHours) || 0;
+                const variance  = actual - estimated;
+                const pct       = estimated > 0 ? ((variance / estimated) * 100).toFixed(0) : 0;
+                const varColor  = variance > 0 ? '#f87171' : variance < 0 ? '#34d399' : '#94a3b8';
+                const actYds    = parseFloat(e.yds) || 0;
+                const prodRate  = actYds > 0 && actual > 0 ? (actYds / actual).toFixed(2) : '—';
+                return `<div style="display:grid;grid-template-columns:1fr 80px 1fr 1fr 1fr 70px 24px;gap:4px;align-items:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+                    <span style="font-size:0.73rem;color:#cbd5e1;">${e.element}</span>
+                    <span style="font-size:0.72rem;color:#94a3b8;">${actYds > 0 ? actYds+' yd³' : '—'}</span>
+                    <span style="font-size:0.72rem;color:#94a3b8;">${e.date||'—'}</span>
+                    <span style="font-size:0.73rem;color:#94a3b8;text-align:right;">${estimated > 0 ? estimated+'h' : '—'}</span>
+                    <span style="font-size:0.73rem;color:#e2e8f0;text-align:right;">${actual > 0 ? actual+'h' : '—'}</span>
+                    <span style="font-size:0.72rem;color:${varColor};text-align:right;">${variance !== 0 ? (variance>0?'+':'')+variance+'h ('+pct+'%)' : '—'}<br><span style="font-size:0.65rem;color:#64748b;">${prodRate !== '—' ? prodRate+' yd³/h' : ''}</span></span>
+                    <button onclick="deleteLaborEntry('${e.id}')" style="background:rgba(239,68,68,0.15);border:none;color:#ef4444;border-radius:3px;cursor:pointer;font-size:0.7rem;padding:1px 4px;">✕</button>
+                </div>`;
+            }).join('');
+            container.innerHTML = html;
+
+            // Stats
+            if (statsEl) {
+                const validEntries = entries.filter(e => e.estHours > 0 && e.actHours > 0);
+                if (validEntries.length > 0) {
+                    const avgVar = validEntries.reduce((s,e) => s + ((e.actHours - e.estHours) / e.estHours * 100), 0) / validEntries.length;
+                    const totalYds  = entries.reduce((s,e) => s + (parseFloat(e.yds)||0), 0);
+                    const totalHrs  = entries.reduce((s,e) => s + (parseFloat(e.actHours)||0), 0);
+                    const avgProd   = totalYds > 0 && totalHrs > 0 ? (totalYds/totalHrs).toFixed(2) : '—';
+                    const overCount = validEntries.filter(e => e.actHours > e.estHours).length;
+                    statsEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:8px;">
+                        <div style="background:rgba(0,0,0,0.2);border-radius:4px;padding:5px;text-align:center;">
+                            <div style="font-size:0.68rem;color:#64748b;">Avg Labor Variance</div>
+                            <div style="font-size:0.85rem;font-weight:700;color:${avgVar>0?'#f87171':'#34d399'};">${avgVar>0?'+':''}${avgVar.toFixed(0)}%</div>
+                        </div>
+                        <div style="background:rgba(0,0,0,0.2);border-radius:4px;padding:5px;text-align:center;">
+                            <div style="font-size:0.68rem;color:#64748b;">Avg Productivity</div>
+                            <div style="font-size:0.85rem;font-weight:700;color:#60a5fa;">${avgProd} yd³/hr</div>
+                        </div>
+                        <div style="background:rgba(0,0,0,0.2);border-radius:4px;padding:5px;text-align:center;">
+                            <div style="font-size:0.68rem;color:#64748b;">Total Poured</div>
+                            <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0;">${totalYds} yd³</div>
+                        </div>
+                        <div style="background:rgba(0,0,0,0.2);border-radius:4px;padding:5px;text-align:center;">
+                            <div style="font-size:0.68rem;color:#64748b;">Over-Bid Rate</div>
+                            <div style="font-size:0.85rem;font-weight:700;color:${overCount>validEntries/2?'#f87171':'#94a3b8'};">${overCount}/${validEntries.length}</div>
+                        </div>
+                    </div>
+                    ${avgVar > 10 ? '<div style="font-size:0.72rem;color:#f59e0b;background:rgba(245,158,11,0.1);border-radius:4px;padding:5px;margin-bottom:6px;">⚠️ You\'re consistently running over on labor. Consider adding '+(Math.ceil(avgVar/5)*5)+'% labor contingency to future bids.</div>' : ''}
+                    ${avgVar < -10 ? '<div style="font-size:0.72rem;color:#34d399;background:rgba(52,211,153,0.1);border-radius:4px;padding:5px;margin-bottom:6px;">✅ Your labor estimates are consistently conservative — you\'re leaving margin on the table or could sharpen your bid to win more work.</div>' : ''}`;
+                }
+            }
+        }
+
+        function addLaborEntry() {
+            const element  = (document.getElementById('ltElement')?.value  || '').trim();
+            const date     = document.getElementById('ltDate')?.value      || '';
+            const yds      = parseFloat(document.getElementById('ltYds')?.value   || 0);
+            const estHours = parseFloat(document.getElementById('ltEst')?.value   || 0);
+            const actHours = parseFloat(document.getElementById('ltAct')?.value   || 0);
+            const crew     = document.getElementById('ltCrew')?.value      || '';
+            const notes    = (document.getElementById('ltNotes')?.value || '').trim();
+            if (!element) { alert('Enter an element description.'); return; }
+            if (!actHours) { alert('Enter actual hours worked.'); return; }
+            const entries = getLaborEntries();
+            entries.push({ id: 'lt_' + Date.now(), element, date, yds, estHours, actHours, crew, notes });
+            saveLaborEntries(entries);
+            // Clear inputs
+            document.getElementById('ltElement').value = '';
+            document.getElementById('ltYds').value     = '';
+            document.getElementById('ltEst').value     = '';
+            document.getElementById('ltAct').value     = '';
+            document.getElementById('ltNotes').value   = '';
+            renderLaborEntries();
+        }
+
+        function deleteLaborEntry(id) {
+            const entries = getLaborEntries().filter(e => e.id !== id);
+            saveLaborEntries(entries);
+            renderLaborEntries();
+        }
+
+        function printLaborReport() {
+            const entries = getLaborEntries();
+            if (entries.length === 0) { alert('No entries to print.'); return; }
+            const co    = localStorage.getItem('oncor_company_name') || 'Oncor Concrete';
+            const today = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+
+            const validEntries = entries.filter(e => e.estHours > 0 && e.actHours > 0);
+            const avgVar = validEntries.length > 0 ? (validEntries.reduce((s,e) => s + ((e.actHours - e.estHours) / e.estHours * 100), 0) / validEntries.length).toFixed(1) : null;
+            const totalYds = entries.reduce((s,e) => s + (parseFloat(e.yds)||0), 0);
+            const totalAct = entries.reduce((s,e) => s + (parseFloat(e.actHours)||0), 0);
+
+            const rows = entries.map(e => {
+                const variance = (parseFloat(e.actHours)||0) - (parseFloat(e.estHours)||0);
+                const pct = e.estHours > 0 ? ((variance / e.estHours)*100).toFixed(0) : '—';
+                const actYds = parseFloat(e.yds)||0;
+                const prod = actYds > 0 && e.actHours > 0 ? (actYds/e.actHours).toFixed(2) : '—';
+                return `<tr style="border-bottom:1px solid #eee;">
+                    <td style="padding:5px 6px;font-size:8.5pt;">${e.date||'—'}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;">${e.element}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;text-align:right;">${e.yds||'—'}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;text-align:right;">${e.estHours||'—'}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;text-align:right;font-weight:600;">${e.actHours||'—'}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;text-align:right;color:${variance>0?'#b91c1c':'#166534'};">${e.estHours > 0 ? (variance>0?'+':'')+variance+'h ('+pct+'%)' : '—'}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;text-align:right;">${prod !== '—' ? prod+' yd³/h' : '—'}</td>
+                    <td style="padding:5px 6px;font-size:8pt;color:#555;">${e.notes||''}</td>
+                </tr>`;
+            }).join('');
+
+            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Labor Productivity Report — ${co}</title>
+            <style>body{font-family:Arial,sans-serif;font-size:9pt;max-width:960px;margin:0 auto;padding:20px;color:#111;}
+            h1{font-size:12pt;margin:0 0 2px;}table{width:100%;border-collapse:collapse;}
+            th{background:#1e3a5f;color:#fff;padding:5px 6px;text-align:right;font-size:7.5pt;}th:first-child,th:nth-child(2){text-align:left;}
+            .note{font-size:7.5pt;color:#666;margin-top:14px;border-top:1px solid #ddd;padding-top:8px;}
+            @media print{body{padding:8px;}}</style></head><body>
+            <div style="display:flex;justify-content:space-between;border-bottom:2px solid #1e3a5f;padding-bottom:8px;margin-bottom:12px;">
+                <div><h1>📈 Labor Productivity Report</h1><div style="font-size:9pt;color:#555;">${co}</div></div>
+                <div style="text-align:right;font-size:8.5pt;color:#555;">As of: <strong>${today}</strong><br>${entries.length} entries · ${totalYds.toFixed(1)} yd³ · ${totalAct.toFixed(1)} hrs total</div>
+            </div>
+            ${avgVar !== null ? `<div style="background:#f0f9ff;border:1px solid #bfdbfe;border-radius:4px;padding:8px;margin-bottom:12px;font-size:8.5pt;">
+                <strong>Average labor variance: ${parseFloat(avgVar)>0?'+':''}${avgVar}%</strong> ${parseFloat(avgVar)>10?' — Consider adding labor contingency to future bids':parseFloat(avgVar)<-10?' — Your estimates are conservative; consider tightening to win more work':''}
+            </div>` : ''}
+            <table><thead><tr>
+                <th style="text-align:left;">Date</th><th style="text-align:left;">Element / Area</th>
+                <th>yd³</th><th>Est. Hrs</th><th>Actual Hrs</th><th>Variance</th><th>Productivity</th><th style="text-align:left;">Notes</th>
+            </tr></thead><tbody>${rows}</tbody></table>
+            <div class="note">This report is for internal calibration only. Compare estimated vs actual labor hours over time to improve bid accuracy. Track productivity rate (yd³/hr) to benchmark crew performance and account for project complexity in future estimates.</div>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`;
+            const w = window.open('', '_blank');
+            if (w) { w.document.write(html); w.document.close(); }
+        }
+
+        /* ── Labor Tracker init ── */
+        (function() {
+            const bondBtn = document.getElementById('bondTrackerBtn');
+            if (!bondBtn) return;
+
+            const crewOpts = ['2 man','3 man','4 man','5 man','6 man','8 man','10 man','Custom'].map(c=>`<option value="${c}">${c}</option>`).join('');
+
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'margin-bottom:6px;';
+            wrapper.innerHTML = `
+            <div id="laborTrackerPanel" style="display:none;background:rgba(0,0,0,0.25);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:10px;font-size:0.82rem;margin-bottom:6px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span style="font-weight:700;color:#e2e8f0;">📈 Labor Productivity Tracker</span>
+                    <span style="font-size:0.68rem;color:#888;">Actual vs estimated hours · builds bid intelligence</span>
+                </div>
+                <div id="laborStats" style="margin-bottom:6px;"></div>
+                <!-- Column headers -->
+                <div style="display:grid;grid-template-columns:1fr 80px 1fr 1fr 1fr 70px 24px;gap:4px;margin-bottom:3px;">
+                    <span style="font-size:0.68rem;color:#64748b;">Element</span>
+                    <span style="font-size:0.68rem;color:#64748b;">yd³</span>
+                    <span style="font-size:0.68rem;color:#64748b;">Date</span>
+                    <span style="font-size:0.68rem;color:#64748b;text-align:right;">Est. Hrs</span>
+                    <span style="font-size:0.68rem;color:#e2e8f0;text-align:right;">Actual Hrs</span>
+                    <span style="font-size:0.68rem;color:#64748b;text-align:right;">Variance</span>
+                    <span></span>
+                </div>
+                <div id="laborEntryRows" style="max-height:200px;overflow-y:auto;margin-bottom:8px;"></div>
+
+                <!-- Add entry -->
+                <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px;margin-bottom:6px;">
+                    <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:4px;font-weight:600;">Log Pour</div>
+                    <div style="display:grid;grid-template-columns:2fr 1fr;gap:4px;margin-bottom:4px;">
+                        <input id="ltElement" placeholder="Element / area (e.g. SOG North Building)" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.75rem;">
+                        <input id="ltDate" type="date" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.75rem;">
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:4px;">
+                        <input id="ltYds" type="number" placeholder="yd³ poured" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.75rem;">
+                        <input id="ltEst" type="number" placeholder="Est. hours" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.75rem;">
+                        <input id="ltAct" type="number" placeholder="Actual hours *" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.75rem;">
+                        <select id="ltCrew" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 5px;color:#fff;font-size:0.75rem;">${crewOpts}</select>
+                    </div>
+                    <input id="ltNotes" placeholder="Notes (weather, issues, etc.)" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.75rem;margin-bottom:5px;">
+                    <button onclick="addLaborEntry()" style="width:100%;background:#1a3a2a;border:none;color:#e2e8f0;border-radius:4px;padding:5px;cursor:pointer;font-size:0.78rem;font-weight:600;">+ Log Pour</button>
+                </div>
+                <button onclick="printLaborReport()" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.73rem;">🖨️ Print Productivity Report</button>
+                <div style="font-size:0.7rem;color:#64748b;margin-top:6px;padding:4px 2px;">
+                    💡 Log actual hours vs estimated hours after each pour. Over time this reveals whether you're consistently over or under on labor — the single biggest variable in concrete bids. Stored globally across all projects.
+                </div>
+            </div>
+            <button onclick="toggleLaborTracker()" id="laborTrackerBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#34d399;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;">📈 Show Labor Tracker</button>`;
+            bondBtn.parentNode.insertBefore(wrapper, bondBtn.nextSibling);
+            // Set default date to today
+            const now = new Date();
+            const ltDate = wrapper.querySelector('#ltDate');
+            if (ltDate) ltDate.value = now.toISOString().slice(0,10);
+        })();
+    </script>
+
 </body>
 </html>
