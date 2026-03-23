@@ -18876,6 +18876,733 @@ ${f.co}${f.phone ? '\n' + f.phone : ''}${f.email ? '\n' + f.email : ''}`;
             if (w) { w.document.write(html); w.document.close(); }
         }
 
+
+        // =========================================================
+        // 📐 ESTIMATE REVISION HISTORY
+        // =========================================================
+        // Snap estimate versions with a label — track bid evolution
+        // Uses project-scoped localStorage key
+
+        let estimateRevisions = [];
+
+        function initEstimateRevisions() {
+            const closeoutBtn = document.getElementById('closeoutBtn');
+            if (!closeoutBtn || document.getElementById('estRevBtn')) return;
+            const container = document.createElement('div');
+            container.style.cssText = 'margin-top:10px;';
+            container.innerHTML = `
+            <button id="estRevBtn" onclick="toggleEstRev()" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#f472b6;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;">📐 Show Estimate Revision History</button>
+            <div id="estRevPanel" style="display:none;margin-top:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;">
+                <div style="font-weight:600;color:#f472b6;margin-bottom:2px;font-size:0.82rem;">📐 Estimate Revision History</div>
+                <div style="color:#9ca3af;font-size:0.68rem;margin-bottom:8px;">Snapshot bid versions to track negotiation history and scope changes</div>
+                <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;">
+                    <input id="estRevLabel" placeholder="e.g. Bid v1, GC Revision, Value-Eng..." style="flex:1;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:5px;padding:4px 7px;font-size:0.73rem;min-width:130px;">
+                    <button onclick="snapEstRevision()" style="background:rgba(244,114,182,0.12);border:1px solid rgba(244,114,182,0.3);color:#f472b6;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:0.73rem;white-space:nowrap;">📸 Snap Revision</button>
+                </div>
+                <div id="estRevList" style="display:flex;flex-direction:column;gap:5px;max-height:300px;overflow-y:auto;"></div>
+                <div style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap;">
+                    <button onclick="copyEstRevHistory()" style="background:rgba(244,114,182,0.08);border:1px solid rgba(244,114,182,0.18);color:#f9a8d4;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">📋 Copy History</button>
+                    <button onclick="printEstRevHistory()" style="background:rgba(244,114,182,0.08);border:1px solid rgba(244,114,182,0.18);color:#f9a8d4;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">🖨️ Print</button>
+                    <button onclick="clearEstRevHistory()" style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.18);color:#f87171;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">🗑️ Clear All</button>
+                </div>
+            </div>`;
+            const closeoutContainer = closeoutBtn.parentElement;
+            if (closeoutContainer && closeoutContainer.parentElement) {
+                closeoutContainer.parentElement.appendChild(container);
+            }
+            loadEstRevisions();
+            renderEstRevisions();
+        }
+
+        function toggleEstRev() {
+            const panel = document.getElementById('estRevPanel');
+            const btn = document.getElementById('estRevBtn');
+            if (!panel) return;
+            if (panel.style.display === 'none') {
+                loadEstRevisions();
+                renderEstRevisions();
+                panel.style.display = 'block';
+                btn.textContent = '📐 Hide Estimate Revision History';
+            } else {
+                panel.style.display = 'none';
+                btn.textContent = '📐 Show Estimate Revision History';
+            }
+        }
+
+        function getEstRevKey() {
+            const proj = (document.getElementById('projectName') || {}).value || 'default';
+            return 'estRevisions_' + proj.replace(/\s+/g,'_').toLowerCase();
+        }
+
+        function loadEstRevisions() {
+            try { estimateRevisions = JSON.parse(localStorage.getItem(getEstRevKey())) || []; }
+            catch(e) { estimateRevisions = []; }
+        }
+
+        function saveEstRevisions() {
+            try { localStorage.setItem(getEstRevKey(), JSON.stringify(estimateRevisions)); }
+            catch(e) {}
+        }
+
+        function snapEstRevision() {
+            const label = (document.getElementById('estRevLabel') || {}).value.trim() || 'Revision ' + (estimateRevisions.length + 1);
+            // Gather current bid state
+            const totalEl = document.getElementById('totalBidAmt') || document.getElementById('quickBidTotal');
+            const totalText = totalEl ? totalEl.textContent.replace(/[^0-9.]/g,'') : '0';
+            const total = parseFloat(totalText) || 0;
+            const m = window.measurements || [];
+            const yds = m.reduce((s, x) => s + (x.yards || 0), 0);
+            const proj = (document.getElementById('projectName') || {}).value || '';
+            const client = (document.getElementById('clientName') || {}).value || '';
+            // Gather pricing snapshot
+            const priceFields = ['price3000','price4000','price5000','price2500','laborRate','pumpRate','ohPct','profitPct','contingencyPct','escalationPct'];
+            const pricing = {};
+            priceFields.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) pricing[id] = el.value;
+            });
+            const rev = {
+                id: Date.now(),
+                ts: new Date().toISOString(),
+                label,
+                proj,
+                client,
+                total,
+                yds: Math.round(yds * 100) / 100,
+                pricing,
+                measurements: m.length
+            };
+            estimateRevisions.push(rev);
+            saveEstRevisions();
+            document.getElementById('estRevLabel').value = '';
+            renderEstRevisions();
+            const btn = document.getElementById('estRevBtn');
+            if (btn) btn.style.background = 'rgba(244,114,182,0.2)';
+            setTimeout(() => { const b = document.getElementById('estRevBtn'); if(b) b.style.background = 'rgba(255,255,255,0.05)'; }, 1200);
+        }
+
+        function renderEstRevisions() {
+            const list = document.getElementById('estRevList');
+            if (!list) return;
+            if (!estimateRevisions.length) {
+                list.innerHTML = '<div style="color:#6b7280;font-size:0.72rem;text-align:center;padding:12px;">No revisions yet. Click "Snap Revision" after each recalculate to track bid evolution.</div>';
+                return;
+            }
+            const fmt = n => n >= 1000 ? '$' + (n/1000).toFixed(1) + 'k' : '$' + n.toFixed(0);
+            let html = '';
+            estimateRevisions.forEach((rev, idx) => {
+                const prev = estimateRevisions[idx - 1];
+                const delta = prev ? rev.total - prev.total : null;
+                const deltaStr = delta !== null ? (delta >= 0 ? '+' + fmt(delta) : '-' + fmt(Math.abs(delta))) : '';
+                const deltaColor = delta === null ? '' : delta > 0 ? '#f87171' : delta < 0 ? '#34d399' : '#9ca3af';
+                const dateStr = new Date(rev.ts).toLocaleDateString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+                html += `<div style="background:rgba(244,114,182,0.06);border:1px solid rgba(244,114,182,0.15);border-radius:6px;padding:7px 9px;position:relative;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;">
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-weight:600;color:#f9a8d4;font-size:0.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Rev ${idx+1}: ${rev.label}</div>
+                            <div style="color:#9ca3af;font-size:0.65rem;margin-top:1px;">${dateStr} · ${rev.measurements} measurements · ${rev.yds} yd³</div>
+                        </div>
+                        <div style="text-align:right;flex-shrink:0;">
+                            <div style="font-weight:700;color:#f472b6;font-size:0.85rem;">${fmt(rev.total)}</div>
+                            ${delta !== null ? `<div style="font-size:0.65rem;color:${deltaColor};">${deltaStr} vs prev</div>` : ''}
+                        </div>
+                    </div>
+                    ${rev.pricing && rev.pricing.ohPct ? `<div style="margin-top:4px;font-size:0.63rem;color:#6b7280;">OH ${rev.pricing.ohPct}% · Profit ${rev.pricing.profitPct||'–'}% · Contingency ${rev.pricing.contingencyPct||0}%</div>` : ''}
+                    <button onclick="deleteEstRev(${rev.id})" style="position:absolute;top:5px;right:5px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.6rem;">✕</button>
+                </div>`;
+            });
+            // If 2+ revisions, show summary delta
+            if (estimateRevisions.length >= 2) {
+                const first = estimateRevisions[0];
+                const last = estimateRevisions[estimateRevisions.length - 1];
+                const totalDelta = last.total - first.total;
+                const pct = first.total > 0 ? ((totalDelta / first.total) * 100).toFixed(1) : '0';
+                html += `<div style="background:rgba(244,114,182,0.1);border:1px solid rgba(244,114,182,0.25);border-radius:6px;padding:7px;margin-top:2px;">
+                    <div style="font-size:0.72rem;color:#f9a8d4;font-weight:600;">📊 Bid Evolution: ${estimateRevisions.length} revisions</div>
+                    <div style="font-size:0.7rem;color:#d1d5db;margin-top:3px;">
+                        First: $${first.total.toLocaleString()} → Latest: $${last.total.toLocaleString()}&nbsp;
+                        <span style="color:${totalDelta>=0?'#f87171':'#34d399'};font-weight:600;">(${totalDelta>=0?'+':''}${pct}% net change)</span>
+                    </div>
+                </div>`;
+            }
+            list.innerHTML = html;
+        }
+
+        function deleteEstRev(id) {
+            estimateRevisions = estimateRevisions.filter(r => r.id !== id);
+            saveEstRevisions();
+            renderEstRevisions();
+        }
+
+        function clearEstRevHistory() {
+            if (!confirm('Clear all estimate revisions for this project?')) return;
+            estimateRevisions = [];
+            saveEstRevisions();
+            renderEstRevisions();
+        }
+
+        function copyEstRevHistory() {
+            if (!estimateRevisions.length) return;
+            let txt = `ESTIMATE REVISION HISTORY\n${(document.getElementById('projectName')||{}).value||''}\n${'='.repeat(50)}\n\n`;
+            estimateRevisions.forEach((rev, i) => {
+                const prev = estimateRevisions[i-1];
+                const delta = prev ? rev.total - prev.total : null;
+                const deltaStr = delta !== null ? ` (${delta>=0?'+':''}$${delta.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0})})` : '';
+                txt += `Rev ${i+1}: ${rev.label}\n`;
+                txt += `  Date: ${new Date(rev.ts).toLocaleString()}\n`;
+                txt += `  Total: $${rev.total.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0})}${deltaStr}\n`;
+                txt += `  Volume: ${rev.yds} yd³ · ${rev.measurements} measurements\n`;
+                if (rev.pricing && rev.pricing.ohPct) txt += `  Markup: OH ${rev.pricing.ohPct}% / Profit ${rev.pricing.profitPct}% / Contingency ${rev.pricing.contingencyPct||0}%\n`;
+                txt += '\n';
+            });
+            if (estimateRevisions.length >= 2) {
+                const first = estimateRevisions[0];
+                const last = estimateRevisions[estimateRevisions.length-1];
+                const d = last.total - first.total;
+                txt += `NET CHANGE: $${d.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0})} (${first.total>0?((d/first.total)*100).toFixed(1):0}%)\n`;
+            }
+            navigator.clipboard.writeText(txt).then(() => {
+                const btn = document.querySelector('[onclick="copyEstRevHistory()"]');
+                if (btn) { const o=btn.textContent; btn.textContent='✅ Copied!'; setTimeout(()=>btn.textContent=o,1500); }
+            });
+        }
+
+        function printEstRevHistory() {
+            if (!estimateRevisions.length) { alert('No revisions to print.'); return; }
+            const proj = (document.getElementById('projectName')||{}).value || '';
+            const co = localStorage.getItem('companyName') || 'Oncor';
+            let rows = '';
+            estimateRevisions.forEach((rev, i) => {
+                const prev = estimateRevisions[i-1];
+                const delta = prev ? rev.total - prev.total : null;
+                const deltaStr = delta !== null ? `${delta>=0?'+':''}$${Math.abs(delta).toLocaleString(undefined,{maximumFractionDigits:0})}` : '—';
+                const deltaColor = delta === null ? '#555' : delta > 0 ? '#dc2626' : '#15803d';
+                rows += `<tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:5px 8px;">${i+1}</td>
+                    <td style="padding:5px 8px;font-weight:500;">${rev.label}</td>
+                    <td style="padding:5px 8px;font-size:8pt;">${new Date(rev.ts).toLocaleDateString()}</td>
+                    <td style="padding:5px 8px;">${rev.yds} yd³</td>
+                    <td style="padding:5px 8px;font-weight:600;">$${rev.total.toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+                    <td style="padding:5px 8px;color:${deltaColor};font-weight:500;">${deltaStr}</td>
+                    <td style="padding:5px 8px;font-size:7.5pt;">OH ${rev.pricing&&rev.pricing.ohPct?rev.pricing.ohPct:'—'}% / P ${rev.pricing&&rev.pricing.profitPct?rev.pricing.profitPct:'—'}%</td>
+                </tr>`;
+            });
+            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Estimate History — ${proj}</title>
+            <style>body{font-family:Arial,sans-serif;max-width:820px;margin:0 auto;padding:20px;font-size:9pt;}
+            table{width:100%;border-collapse:collapse;} th{background:#1e3a5f;color:#fff;padding:5px 8px;text-align:left;font-size:8.5pt;}
+            @media print{body{padding:8px;}}</style></head><body>
+            <div style="display:flex;justify-content:space-between;border-bottom:2px solid #1e3a5f;padding-bottom:8px;margin-bottom:12px;">
+                <div><h2 style="margin:0;font-size:12pt;">📐 Estimate Revision History</h2>
+                <div style="font-size:8.5pt;margin-top:2px;">${proj}</div></div>
+                <div style="text-align:right;font-size:8pt;color:#555;">${co}<br>${new Date().toLocaleDateString()}</div>
+            </div>
+            <table><thead><tr><th>#</th><th>Revision Label</th><th>Date</th><th>Volume</th><th>Bid Total</th><th>vs Prev</th><th>OH / Profit</th></tr></thead>
+            <tbody>${rows}</tbody></table>
+            ${estimateRevisions.length>=2?`<div style="margin-top:14px;padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;font-size:9pt;">
+                <strong>Bid Evolution:</strong> $${estimateRevisions[0].total.toLocaleString(undefined,{maximumFractionDigits:0})} → $${estimateRevisions[estimateRevisions.length-1].total.toLocaleString(undefined,{maximumFractionDigits:0})}
+                &nbsp; Net change: ${estimateRevisions[0].total>0?((((estimateRevisions[estimateRevisions.length-1].total-estimateRevisions[0].total)/estimateRevisions[0].total)*100).toFixed(1)):0}%
+            </div>`:''}
+            <div style="margin-top:20px;font-size:7pt;color:#888;">Confidential — ${co}</div>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`;
+            const w = window.open('', '_blank');
+            if (w) { w.document.write(html); w.document.close(); }
+        }
+
+
+        // =========================================================
+        // 🆚 SUBCONTRACTOR BID COMPARISON MATRIX
+        // =========================================================
+        // Compare up to 3 sub bids side-by-side on same scope
+        // Global localStorage — useful across projects
+
+        let subBidMatrix = { subs: [{name:'',labor:0,materials:0,mobilization:0,notes:''},{name:'',labor:0,materials:0,mobilization:0,notes:''},{name:'',labor:0,materials:0,mobilization:0,notes:''}], scope:'', recommended:null };
+
+        function initSubBidMatrix() {
+            const estRevBtn = document.getElementById('estRevBtn');
+            if (!estRevBtn || document.getElementById('subMatrixBtn')) return;
+            const container = document.createElement('div');
+            container.style.cssText = 'margin-top:10px;';
+            container.innerHTML = `
+            <button id="subMatrixBtn" onclick="toggleSubMatrix()" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fb923c;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;">🆚 Show Sub Bid Comparison</button>
+            <div id="subMatrixPanel" style="display:none;margin-top:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;">
+                <div style="font-weight:600;color:#fb923c;margin-bottom:2px;font-size:0.82rem;">🆚 Subcontractor Bid Comparison Matrix</div>
+                <div style="color:#9ca3af;font-size:0.68rem;margin-bottom:8px;">Compare 3 sub bids side-by-side. Awards the lowest qualified bid.</div>
+                <div style="margin-bottom:8px;">
+                    <input id="subMatrixScope" placeholder="Scope description (e.g. Pump & Place — Phase 2 SOG)" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:5px;padding:5px 7px;font-size:0.73rem;">
+                </div>
+                <div id="subMatrixGrid" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px;"></div>
+                <div id="subMatrixSummary" style="margin-bottom:8px;"></div>
+                <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                    <button onclick="calcSubMatrix()" style="background:rgba(251,146,60,0.12);border:1px solid rgba(251,146,60,0.3);color:#fb923c;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:0.73rem;">⚡ Compare</button>
+                    <button onclick="saveSubMatrix()" style="background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.18);color:#fdba74;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:0.73rem;">💾 Save</button>
+                    <button onclick="copySubMatrix()" style="background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.18);color:#fdba74;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:0.73rem;">📋 Copy</button>
+                    <button onclick="printSubMatrix()" style="background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.18);color:#fdba74;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:0.73rem;">🖨️ Print</button>
+                </div>
+            </div>`;
+            const estRevContainer = estRevBtn.parentElement;
+            if (estRevContainer && estRevContainer.parentElement) {
+                estRevContainer.parentElement.appendChild(container);
+            }
+            loadSubMatrix();
+            renderSubMatrixGrid();
+        }
+
+        function toggleSubMatrix() {
+            const panel = document.getElementById('subMatrixPanel');
+            const btn = document.getElementById('subMatrixBtn');
+            if (!panel) return;
+            if (panel.style.display === 'none') {
+                loadSubMatrix();
+                renderSubMatrixGrid();
+                panel.style.display = 'block';
+                btn.textContent = '🆚 Hide Sub Bid Comparison';
+            } else {
+                panel.style.display = 'none';
+                btn.textContent = '🆚 Show Sub Bid Comparison';
+            }
+        }
+
+        function loadSubMatrix() {
+            try {
+                const saved = JSON.parse(localStorage.getItem('subBidMatrix'));
+                if (saved) subBidMatrix = saved;
+            } catch(e) {}
+        }
+
+        function saveSubMatrix() {
+            subBidMatrix.scope = (document.getElementById('subMatrixScope')||{}).value || '';
+            // Read grid inputs
+            [0,1,2].forEach(i => {
+                subBidMatrix.subs[i].name = (document.getElementById('smName'+i)||{}).value || '';
+                subBidMatrix.subs[i].labor = parseFloat((document.getElementById('smLabor'+i)||{}).value) || 0;
+                subBidMatrix.subs[i].materials = parseFloat((document.getElementById('smMaterials'+i)||{}).value) || 0;
+                subBidMatrix.subs[i].mobilization = parseFloat((document.getElementById('smMob'+i)||{}).value) || 0;
+                subBidMatrix.subs[i].inclusions = (document.getElementById('smInclusions'+i)||{}).value || '';
+                subBidMatrix.subs[i].exclusions = (document.getElementById('smExclusions'+i)||{}).value || '';
+                subBidMatrix.subs[i].notes = (document.getElementById('smNotes'+i)||{}).value || '';
+            });
+            localStorage.setItem('subBidMatrix', JSON.stringify(subBidMatrix));
+            const btn = document.querySelector('[onclick="saveSubMatrix()"]');
+            if (btn) { const o=btn.textContent; btn.textContent='✅ Saved'; setTimeout(()=>btn.textContent=o,1200); }
+        }
+
+        function renderSubMatrixGrid() {
+            const grid = document.getElementById('subMatrixGrid');
+            if (!grid) return;
+            const scope = subBidMatrix.scope || '';
+            if (document.getElementById('subMatrixScope')) document.getElementById('subMatrixScope').value = scope;
+            const colors = ['#fb923c','#60a5fa','#34d399'];
+            const labels = ['Sub #1','Sub #2','Sub #3'];
+            let html = '';
+            [0,1,2].forEach(i => {
+                const s = subBidMatrix.subs[i];
+                html += `<div style="background:rgba(${i===0?'251,146,60':i===1?'96,165,250':'52,211,153'},0.07);border:1px solid rgba(${i===0?'251,146,60':i===1?'96,165,250':'52,211,153'},0.18);border-radius:7px;padding:8px;">
+                    <div style="font-weight:600;color:${colors[i]};font-size:0.75rem;margin-bottom:5px;">${labels[i]}</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+                        <input id="smName${i}" placeholder="Company name" value="${s.name||''}" style="grid-column:1/-1;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:4px 6px;font-size:0.71rem;">
+                        <div><div style="color:#9ca3af;font-size:0.63rem;margin-bottom:2px;">Labor ($)</div>
+                        <input id="smLabor${i}" type="number" placeholder="0" value="${s.labor||''}" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:#e2e8f0;border-radius:4px;padding:3px 5px;font-size:0.71rem;"></div>
+                        <div><div style="color:#9ca3af;font-size:0.63rem;margin-bottom:2px;">Materials ($)</div>
+                        <input id="smMaterials${i}" type="number" placeholder="0" value="${s.materials||''}" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:#e2e8f0;border-radius:4px;padding:3px 5px;font-size:0.71rem;"></div>
+                        <div><div style="color:#9ca3af;font-size:0.63rem;margin-bottom:2px;">Mobilization ($)</div>
+                        <input id="smMob${i}" type="number" placeholder="0" value="${s.mobilization||''}" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:#e2e8f0;border-radius:4px;padding:3px 5px;font-size:0.71rem;"></div>
+                        <div><div style="color:#9ca3af;font-size:0.63rem;margin-bottom:2px;">Inclusions</div>
+                        <input id="smInclusions${i}" placeholder="pump, rebar, finishing..." value="${s.inclusions||''}" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:#e2e8f0;border-radius:4px;padding:3px 5px;font-size:0.71rem;"></div>
+                        <div style="grid-column:1/-1;"><div style="color:#9ca3af;font-size:0.63rem;margin-bottom:2px;">Exclusions / Conditions</div>
+                        <input id="smExclusions${i}" placeholder="no pump, material TBD..." value="${s.exclusions||''}" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:#e2e8f0;border-radius:4px;padding:3px 5px;font-size:0.71rem;"></div>
+                        <div style="grid-column:1/-1;"><div style="color:#9ca3af;font-size:0.63rem;margin-bottom:2px;">Notes</div>
+                        <input id="smNotes${i}" placeholder="insurance status, references, bonded..." value="${s.notes||''}" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:#e2e8f0;border-radius:4px;padding:3px 5px;font-size:0.71rem;"></div>
+                    </div>
+                </div>`;
+            });
+            grid.innerHTML = html;
+        }
+
+        function calcSubMatrix() {
+            saveSubMatrix();
+            const subs = subBidMatrix.subs.map((s,i) => {
+                const total = (s.labor||0) + (s.materials||0) + (s.mobilization||0);
+                return {...s, total, idx:i};
+            });
+            const filled = subs.filter(s => s.name && s.total > 0);
+            if (!filled.length) { alert('Enter at least one sub name and bid amount, then Compare.'); return; }
+            filled.sort((a,b) => a.total - b.total);
+            const low = filled[0];
+            const colors = ['#fb923c','#60a5fa','#34d399'];
+            const fmt = n => '$' + n.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0});
+            let html = `<div style="background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.2);border-radius:8px;padding:8px;">
+                <div style="font-weight:600;color:#fdba74;font-size:0.78rem;margin-bottom:6px;">📊 Comparison Results${subBidMatrix.scope?' — '+subBidMatrix.scope:''}</div>
+                <div style="display:flex;flex-direction:column;gap:4px;">`;
+            filled.forEach((s, rank) => {
+                const spread = s.total - low.total;
+                const spreadPct = low.total > 0 ? ((spread/low.total)*100).toFixed(1) : '0';
+                const isLow = rank === 0;
+                html += `<div style="display:flex;align-items:center;gap:6px;background:${isLow?'rgba(52,211,153,0.1)':'rgba(255,255,255,0.03)'};border:1px solid ${isLow?'rgba(52,211,153,0.3)':'rgba(255,255,255,0.06)'};border-radius:6px;padding:6px 8px;">
+                    <div style="font-size:1rem;">${isLow?'🏆':'•'}</div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-weight:600;color:${isLow?'#34d399':'#e2e8f0'};font-size:0.75rem;">${s.name}</div>
+                        <div style="font-size:0.62rem;color:#9ca3af;margin-top:1px;">L: ${fmt(s.labor)} · M: ${fmt(s.materials)} · Mob: ${fmt(s.mobilization)}</div>
+                        ${s.exclusions?`<div style="font-size:0.61rem;color:#f87171;margin-top:1px;">⚠️ ${s.exclusions}</div>`:''}
+                    </div>
+                    <div style="text-align:right;flex-shrink:0;">
+                        <div style="font-weight:700;font-size:0.85rem;color:${isLow?'#34d399':'#e2e8f0'}">${fmt(s.total)}</div>
+                        ${!isLow?`<div style="font-size:0.63rem;color:#f87171;">+${fmt(spread)} (+${spreadPct}%)</div>`:'<div style="font-size:0.63rem;color:#34d399;">LOWEST</div>'}
+                    </div>
+                </div>`;
+            });
+            if (filled.length >= 2) {
+                const spread = filled[filled.length-1].total - filled[0].total;
+                html += `<div style="font-size:0.68rem;color:#9ca3af;margin-top:4px;text-align:center;">Spread: ${fmt(spread)} — Recommend award to ${filled[0].name||'Sub #1'}</div>`;
+            }
+            html += `</div></div>`;
+            document.getElementById('subMatrixSummary').innerHTML = html;
+        }
+
+        function copySubMatrix() {
+            saveSubMatrix();
+            const fmt = n => '$' + n.toLocaleString(undefined,{maximumFractionDigits:0});
+            let txt = `SUB BID COMPARISON\n${subBidMatrix.scope||''}\n${'='.repeat(50)}\n\n`;
+            let subs = subBidMatrix.subs.map(s => ({...s, total:(s.labor||0)+(s.materials||0)+(s.mobilization||0)})).filter(s=>s.name);
+            subs.sort((a,b)=>a.total-b.total);
+            subs.forEach((s,i) => {
+                txt += `${i===0?'★ ':'  '}${s.name}${i===0?' (RECOMMEND AWARD)':''}\n`;
+                txt += `    Labor: ${fmt(s.labor)}  |  Materials: ${fmt(s.materials)}  |  Mobilization: ${fmt(s.mobilization)}\n`;
+                txt += `    TOTAL: ${fmt(s.total)}\n`;
+                if (s.inclusions) txt += `    Inclusions: ${s.inclusions}\n`;
+                if (s.exclusions) txt += `    Exclusions: ${s.exclusions}\n`;
+                if (s.notes) txt += `    Notes: ${s.notes}\n`;
+                txt += '\n';
+            });
+            if (subs.length>=2) txt += `Spread: ${fmt(subs[subs.length-1].total - subs[0].total)}\n`;
+            navigator.clipboard.writeText(txt).then(() => {
+                const btn = document.querySelector('[onclick="copySubMatrix()"]');
+                if (btn) { const o=btn.textContent; btn.textContent='✅ Copied!'; setTimeout(()=>btn.textContent=o,1500); }
+            });
+        }
+
+        function printSubMatrix() {
+            saveSubMatrix();
+            const proj = (document.getElementById('projectName')||{}).value || '';
+            const co = localStorage.getItem('companyName') || 'Oncor';
+            const fmt = n => '$' + n.toLocaleString(undefined,{maximumFractionDigits:0});
+            let subs = subBidMatrix.subs.map(s => ({...s, total:(s.labor||0)+(s.materials||0)+(s.mobilization||0)}));
+            const filled = subs.filter(s=>s.name&&s.total>0).sort((a,b)=>a.total-b.total);
+            const low = filled[0];
+            let rows = '';
+            subs.forEach((s,i) => {
+                if (!s.name) return;
+                const isLow = low && s.name === low.name;
+                const spread = low ? s.total - low.total : 0;
+                rows += `<tr style="background:${isLow?'#f0fdf4':'#fff'};border-bottom:1px solid #e2e8f0;">
+                    <td style="padding:6px 8px;font-weight:${isLow?700:400};">${isLow?'★ ':''}${s.name}</td>
+                    <td style="padding:6px 8px;text-align:right;">${fmt(s.labor)}</td>
+                    <td style="padding:6px 8px;text-align:right;">${fmt(s.materials)}</td>
+                    <td style="padding:6px 8px;text-align:right;">${fmt(s.mobilization)}</td>
+                    <td style="padding:6px 8px;text-align:right;font-weight:${isLow?700:400};color:${isLow?'#15803d':'#111'};">${fmt(s.total)}</td>
+                    <td style="padding:6px 8px;text-align:right;color:${isLow?'#15803d':'#dc2626'};">${isLow?'Recommend':'+'+(spread>0?fmt(spread):'$0')}</td>
+                    <td style="padding:6px 8px;font-size:7.5pt;color:#555;">${s.inclusions||''}</td>
+                    <td style="padding:6px 8px;font-size:7.5pt;color:#dc2626;">${s.exclusions||''}</td>
+                </tr>`;
+            });
+            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Sub Bid Comparison — ${proj}</title>
+            <style>body{font-family:Arial,sans-serif;max-width:1000px;margin:0 auto;padding:20px;font-size:9pt;}
+            table{width:100%;border-collapse:collapse;} th{background:#1e3a5f;color:#fff;padding:5px 8px;text-align:left;font-size:8.5pt;}
+            @media print{body{padding:8px;}}</style></head><body>
+            <div style="display:flex;justify-content:space-between;border-bottom:2px solid #1e3a5f;padding-bottom:8px;margin-bottom:12px;">
+                <div><h2 style="margin:0;font-size:12pt;">🆚 Subcontractor Bid Comparison</h2>
+                <div style="font-size:8.5pt;margin-top:2px;">${subBidMatrix.scope||'General Scope'}${proj?' — '+proj:''}</div></div>
+                <div style="text-align:right;font-size:8pt;color:#555;">${co}<br>${new Date().toLocaleDateString()}</div>
+            </div>
+            <table><thead><tr><th>Subcontractor</th><th style="text-align:right">Labor</th><th style="text-align:right">Materials</th><th style="text-align:right">Mob</th><th style="text-align:right">TOTAL</th><th style="text-align:right">vs Low</th><th>Inclusions</th><th>Exclusions</th></tr></thead>
+            <tbody>${rows}</tbody></table>
+            ${filled.length>=2?`<div style="margin-top:12px;padding:8px;background:#f8fafc;border-radius:4px;font-size:9pt;">
+                <strong>Recommended Award:</strong> ${filled[0].name} at ${fmt(filled[0].total)}&nbsp;·&nbsp;
+                Spread: ${fmt(filled[filled.length-1].total - filled[0].total)}
+            </div>`:''}
+            <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                <div><div style="font-size:7.5pt;color:#888;margin-bottom:14px;">Estimator / Date</div>
+                <div style="border-bottom:1px solid #333;width:90%;">&nbsp;</div></div>
+                <div><div style="font-size:7.5pt;color:#888;margin-bottom:14px;">PM Approval / Date</div>
+                <div style="border-bottom:1px solid #333;width:90%;">&nbsp;</div></div>
+            </div>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`;
+            const w = window.open('', '_blank');
+            if (w) { w.document.write(html); w.document.close(); }
+        }
+
+
+        // =========================================================
+        // 🔁 CONCRETE QUANTITY RECONCILIATION
+        // =========================================================
+        // Line-by-line: takeoff yd³ vs actual ticket yd³ per element
+        // Accounts for over/under-pour. Computes material cost variance.
+        // Persisted per project. Separate from As-Built tracker.
+
+        let qtyReconcItems = [];
+
+        function initQtyRecon() {
+            const subMatrixBtn = document.getElementById('subMatrixBtn');
+            if (!subMatrixBtn || document.getElementById('qtyReconBtn')) return;
+            const container = document.createElement('div');
+            container.style.cssText = 'margin-top:10px;';
+            container.innerHTML = `
+            <button id="qtyReconBtn" onclick="toggleQtyRecon()" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#a78bfa;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;">🔁 Show Qty Reconciliation</button>
+            <div id="qtyReconPanel" style="display:none;margin-top:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;">
+                <div style="font-weight:600;color:#a78bfa;margin-bottom:2px;font-size:0.82rem;">🔁 Concrete Quantity Reconciliation</div>
+                <div style="color:#9ca3af;font-size:0.68rem;margin-bottom:8px;">Compare takeoff yd³ vs. actual ticket yd³ per element. Reconcile material costs at job close.</div>
+                <div style="display:flex;gap:4px;margin-bottom:8px;">
+                    <button onclick="autoPopQtyRecon()" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:0.73rem;">⬇️ Pull from Takeoff</button>
+                    <button onclick="addQtyReconItem()" style="background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.18);color:#c4b5fd;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:0.73rem;">+ Add Row</button>
+                </div>
+                <div id="qtyReconList" style="display:flex;flex-direction:column;gap:4px;max-height:300px;overflow-y:auto;margin-bottom:8px;"></div>
+                <div id="qtyReconSummary" style="margin-bottom:8px;"></div>
+                <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                    <button onclick="calcQtyRecon()" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:0.73rem;">🔢 Reconcile</button>
+                    <button onclick="copyQtyRecon()" style="background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.18);color:#c4b5fd;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:0.73rem;">📋 Copy</button>
+                    <button onclick="printQtyRecon()" style="background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.18);color:#c4b5fd;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:0.73rem;">🖨️ Print</button>
+                </div>
+            </div>`;
+            const subMatrixContainer = subMatrixBtn.parentElement;
+            if (subMatrixContainer && subMatrixContainer.parentElement) {
+                subMatrixContainer.parentElement.appendChild(container);
+            }
+            loadQtyRecon();
+            renderQtyRecon();
+        }
+
+        function toggleQtyRecon() {
+            const panel = document.getElementById('qtyReconPanel');
+            const btn = document.getElementById('qtyReconBtn');
+            if (!panel) return;
+            if (panel.style.display === 'none') {
+                loadQtyRecon();
+                renderQtyRecon();
+                panel.style.display = 'block';
+                btn.textContent = '🔁 Hide Qty Reconciliation';
+            } else {
+                panel.style.display = 'none';
+                btn.textContent = '🔁 Show Qty Reconciliation';
+            }
+        }
+
+        function getQtyReconKey() {
+            const proj = (document.getElementById('projectName')||{}).value || 'default';
+            return 'qtyRecon_' + proj.replace(/\s+/g,'_').toLowerCase();
+        }
+
+        function loadQtyRecon() {
+            try { qtyReconcItems = JSON.parse(localStorage.getItem(getQtyReconKey())) || []; }
+            catch(e) { qtyReconcItems = []; }
+        }
+
+        function saveQtyRecon() {
+            try { localStorage.setItem(getQtyReconKey(), JSON.stringify(qtyReconcItems)); }
+            catch(e) {}
+        }
+
+        function autoPopQtyRecon() {
+            const m = window.measurements || [];
+            if (!m.length) { alert('No measurements in takeoff to pull.'); return; }
+            // Get concrete price
+            const priceEl = document.getElementById('price3000');
+            const concreteRate = parseFloat(priceEl ? priceEl.value : 165) || 165;
+            const existing = new Set(qtyReconcItems.map(i=>i.label));
+            let added = 0;
+            m.forEach(meas => {
+                if (!meas.yards || meas.yards <= 0) return;
+                const label = meas.label || (meas.type+' '+(m.indexOf(meas)+1));
+                if (existing.has(label)) return;
+                qtyReconcItems.push({
+                    id: Date.now() + Math.random(),
+                    label,
+                    type: meas.type || 'slab',
+                    takeoffYds: Math.round(meas.yards * 100) / 100,
+                    actualYds: 0,
+                    concreteRate,
+                    notes: ''
+                });
+                existing.add(label);
+                added++;
+            });
+            if (!added) { alert('All measurements already in reconciliation table.'); return; }
+            saveQtyRecon();
+            renderQtyRecon();
+        }
+
+        function addQtyReconItem() {
+            qtyReconcItems.push({ id: Date.now(), label:'', type:'slab', takeoffYds:0, actualYds:0, concreteRate:165, notes:'' });
+            saveQtyRecon();
+            renderQtyRecon();
+        }
+
+        function deleteQtyReconItem(id) {
+            qtyReconcItems = qtyReconcItems.filter(i=>i.id!==id);
+            saveQtyRecon();
+            renderQtyRecon();
+            calcQtyRecon();
+        }
+
+        function readQtyReconInputs() {
+            qtyReconcItems.forEach((item, idx) => {
+                item.label = (document.getElementById('qrLabel'+idx)||{}).value || item.label;
+                item.takeoffYds = parseFloat((document.getElementById('qrTakeoff'+idx)||{}).value) || 0;
+                item.actualYds = parseFloat((document.getElementById('qrActual'+idx)||{}).value) || 0;
+                item.concreteRate = parseFloat((document.getElementById('qrRate'+idx)||{}).value) || 165;
+                item.notes = (document.getElementById('qrNotes'+idx)||{}).value || '';
+            });
+        }
+
+        function renderQtyRecon() {
+            const list = document.getElementById('qtyReconList');
+            if (!list) return;
+            if (!qtyReconcItems.length) {
+                list.innerHTML = '<div style="color:#6b7280;font-size:0.72rem;text-align:center;padding:12px;">No items. Pull from Takeoff or add rows manually.</div>';
+                return;
+            }
+            let html = '';
+            qtyReconcItems.forEach((item, idx) => {
+                const delta = (item.actualYds||0) - (item.takeoffYds||0);
+                const deltaColor = delta > 0.1 ? '#f87171' : delta < -0.1 ? '#34d399' : '#9ca3af';
+                const costDelta = delta * (item.concreteRate||165);
+                html += `<div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.12);border-radius:6px;padding:7px 8px;">
+                    <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-bottom:4px;">
+                        <input id="qrLabel${idx}" value="${item.label||''}" placeholder="Element name" style="flex:1;min-width:90px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:4px;padding:3px 5px;font-size:0.71rem;">
+                        <button onclick="deleteQtyReconItem(${item.id})" style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:0.65rem;">✕</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;">
+                        <div><div style="color:#9ca3af;font-size:0.61rem;">Takeoff (yd³)</div>
+                        <input id="qrTakeoff${idx}" type="number" step="0.01" value="${item.takeoffYds||''}" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:#e2e8f0;border-radius:4px;padding:3px 5px;font-size:0.72rem;"></div>
+                        <div><div style="color:#9ca3af;font-size:0.61rem;">Actual (yd³)</div>
+                        <input id="qrActual${idx}" type="number" step="0.01" value="${item.actualYds||''}" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:#e2e8f0;border-radius:4px;padding:3px 5px;font-size:0.72rem;"></div>
+                        <div><div style="color:#9ca3af;font-size:0.61rem;">$/yd³</div>
+                        <input id="qrRate${idx}" type="number" value="${item.concreteRate||165}" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:#e2e8f0;border-radius:4px;padding:3px 5px;font-size:0.72rem;"></div>
+                    </div>
+                    ${item.actualYds ? `<div style="display:flex;justify-content:space-between;margin-top:5px;font-size:0.68rem;">
+                        <span style="color:${deltaColor};">Δ ${delta>=0?'+':''}${delta.toFixed(2)} yd³ (${delta>=0?'over':'under'}-pour)</span>
+                        <span style="color:${deltaColor};">Cost Δ ${costDelta>=0?'+':''}$${costDelta.toLocaleString(undefined,{maximumFractionDigits:0})}</span>
+                    </div>` : ''}
+                    <input id="qrNotes${idx}" value="${item.notes||''}" placeholder="Notes (supplier, ticket#, etc.)" style="width:100%;box-sizing:border-box;margin-top:4px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);color:#9ca3af;border-radius:4px;padding:3px 5px;font-size:0.66rem;">
+                </div>`;
+            });
+            list.innerHTML = html;
+        }
+
+        function calcQtyRecon() {
+            readQtyReconInputs();
+            saveQtyRecon();
+            renderQtyRecon();
+            // Summary
+            const summary = document.getElementById('qtyReconSummary');
+            if (!summary) return;
+            let totalTakeoff = 0, totalActual = 0, totalCostDelta = 0;
+            qtyReconcItems.forEach(item => {
+                totalTakeoff += item.takeoffYds || 0;
+                totalActual += item.actualYds || 0;
+                totalCostDelta += ((item.actualYds||0) - (item.takeoffYds||0)) * (item.concreteRate||165);
+            });
+            const delta = totalActual - totalTakeoff;
+            const deltaColor = delta > 0.1 ? '#f87171' : delta < -0.1 ? '#34d399' : '#9ca3af';
+            const pct = totalTakeoff > 0 ? ((delta/totalTakeoff)*100).toFixed(1) : '0';
+            summary.innerHTML = `<div style="background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);border-radius:7px;padding:8px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;text-align:center;">
+                    <div><div style="font-size:0.68rem;color:#9ca3af;">Takeoff</div><div style="font-weight:700;color:#a78bfa;">${totalTakeoff.toFixed(2)} yd³</div></div>
+                    <div><div style="font-size:0.68rem;color:#9ca3af;">Actual</div><div style="font-weight:700;color:#e2e8f0;">${totalActual.toFixed(2)} yd³</div></div>
+                    <div><div style="font-size:0.68rem;color:#9ca3af;">Delta</div><div style="font-weight:700;color:${deltaColor};">${delta>=0?'+':''}${delta.toFixed(2)} yd³ (${delta>=0?'+':''}${pct}%)</div></div>
+                    <div><div style="font-size:0.68rem;color:#9ca3af;">Cost Δ</div><div style="font-weight:700;color:${totalCostDelta>=0?'#f87171':'#34d399'};">${totalCostDelta>=0?'+':''}$${Math.abs(totalCostDelta).toLocaleString(undefined,{maximumFractionDigits:0})}</div></div>
+                </div>
+                <div style="margin-top:5px;font-size:0.67rem;color:#9ca3af;text-align:center;">${delta > 0 ? '⚠️ Over-pour = extra concrete cost' : delta < 0 ? '✅ Under-pour = material savings (verify no short pours)' : '✅ Takeoff matched actual volume'}</div>
+            </div>`;
+        }
+
+        function copyQtyRecon() {
+            readQtyReconInputs();
+            const proj = (document.getElementById('projectName')||{}).value || '';
+            let txt = `CONCRETE QUANTITY RECONCILIATION\n${proj}\n${'='.repeat(50)}\n\n`;
+            let totTakeoff=0, totActual=0, totCostDelta=0;
+            qtyReconcItems.forEach(item => {
+                const d = (item.actualYds||0)-(item.takeoffYds||0);
+                const cd = d*(item.concreteRate||165);
+                totTakeoff+=item.takeoffYds||0; totActual+=item.actualYds||0; totCostDelta+=cd;
+                txt += `${item.label||'(unlabeled)'}\n  Takeoff: ${(item.takeoffYds||0).toFixed(2)} yd³ | Actual: ${(item.actualYds||0).toFixed(2)} yd³ | Δ ${d>=0?'+':''}${d.toFixed(2)} yd³ | Cost Δ ${cd>=0?'+':''}$${cd.toLocaleString(undefined,{maximumFractionDigits:0})}\n`;
+                if (item.notes) txt += `  Notes: ${item.notes}\n`;
+                txt += '\n';
+            });
+            const d = totActual - totTakeoff;
+            txt += `TOTALS\n  Takeoff: ${totTakeoff.toFixed(2)} yd³ | Actual: ${totActual.toFixed(2)} yd³ | Δ ${d>=0?'+':''}${d.toFixed(2)} yd³ | Cost Δ ${totCostDelta>=0?'+':''}$${totCostDelta.toLocaleString(undefined,{maximumFractionDigits:0})}\n`;
+            navigator.clipboard.writeText(txt).then(() => {
+                const btn = document.querySelector('[onclick="copyQtyRecon()"]');
+                if (btn) { const o=btn.textContent; btn.textContent='✅ Copied!'; setTimeout(()=>btn.textContent=o,1500); }
+            });
+        }
+
+        function printQtyRecon() {
+            readQtyReconInputs();
+            const proj = (document.getElementById('projectName')||{}).value || '';
+            const co = localStorage.getItem('companyName') || 'Oncor';
+            let rows = '', totTakeoff=0, totActual=0, totCost=0;
+            qtyReconcItems.forEach((item,i) => {
+                const d = (item.actualYds||0)-(item.takeoffYds||0);
+                const cd = d*(item.concreteRate||165);
+                totTakeoff+=item.takeoffYds||0; totActual+=item.actualYds||0; totCost+=cd;
+                rows += `<tr style="border-bottom:1px solid #f1f5f9;background:${i%2?'#f8fafc':'#fff'};">
+                    <td style="padding:5px 8px;">${item.label||'—'}</td>
+                    <td style="padding:5px 8px;text-align:right;">${(item.takeoffYds||0).toFixed(2)}</td>
+                    <td style="padding:5px 8px;text-align:right;">${(item.actualYds||0).toFixed(2)}</td>
+                    <td style="padding:5px 8px;text-align:right;color:${d>0.1?'#dc2626':d<-0.1?'#15803d':'#555'};font-weight:500;">${d>=0?'+':''}${d.toFixed(2)}</td>
+                    <td style="padding:5px 8px;text-align:right;">$${(item.concreteRate||165).toFixed(0)}</td>
+                    <td style="padding:5px 8px;text-align:right;color:${cd>0?'#dc2626':'#15803d'};font-weight:500;">${cd>=0?'+':''}$${Math.abs(cd).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+                    <td style="padding:5px 8px;font-size:7.5pt;color:#555;">${item.notes||''}</td>
+                </tr>`;
+            });
+            const dTotal = totActual - totTakeoff;
+            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Qty Recon — ${proj}</title>
+            <style>body{font-family:Arial,sans-serif;max-width:900px;margin:0 auto;padding:20px;font-size:9pt;}
+            table{width:100%;border-collapse:collapse;} th{background:#1e3a5f;color:#fff;padding:5px 8px;text-align:left;font-size:8.5pt;}
+            @media print{body{padding:8px;}}</style></head><body>
+            <div style="display:flex;justify-content:space-between;border-bottom:2px solid #1e3a5f;padding-bottom:8px;margin-bottom:12px;">
+                <div><h2 style="margin:0;font-size:12pt;">🔁 Concrete Quantity Reconciliation</h2>
+                <div style="font-size:8.5pt;margin-top:2px;">${proj}</div></div>
+                <div style="text-align:right;font-size:8pt;color:#555;">${co}<br>${new Date().toLocaleDateString()}</div>
+            </div>
+            <table><thead><tr><th>Element</th><th style="text-align:right">Takeoff (yd³)</th><th style="text-align:right">Actual (yd³)</th><th style="text-align:right">Δ yd³</th><th style="text-align:right">$/yd³</th><th style="text-align:right">Cost Δ</th><th>Notes</th></tr></thead>
+            <tbody>${rows}</tbody>
+            <tfoot><tr style="background:#1e3a5f;color:#fff;">
+                <td style="padding:5px 8px;font-weight:700;">TOTAL</td>
+                <td style="padding:5px 8px;text-align:right;font-weight:700;">${totTakeoff.toFixed(2)}</td>
+                <td style="padding:5px 8px;text-align:right;font-weight:700;">${totActual.toFixed(2)}</td>
+                <td style="padding:5px 8px;text-align:right;font-weight:700;">${dTotal>=0?'+':''}${dTotal.toFixed(2)}</td>
+                <td style="padding:5px 8px;">—</td>
+                <td style="padding:5px 8px;text-align:right;font-weight:700;color:${totCost>=0?'#fca5a5':'#86efac'};">${totCost>=0?'+':''}$${Math.abs(totCost).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+                <td></td>
+            </tr></tfoot></table>
+            <div style="margin-top:14px;padding:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;font-size:9pt;">
+                <strong>Conclusion:</strong> ${dTotal > 0.1 ? `Over-poured by ${dTotal.toFixed(2)} yd³ — extra concrete cost $${totCost.toLocaleString(undefined,{maximumFractionDigits:0})}` : dTotal < -0.1 ? `Under-poured by ${Math.abs(dTotal).toFixed(2)} yd³ — material savings $${Math.abs(totCost).toLocaleString(undefined,{maximumFractionDigits:0})}` : 'Volume matched takeoff — no material variance.'}
+            </div>
+            <div style="margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                <div><div style="font-size:7.5pt;color:#888;margin-bottom:14px;">Prepared By / Date</div><div style="border-bottom:1px solid #333;width:90%;">&nbsp;</div></div>
+                <div><div style="font-size:7.5pt;color:#888;margin-bottom:14px;">PM Review / Date</div><div style="border-bottom:1px solid #333;width:90%;">&nbsp;</div></div>
+            </div>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`;
+            const w = window.open('', '_blank');
+            if (w) { w.document.write(html); w.document.close(); }
+        }
+
+
+        // Initialize new panels on load
+        (function() {
+            const origInit = window.onload;
+            function newPanelsInit() {
+                if (typeof initEstimateRevisions === 'function') setTimeout(initEstimateRevisions, 600);
+                if (typeof initSubBidMatrix === 'function') setTimeout(initSubBidMatrix, 700);
+                if (typeof initQtyRecon === 'function') setTimeout(initQtyRecon, 800);
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', newPanelsInit);
+            } else {
+                newPanelsInit();
+            }
+        })();
+
     </script>
 
 </body>
