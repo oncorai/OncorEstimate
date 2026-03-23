@@ -22348,6 +22348,636 @@ ${f.co}${f.phone ? '\n' + f.phone : ''}${f.email ? '\n' + f.email : ''}`;
         });
     })();
 
+
+    // ── TILT-UP PANEL CALCULATOR ──────────────────────────────────────────────
+    (function injectTiltUpCalc(){
+        document.addEventListener('DOMContentLoaded', function(){
+            setTimeout(function(){
+                const anchor = document.getElementById('wasteTrackerBtn');
+                if(!anchor) return;
+
+                // localStorage key
+                const LS_KEY = 'tiltup_panels';
+                function getPanels(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)||'[]'); }catch(e){ return []; } }
+                function savePanels(d){ localStorage.setItem(LS_KEY, JSON.stringify(d)); }
+
+                function calcPanel(w,h,t){ // ft, ft, in
+                    const thFt = t/12;
+                    const vol = w*h*thFt; // CF
+                    const wt = vol*150; // lbs (150 pcf)
+                    const sf = w*h;
+                    return { sf, wt, vol, yd3: vol/27 };
+                }
+
+                function craneSize(lbs){
+                    // rule-of-thumb: crane rated capacity = panel weight × 1.25 (rigging) / 0.75 (working load 75% of rated)
+                    const needed = lbs * 1.25 / 0.75;
+                    if(needed < 40000) return '40-ton hydraulic (typical residential/light commercial)';
+                    if(needed < 80000) return '80-ton hydraulic (standard tilt-up)';
+                    if(needed < 150000) return '150-ton crawler (heavy tilt-up)';
+                    return '200-ton+ crawler (consult crane engineer)';
+                }
+
+                function renderPanels(){
+                    const panels = getPanels();
+                    let totalSF=0, totalYd3=0, totalWt=0;
+                    const rows = panels.map((p,i)=>{
+                        const c = calcPanel(p.w, p.h, p.t);
+                        totalSF += c.sf * p.qty;
+                        totalYd3 += c.yd3 * p.qty;
+                        totalWt += c.wt * p.qty;
+                        const braces = Math.ceil(c.sf / 250) * p.qty;
+                        return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                            <td style="padding:3px 5px;font-size:0.72rem;">${p.mark||'—'}</td>
+                            <td style="padding:3px 5px;font-size:0.72rem;text-align:right;">${p.w}×${p.h}</td>
+                            <td style="padding:3px 5px;font-size:0.72rem;text-align:right;">${p.t}"</td>
+                            <td style="padding:3px 5px;font-size:0.72rem;text-align:right;">${p.qty}</td>
+                            <td style="padding:3px 5px;font-size:0.72rem;text-align:right;">${c.sf.toFixed(0)} SF</td>
+                            <td style="padding:3px 5px;font-size:0.72rem;text-align:right;">${(c.wt/1000).toFixed(1)}k lbs</td>
+                            <td style="padding:3px 5px;font-size:0.72rem;text-align:right;">${c.yd3.toFixed(2)}</td>
+                            <td style="padding:3px 5px;font-size:0.71rem;color:#94a3b8;">${braces} braces</td>
+                            <td><button onclick="deleteTiltPanel(${i})" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:0.85rem;padding:0 3px;">×</button></td>
+                        </tr>`;
+                    }).join('');
+
+                    const heaviest = panels.reduce((mx,p)=>{ const w=calcPanel(p.w,p.h,p.t).wt; return w>mx?w:mx; },0);
+                    const craneRec = heaviest>0 ? craneSize(heaviest) : '—';
+                    const pourBed = totalSF; // approx — panels pour on the floor slab
+
+                    document.getElementById('tuPanelBody').innerHTML = rows || `<tr><td colspan="9" style="text-align:center;color:#64748b;font-size:0.72rem;padding:8px;">No panels yet — add below</td></tr>`;
+                    document.getElementById('tuSummary').innerHTML = panels.length===0 ? '' : `
+                        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:5px;margin-top:6px;">
+                            <div style="background:rgba(255,255,255,0.04);border-radius:4px;padding:6px;text-align:center;">
+                                <div style="font-size:0.7rem;color:#64748b;">Total Panel SF</div>
+                                <div style="font-size:1rem;font-weight:700;color:#38bdf8;">${totalSF.toLocaleString()} SF</div>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.04);border-radius:4px;padding:6px;text-align:center;">
+                                <div style="font-size:0.7rem;color:#64748b;">Total Concrete</div>
+                                <div style="font-size:1rem;font-weight:700;color:#4ade80;">${totalYd3.toFixed(1)} yd³</div>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.04);border-radius:4px;padding:6px;text-align:center;">
+                                <div style="font-size:0.7rem;color:#64748b;">Total Panel Weight</div>
+                                <div style="font-size:1rem;font-weight:700;color:#fb923c;">${(totalWt/1000).toFixed(0)}k lbs</div>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.04);border-radius:4px;padding:6px;text-align:center;">
+                                <div style="font-size:0.7rem;color:#64748b;">Pour Bed Area Needed</div>
+                                <div style="font-size:1rem;font-weight:700;color:#a78bfa;">${pourBed.toLocaleString()} SF</div>
+                            </div>
+                        </div>
+                        <div style="margin-top:6px;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:5px;padding:6px;">
+                            <div style="font-size:0.72rem;color:#94a3b8;">Heaviest single panel: <strong style="color:#e2e8f0;">${(heaviest/1000).toFixed(1)}k lbs</strong></div>
+                            <div style="font-size:0.72rem;color:#94a3b8;margin-top:3px;">Recommended crane: <strong style="color:#38bdf8;">${craneRec}</strong></div>
+                            <div style="font-size:0.68rem;color:#64748b;margin-top:3px;">Crane sizing = panel wt × 1.25 rigging ÷ 0.75 working load. Consult engineer for final spec.</div>
+                        </div>`;
+                }
+
+                window.addTiltPanel = function(){
+                    const mark = document.getElementById('tuMark')?.value.trim();
+                    const w = parseFloat(document.getElementById('tuW')?.value);
+                    const h = parseFloat(document.getElementById('tuH')?.value);
+                    const t = parseFloat(document.getElementById('tuT')?.value);
+                    const qty = parseInt(document.getElementById('tuQty')?.value)||1;
+                    if(isNaN(w)||isNaN(h)||isNaN(t)||w<=0||h<=0||t<=0){ alert('Enter valid width, height, and thickness.'); return; }
+                    const panels = getPanels();
+                    panels.push({ mark:mark||`P${panels.length+1}`, w, h, t, qty });
+                    savePanels(panels);
+                    document.getElementById('tuMark').value='';
+                    document.getElementById('tuW').value='';
+                    document.getElementById('tuH').value='';
+                    document.getElementById('tuT').value='7.25';
+                    document.getElementById('tuQty').value='1';
+                    renderPanels();
+                };
+                window.deleteTiltPanel = function(i){
+                    const panels=getPanels(); panels.splice(i,1); savePanels(panels); renderPanels();
+                };
+                window.copyTiltPanel = function(){
+                    const panels=getPanels();
+                    if(!panels.length){ alert('No panels to copy.'); return; }
+                    let txt=`TILT-UP PANEL SCHEDULE\n${new Date().toLocaleDateString()}\n${'─'.repeat(60)}\n\n`;
+                    txt+=`Mark       W×H (ft)   Thick   Qty   SF/ea   Wt/ea (lbs)   yd³/ea\n${'─'.repeat(60)}\n`;
+                    let tsf=0,tyd3=0,twt=0;
+                    panels.forEach(p=>{
+                        const c=calcPanel(p.w,p.h,p.t);
+                        tsf+=c.sf*p.qty; tyd3+=c.yd3*p.qty; twt+=c.wt*p.qty;
+                        txt+=`${(p.mark||'').padEnd(10)} ${(p.w+'×'+p.h).padEnd(10)} ${p.t+'"'}     ${String(p.qty).padEnd(5)} ${c.sf.toFixed(0).padEnd(7)} ${c.wt.toLocaleString().padEnd(13)} ${c.yd3.toFixed(2)}\n`;
+                    });
+                    txt+=`${'─'.repeat(60)}\nTOTALS: ${tsf.toLocaleString()} SF | ${(twt/1000).toFixed(1)}k lbs | ${tyd3.toFixed(1)} yd³\n`;
+                    const heaviest=panels.reduce((mx,p)=>{const w=calcPanel(p.w,p.h,p.t).wt;return w>mx?w:mx;},0);
+                    txt+=`Crane recommendation: ${craneSize(heaviest)}\n`;
+                    navigator.clipboard?.writeText(txt).then(()=>{ const b=event.target; b.textContent='✅ Copied!'; setTimeout(()=>b.textContent='📋 Copy Schedule',1500); });
+                };
+                window.printTiltPanel = function(){
+                    const panels=getPanels();
+                    if(!panels.length){ alert('No panels to print.'); return; }
+                    let rows=''; let tsf=0,tyd3=0,twt=0;
+                    panels.forEach(p=>{
+                        const c=calcPanel(p.w,p.h,p.t);
+                        tsf+=c.sf*p.qty; tyd3+=c.yd3*p.qty; twt+=c.wt*p.qty;
+                        rows+=`<tr><td>${p.mark||''}</td><td>${p.w}×${p.h}</td><td>${p.t}"</td><td>${p.qty}</td><td>${c.sf.toFixed(0)}</td><td>${c.wt.toLocaleString()}</td><td>${(c.wt*p.qty/1000).toFixed(1)}k</td><td>${c.yd3.toFixed(2)}</td><td>${(c.yd3*p.qty).toFixed(2)}</td><td>${Math.ceil(c.sf/250)*p.qty}</td></tr>`;
+                    });
+                    const heaviest=panels.reduce((mx,p)=>{const w=calcPanel(p.w,p.h,p.t).wt;return w>mx?w:mx;},0);
+                    const co=document.getElementById('companyNameInput')?.value||'Oncor';
+                    const proj=document.getElementById('projectNameInput')?.value||'—';
+                    const w=window.open('','_blank');
+                    w.document.write(`<!DOCTYPE html><html><head><title>Tilt-Up Panel Schedule</title><style>
+                        body{font-family:Arial,sans-serif;margin:30px;font-size:12px;}
+                        h2{font-size:16px;margin-bottom:4px;}
+                        .meta{color:#555;margin-bottom:16px;font-size:11px;}
+                        table{width:100%;border-collapse:collapse;margin-bottom:14px;}
+                        th{background:#1a3a5c;color:#fff;padding:6px 8px;text-align:center;}
+                        td{padding:5px 8px;border-bottom:1px solid #ddd;text-align:center;}
+                        .tot{background:#f0f0f0;font-weight:bold;}
+                        .crane{background:#e8f4fd;border:1px solid #b3d9f5;padding:8px 12px;border-radius:4px;margin-bottom:14px;}
+                        .sig{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:30px;}
+                        .sl{border-top:1px solid #000;padding-top:4px;font-size:11px;}
+                        @media print{body{margin:15px;}}
+                    </style></head><body>
+                        <h2>TILT-UP PANEL SCHEDULE</h2>
+                        <div class="meta">${co} | Project: ${proj} | Date: ${new Date().toLocaleDateString()}</div>
+                        <table>
+                            <thead><tr><th>Mark</th><th>W×H (ft)</th><th>Thick</th><th>Qty</th><th>SF/ea</th><th>Wt/ea (lbs)</th><th>Total Wt</th><th>yd³/ea</th><th>Total yd³</th><th>Braces</th></tr></thead>
+                            <tbody>${rows}</tbody>
+                            <tfoot><tr class="tot"><td colspan="4">TOTALS</td><td>${tsf.toLocaleString()}</td><td>—</td><td>${(twt/1000).toFixed(1)}k lbs</td><td>—</td><td>${tyd3.toFixed(1)}</td><td>—</td></tr></tfoot>
+                        </table>
+                        <div class="crane"><strong>Crane Sizing:</strong> Heaviest panel = ${(heaviest/1000).toFixed(1)}k lbs | Recommended: ${craneSize(heaviest)}<br><small>Sizing = panel weight × 1.25 (rigging) ÷ 0.75 (working load). Obtain stamped lift plan from structural engineer.</small></div>
+                        <div class="sig">
+                            <div class="sl">Estimator / Prepared By: ___________________</div>
+                            <div class="sl">Engineer of Record: ___________________</div>
+                            <div class="sl">Approved: ___________________</div>
+                        </div>
+                    </body></html>`);
+                    w.document.close(); w.focus(); setTimeout(()=>w.print(),400);
+                };
+
+                window.toggleTiltUp = function(){
+                    const p=document.getElementById('tiltUpWrap');
+                    const b=document.getElementById('tiltUpBtn');
+                    if(!p||!b) return;
+                    const open=p.style.display==='block';
+                    p.style.display=open?'none':'block';
+                    b.textContent=open?'🏗️ Show Tilt-Up Panel Calculator':'🏗️ Hide Tilt-Up Panel Calculator';
+                    if(!open) renderPanels();
+                };
+
+                const wrapper=document.createElement('div');
+                wrapper.style.cssText='margin-top:6px;';
+                wrapper.innerHTML=`
+                <div id="tiltUpWrap" style="display:none;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px;">
+                        <span style="font-weight:700;color:#38bdf8;">🏗️ Tilt-Up Panel Calculator</span>
+                        <span style="font-size:0.7rem;color:#64748b;">Weight · Crane sizing · Pour bed area · Bracing count</span>
+                    </div>
+                    <div id="tuSummary"></div>
+                    <div style="overflow-x:auto;margin-top:6px;">
+                    <table style="width:100%;border-collapse:collapse;min-width:500px;">
+                        <thead><tr style="color:#64748b;font-size:0.7rem;border-bottom:1px solid rgba(255,255,255,0.1);">
+                            <th style="padding:3px 5px;text-align:left;">Mark</th>
+                            <th style="padding:3px 5px;text-align:right;">W×H (ft)</th>
+                            <th style="padding:3px 5px;text-align:right;">Thick</th>
+                            <th style="padding:3px 5px;text-align:right;">Qty</th>
+                            <th style="padding:3px 5px;text-align:right;">SF/ea</th>
+                            <th style="padding:3px 5px;text-align:right;">Wt/ea</th>
+                            <th style="padding:3px 5px;text-align:right;">yd³/ea</th>
+                            <th style="padding:3px 5px;text-align:left;">Bracing</th>
+                            <th style="width:20px;"></th>
+                        </tr></thead>
+                        <tbody id="tuPanelBody"></tbody>
+                    </table>
+                    </div>
+                    <div style="font-size:0.75rem;font-weight:600;color:#94a3b8;margin:8px 0 4px;">Add Panel Type</div>
+                    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:6px;align-items:end;">
+                        <div>
+                            <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Mark</div>
+                            <input type="text" id="tuMark" placeholder="P1" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 6px;font-size:0.75rem;width:100%;box-sizing:border-box;" />
+                        </div>
+                        <div>
+                            <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Width (ft)</div>
+                            <input type="number" id="tuW" placeholder="20" min="1" step="0.5" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 6px;font-size:0.75rem;width:100%;box-sizing:border-box;" />
+                        </div>
+                        <div>
+                            <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Height (ft)</div>
+                            <input type="number" id="tuH" placeholder="24" min="1" step="0.5" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 6px;font-size:0.75rem;width:100%;box-sizing:border-box;" />
+                        </div>
+                        <div>
+                            <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Thick (in)</div>
+                            <input type="number" id="tuT" value="7.25" min="3.5" step="0.25" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 6px;font-size:0.75rem;width:100%;box-sizing:border-box;" />
+                        </div>
+                        <div>
+                            <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Qty</div>
+                            <input type="number" id="tuQty" value="1" min="1" step="1" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 6px;font-size:0.75rem;width:100%;box-sizing:border-box;" />
+                        </div>
+                    </div>
+                    <button onclick="addTiltPanel()" style="width:100%;background:rgba(56,189,248,0.15);border:1px solid rgba(56,189,248,0.3);color:#38bdf8;border-radius:6px;padding:6px;cursor:pointer;font-size:0.8rem;font-weight:600;">+ Add Panel Type</button>
+                    <div style="display:flex;gap:4px;margin-top:6px;">
+                        <button onclick="copyTiltPanel()" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">📋 Copy Schedule</button>
+                        <button onclick="printTiltPanel()" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">🖨️ Print Schedule</button>
+                    </div>
+                    <div style="font-size:0.68rem;color:#475569;margin-top:6px;">Standard tilt-up: 7-9" thick, 4000 PSI, #5 rebar each way. Bracing: 1 per 250 SF per TILT-UP CONCRETE ASSOCIATION guidelines. Pour bed = floor slab poured first, panels cast on top. Persistent per-project localStorage.</div>
+                </div>
+                <button onclick="toggleTiltUp()" id="tiltUpBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#38bdf8;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;">🏗️ Show Tilt-Up Panel Calculator</button>`;
+                anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+                renderPanels();
+            }, 4800);
+        });
+    })();
+
+    // ── SUB ACCOUNTS PAYABLE TRACKER ─────────────────────────────────────────
+    (function injectSubAP(){
+        document.addEventListener('DOMContentLoaded', function(){
+            setTimeout(function(){
+                const anchor = document.getElementById('tiltUpBtn');
+                if(!anchor) return;
+
+                const LS_KEY = 'subAP_data';
+                function getAP(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)||'[]'); }catch(e){ return []; } }
+                function saveAP(d){ localStorage.setItem(LS_KEY, JSON.stringify(d)); }
+
+                function renderAP(){
+                    const subs = getAP();
+                    let totalContract=0,totalApproved=0,totalPaid=0,totalRet=0,totalOwed=0;
+                    const rows = subs.map((s,i)=>{
+                        const ret = s.approved * (s.retPct/100);
+                        const netDue = s.approved - ret - s.paid;
+                        const balance = s.contract - s.approved; // unbilled
+                        totalContract += s.contract;
+                        totalApproved += s.approved;
+                        totalPaid += s.paid;
+                        totalRet += ret;
+                        totalOwed += Math.max(0, netDue);
+                        const owedColor = netDue > 0 ? '#f87171' : '#4ade80';
+                        const pctComplete = s.contract > 0 ? (s.approved/s.contract*100).toFixed(0) : 0;
+                        return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                            <td style="padding:3px 5px;font-size:0.72rem;">${s.name||'—'}</td>
+                            <td style="padding:3px 5px;font-size:0.72rem;color:#94a3b8;">${s.scope||'—'}</td>
+                            <td style="padding:3px 5px;font-size:0.72rem;text-align:right;">$${s.contract.toLocaleString()}</td>
+                            <td style="padding:3px 5px;font-size:0.72rem;text-align:right;">$${s.approved.toLocaleString()}<br><span style="font-size:0.66rem;color:#64748b;">${pctComplete}%</span></td>
+                            <td style="padding:3px 5px;font-size:0.72rem;text-align:right;color:#fbbf24;">$${ret.toLocaleString()}</td>
+                            <td style="padding:3px 5px;font-size:0.72rem;text-align:right;">$${s.paid.toLocaleString()}</td>
+                            <td style="padding:3px 5px;font-size:0.72rem;text-align:right;font-weight:700;color:${owedColor};">$${netDue.toLocaleString()}</td>
+                            <td><button onclick="deleteSubAP(${i})" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:0.85rem;padding:0 3px;">×</button></td>
+                        </tr>`;
+                    }).join('');
+
+                    document.getElementById('subAPBody').innerHTML = rows || `<tr><td colspan="8" style="text-align:center;color:#64748b;font-size:0.72rem;padding:8px;">No subs added yet</td></tr>`;
+                    document.getElementById('subAPSummary').innerHTML = subs.length===0?'':`
+                        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:5px;margin-bottom:6px;">
+                            <div style="background:rgba(255,255,255,0.04);border-radius:4px;padding:5px;text-align:center;">
+                                <div style="font-size:0.68rem;color:#64748b;">Total Sub Commitments</div>
+                                <div style="font-size:0.9rem;font-weight:700;color:#38bdf8;">$${totalContract.toLocaleString()}</div>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.04);border-radius:4px;padding:5px;text-align:center;">
+                                <div style="font-size:0.68rem;color:#64748b;">Total Paid to Subs</div>
+                                <div style="font-size:0.9rem;font-weight:700;color:#4ade80;">$${totalPaid.toLocaleString()}</div>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.04);border-radius:4px;padding:5px;text-align:center;">
+                                <div style="font-size:0.68rem;color:#64748b;">Retainage Held (AP)</div>
+                                <div style="font-size:0.9rem;font-weight:700;color:#fbbf24;">$${totalRet.toLocaleString()}</div>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.04);border-radius:4px;padding:5px;text-align:center;">
+                                <div style="font-size:0.68rem;color:#64748b;">Currently Owed to Subs</div>
+                                <div style="font-size:0.9rem;font-weight:700;color:#f87171;">$${totalOwed.toLocaleString()}</div>
+                            </div>
+                        </div>`;
+                }
+
+                window.addSubAP = function(){
+                    const name=document.getElementById('sapName')?.value.trim();
+                    const scope=document.getElementById('sapScope')?.value.trim();
+                    const contract=parseFloat(document.getElementById('sapContract')?.value)||0;
+                    const approved=parseFloat(document.getElementById('sapApproved')?.value)||0;
+                    const paid=parseFloat(document.getElementById('sapPaid')?.value)||0;
+                    const retPct=parseFloat(document.getElementById('sapRet')?.value)||10;
+                    if(!name||contract<=0){ alert('Enter sub name and contract value.'); return; }
+                    const subs=getAP(); subs.push({name,scope,contract,approved,paid,retPct});
+                    saveAP(subs);
+                    ['sapName','sapScope','sapContract','sapApproved','sapPaid'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+                    document.getElementById('sapRet').value='10';
+                    renderAP();
+                };
+                window.deleteSubAP = function(i){ const s=getAP(); s.splice(i,1); saveAP(s); renderAP(); };
+                window.copySubAP = function(){
+                    const subs=getAP();
+                    if(!subs.length){ alert('No subs to copy.'); return; }
+                    let txt=`SUBCONTRACTOR ACCOUNTS PAYABLE\n${new Date().toLocaleDateString()}\n${'─'.repeat(60)}\n\n`;
+                    let tc=0,ta=0,tp=0,tr=0,to=0;
+                    subs.forEach(s=>{
+                        const ret=s.approved*(s.retPct/100);
+                        const owed=s.approved-ret-s.paid;
+                        tc+=s.contract;ta+=s.approved;tp+=s.paid;tr+=ret;to+=Math.max(0,owed);
+                        txt+=`SUB: ${s.name} | Scope: ${s.scope||'—'}\n`;
+                        txt+=`  Contract: $${s.contract.toLocaleString()} | Approved: $${s.approved.toLocaleString()} (${s.contract>0?(s.approved/s.contract*100).toFixed(0):0}%) | Ret ${s.retPct}%: $${ret.toLocaleString()} | Paid: $${s.paid.toLocaleString()} | Owed: $${owed.toLocaleString()}\n\n`;
+                    });
+                    txt+=`${'─'.repeat(60)}\nTOTALS: Commitments $${tc.toLocaleString()} | Approved $${ta.toLocaleString()} | Paid $${tp.toLocaleString()} | Ret Held $${tr.toLocaleString()} | Owed $${to.toLocaleString()}\n`;
+                    navigator.clipboard?.writeText(txt).then(()=>{ const b=event.target; b.textContent='✅ Copied!'; setTimeout(()=>b.textContent='📋 Copy AP Report',1500); });
+                };
+                window.printSubAP = function(){
+                    const subs=getAP();
+                    if(!subs.length){ alert('No subs to print.'); return; }
+                    let rows=''; let tc=0,ta=0,tp=0,tr=0,to=0;
+                    subs.forEach((s,i)=>{
+                        const ret=s.approved*(s.retPct/100);
+                        const owed=s.approved-ret-s.paid;
+                        tc+=s.contract;ta+=s.approved;tp+=s.paid;tr+=ret;to+=Math.max(0,owed);
+                        const pct=s.contract>0?(s.approved/s.contract*100).toFixed(0):0;
+                        rows+=`<tr><td>${s.name}</td><td>${s.scope||'—'}</td><td>$${s.contract.toLocaleString()}</td><td>$${s.approved.toLocaleString()} (${pct}%)</td><td>${s.retPct}%</td><td>$${ret.toLocaleString()}</td><td>$${s.paid.toLocaleString()}</td><td style="font-weight:bold;color:${owed>0?'#c00':'green'};">$${owed.toLocaleString()}</td></tr>`;
+                    });
+                    const co=document.getElementById('companyNameInput')?.value||'Oncor';
+                    const proj=document.getElementById('projectNameInput')?.value||'—';
+                    const w=window.open('','_blank');
+                    w.document.write(`<!DOCTYPE html><html><head><title>Sub AP Report</title><style>
+                        body{font-family:Arial,sans-serif;margin:30px;font-size:12px;}
+                        h2{font-size:16px;margin-bottom:4px;}
+                        .meta{color:#555;margin-bottom:16px;font-size:11px;}
+                        table{width:100%;border-collapse:collapse;margin-bottom:14px;}
+                        th{background:#1a3a5c;color:#fff;padding:6px 8px;}
+                        td{padding:5px 8px;border-bottom:1px solid #ddd;}
+                        .tot{background:#f0f0f0;font-weight:bold;}
+                        .note{font-size:10px;color:#555;margin-bottom:12px;border:1px solid #ccc;padding:6px;}
+                        .sig{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:30px;}
+                        .sl{border-top:1px solid #000;padding-top:4px;font-size:11px;}
+                        @media print{body{margin:15px;}}
+                    </style></head><body>
+                        <h2>SUBCONTRACTOR ACCOUNTS PAYABLE REPORT</h2>
+                        <div class="meta">${co} | Project: ${proj} | As of: ${new Date().toLocaleDateString()}</div>
+                        <table>
+                            <thead><tr><th>Sub Name</th><th>Scope</th><th>Contract</th><th>Approved Draws</th><th>Ret%</th><th>Ret Held</th><th>Paid</th><th>Currently Owed</th></tr></thead>
+                            <tbody>${rows}</tbody>
+                            <tfoot><tr class="tot"><td colspan="2">TOTALS</td><td>$${tc.toLocaleString()}</td><td>$${ta.toLocaleString()}</td><td>—</td><td>$${tr.toLocaleString()}</td><td>$${tp.toLocaleString()}</td><td>$${to.toLocaleString()}</td></tr></tfoot>
+                        </table>
+                        <div class="note">Note: "Currently Owed" = Approved Draws − Retainage Held − Amount Paid. Pay-when-paid provisions per subcontract — release funds only after receipt from GC/Owner. Retainage release upon project closeout per contract terms.</div>
+                        <div class="sig">
+                            <div class="sl">Prepared By / PM: ___________________</div>
+                            <div class="sl">Controller / Owner Review: ___________________</div>
+                        </div>
+                    </body></html>`);
+                    w.document.close(); w.focus(); setTimeout(()=>w.print(),400);
+                };
+
+                window.toggleSubAP = function(){
+                    const p=document.getElementById('subAPWrap');
+                    const b=document.getElementById('subAPBtn');
+                    if(!p||!b) return;
+                    const open=p.style.display==='block';
+                    p.style.display=open?'none':'block';
+                    b.textContent=open?'💸 Show Sub Accounts Payable Tracker':'💸 Hide Sub Accounts Payable Tracker';
+                    if(!open) renderAP();
+                };
+
+                const wrapper=document.createElement('div');
+                wrapper.style.cssText='margin-top:6px;';
+                wrapper.innerHTML=`
+                <div id="subAPWrap" style="display:none;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px;">
+                        <span style="font-weight:700;color:#f87171;">💸 Sub Accounts Payable Tracker</span>
+                        <span style="font-size:0.7rem;color:#64748b;">Track what you owe subs: contract · approved draws · retainage · balance</span>
+                    </div>
+                    <div id="subAPSummary"></div>
+                    <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;min-width:520px;">
+                        <thead><tr style="color:#64748b;font-size:0.7rem;border-bottom:1px solid rgba(255,255,255,0.1);">
+                            <th style="padding:3px 5px;text-align:left;">Sub Name</th>
+                            <th style="padding:3px 5px;text-align:left;">Scope</th>
+                            <th style="padding:3px 5px;text-align:right;">Contract</th>
+                            <th style="padding:3px 5px;text-align:right;">Approved</th>
+                            <th style="padding:3px 5px;text-align:right;">Ret Held</th>
+                            <th style="padding:3px 5px;text-align:right;">Paid</th>
+                            <th style="padding:3px 5px;text-align:right;">Owed</th>
+                            <th style="width:20px;"></th>
+                        </tr></thead>
+                        <tbody id="subAPBody"></tbody>
+                    </table>
+                    </div>
+                    <div style="font-size:0.75rem;font-weight:600;color:#94a3b8;margin:8px 0 4px;">Add Subcontractor</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">
+                        <div>
+                            <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Sub Name</div>
+                            <input type="text" id="sapName" placeholder="ABC Pump Co." style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 6px;font-size:0.75rem;width:100%;box-sizing:border-box;" />
+                        </div>
+                        <div>
+                            <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Scope</div>
+                            <input type="text" id="sapScope" placeholder="Pump / Rebar / Forming..." style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 6px;font-size:0.75rem;width:100%;box-sizing:border-box;" />
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:6px;">
+                        <div>
+                            <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Contract $</div>
+                            <input type="number" id="sapContract" placeholder="50000" min="0" step="100" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 6px;font-size:0.75rem;width:100%;box-sizing:border-box;" />
+                        </div>
+                        <div>
+                            <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Approved Draws $</div>
+                            <input type="number" id="sapApproved" placeholder="30000" min="0" step="100" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 6px;font-size:0.75rem;width:100%;box-sizing:border-box;" />
+                        </div>
+                        <div>
+                            <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Amount Paid $</div>
+                            <input type="number" id="sapPaid" placeholder="25000" min="0" step="100" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 6px;font-size:0.75rem;width:100%;box-sizing:border-box;" />
+                        </div>
+                        <div>
+                            <div style="font-size:0.68rem;color:#64748b;margin-bottom:2px;">Ret %</div>
+                            <input type="number" id="sapRet" value="10" min="0" max="20" step="1" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;border-radius:4px;padding:4px 6px;font-size:0.75rem;width:100%;box-sizing:border-box;" />
+                        </div>
+                    </div>
+                    <button onclick="addSubAP()" style="width:100%;background:rgba(248,113,113,0.15);border:1px solid rgba(248,113,113,0.3);color:#f87171;border-radius:6px;padding:6px;cursor:pointer;font-size:0.8rem;font-weight:600;">+ Add Sub</button>
+                    <div style="display:flex;gap:4px;margin-top:6px;">
+                        <button onclick="copySubAP()" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">📋 Copy AP Report</button>
+                        <button onclick="printSubAP()" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">🖨️ Print AP Report</button>
+                    </div>
+                    <div style="font-size:0.68rem;color:#475569;margin-top:6px;">Pairs with AR Aging (your receivables) to give a complete cash flow picture. Owed = Approved Draws − Retainage Held − Paid. Retainage typically 10% until project closeout. Global localStorage — company-wide across projects.</div>
+                </div>
+                <button onclick="toggleSubAP()" id="subAPBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#f87171;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;">💸 Show Sub Accounts Payable Tracker</button>`;
+                anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+                renderAP();
+            }, 5000);
+        });
+    })();
+
+    // ── QUANTITY FIELD SHEET ─────────────────────────────────────────────────
+    (function injectQtyFieldSheet(){
+        document.addEventListener('DOMContentLoaded', function(){
+            setTimeout(function(){
+                const anchor = document.getElementById('subAPBtn');
+                if(!anchor) return;
+
+                window.generateQtyFieldSheet = function(){
+                    // Pull measurements from the main app
+                    if(typeof measurements === 'undefined' || measurements.length===0){
+                        alert('No measurements to print. Add measurements first.');
+                        return;
+                    }
+                    const proj = document.getElementById('projectNameInput')?.value||'—';
+                    const client = document.getElementById('clientNameInput')?.value||'—';
+                    const estimator = document.getElementById('estimatorNameInput')?.value||'—';
+                    const co = document.getElementById('companyNameInput')?.value||'Oncor';
+                    const today = new Date().toLocaleDateString();
+
+                    // Group by element type
+                    const groups = {};
+                    measurements.forEach(m=>{
+                        if(m.excluded) return;
+                        const t = m.type||'unknown';
+                        if(!groups[t]) groups[t]=[];
+                        groups[t].push(m);
+                    });
+
+                    let tableRows=''; let grandYd3=0; let grandSF=0; let grandLF=0;
+                    const typeColors={'slab':'#1a3a5c','footing':'#1a4a2c','wall':'#3a2a1c','beam':'#3a1c3a','curb':'#3a3a1c','pier':'#2a1c3a'};
+
+                    Object.entries(groups).forEach(([type,items])=>{
+                        let groupYd3=0, groupSF=0, groupLF=0;
+                        const typeColor = typeColors[type]||'#2a2a2a';
+                        tableRows+=`<tr style="background:${typeColor};"><td colspan="8" style="padding:5px 8px;font-weight:bold;font-size:11px;color:#fff;text-transform:uppercase;">${type} (${items.length} item${items.length>1?'s':''})</td></tr>`;
+                        items.forEach((m,idx)=>{
+                            let dimStr='', qty2='';
+                            const yd3 = m.volume||0;
+                            groupYd3+=yd3;
+                            grandYd3+=yd3;
+                            if(type==='slab'){
+                                const sf=(m.areaSqFt||0);
+                                groupSF+=sf; grandSF+=sf;
+                                const thick=m.config?.thickness||4;
+                                const thUnit=m.config?.thicknessUnit||'in';
+                                dimStr=`${sf.toFixed(0)} SF @ ${thick}${thUnit} thick`;
+                                qty2=`${sf.toFixed(0)} SF`;
+                            } else if(['footing','beam','curb'].includes(type)){
+                                const lf=(m.lengthFt||0);
+                                groupLF+=lf; grandLF+=lf;
+                                const w=m.config?.width||12; const d=m.config?.depth||12;
+                                dimStr=`${lf.toFixed(1)} LF @ ${w}"w × ${d}"d`;
+                                qty2=`${lf.toFixed(1)} LF`;
+                            } else if(type==='wall'){
+                                const lf=(m.lengthFt||0);
+                                groupLF+=lf; grandLF+=lf;
+                                const ht=m.config?.height||10; const htU=m.config?.heightUnit||'ft';
+                                const th=m.config?.thickness||8; const thU=m.config?.thicknessUnit||'in';
+                                dimStr=`${lf.toFixed(1)} LF @ ${ht}${htU}h × ${th}${thU} thick`;
+                                qty2=`${lf.toFixed(1)} LF`;
+                            } else if(type==='pier'){
+                                const dia=m.config?.diameter||12; const dep=m.config?.depth||48;
+                                dimStr=`⌀${dia}" × ${dep}" deep`;
+                                qty2=`1 ea`;
+                            } else {
+                                dimStr=yd3.toFixed(3)+' yd³';
+                                qty2='—';
+                            }
+                            const phBadge=m.phase?`<span style="background:${m.phase==='phase1'?'#1d4ed8':m.phase==='phase2'?'#15803d':'#c2410c'};color:#fff;border-radius:2px;padding:1px 4px;font-size:9px;margin-left:4px;">${m.phase==='phase1'?'P1':m.phase==='phase2'?'P2':'P3'}</span>`:'';
+                            const pgBadge=m.pageNumber?`<span style="background:#374151;color:#9ca3af;border-radius:2px;padding:1px 4px;font-size:9px;margin-left:3px;">pg${m.pageNumber}</span>`:'';
+                            tableRows+=`<tr style="border-bottom:1px solid #ddd;">
+                                <td style="padding:4px 8px;font-size:11px;">${idx+1}</td>
+                                <td style="padding:4px 8px;font-size:11px;">${m.label||type+'-'+(idx+1)}${phBadge}${pgBadge}</td>
+                                <td style="padding:4px 8px;font-size:11px;">${type}</td>
+                                <td style="padding:4px 8px;font-size:11px;">${dimStr}</td>
+                                <td style="padding:4px 8px;font-size:11px;text-align:right;font-weight:bold;">${yd3.toFixed(3)}</td>
+                                <td style="padding:4px 8px;font-size:11px;text-align:right;">${qty2}</td>
+                                <td style="padding:4px 8px;font-size:11px;color:#555;">${m.psiOverride?m.psiOverride+' PSI':''}</td>
+                                <td style="padding:4px 8px;font-size:11px;color:#555;">${m.notes||''}</td>
+                            </tr>`;
+                        });
+                        let groupSummary='';
+                        if(groupYd3>0) groupSummary+=`${groupYd3.toFixed(2)} yd³`;
+                        if(groupSF>0) groupSummary+=` | ${groupSF.toFixed(0)} SF`;
+                        if(groupLF>0) groupSummary+=` | ${groupLF.toFixed(0)} LF`;
+                        tableRows+=`<tr style="background:#f5f5f5;font-weight:bold;"><td colspan="4" style="padding:4px 8px;font-size:11px;text-align:right;">Subtotal (${type}):</td><td colspan="4" style="padding:4px 8px;font-size:11px;">${groupSummary}</td></tr>`;
+                    });
+
+                    // Grand total row
+                    let gtStr=`${grandYd3.toFixed(2)} yd³`;
+                    if(grandSF>0) gtStr+=` | ${grandSF.toFixed(0)} SF total slab`;
+                    if(grandLF>0) gtStr+=` | ${grandLF.toFixed(0)} LF total linear`;
+
+                    const w=window.open('','_blank');
+                    w.document.write(`<!DOCTYPE html><html><head><title>Quantity Field Sheet</title><style>
+                        body{font-family:Arial,sans-serif;margin:20px;font-size:12px;}
+                        h2{font-size:16px;margin-bottom:3px;}
+                        .hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;}
+                        .meta{color:#555;font-size:11px;line-height:1.6;}
+                        table{width:100%;border-collapse:collapse;margin-bottom:10px;}
+                        th{background:#0f172a;color:#fff;padding:6px 8px;font-size:11px;text-align:left;}
+                        td{padding:4px 8px;font-size:11px;}
+                        .grand{background:#0f172a;color:#fff;font-weight:bold;}
+                        .exc{margin-top:8px;font-size:10px;color:#666;border-top:1px solid #ccc;padding-top:6px;}
+                        .sig{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:24px;}
+                        .sl{border-top:1px solid #000;padding-top:4px;font-size:10px;}
+                        .badge{display:inline-block;font-size:8px;border-radius:2px;padding:1px 3px;color:#fff;margin-left:3px;}
+                        @media print{body{margin:10px;}@page{margin:10mm;}}
+                    </style></head><body>
+                        <div class="hdr">
+                            <div>
+                                <h2>CONCRETE QUANTITY TAKEOFF FIELD SHEET</h2>
+                                <div class="meta">
+                                    Company: <strong>${co}</strong> | Project: <strong>${proj}</strong><br>
+                                    Client/GC: ${client} | Estimator: ${estimator} | Date: ${today}
+                                </div>
+                            </div>
+                        </div>
+                        <table>
+                            <thead><tr><th>#</th><th>Label / Description</th><th>Type</th><th>Dimensions</th><th>yd³</th><th>Secondary Qty</th><th>PSI</th><th>Notes</th></tr></thead>
+                            <tbody>${tableRows}</tbody>
+                            <tfoot><tr class="grand"><td colspan="4" style="padding:6px 8px;">GRAND TOTAL — ${measurements.filter(m=>!m.excluded).length} items</td><td colspan="4" style="padding:6px 8px;">${gtStr}</td></tr></tfoot>
+                        </table>
+                        <div class="exc">This sheet represents estimated takeoff quantities only. Actual field quantities may vary. yd³ includes planned waste factor per pricing settings. Verify all dimensions against current approved drawings before ordering.</div>
+                        <div class="sig">
+                            <div class="sl">Estimator: ___________________</div>
+                            <div class="sl">Field Verified By: ___________________</div>
+                            <div class="sl">Date Verified: ___________________</div>
+                        </div>
+                    </body></html>`);
+                    w.document.close(); w.focus(); setTimeout(()=>w.print(),400);
+                };
+
+                window.copyQtyFieldSheet = function(){
+                    if(typeof measurements === 'undefined' || measurements.length===0){
+                        alert('No measurements to copy.'); return;
+                    }
+                    const proj=document.getElementById('projectNameInput')?.value||'—';
+                    const today=new Date().toLocaleDateString();
+                    let txt=`CONCRETE QUANTITY TAKEOFF — ${proj}\n${today}\n${'─'.repeat(60)}\n\n`;
+                    let grandYd3=0;
+                    measurements.filter(m=>!m.excluded).forEach((m,i)=>{
+                        const yd3=m.volume||0;
+                        grandYd3+=yd3;
+                        const dim = m.areaSqFt?`${m.areaSqFt.toFixed(0)} SF`:m.lengthFt?`${m.lengthFt.toFixed(1)} LF`:'';
+                        const ph=m.phase?` [${m.phase==='phase1'?'P1':m.phase==='phase2'?'P2':'P3'}]`:'';
+                        const psi=m.psiOverride?` (${m.psiOverride} PSI)`:'';
+                        txt+=`${String(i+1).padStart(3)}. ${(m.label||m.type).padEnd(25)} ${String(yd3.toFixed(3)+' yd³').padEnd(12)} ${dim}${ph}${psi}\n`;
+                        if(m.notes) txt+=`     Notes: ${m.notes}\n`;
+                    });
+                    txt+=`\n${'─'.repeat(60)}\nTOTAL: ${grandYd3.toFixed(2)} yd³ (${measurements.filter(m=>!m.excluded).length} items)\n`;
+                    navigator.clipboard?.writeText(txt).then(()=>{ const b=event.target; b.textContent='✅ Copied!'; setTimeout(()=>b.textContent='📋 Copy Qty Sheet',1500); });
+                };
+
+                window.toggleQtyFieldSheet = function(){
+                    const p=document.getElementById('qtyFieldWrap');
+                    const b=document.getElementById('qtyFieldBtn');
+                    if(!p||!b) return;
+                    const open=p.style.display==='block';
+                    p.style.display=open?'none':'block';
+                    b.textContent=open?'📋 Show Quantity Field Sheet':'📋 Hide Quantity Field Sheet';
+                };
+
+                const wrapper=document.createElement('div');
+                wrapper.style.cssText='margin-top:6px;';
+                wrapper.innerHTML=`
+                <div id="qtyFieldWrap" style="display:none;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:10px;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px;">
+                        <span style="font-weight:700;color:#e2e8f0;">📋 Quantity Field Sheet</span>
+                        <span style="font-size:0.7rem;color:#64748b;">Clean printable takeoff for field use or GC submittal</span>
+                    </div>
+                    <div style="font-size:0.78rem;color:#94a3b8;margin-bottom:8px;line-height:1.5;">
+                        Generates a formatted, printable quantity takeoff table — all measurements grouped by element type, with dimensions, yd³, secondary quantities (SF/LF), PSI overrides, phase tags, and page references.<br>
+                        <strong style="color:#e2e8f0;">Use when:</strong> A GC asks for your quantity basis, submitting with a bid proposal, field crew needs a pour checklist, or documenting quantities for change order support.
+                    </div>
+                    <div style="display:flex;gap:5px;">
+                        <button onclick="generateQtyFieldSheet()" style="flex:2;background:rgba(226,232,240,0.15);border:1px solid rgba(226,232,240,0.3);color:#e2e8f0;border-radius:6px;padding:8px;cursor:pointer;font-size:0.82rem;font-weight:600;">🖨️ Print Quantity Field Sheet</button>
+                        <button onclick="copyQtyFieldSheet()" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:8px;cursor:pointer;font-size:0.78rem;">📋 Copy Qty Sheet</button>
+                    </div>
+                    <div style="font-size:0.68rem;color:#475569;margin-top:6px;">Excluded measurements (👁🚫) are omitted. Phase badges (P1/P2/P3), PSI overrides, and per-item notes are included when set. Uses current project measurements — no extra data entry.</div>
+                </div>
+                <button onclick="toggleQtyFieldSheet()" id="qtyFieldBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;">📋 Show Quantity Field Sheet</button>`;
+                anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+            }, 5200);
+        });
+    })();
+
     </script>
 
 </body>
