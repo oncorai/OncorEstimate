@@ -20821,5 +20821,414 @@ ${f.co}${f.phone ? '\n' + f.phone : ''}${f.email ? '\n' + f.email : ''}`;
     })();
     </script>
 
+    <!-- ==================== REBAR BAR SCHEDULE ==================== -->
+    <script>
+    (function(){
+        // Bar weights lbs/LF
+        const BAR_WEIGHTS = { '#3':0.376,'#4':0.668,'#5':1.043,'#6':1.502,'#7':2.044,'#8':2.670,'#9':3.400,'#10':4.303,'#11':5.313 };
+        const HOOK_ADD = { straight:0, '90_std':0.42, '180_std':0.17, seismic:0.83 }; // ft added per hook for #4 equiv, simplified
+        const HOOK_LABELS = { straight:'Straight','90_std':'90° Std Hook','180_std':'180° Std Hook',seismic:'Seismic Hook' };
+
+        function storageKey(){ return 'onc_barschedule_' + (document.getElementById('projectName')?.value||'default'); }
+        function loadSchedule(){ try{ return JSON.parse(localStorage.getItem(storageKey()))||[]; }catch(e){return [];} }
+        function saveSchedule(d){ localStorage.setItem(storageKey(), JSON.stringify(d)); }
+
+        function renderBarSchedule(){
+            const panel = document.getElementById('barSchedulePanel');
+            if(!panel) return;
+            const rows = loadSchedule();
+            let totalLF=0, totalLbs=0;
+            let rowsHtml='';
+            rows.forEach((r,i)=>{
+                const wt=BAR_WEIGHTS[r.size]||0.668;
+                const hookedLen = r.qty * (r.length + (HOOK_ADD[r.hook]||0));
+                const lbs = hookedLen * wt;
+                totalLF+=hookedLen; totalLbs+=lbs;
+                rowsHtml+=`<tr style="font-size:0.7rem;">
+                    <td style="padding:3px 5px;color:#94a3b8;">${r.mark||'—'}</td>
+                    <td style="padding:3px 5px;color:#c4b5fd;">${r.size}</td>
+                    <td style="padding:3px 5px;color:#cbd5e1;">${r.qty}</td>
+                    <td style="padding:3px 5px;color:#cbd5e1;">${r.length}'</td>
+                    <td style="padding:3px 5px;color:#7dd3fc;">${HOOK_LABELS[r.hook]||'Straight'}</td>
+                    <td style="padding:3px 5px;color:#94a3b8;">${r.location||'—'}</td>
+                    <td style="padding:3px 5px;color:#6ee7b7;text-align:right;">${hookedLen.toFixed(0)} LF</td>
+                    <td style="padding:3px 5px;color:#fbbf24;text-align:right;">${lbs.toFixed(0)} lbs</td>
+                    <td style="padding:3px 5px;"><button onclick="deleteBarRow(${i})" style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);color:#f87171;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.68rem;">✕</button></td>
+                </tr>`;
+            });
+            const totalTons=(totalLbs/2000);
+            panel.innerHTML=`
+            <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:6px;">Bar mark, size, qty, cut length. Auto-calculates total LF and weight for buyout and cage submittal.</div>
+            <div style="display:grid;grid-template-columns:repeat(6,1fr) auto;gap:4px;margin-bottom:6px;align-items:end;">
+                <div><div style="font-size:0.65rem;color:#64748b;margin-bottom:2px;">Mark</div><input id="bs_mark" placeholder="B1" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#cbd5e1;padding:3px 5px;font-size:0.72rem;box-sizing:border-box;"></div>
+                <div><div style="font-size:0.65rem;color:#64748b;margin-bottom:2px;">Size</div><select id="bs_size" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#cbd5e1;padding:3px;font-size:0.72rem;">${Object.keys(BAR_WEIGHTS).map(s=>`<option value="${s}"${s==='#4'?' selected':''}>${s}</option>`).join('')}</select></div>
+                <div><div style="font-size:0.65rem;color:#64748b;margin-bottom:2px;">Qty</div><input id="bs_qty" type="number" min="1" value="1" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#cbd5e1;padding:3px 5px;font-size:0.72rem;box-sizing:border-box;"></div>
+                <div><div style="font-size:0.65rem;color:#64748b;margin-bottom:2px;">Length (ft)</div><input id="bs_length" type="number" min="0" step="0.25" value="20" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#cbd5e1;padding:3px 5px;font-size:0.72rem;box-sizing:border-box;"></div>
+                <div><div style="font-size:0.65rem;color:#64748b;margin-bottom:2px;">End Hook</div><select id="bs_hook" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#cbd5e1;padding:3px;font-size:0.72rem;">${Object.entries(HOOK_LABELS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></div>
+                <div><div style="font-size:0.65rem;color:#64748b;margin-bottom:2px;">Location/Element</div><input id="bs_loc" placeholder="Footing N" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#cbd5e1;padding:3px 5px;font-size:0.72rem;box-sizing:border-box;"></div>
+                <button onclick="addBarRow()" style="background:rgba(99,102,241,0.18);border:1px solid rgba(99,102,241,0.35);color:#a5b4fc;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:0.72rem;white-space:nowrap;">+ Add</button>
+            </div>
+            ${rows.length>0?`
+            <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;border:1px solid rgba(255,255,255,0.08);">
+                <thead><tr style="background:rgba(255,255,255,0.05);font-size:0.65rem;color:#64748b;">
+                    <th style="padding:4px 5px;text-align:left;">Mark</th>
+                    <th style="padding:4px 5px;text-align:left;">Size</th>
+                    <th style="padding:4px 5px;text-align:left;">Qty</th>
+                    <th style="padding:4px 5px;text-align:left;">Len</th>
+                    <th style="padding:4px 5px;text-align:left;">Hook</th>
+                    <th style="padding:4px 5px;text-align:left;">Location</th>
+                    <th style="padding:4px 5px;text-align:right;">Total LF</th>
+                    <th style="padding:4px 5px;text-align:right;">Weight</th>
+                    <th></th>
+                </tr></thead>
+                <tbody>${rowsHtml}</tbody>
+                <tfoot><tr style="background:rgba(255,255,255,0.07);font-weight:bold;font-size:0.7rem;">
+                    <td colspan="6" style="padding:4px 5px;color:#94a3b8;">TOTALS (${rows.length} marks)</td>
+                    <td style="padding:4px 5px;text-align:right;color:#6ee7b7;">${totalLF.toFixed(0)} LF</td>
+                    <td style="padding:4px 5px;text-align:right;color:#fbbf24;">${totalLbs>=2000?(totalTons.toFixed(2)+' tons'):(totalLbs.toFixed(0)+' lbs')}</td>
+                    <td></td>
+                </tr></tfoot>
+            </table></div>
+            <div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;">
+                <button onclick="copyBarSchedule()" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">📋 Copy Schedule</button>
+                <button onclick="printBarSchedule()" style="background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.25);color:#7dd3fc;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">🖨️ Print</button>
+                <button onclick="clearBarSchedule()" style="background:rgba(255,0,0,0.08);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">↺ Clear All</button>
+            </div>`:'<div style="color:#475569;font-size:0.72rem;text-align:center;padding:12px;">No bars added yet. Fill in the fields above and click + Add.</div>'}
+            <div style="font-size:0.65rem;color:#475569;margin-top:5px;">Hook adder uses #4 CRSI standard values (simplified). Consult engineer for exact bar lengths on engineered members.</div>`;
+        }
+
+        window.addBarRow = function(){
+            const r={ mark:document.getElementById('bs_mark')?.value.trim()||'', size:document.getElementById('bs_size')?.value||'#4', qty:parseInt(document.getElementById('bs_qty')?.value)||1, length:parseFloat(document.getElementById('bs_length')?.value)||20, hook:document.getElementById('bs_hook')?.value||'straight', location:document.getElementById('bs_loc')?.value.trim()||'' };
+            const rows=loadSchedule(); rows.push(r); saveSchedule(rows); renderBarSchedule();
+        };
+        window.deleteBarRow = function(i){ const rows=loadSchedule(); rows.splice(i,1); saveSchedule(rows); renderBarSchedule(); };
+        window.clearBarSchedule = function(){ if(!confirm('Clear entire bar schedule?'))return; saveSchedule([]); renderBarSchedule(); };
+        window.copyBarSchedule = function(){
+            const rows=loadSchedule(); if(!rows.length){alert('No bars in schedule.');return;}
+            let totalLF=0, totalLbs=0;
+            let txt=`REBAR BAR SCHEDULE\nProject: ${document.getElementById('projectName')?.value||'—'}\nDate: ${new Date().toLocaleDateString()}\n${'='.repeat(50)}\n`;
+            txt+=`Mark  Size  Qty  Length  Hook         Location            Total LF  Weight\n`;
+            txt+='-'.repeat(80)+'\n';
+            rows.forEach(r=>{ const wt=BAR_WEIGHTS[r.size]||0.668; const lf=r.qty*(r.length+(HOOK_ADD[r.hook]||0)); const lbs=lf*wt; totalLF+=lf; totalLbs+=lbs; txt+=`${(r.mark||'—').padEnd(6)}${r.size.padEnd(6)}${String(r.qty).padEnd(5)}${(r.length+"'").padEnd(8)}${(HOOK_LABELS[r.hook]||'Straight').padEnd(13)}${(r.location||'—').padEnd(20)}${lf.toFixed(0).padStart(8)} LF  ${lbs.toFixed(0)} lbs\n`; });
+            txt+='-'.repeat(80)+'\n';
+            txt+=`${''.padEnd(54)}TOTAL:  ${totalLF.toFixed(0)} LF  ${totalLbs>=2000?(totalLbs/2000).toFixed(2)+' tons':totalLbs.toFixed(0)+' lbs'}\n`;
+            navigator.clipboard.writeText(txt).then(()=>alert('Bar schedule copied!')).catch(()=>alert(txt));
+        };
+        window.printBarSchedule = function(){
+            const rows=loadSchedule(); if(!rows.length){alert('No bars to print.');return;}
+            let totalLF=0, totalLbs=0;
+            const co=typeof getCompanyInfo==='function'?getCompanyInfo():{};
+            let rowsHtml=''; rows.forEach(r=>{ const wt=BAR_WEIGHTS[r.size]||0.668; const lf=r.qty*(r.length+(HOOK_ADD[r.hook]||0)); const lbs=lf*wt; totalLF+=lf; totalLbs+=lbs; rowsHtml+=`<tr><td>${r.mark||'—'}</td><td>${r.size}</td><td>${r.qty}</td><td>${r.length}'</td><td>${HOOK_LABELS[r.hook]||'Straight'}</td><td>${r.location||'—'}</td><td style="text-align:right;">${lf.toFixed(0)} LF</td><td style="text-align:right;">${lbs.toFixed(0)} lbs</td></tr>`; });
+            const html=`<!DOCTYPE html><html><head><title>Rebar Bar Schedule</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:30px;}h1{font-size:14pt;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #aaa;padding:4px 6px;}th{background:#e8e8e8;font-size:9pt;}tfoot tr{font-weight:bold;background:#f0f0f0;}.note{font-size:8pt;color:#666;margin-top:8px;}</style></head><body>
+            <h1>Rebar Bar Schedule</h1>
+            <p>${co.name||'Oncor'} · Project: ${document.getElementById('projectName')?.value||'—'} · ${new Date().toLocaleDateString()}</p>
+            <table><thead><tr><th>Mark</th><th>Size</th><th>Qty</th><th>Len</th><th>Hook</th><th>Location/Element</th><th>Total LF</th><th>Weight</th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+            <tfoot><tr><td colspan="6">TOTALS (${rows.length} bar marks)</td><td style="text-align:right;">${totalLF.toFixed(0)} LF</td><td style="text-align:right;">${totalLbs>=2000?((totalLbs/2000).toFixed(2)+' tons'):(totalLbs.toFixed(0)+' lbs')}</td></tr></tfoot></table>
+            <p class="note">Hook lengths use CRSI standard values (simplified). Verify with engineer for engineered members.</p>
+            <table style="margin-top:30px;"><tr><th style="width:33%">Prepared By</th><th>Checked By</th><th>Date</th></tr><tr style="height:40px;"><td></td><td></td><td></td></tr></table>
+            </body></html>`;
+            const w=window.open('','_blank');if(w){w.document.write(html);w.document.close();}
+        };
+        window.toggleBarSchedule = function(){
+            const p=document.getElementById('barSchedulePanelWrap');
+            const b=document.getElementById('barScheduleBtn');
+            if(!p)return;
+            const show=p.style.display==='none';
+            p.style.display=show?'block':'none';
+            b.textContent=show?'📏 Hide Bar Schedule':'📏 Show Rebar Bar Schedule';
+            if(show)renderBarSchedule();
+        };
+
+        document.addEventListener('DOMContentLoaded',function(){
+            setTimeout(function(){
+                const anchor=document.getElementById('profitBtn');
+                if(!anchor)return;
+                const wrapper=document.createElement('div');
+                wrapper.style.cssText='margin-top:6px;';
+                wrapper.innerHTML=`
+                <div id="barSchedulePanelWrap" style="display:none;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px;">
+                        <span style="font-weight:700;color:#c4b5fd;">📏 Rebar Bar Schedule</span>
+                        <span style="font-size:0.7rem;color:#64748b;">Bar mark → weight → buyout quantity</span>
+                    </div>
+                    <div id="barSchedulePanel"></div>
+                </div>
+                <button onclick="toggleBarSchedule()" id="barScheduleBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#c4b5fd;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;">📏 Show Rebar Bar Schedule</button>`;
+                anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+            }, 2100);
+        });
+    })();
+    </script>
+
+    <!-- ==================== POUR SEQUENCE PLANNER ==================== -->
+    <script>
+    (function(){
+        function storageKey(){ return 'onc_pourseq_' + (document.getElementById('projectName')?.value||'default'); }
+        function loadSeq(){ try{ return JSON.parse(localStorage.getItem(storageKey()))||[]; }catch(e){return [];} }
+        function saveSeq(d){ localStorage.setItem(storageKey(), JSON.stringify(d)); }
+
+        const STATUS_CYCLE = ['Planned','Scheduled','Active','Cured','Complete'];
+        const STATUS_COLORS = { Planned:'#94a3b8',Scheduled:'#38bdf8',Active:'#fb923c',Cured:'#a3e635',Complete:'#4ade80' };
+
+        function calcUnlockDate(pours, depIdx, cureD){
+            if(depIdx===null||depIdx===undefined||depIdx==='') return null;
+            const dep=pours[parseInt(depIdx)];
+            if(!dep||!dep.date) return null;
+            const d=new Date(dep.date+'T00:00:00');
+            d.setDate(d.getDate()+(parseInt(dep.cure)||0));
+            return d;
+        }
+
+        function renderSeq(){
+            const panel=document.getElementById('pourSeqPanel');
+            if(!panel)return;
+            const pours=loadSeq();
+            let totalYd3=pours.reduce((s,p)=>s+(parseFloat(p.yd3)||0),0);
+            const today=new Date(); today.setHours(0,0,0,0);
+
+            const depOptions=pours.map((p,i)=>`<option value="${i}">#${i+1} ${p.element||'Pour '+(i+1)}</option>`).join('');
+
+            let rows='';
+            pours.forEach((p,i)=>{
+                const unlock=calcUnlockDate(pours,p.dep,p.cure);
+                let unlockHtml='';
+                if(p.dep!==''&&p.dep!==null&&p.dep!==undefined&&unlock){
+                    const dDiff=Math.ceil((unlock-today)/(1000*60*60*24));
+                    const col=dDiff<0?'#4ade80':(dDiff===0?'#fb923c':'#38bdf8');
+                    unlockHtml=`<div style="font-size:0.62rem;color:${col};">🔓 ${dDiff<0?'Unlocked':'In '+dDiff+'d'} (${unlock.toLocaleDateString('en-US',{month:'short',day:'numeric'})})</div>`;
+                }
+                let pourDateStr=''; if(p.date){ const d=new Date(p.date+'T00:00:00'); pourDateStr=d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
+                let statusColor=STATUS_COLORS[p.status]||'#94a3b8';
+                rows+=`<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-left:3px solid ${statusColor};border-radius:5px;padding:7px 8px;margin-bottom:5px;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:4px;">
+                        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                            <span style="font-size:0.72rem;font-weight:700;color:#e2e8f0;">#${i+1}</span>
+                            <input value="${p.element||''}" onchange="updatePourField(${i},'element',this.value)" placeholder="Element / Area" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#cbd5e1;padding:2px 5px;font-size:0.71rem;width:140px;">
+                            <input type="number" value="${p.yd3||''}" onchange="updatePourField(${i},'yd3',this.value)" placeholder="yd³" step="0.5" min="0" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#6ee7b7;padding:2px 5px;font-size:0.71rem;width:60px;">
+                            <span style="font-size:0.65rem;color:#64748b;">yd³</span>
+                            <input type="date" value="${p.date||''}" onchange="updatePourField(${i},'date',this.value)" style="background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#cbd5e1;padding:2px 4px;font-size:0.7rem;">
+                        </div>
+                        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                            <span style="font-size:0.65rem;color:#64748b;">Cure</span>
+                            <input type="number" value="${p.cure||7}" onchange="updatePourField(${i},'cure',this.value)" min="0" max="28" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#fbbf24;padding:2px 4px;font-size:0.71rem;width:36px;">
+                            <span style="font-size:0.65rem;color:#64748b;">days</span>
+                            <span style="font-size:0.65rem;color:#64748b;">Dep:</span>
+                            <select onchange="updatePourField(${i},'dep',this.value)" style="background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#a5b4fc;padding:2px;font-size:0.68rem;">
+                                <option value="">None</option>${depOptions.replace(`<option value="${i}"`,`<option value="${i}" disabled`)}
+                            </select>
+                            <select onchange="updatePourField(${i},'status',this.value)" style="background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:${statusColor};padding:2px;font-size:0.68rem;">${STATUS_CYCLE.map(s=>`<option value="${s}"${p.status===s?' selected':''}>${s}</option>`).join('')}</select>
+                            <button onclick="deletePour(${i})" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:3px;padding:1px 6px;cursor:pointer;font-size:0.68rem;">✕</button>
+                        </div>
+                    </div>
+                    ${unlockHtml}
+                    <input value="${p.notes||''}" onchange="updatePourField(${i},'notes',this.value)" placeholder="Notes (crew, pump, mix design...)" style="margin-top:4px;width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:3px;color:#94a3b8;padding:2px 5px;font-size:0.68rem;box-sizing:border-box;">
+                </div>`;
+            });
+
+            const completedYd3=pours.filter(p=>p.status==='Complete').reduce((s,p)=>s+(parseFloat(p.yd3)||0),0);
+            const pct=totalYd3>0?(completedYd3/totalYd3*100):0;
+
+            panel.innerHTML=`
+            <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:6px;">Plan pour sequence, cure times, and dependencies. Tracks project flow when there are multiple pours with interdependencies.</div>
+            <div style="background:rgba(255,255,255,0.04);border-radius:4px;padding:6px 8px;margin-bottom:6px;display:flex;gap:16px;flex-wrap:wrap;">
+                <span style="font-size:0.72rem;color:#94a3b8;">Pours: <b style="color:#e2e8f0;">${pours.length}</b></span>
+                <span style="font-size:0.72rem;color:#94a3b8;">Total yd³: <b style="color:#6ee7b7;">${totalYd3.toFixed(1)}</b></span>
+                <span style="font-size:0.72rem;color:#94a3b8;">Complete: <b style="color:#4ade80;">${completedYd3.toFixed(1)} yd³ (${pct.toFixed(0)}%)</b></span>
+            </div>
+            ${pours.length>0?`<div style="background:rgba(255,255,255,0.03);border-radius:3px;height:6px;overflow:hidden;margin-bottom:8px;"><div style="height:100%;width:${pct.toFixed(0)}%;background:linear-gradient(90deg,#4ade80,#22c55e);border-radius:3px;transition:width 0.3s;"></div></div>`:''}
+            ${rows}
+            <button onclick="addPour()" style="width:100%;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.25);color:#a5b4fc;border-radius:4px;padding:5px;cursor:pointer;font-size:0.72rem;margin-top:4px;">+ Add Pour</button>
+            ${pours.length>0?`<div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap;">
+                <button onclick="copyPourSeq()" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">📋 Copy Schedule</button>
+                <button onclick="printPourSeq()" style="background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.25);color:#7dd3fc;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">🖨️ Print</button>
+            </div>`:''}
+            <div style="font-size:0.65rem;color:#475569;margin-top:4px;">Dependency unlock date = previous pour date + cure days. Status: Planned → Scheduled → Active → Cured → Complete.</div>`;
+        }
+
+        window.addPour = function(){ const rows=loadSeq(); rows.push({element:'',yd3:'',date:'',cure:7,dep:'',status:'Planned',notes:''}); saveSeq(rows); renderSeq(); };
+        window.deletePour = function(i){ if(!confirm('Remove this pour?'))return; const rows=loadSeq(); rows.splice(i,1); saveSeq(rows); renderSeq(); };
+        window.updatePourField = function(i,field,val){ const rows=loadSeq(); if(rows[i]) rows[i][field]=val; saveSeq(rows); renderSeq(); };
+
+        window.copyPourSeq = function(){
+            const pours=loadSeq(); if(!pours.length){alert('No pours to copy.');return;}
+            let txt=`POUR SEQUENCE PLAN\nProject: ${document.getElementById('projectName')?.value||'—'}\nDate: ${new Date().toLocaleDateString()}\n${'='.repeat(50)}\n`;
+            pours.forEach((p,i)=>{ txt+=`#${i+1}  ${p.element||'Pour '+(i+1)}  ${p.yd3||'?'} yd³  Date: ${p.date||'TBD'}  Cure: ${p.cure||7}d  Dep: ${p.dep!==''&&p.dep!==null&&p.dep!==undefined?'#'+(parseInt(p.dep)+1):'None'}  Status: ${p.status||'Planned'}${p.notes?'\n     Notes: '+p.notes:''}\n`; });
+            const tot=pours.reduce((s,p)=>s+(parseFloat(p.yd3)||0),0);
+            txt+=`\nTotal: ${pours.length} pours · ${tot.toFixed(1)} yd³\n`;
+            navigator.clipboard.writeText(txt).then(()=>alert('Copied!')).catch(()=>alert(txt));
+        };
+
+        window.printPourSeq = function(){
+            const pours=loadSeq(); if(!pours.length){alert('No pours to print.');return;}
+            const co=typeof getCompanyInfo==='function'?getCompanyInfo():{};
+            let rows=''; pours.forEach((p,i)=>{ const statusColor=STATUS_COLORS[p.status]||'#666'; rows+=`<tr><td>${i+1}</td><td>${p.element||'—'}</td><td style="text-align:right;">${p.yd3||'—'}</td><td>${p.date||'TBD'}</td><td style="text-align:center;">${p.cure||7}d</td><td>${p.dep!==''&&p.dep!==null&&p.dep!==undefined?'Pour #'+(parseInt(p.dep)+1):'—'}</td><td style="color:${statusColor};font-weight:bold;">${p.status||'Planned'}</td><td style="font-size:9pt;">${p.notes||''}</td></tr>`; });
+            const tot=pours.reduce((s,p)=>s+(parseFloat(p.yd3)||0),0);
+            const html=`<!DOCTYPE html><html><head><title>Pour Sequence Plan</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:30px;}h1{font-size:14pt;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #bbb;padding:4px 6px;}th{background:#e8e8e8;font-size:9pt;}tfoot tr{font-weight:bold;background:#f5f5f5;}</style></head><body>
+            <h1>Pour Sequence Plan</h1>
+            <p>${co.name||'Oncor'} · Project: ${document.getElementById('projectName')?.value||'—'} · ${new Date().toLocaleDateString()}</p>
+            <table><thead><tr><th>#</th><th>Element/Area</th><th style="text-align:right;">yd³</th><th>Pour Date</th><th>Cure</th><th>Depends On</th><th>Status</th><th>Notes</th></tr></thead>
+            <tbody>${rows}</tbody>
+            <tfoot><tr><td colspan="2">TOTALS (${pours.length} pours)</td><td style="text-align:right;">${tot.toFixed(1)} yd³</td><td colspan="5"></td></tr></tfoot></table>
+            <table style="margin-top:25px;"><tr><th style="width:33%">PM/Foreman</th><th>GC Review</th><th>Date</th></tr><tr style="height:38px;"><td></td><td></td><td></td></tr></table>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`;
+            const w=window.open('','_blank');if(w){w.document.write(html);w.document.close();}
+        };
+
+        window.togglePourSeq = function(){
+            const p=document.getElementById('pourSeqPanelWrap');
+            const b=document.getElementById('pourSeqBtn');
+            if(!p)return;
+            const show=p.style.display==='none';
+            p.style.display=show?'block':'none';
+            b.textContent=show?'🗓️ Hide Pour Sequence':'🗓️ Show Pour Sequence Planner';
+            if(show)renderSeq();
+        };
+
+        document.addEventListener('DOMContentLoaded',function(){
+            setTimeout(function(){
+                const anchor=document.getElementById('barScheduleBtn');
+                if(!anchor)return;
+                const wrapper=document.createElement('div');
+                wrapper.style.cssText='margin-top:6px;';
+                wrapper.innerHTML=`
+                <div id="pourSeqPanelWrap" style="display:none;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px;">
+                        <span style="font-weight:700;color:#fb923c;">🗓️ Pour Sequence Planner</span>
+                        <span style="font-size:0.7rem;color:#64748b;">Multi-pour planning with cure dependencies</span>
+                    </div>
+                    <div id="pourSeqPanel"></div>
+                </div>
+                <button onclick="togglePourSeq()" id="pourSeqBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fb923c;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;">🗓️ Show Pour Sequence Planner</button>`;
+                anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+            }, 2300);
+        });
+    })();
+    </script>
+
+    <!-- ==================== FIELD NOTES LOG ==================== -->
+    <script>
+    (function(){
+        const NOTE_TYPES = ['Observation','Instruction','QC Issue','Safety','Material','Weather','Owner/GC Direction','Other'];
+        const NOTE_COLORS = {'Observation':'#7dd3fc','Instruction':'#a5b4fc','QC Issue':'#f87171','Safety':'#fb923c','Material':'#fbbf24','Weather':'#94a3b8','Owner/GC Direction':'#4ade80','Other':'#cbd5e1'};
+
+        function storageKey(){ return 'onc_fieldnotes_' + (document.getElementById('projectName')?.value||'default'); }
+        function loadNotes(){ try{ return JSON.parse(localStorage.getItem(storageKey()))||[]; }catch(e){return [];} }
+        function saveNotes(d){ localStorage.setItem(storageKey(), JSON.stringify(d)); }
+
+        function renderFieldNotes(){
+            const panel=document.getElementById('fieldNotesPanel');
+            if(!panel)return;
+            const notes=loadNotes();
+            let rows='';
+            notes.slice().reverse().forEach((n,ri)=>{
+                const i=notes.length-1-ri; // original index
+                const col=NOTE_COLORS[n.type]||'#cbd5e1';
+                rows+=`<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-left:3px solid ${col};border-radius:4px;padding:6px 8px;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:3px;">
+                        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                            <span style="font-size:0.65rem;font-weight:700;color:${col};background:rgba(255,255,255,0.07);border-radius:3px;padding:1px 5px;">${n.type}</span>
+                            <span style="font-size:0.65rem;color:#64748b;">${n.ts||''}</span>
+                            ${n.by?`<span style="font-size:0.65rem;color:#94a3b8;">${n.by}</span>`:''}
+                        </div>
+                        <button onclick="deleteNote(${i})" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.65rem;">✕</button>
+                    </div>
+                    <div style="margin-top:3px;font-size:0.72rem;color:#e2e8f0;white-space:pre-wrap;">${n.note}</div>
+                </div>`;
+            });
+
+            const issueCount=notes.filter(n=>n.type==='QC Issue'||n.type==='Safety').length;
+
+            panel.innerHTML=`
+            <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:6px;">Timestamped field log. Log observations, GC directions, QC issues, safety concerns. Print end-of-day field notes report.</div>
+            <div style="background:rgba(255,255,255,0.04);border-radius:4px;padding:5px 8px;margin-bottom:6px;display:flex;gap:14px;flex-wrap:wrap;">
+                <span style="font-size:0.72rem;color:#94a3b8;">Entries: <b style="color:#e2e8f0;">${notes.length}</b></span>
+                ${issueCount>0?`<span style="font-size:0.72rem;color:#f87171;font-weight:700;">⚠️ ${issueCount} QC/Safety issue${issueCount>1?'s':''}</span>`:''}
+            </div>
+            <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.07);border-radius:5px;padding:7px;margin-bottom:6px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px;">
+                    <div><div style="font-size:0.65rem;color:#64748b;margin-bottom:2px;">Type</div>
+                    <select id="fn_type" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#cbd5e1;padding:3px;font-size:0.72rem;">${NOTE_TYPES.map(t=>`<option value="${t}">${t}</option>`).join('')}</select></div>
+                    <div><div style="font-size:0.65rem;color:#64748b;margin-bottom:2px;">By (name/initials)</div>
+                    <input id="fn_by" placeholder="e.g. JFS" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#cbd5e1;padding:3px 5px;font-size:0.72rem;box-sizing:border-box;"></div>
+                </div>
+                <textarea id="fn_note" placeholder="Enter note..." rows="2" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#e2e8f0;padding:4px 6px;font-size:0.72rem;box-sizing:border-box;resize:vertical;"></textarea>
+                <button onclick="addNote()" style="margin-top:4px;width:100%;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">+ Log Note</button>
+            </div>
+            ${notes.length>0?rows:'<div style="color:#475569;font-size:0.72rem;text-align:center;padding:10px;">No notes logged yet.</div>'}
+            ${notes.length>0?`<div style="display:flex;gap:5px;margin-top:4px;flex-wrap:wrap;">
+                <button onclick="copyFieldNotes()" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">📋 Copy Log</button>
+                <button onclick="printFieldNotes()" style="background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.25);color:#7dd3fc;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">🖨️ Print Report</button>
+                <button onclick="clearFieldNotes()" style="background:rgba(255,0,0,0.07);border:1px solid rgba(239,68,68,0.18);color:#f87171;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.72rem;">↺ Clear All</button>
+            </div>`:''}`;
+        }
+
+        window.addNote = function(){
+            const note=document.getElementById('fn_note')?.value.trim();
+            if(!note){alert('Enter a note before logging.');return;}
+            const rows=loadNotes();
+            rows.push({ type:document.getElementById('fn_type')?.value||'Observation', by:document.getElementById('fn_by')?.value.trim()||'', note, ts:new Date().toLocaleString() });
+            saveNotes(rows); renderFieldNotes();
+            if(document.getElementById('fn_note')) document.getElementById('fn_note').value='';
+        };
+        window.deleteNote = function(i){ if(!confirm('Delete this note?'))return; const rows=loadNotes(); rows.splice(i,1); saveNotes(rows); renderFieldNotes(); };
+        window.clearFieldNotes = function(){ if(!confirm('Clear all field notes for this project?'))return; saveNotes([]); renderFieldNotes(); };
+
+        window.copyFieldNotes = function(){
+            const notes=loadNotes(); if(!notes.length){alert('No notes to copy.');return;}
+            let txt=`FIELD NOTES LOG\nProject: ${document.getElementById('projectName')?.value||'—'}\nDate: ${new Date().toLocaleDateString()}\n${'='.repeat(50)}\n`;
+            notes.forEach((n,i)=>{ txt+=`[${n.ts||''}] [${n.type}]${n.by?' ('+n.by+')':''}\n${n.note}\n\n`; });
+            navigator.clipboard.writeText(txt).then(()=>alert('Copied!')).catch(()=>alert(txt));
+        };
+
+        window.printFieldNotes = function(){
+            const notes=loadNotes(); if(!notes.length){alert('No notes to print.');return;}
+            const co=typeof getCompanyInfo==='function'?getCompanyInfo():{};
+            const issues=notes.filter(n=>n.type==='QC Issue'||n.type==='Safety');
+            let rows=''; notes.forEach(n=>{ const col=NOTE_COLORS[n.type]||'#333'; rows+=`<tr><td style="font-size:8pt;white-space:nowrap;">${n.ts||''}</td><td style="color:${col};font-weight:bold;font-size:8pt;white-space:nowrap;">${n.type}</td><td style="font-size:8pt;">${n.by||''}</td><td style="font-size:9pt;">${n.note.replace(/\n/g,'<br>')}</td></tr>`; });
+            let issueRows=''; issues.forEach(n=>{ issueRows+=`<tr><td>${n.ts||''}</td><td>${n.type}</td><td>${n.note.replace(/\n/g,'<br>')}</td></tr>`; });
+            const html=`<!DOCTYPE html><html><head><title>Field Notes Report</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:30px;}h1{font-size:14pt;}h3{font-size:11pt;margin-top:20px;}table{width:100%;border-collapse:collapse;margin-bottom:10px;}th,td{border:1px solid #ccc;padding:4px 6px;vertical-align:top;}th{background:#f0f0f0;font-size:9pt;}.issues th{background:#fdd;}.note{font-size:8pt;color:#666;}</style></head><body>
+            <h1>Field Notes Report</h1>
+            <p>${co.name||'Oncor'} · Project: ${document.getElementById('projectName')?.value||'—'} · Printed: ${new Date().toLocaleString()}</p>
+            ${issues.length>0?`<h3 style="color:#c00;">⚠️ QC / Safety Issues (${issues.length})</h3><table class="issues"><thead><tr><th>Time</th><th>Type</th><th>Note</th></tr></thead><tbody>${issueRows}</tbody></table>`:''}
+            <h3>Full Field Log (${notes.length} entries)</h3>
+            <table><thead><tr><th>Timestamp</th><th>Type</th><th>By</th><th>Note</th></tr></thead><tbody>${rows}</tbody></table>
+            <table style="margin-top:25px;"><tr><th style="width:33%">Foreman Sign-Off</th><th>PM/Superintendent</th><th>Date</th></tr><tr style="height:40px;"><td></td><td></td><td></td></tr></table>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`;
+            const w=window.open('','_blank');if(w){w.document.write(html);w.document.close();}
+        };
+
+        window.toggleFieldNotes = function(){
+            const p=document.getElementById('fieldNotesPanelWrap');
+            const b=document.getElementById('fieldNotesBtn');
+            if(!p)return;
+            const show=p.style.display==='none';
+            p.style.display=show?'block':'none';
+            b.textContent=show?'📝 Hide Field Notes':'📝 Show Field Notes Log';
+            if(show)renderFieldNotes();
+        };
+
+        document.addEventListener('DOMContentLoaded',function(){
+            setTimeout(function(){
+                const anchor=document.getElementById('pourSeqBtn');
+                if(!anchor)return;
+                const wrapper=document.createElement('div');
+                wrapper.style.cssText='margin-top:6px;';
+                wrapper.innerHTML=`
+                <div id="fieldNotesPanelWrap" style="display:none;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px;">
+                        <span style="font-weight:700;color:#7dd3fc;">📝 Field Notes Log</span>
+                        <span style="font-size:0.7rem;color:#64748b;">Timestamped observations, directions, issues</span>
+                    </div>
+                    <div id="fieldNotesPanel"></div>
+                </div>
+                <button onclick="toggleFieldNotes()" id="fieldNotesBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#7dd3fc;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;">📝 Show Field Notes Log</button>`;
+                anchor.parentNode.insertBefore(wrapper, anchor.nextSibling);
+            }, 2500);
+        });
+    })();
+    </script>
+
 </body>
 </html>
