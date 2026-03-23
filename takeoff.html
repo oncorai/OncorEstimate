@@ -16085,6 +16085,766 @@ ${bidTotal > 0 ? `
             const ltDate = wrapper.querySelector('#ltDate');
             if (ltDate) ltDate.value = now.toISOString().slice(0,10);
         })();
+
+        // ===================================================================
+        //  FEATURE: PREVAILING WAGE TRACKER 🏛️
+        //  Public / Davis-Bacon / DBA compliance for gov't & school projects
+        // ===================================================================
+        function togglePrevWage() {
+            const panel = document.getElementById('prevWagePanel');
+            const btn   = document.getElementById('prevWageBtn');
+            if (!panel || !btn) return;
+            const open = panel.style.display === 'none';
+            panel.style.display = open ? 'block' : 'none';
+            btn.textContent = open ? '🏛️ Hide Prevailing Wage Tracker' : '🏛️ Show Prevailing Wage Tracker';
+        }
+
+        // Texas prevailing wage rates (approximate 2024 DBA rates for TX)
+        const PREVAILING_WAGE_ROLES = [
+            { role: 'Cement Mason / Concrete Finisher', code: 'CEMEN', rate: 24.50 },
+            { role: 'Carpenter (forms)', code: 'CARP', rate: 26.85 },
+            { role: 'Ironworker / Rebar Installer', code: 'IRON', rate: 28.40 },
+            { role: 'Laborer (general)', code: 'LABO', rate: 19.00 },
+            { role: 'Operating Engineer (pump/crane)', code: 'OPE', rate: 35.75 },
+            { role: 'Truck Driver (ready-mix)', code: 'TRCK', rate: 22.80 },
+            { role: 'Surveyor / Layout Tech', code: 'SURV', rate: 30.00 }
+        ];
+
+        (function initPrevWage() {
+            const laborBtn = document.getElementById('laborTrackerBtn');
+            if (!laborBtn) return;
+
+            const KEY = 'oncor_prevwage_v1';
+            function loadPW() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch(e) { return {}; } }
+            function savePW(d) { localStorage.setItem(KEY, JSON.stringify(d)); }
+
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'margin-bottom:6px;';
+
+            const roleRows = PREVAILING_WAGE_ROLES.map((r, i) => `
+                <div style="display:grid;grid-template-columns:2fr 1fr 1fr 90px;gap:4px;align-items:center;margin-bottom:3px;" id="pwr_row_${i}">
+                    <span style="font-size:0.75rem;color:#e2e8f0;">${r.role}</span>
+                    <span style="font-size:0.72rem;color:#64748b;">Min: $${r.rate.toFixed(2)}/hr</span>
+                    <input id="pwr_act_${i}" type="number" step="0.25" placeholder="Your $/hr" onchange="updatePWRow(${i})"
+                        style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:3px 6px;color:#fff;font-size:0.75rem;width:100%;">
+                    <span id="pwr_badge_${i}" style="font-size:0.7rem;text-align:center;border-radius:4px;padding:2px 6px;background:rgba(100,116,139,0.3);color:#94a3b8;">—</span>
+                </div>`).join('');
+
+            wrapper.innerHTML = `
+            <div id="prevWagePanel" style="display:none;background:rgba(0,0,0,0.25);border:1px solid rgba(251,191,36,0.25);border-radius:8px;padding:10px;font-size:0.82rem;margin-bottom:6px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-weight:700;color:#fbbf24;">🏛️ Prevailing Wage Checker</span>
+                    <span style="font-size:0.68rem;color:#888;">Davis-Bacon Act / TX DBA compliance</span>
+                </div>
+
+                <!-- Job type toggle -->
+                <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px;margin-bottom:8px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px;">
+                        <div>
+                            <label style="font-size:0.72rem;color:#94a3b8;display:block;margin-bottom:2px;">Project Type</label>
+                            <select id="pwJobType" onchange="refreshPWHeader()" style="width:100%;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.75rem;">
+                                <option value="private">Private / Commercial</option>
+                                <option value="federal">Federal (Davis-Bacon)</option>
+                                <option value="state">State / TxDOT</option>
+                                <option value="school">School District / ISD</option>
+                                <option value="muni">City / Municipality</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:0.72rem;color:#94a3b8;display:block;margin-bottom:2px;">County</label>
+                            <select id="pwCounty" style="width:100%;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.75rem;">
+                                <option>El Paso</option><option>Bexar</option><option>Harris</option>
+                                <option>Dallas</option><option>Tarrant</option><option>Travis</option>
+                                <option>Webb (Laredo)</option><option>Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="pwHeader" style="font-size:0.75rem;padding:6px 8px;border-radius:4px;background:rgba(30,58,95,0.4);color:#93c5fd;"></div>
+                </div>
+
+                <!-- Wage comparison grid -->
+                <div style="font-size:0.72rem;color:#64748b;margin-bottom:4px;font-weight:600;">Enter your actual pay rates — green = compliant, red = violation:</div>
+                ${roleRows}
+
+                <div id="pwSummary" style="margin-top:8px;padding:6px 8px;border-radius:4px;font-size:0.75rem;"></div>
+
+                <!-- Premium calc -->
+                <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px;margin-top:8px;">
+                    <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:4px;font-weight:600;">Prevailing Wage Cost Premium Estimator</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:4px;">
+                        <div>
+                            <label style="font-size:0.7rem;color:#64748b;display:block;">Crew-Hours</label>
+                            <input id="pwTotalHrs" type="number" placeholder="Total labor hrs" value="200"
+                                style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:3px 6px;color:#fff;font-size:0.75rem;">
+                        </div>
+                        <div>
+                            <label style="font-size:0.7rem;color:#64748b;display:block;">Avg Market $/hr</label>
+                            <input id="pwMktRate" type="number" placeholder="Your market rate" value="22"
+                                style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:3px 6px;color:#fff;font-size:0.75rem;">
+                        </div>
+                        <div>
+                            <label style="font-size:0.7rem;color:#64748b;display:block;">Required PW $/hr</label>
+                            <input id="pwReqRate" type="number" placeholder="Required rate" value="24.50"
+                                style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:3px 6px;color:#fff;font-size:0.75rem;">
+                        </div>
+                    </div>
+                    <button onclick="calcPWPremium()" style="width:100%;background:#1a2a3a;border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:4px;padding:5px;cursor:pointer;font-size:0.78rem;font-weight:600;margin-bottom:4px;">Calculate Cost Premium</button>
+                    <div id="pwPremiumResult" style="font-size:0.78rem;"></div>
+                </div>
+
+                <!-- Notes + print -->
+                <textarea id="pwNotes" placeholder="Wage determination notes, source document reference, certified payroll contact..." rows="2"
+                    style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.75rem;margin-top:8px;box-sizing:border-box;resize:vertical;"></textarea>
+                <button onclick="printPWForm()" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.73rem;margin-top:4px;">🖨️ Print Wage Compliance Summary</button>
+                <div style="font-size:0.7rem;color:#64748b;margin-top:6px;padding:4px 2px;">
+                    💡 Federal Davis-Bacon applies to federal contracts >$2,000 for construction. Texas state projects and school districts often impose similar requirements. Certified payroll records required weekly. Violations = fines + debarment. Always get the actual Wage Determination from sam.gov before bidding public work.
+                </div>
+            </div>
+            <button onclick="togglePrevWage()" id="prevWageBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fbbf24;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;">🏛️ Show Prevailing Wage Tracker</button>`;
+
+            laborBtn.parentNode.insertBefore(wrapper, laborBtn.nextSibling);
+
+            // Load saved state
+            const saved = loadPW();
+            if (saved.jobType) document.getElementById('pwJobType').value = saved.jobType;
+            if (saved.county) document.getElementById('pwCounty').value = saved.county;
+            if (saved.notes) document.getElementById('pwNotes').value = saved.notes;
+            if (saved.rates) {
+                saved.rates.forEach((r, i) => {
+                    const inp = document.getElementById(`pwr_act_${i}`);
+                    if (inp && r !== null) { inp.value = r; updatePWRow(i); }
+                });
+            }
+            refreshPWHeader();
+
+            // Auto-save on change
+            ['pwJobType','pwCounty','pwNotes','pwTotalHrs','pwMktRate','pwReqRate'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', () => {
+                    const d = loadPW();
+                    d.jobType = document.getElementById('pwJobType').value;
+                    d.county  = document.getElementById('pwCounty').value;
+                    d.notes   = document.getElementById('pwNotes').value;
+                    savePW(d);
+                });
+            });
+        })();
+
+        function refreshPWHeader() {
+            const jt = document.getElementById('pwJobType');
+            const el = document.getElementById('pwHeader');
+            if (!jt || !el) return;
+            const msgs = {
+                private: '✅ Private project — prevailing wage generally NOT required. Standard market rates apply.',
+                federal: '⚠️ Federal project — Davis-Bacon Act REQUIRED. Pull official Wage Determination from sam.gov for your county.',
+                state:   '⚠️ TxDOT / State contract — Texas Government Code §2258 applies. Get county wage determination from TxDOT.',
+                school:  '⚠️ School District (ISD) — Many TX ISDs require prevailing wages; verify in project specifications.',
+                muni:    '⚠️ City / Municipality — Check project specs. Many municipalities require prevailing wages on public improvements.'
+            };
+            el.textContent = msgs[jt.value] || '';
+            el.style.background = jt.value === 'private' ? 'rgba(22,101,52,0.3)' : 'rgba(120,53,15,0.3)';
+            el.style.color = jt.value === 'private' ? '#86efac' : '#fbbf24';
+        }
+
+        function updatePWRow(idx) {
+            const inp   = document.getElementById(`pwr_act_${idx}`);
+            const badge = document.getElementById(`pwr_badge_${idx}`);
+            if (!inp || !badge) return;
+            const actual = parseFloat(inp.value);
+            const min    = PREVAILING_WAGE_ROLES[idx].rate;
+            if (isNaN(actual)) { badge.textContent = '—'; badge.style.background = 'rgba(100,116,139,0.3)'; badge.style.color = '#94a3b8'; return; }
+            const delta = actual - min;
+            if (delta >= 0) {
+                badge.textContent = `✓ +$${delta.toFixed(2)}`;
+                badge.style.background = 'rgba(22,101,52,0.3)';
+                badge.style.color = '#86efac';
+            } else {
+                badge.textContent = `✗ -$${Math.abs(delta).toFixed(2)}`;
+                badge.style.background = 'rgba(127,29,29,0.4)';
+                badge.style.color = '#fca5a5';
+            }
+            // Save rates
+            const d = (() => { try { return JSON.parse(localStorage.getItem('oncor_prevwage_v1')) || {}; } catch(e) { return {}; } })();
+            if (!d.rates) d.rates = Array(PREVAILING_WAGE_ROLES.length).fill(null);
+            d.rates[idx] = actual;
+            localStorage.setItem('oncor_prevwage_v1', JSON.stringify(d));
+            // Update summary
+            let violations = 0, entered = 0;
+            PREVAILING_WAGE_ROLES.forEach((r, i) => {
+                const v = parseFloat((document.getElementById(`pwr_act_${i}`) || {}).value);
+                if (!isNaN(v)) { entered++; if (v < r.rate) violations++; }
+            });
+            const s = document.getElementById('pwSummary');
+            if (s && entered > 0) {
+                if (violations === 0) {
+                    s.style.cssText = 'margin-top:8px;padding:6px 8px;border-radius:4px;font-size:0.75rem;background:rgba(22,101,52,0.3);color:#86efac;';
+                    s.textContent = `✅ All ${entered} entered rates meet prevailing wage minimums.`;
+                } else {
+                    s.style.cssText = 'margin-top:8px;padding:6px 8px;border-radius:4px;font-size:0.75rem;background:rgba(127,29,29,0.3);color:#fca5a5;';
+                    s.textContent = `⚠️ ${violations} of ${entered} rates below prevailing wage minimum. This project would be non-compliant at current pay rates.`;
+                }
+            }
+        }
+
+        function calcPWPremium() {
+            const hrs  = parseFloat(document.getElementById('pwTotalHrs').value) || 0;
+            const mkt  = parseFloat(document.getElementById('pwMktRate').value)  || 0;
+            const req  = parseFloat(document.getElementById('pwReqRate').value)  || 0;
+            const el   = document.getElementById('pwPremiumResult');
+            if (!el) return;
+            if (hrs === 0 || mkt === 0 || req === 0) { el.textContent = 'Enter all three values.'; return; }
+            const premPerHr   = Math.max(0, req - mkt);
+            const totalPrem   = premPerHr * hrs;
+            const burdenedPrem = totalPrem * 1.32; // ~32% payroll burden (FICA, WC, FUTA, SUTA)
+            if (premPerHr === 0) {
+                el.style.cssText = 'font-size:0.78rem;padding:6px;border-radius:4px;background:rgba(22,101,52,0.3);color:#86efac;';
+                el.textContent = `✅ Your market rate meets the requirement. No wage premium needed.`;
+            } else {
+                el.style.cssText = 'font-size:0.78rem;padding:6px;border-radius:4px;background:rgba(120,53,15,0.3);color:#fbbf24;';
+                el.innerHTML = `<strong>Prevailing Wage Premium:</strong><br>
+                    +$${premPerHr.toFixed(2)}/hr × ${hrs} hrs = <strong>$${totalPrem.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}</strong> base<br>
+                    With payroll burden (~32%): <strong>$${burdenedPrem.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}</strong><br>
+                    <span style="color:#94a3b8;font-size:0.7rem;">Add this as a line item in your bid if public work — or walk the job.</span>`;
+            }
+        }
+
+        function printPWForm() {
+            const proj   = (document.getElementById('projectNameInput') || {}).value || 'Unnamed Project';
+            const jt     = (document.getElementById('pwJobType') || {}).value || 'private';
+            const county = (document.getElementById('pwCounty') || {}).value || '—';
+            const notes  = (document.getElementById('pwNotes') || {}).value || '';
+            const today  = new Date().toLocaleDateString();
+            const jtLabel = { private:'Private/Commercial', federal:'Federal (Davis-Bacon)', state:'State/TxDOT', school:'School District/ISD', muni:'City/Municipality' }[jt] || jt;
+
+            const rows = PREVAILING_WAGE_ROLES.map((r, i) => {
+                const actual = parseFloat((document.getElementById(`pwr_act_${i}`) || {}).value);
+                const status = isNaN(actual) ? '—' : (actual >= r.rate ? `✓ COMPLIANT ($${actual.toFixed(2)})` : `✗ VIOLATION ($${actual.toFixed(2)})`);
+                const color  = isNaN(actual) ? '#555' : (actual >= r.rate ? '#166534' : '#991b1b');
+                return `<tr style="border-bottom:1px solid #eee;">
+                    <td style="padding:5px 6px;font-size:8.5pt;">${r.role}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;text-align:right;">$${r.rate.toFixed(2)}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;text-align:right;">${isNaN(actual) ? '—' : '$'+actual.toFixed(2)}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;font-weight:600;color:${color};">${status}</td>
+                </tr>`;
+            }).join('');
+
+            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prevailing Wage Summary — ${proj}</title>
+            <style>body{font-family:Arial,sans-serif;font-size:9pt;max-width:800px;margin:0 auto;padding:20px;color:#111;}
+            h1{font-size:12pt;margin:0 0 2px;}table{width:100%;border-collapse:collapse;}
+            th{background:#1e3a5f;color:#fff;padding:5px 6px;font-size:8pt;}
+            .note{font-size:7.5pt;color:#666;margin-top:14px;border-top:1px solid #ddd;padding-top:8px;}
+            @media print{body{padding:8px;}}</style></head><body>
+            <div style="display:flex;justify-content:space-between;border-bottom:2px solid #1e3a5f;padding-bottom:8px;margin-bottom:12px;">
+                <div><h1>🏛️ Prevailing Wage Compliance Summary</h1><div style="font-size:9pt;color:#555;">${proj} · ${county} County</div></div>
+                <div style="text-align:right;font-size:8.5pt;color:#555;">Project Type: <strong>${jtLabel}</strong><br>Date: ${today}</div>
+            </div>
+            <table><thead><tr>
+                <th style="text-align:left;">Trade / Classification</th><th>Min Required ($/hr)</th><th>Your Rate ($/hr)</th><th>Status</th>
+            </tr></thead><tbody>${rows}</tbody></table>
+            ${notes ? `<div style="margin-top:12px;font-size:8.5pt;"><strong>Notes:</strong> ${notes}</div>` : ''}
+            <div class="note">⚠️ These rates are approximate 2024 Texas prevailing wage benchmarks. Always obtain the official Wage Determination from sam.gov for federal work, or the applicable agency for state/local projects. This summary is for internal bidding reference only — consult legal counsel for compliance questions. Certified payroll records (WH-347) must be submitted weekly on federal work.</div>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`;
+            const w = window.open('', '_blank');
+            if (w) { w.document.write(html); w.document.close(); }
+        }
+
+
+        // ===================================================================
+        //  FEATURE: CONCRETE SPEC REVIEW CHECKLIST 📋 (Division 03 / CSI)
+        //  Structured pre-bid spec review to prevent missed requirements
+        // ===================================================================
+        function toggleSpecReview() {
+            const panel = document.getElementById('specReviewPanel');
+            const btn   = document.getElementById('specReviewBtn');
+            if (!panel || !btn) return;
+            const open = panel.style.display === 'none';
+            panel.style.display = open ? 'block' : 'none';
+            btn.textContent = open ? '📋 Hide Spec Review Checklist' : '📋 Show Spec Review Checklist';
+        }
+
+        const SPEC_ITEMS = [
+            // Concrete mix
+            { section:'Mix Design', id:'s01', text:'PSI confirmed per element (slab, footing, wall) — no single PSI assumed' },
+            { section:'Mix Design', id:'s02', text:'Exposure class confirmed (F0/F1/F2/F3 freeze, W0/W1/W2 water, S0/S1/S2/S3 sulfate, C0/C1/C2 rebar corrosion)' },
+            { section:'Mix Design', id:'s03', text:'Max w/c ratio specified (ACI 318 Table 19.3.3)' },
+            { section:'Mix Design', id:'s04', text:'Air entrainment required? (check for TX freeze exposure or spec note)' },
+            { section:'Mix Design', id:'s05', text:'Admixtures specified (accelerator, retarder, fly ash, slag, HRWR)' },
+            { section:'Mix Design', id:'s06', text:'Mix design submittal required before pour? Lead time noted' },
+            // Reinforcement
+            { section:'Reinforcement', id:'s07', text:'Rebar grade confirmed (Gr. 40 vs 60 vs 80 epoxy-coated)' },
+            { section:'Reinforcement', id:'s08', text:'Cover requirements checked (ACI 318 Table 20.6.1.3)' },
+            { section:'Reinforcement', id:'s09', text:'Tie wire, chairs, and spacers included in scope' },
+            { section:'Reinforcement', id:'s10', text:'Fiber reinforcement in lieu of mesh allowed? (confirm with GC)' },
+            // Forming
+            { section:'Forming', id:'s11', text:'Formwork material specified (plywood vs steel vs stay-in-place)' },
+            { section:'Forming', id:'s12', text:'Stripping time / cure strength required before form removal' },
+            { section:'Forming', id:'s13', text:'Architectural / off-form finish required? (reveals, chamfers, color)' },
+            // Placement
+            { section:'Placement', id:'s14', text:'Pump vs chute vs direct discharge confirmed' },
+            { section:'Placement', id:'s15', text:'Max drop height for concrete placement noted' },
+            { section:'Placement', id:'s16', text:'Vibration requirements (internal, external, OSHA-compliant)' },
+            // Finishing
+            { section:'Finishing', id:'s17', text:'Floor flatness spec confirmed (FF/FL, or ASTM E1155 class)' },
+            { section:'Finishing', id:'s18', text:'Surface finish type (broom, trowel, exposed aggregate, stamped, rock salt)' },
+            { section:'Finishing', id:'s19', text:'Control joint spacing and saw-cut timing confirmed' },
+            { section:'Finishing', id:'s20', text:'Expansion/isolation joint material and location confirmed' },
+            // Curing
+            { section:'Curing', id:'s21', text:'Curing method specified (wet burlap, curing compound, blankets)' },
+            { section:'Curing', id:'s22', text:'Curing duration confirmed (ACI 301: 7 days min; high-strength longer)' },
+            { section:'Curing', id:'s23', text:'Hot weather plan required? (ACI 305R — El Paso summer)' },
+            { section:'Curing', id:'s24', text:'Cold weather plan required? (ACI 306R — freeze risk)' },
+            // Testing / QC
+            { section:'Testing / QC', id:'s25', text:'Slump test frequency confirmed (ASTM C143)' },
+            { section:'Testing / QC', id:'s26', text:'Cylinder break schedule (3 sets 7/28 day typical — who pays?)' },
+            { section:'Testing / QC', id:'s27', text:'Owner\'s testing lab vs self-provided — confirmed in spec' },
+            { section:'Testing / QC', id:'s28', text:'Acceptance criteria (f\'c, ACI 318 §26.12)' },
+            // Submittals
+            { section:'Submittals', id:'s29', text:'Required submittals listed (mix design, certs, shop drawings, product data)' },
+            { section:'Submittals', id:'s30', text:'Submittal lead times noted — no pour before approval?' },
+            // Scope exclusions
+            { section:'Scope Exclusions', id:'s31', text:'Shoring / underpinning excluded (confirmed with GC)' },
+            { section:'Scope Exclusions', id:'s32', text:'Earthwork / excavation / backfill excluded' },
+            { section:'Scope Exclusions', id:'s33', text:'Waterproofing / dampproofing excluded (or included if in concrete spec)' },
+            { section:'Scope Exclusions', id:'s34', text:'Anchor bolts, embed plates, sleeves, blockouts by others?' },
+        ];
+
+        (function initSpecReview() {
+            const prevWageBtn = document.getElementById('prevWageBtn');
+            if (!prevWageBtn) return;
+
+            const KEY = 'oncor_specreview_v2';
+            function loadSR() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch(e) { return {}; } }
+            function saveSR(d) { localStorage.setItem(KEY, JSON.stringify(d)); }
+
+            // Group by section
+            const sections = [...new Set(SPEC_ITEMS.map(i => i.section))];
+            const sectHTML = sections.map(sec => {
+                const items = SPEC_ITEMS.filter(i => i.section === sec);
+                const itemHTML = items.map(item => `
+                    <div style="display:grid;grid-template-columns:22px 1fr 80px;gap:4px;align-items:start;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+                        <input type="checkbox" id="sr_${item.id}" onchange="updateSRProgress()" style="margin-top:2px;cursor:pointer;width:14px;height:14px;">
+                        <label for="sr_${item.id}" style="font-size:0.74rem;color:#cbd5e1;cursor:pointer;line-height:1.4;">${item.text}</label>
+                        <select id="sr_risk_${item.id}" onchange="updateSRProgress()" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-radius:3px;padding:2px 3px;color:#e2e8f0;font-size:0.66rem;cursor:pointer;">
+                            <option value="">Risk?</option>
+                            <option value="none">✓ Clear</option>
+                            <option value="low">⚠ Low</option>
+                            <option value="high">🔴 High</option>
+                            <option value="na">N/A</option>
+                        </select>
+                    </div>`).join('');
+                return `<div style="margin-bottom:8px;">
+                    <div style="font-size:0.72rem;font-weight:700;color:#60a5fa;padding:4px 0 2px;border-bottom:1px solid rgba(96,165,250,0.2);margin-bottom:3px;">${sec}</div>
+                    ${itemHTML}
+                </div>`;
+            }).join('');
+
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'margin-bottom:6px;';
+            wrapper.innerHTML = `
+            <div id="specReviewPanel" style="display:none;background:rgba(0,0,0,0.25);border:1px solid rgba(96,165,250,0.2);border-radius:8px;padding:10px;font-size:0.82rem;margin-bottom:6px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span style="font-weight:700;color:#60a5fa;">📋 Division 03 Spec Review Checklist</span>
+                    <span style="font-size:0.68rem;color:#888;">Pre-bid spec verification</span>
+                </div>
+                <div id="srProgress" style="height:6px;border-radius:3px;background:rgba(255,255,255,0.1);margin-bottom:8px;overflow:hidden;"><div id="srBar" style="height:100%;background:#3b82f6;width:0%;transition:width 0.3s;border-radius:3px;"></div></div>
+                <div id="srStat" style="font-size:0.72rem;color:#64748b;margin-bottom:6px;"></div>
+                <div style="max-height:480px;overflow-y:auto;padding-right:4px;">${sectHTML}</div>
+                <div id="srRisks" style="margin-top:8px;"></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;">
+                    <button onclick="clearSRChecklist()" style="background:rgba(127,29,29,0.3);border:1px solid rgba(239,68,68,0.2);color:#fca5a5;border-radius:4px;padding:4px;cursor:pointer;font-size:0.73rem;">↺ Clear All</button>
+                    <button onclick="printSpecReview()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.73rem;">🖨️ Print Review</button>
+                </div>
+                <div style="font-size:0.7rem;color:#64748b;margin-top:6px;padding:4px 2px;">
+                    💡 A missed spec item on a $500k job can cost $30k+. This checklist mirrors how a senior estimator reads Division 03 before submitting a bid. Mark each item reviewed; flag risks for clarification with the GC or spec writer before bid day.
+                </div>
+            </div>
+            <button onclick="toggleSpecReview()" id="specReviewBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#60a5fa;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;">📋 Show Spec Review Checklist</button>`;
+
+            prevWageBtn.parentNode.insertBefore(wrapper, prevWageBtn.nextSibling);
+
+            // Restore saved state
+            const saved = loadSR();
+            if (saved.checks) {
+                Object.entries(saved.checks).forEach(([id, val]) => {
+                    const cb = document.getElementById(`sr_${id}`);
+                    if (cb) cb.checked = val;
+                });
+            }
+            if (saved.risks) {
+                Object.entries(saved.risks).forEach(([id, val]) => {
+                    const sel = document.getElementById(`sr_risk_${id}`);
+                    if (sel) sel.value = val;
+                });
+            }
+            updateSRProgress();
+        })();
+
+        function updateSRProgress() {
+            const total    = SPEC_ITEMS.length;
+            let checked = 0, highRisks = 0;
+            const highRiskItems = [];
+            SPEC_ITEMS.forEach(item => {
+                const cb  = document.getElementById(`sr_${item.id}`);
+                const sel = document.getElementById(`sr_risk_${item.id}`);
+                if (cb && cb.checked) checked++;
+                if (sel && sel.value === 'high') { highRisks++; highRiskItems.push(item.text); }
+            });
+            const pct = Math.round((checked / total) * 100);
+            const bar = document.getElementById('srBar');
+            const stat = document.getElementById('srStat');
+            const risksEl = document.getElementById('srRisks');
+            if (bar)  bar.style.width = pct + '%';
+            if (stat) stat.textContent = `${checked} of ${total} items reviewed (${pct}%)`;
+            if (risksEl) {
+                if (highRiskItems.length > 0) {
+                    risksEl.innerHTML = `<div style="background:rgba(127,29,29,0.3);border:1px solid rgba(239,68,68,0.2);border-radius:4px;padding:6px;font-size:0.72rem;color:#fca5a5;">
+                        <strong>🔴 High-Risk Items (${highRiskItems.length}) — Clarify before bidding:</strong>
+                        ${highRiskItems.map(t=>`<div style="margin-top:3px;">• ${t}</div>`).join('')}
+                    </div>`;
+                } else {
+                    risksEl.innerHTML = '';
+                }
+            }
+            // Persist
+            const d = { checks: {}, risks: {} };
+            SPEC_ITEMS.forEach(item => {
+                const cb  = document.getElementById(`sr_${item.id}`);
+                const sel = document.getElementById(`sr_risk_${item.id}`);
+                if (cb)  d.checks[item.id] = cb.checked;
+                if (sel) d.risks[item.id]  = sel.value;
+            });
+            localStorage.setItem('oncor_specreview_v2', JSON.stringify(d));
+        }
+
+        function clearSRChecklist() {
+            if (!confirm('Clear all spec review checkmarks?')) return;
+            SPEC_ITEMS.forEach(item => {
+                const cb = document.getElementById(`sr_${item.id}`);
+                const sel = document.getElementById(`sr_risk_${item.id}`);
+                if (cb) cb.checked = false;
+                if (sel) sel.value = '';
+            });
+            updateSRProgress();
+        }
+
+        function printSpecReview() {
+            const proj  = (document.getElementById('projectNameInput') || {}).value || 'Unnamed Project';
+            const today = new Date().toLocaleDateString();
+            const sections = [...new Set(SPEC_ITEMS.map(i => i.section))];
+            const secHTML = sections.map(sec => {
+                const items = SPEC_ITEMS.filter(i => i.section === sec);
+                const rows = items.map(item => {
+                    const cb  = document.getElementById(`sr_${item.id}`);
+                    const sel = document.getElementById(`sr_risk_${item.id}`);
+                    const checked  = cb && cb.checked;
+                    const riskVal  = sel ? sel.value : '';
+                    const riskText = { none:'✓ Clear', low:'⚠ Low Risk', high:'🔴 HIGH RISK', na:'N/A', '': '—' }[riskVal] || '—';
+                    const riskColor = riskVal === 'high' ? '#991b1b' : riskVal === 'low' ? '#92400e' : '#374151';
+                    return `<tr style="border-bottom:1px solid #f0f0f0;">
+                        <td style="padding:4px 6px;text-align:center;font-size:10pt;">${checked ? '☑' : '☐'}</td>
+                        <td style="padding:4px 6px;font-size:8pt;color:${checked?'#1a1a1a':'#555'};">${item.text}</td>
+                        <td style="padding:4px 6px;font-size:7.5pt;font-weight:600;color:${riskColor};">${riskText}</td>
+                    </tr>`;
+                }).join('');
+                return `<div style="margin-bottom:10px;"><div style="font-size:9pt;font-weight:700;color:#1e3a5f;border-bottom:1px solid #1e3a5f;padding-bottom:2px;margin-bottom:4px;">${sec}</div>
+                    <table style="width:100%;border-collapse:collapse;">${rows}</table></div>`;
+            }).join('');
+
+            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Spec Review — ${proj}</title>
+            <style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px;}@media print{body{padding:8px;}}</style></head><body>
+            <div style="display:flex;justify-content:space-between;border-bottom:2px solid #1e3a5f;padding-bottom:8px;margin-bottom:12px;">
+                <div><h2 style="margin:0;font-size:12pt;">📋 Division 03 Spec Review Checklist</h2><div style="font-size:9pt;color:#555;">${proj}</div></div>
+                <div style="text-align:right;font-size:8.5pt;color:#555;">Date: ${today}</div>
+            </div>
+            ${secHTML}
+            <div style="font-size:7.5pt;color:#666;margin-top:12px;border-top:1px solid #ddd;padding-top:8px;">This checklist is an internal estimating tool. All flagged items should be resolved via RFI or pre-bid questions before final bid submission. Unreviewed items represent potential scope gaps.</div>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`;
+            const w = window.open('', '_blank');
+            if (w) { w.document.write(html); w.document.close(); }
+        }
+
+
+        // ===================================================================
+        //  FEATURE: HOT / COLD WEATHER CONCRETE PLAN 🌡️ (ACI 305R / ACI 306R)
+        // ===================================================================
+        function toggleWeatherPlan() {
+            const panel = document.getElementById('weatherPlanPanel');
+            const btn   = document.getElementById('weatherPlanBtn');
+            if (!panel || !btn) return;
+            const open = panel.style.display === 'none';
+            panel.style.display = open ? 'block' : 'none';
+            btn.textContent = open ? '🌡️ Hide Hot/Cold Weather Plan' : '🌡️ Show Hot/Cold Weather Plan';
+        }
+
+        (function initWeatherPlan() {
+            const specBtn = document.getElementById('specReviewBtn');
+            if (!specBtn) return;
+
+            const KEY = 'oncor_weatherplan_v1';
+            function loadWP() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch(e) { return {}; } }
+            function saveWP(d) { localStorage.setItem(KEY, JSON.stringify(d)); }
+
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'margin-bottom:6px;';
+            wrapper.innerHTML = `
+            <div id="weatherPlanPanel" style="display:none;background:rgba(0,0,0,0.25);border:1px solid rgba(251,146,60,0.25);border-radius:8px;padding:10px;font-size:0.82rem;margin-bottom:6px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-weight:700;color:#fb923c;">🌡️ Hot / Cold Weather Concrete Plan</span>
+                    <span style="font-size:0.68rem;color:#888;">ACI 305R (hot) · ACI 306R (cold)</span>
+                </div>
+
+                <!-- Conditions input -->
+                <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px;margin-bottom:8px;">
+                    <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:4px;font-weight:600;">Pour Conditions</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px;">
+                        <div>
+                            <label style="font-size:0.7rem;color:#64748b;display:block;margin-bottom:2px;">Ambient Temp (°F)</label>
+                            <input id="wpAmbient" type="number" placeholder="e.g. 95" onchange="evalWeatherConditions()"
+                                style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.8rem;box-sizing:border-box;">
+                        </div>
+                        <div>
+                            <label style="font-size:0.7rem;color:#64748b;display:block;margin-bottom:2px;">Wind Speed (mph)</label>
+                            <input id="wpWind" type="number" placeholder="e.g. 20" onchange="evalWeatherConditions()"
+                                style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.8rem;box-sizing:border-box;">
+                        </div>
+                        <div>
+                            <label style="font-size:0.7rem;color:#64748b;display:block;margin-bottom:2px;">Relative Humidity (%)</label>
+                            <input id="wpHumidity" type="number" placeholder="e.g. 15" onchange="evalWeatherConditions()"
+                                style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.8rem;box-sizing:border-box;">
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+                        <div>
+                            <label style="font-size:0.7rem;color:#64748b;display:block;margin-bottom:2px;">Concrete Temp at Delivery (°F)</label>
+                            <input id="wpConcreteTemp" type="number" placeholder="ACI max 90°F" onchange="evalWeatherConditions()"
+                                style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.8rem;box-sizing:border-box;">
+                        </div>
+                        <div>
+                            <label style="font-size:0.7rem;color:#64748b;display:block;margin-bottom:2px;">Min Overnight Temp (°F)</label>
+                            <input id="wpNightTemp" type="number" placeholder="Freeze risk?" onchange="evalWeatherConditions()"
+                                style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.8rem;box-sizing:border-box;">
+                        </div>
+                    </div>
+                    <div id="wpAlert" style="margin-bottom:6px;"></div>
+                </div>
+
+                <!-- Evaporation rate calculator -->
+                <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px;margin-bottom:8px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                        <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;">Plastic Shrinkage Risk (ACI 305R Nomograph)</div>
+                        <button onclick="calcEvapRate()" style="background:#1a2a3a;border:1px solid rgba(251,146,60,0.3);color:#fb923c;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:0.72rem;">Calculate</button>
+                    </div>
+                    <div id="wpEvapResult" style="font-size:0.75rem;"></div>
+                    <div style="font-size:0.68rem;color:#64748b;margin-top:4px;">ACI 305R: plastic shrinkage cracking risk when evaporation rate ≥ 0.20 lb/ft²/hr. El Paso summers routinely exceed this.</div>
+                </div>
+
+                <!-- Hot weather measures -->
+                <div style="margin-bottom:8px;">
+                    <div style="font-size:0.72rem;color:#fb923c;font-weight:600;margin-bottom:4px;">Hot Weather Measures (check all that apply)</div>
+                    <div id="hotMeasures" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+                    ${[
+                        ['hw1','Pre-wet subgrade and forms'],
+                        ['hw2','Schedule pour before 7 AM'],
+                        ['hw3','Request chilled mix water from plant'],
+                        ['hw4','Request ice in mix water'],
+                        ['hw5','Specify retarder admixture'],
+                        ['hw6','Shade concrete truck drums'],
+                        ['hw7','Moisten subgrade to reduce absorption'],
+                        ['hw8','Have fogging/misting equipment on-site'],
+                        ['hw9','Evaporation retarder (Confilm or equiv.)'],
+                        ['hw10','Increase vibrator crew — faster placement'],
+                        ['hw11','Plastic sheeting ready for wind breaks'],
+                        ['hw12','Curing compound applied immediately after finish'],
+                    ].map(([id,txt])=>`<div style="display:flex;gap:5px;align-items:start;">
+                        <input type="checkbox" id="hw_${id}" onchange="saveWPState()" style="margin-top:2px;cursor:pointer;width:13px;height:13px;flex-shrink:0;">
+                        <label for="hw_${id}" style="font-size:0.72rem;color:#cbd5e1;cursor:pointer;line-height:1.3;">${txt}</label>
+                    </div>`).join('')}
+                    </div>
+                </div>
+
+                <!-- Cold weather measures -->
+                <div style="margin-bottom:8px;">
+                    <div style="font-size:0.72rem;color:#93c5fd;font-weight:600;margin-bottom:4px;">Cold Weather Measures (ACI 306R)</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+                    ${[
+                        ['cw1','Heated enclosure or wind break'],
+                        ['cw2','Insulating blankets ordered'],
+                        ['cw3','Request heated mix water from plant'],
+                        ['cw4','Accelerator (non-chloride) in mix'],
+                        ['cw5','Min concrete temp 55°F at delivery'],
+                        ['cw6','Min concrete temp 50°F during protection'],
+                        ['cw7','No frozen sub-base — verify temp >32°F'],
+                        ['cw8','Thermometers on-site, log every 4 hrs'],
+                        ['cw9','Protection plan: minimum 7 days (>3000 PSI)'],
+                        ['cw10','GC written notification of cold weather plan'],
+                    ].map(([id,txt])=>`<div style="display:flex;gap:5px;align-items:start;">
+                        <input type="checkbox" id="cw_${id}" onchange="saveWPState()" style="margin-top:2px;cursor:pointer;width:13px;height:13px;flex-shrink:0;">
+                        <label for="cw_${id}" style="font-size:0.72rem;color:#cbd5e1;cursor:pointer;line-height:1.3;">${txt}</label>
+                    </div>`).join('')}
+                    </div>
+                </div>
+
+                <!-- Notes -->
+                <textarea id="wpNotes" placeholder="Pour day plan, plant contact, site-specific notes..." rows="2" onchange="saveWPState()"
+                    style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.75rem;box-sizing:border-box;resize:vertical;margin-bottom:6px;"></textarea>
+
+                <button onclick="printWeatherPlan()" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.73rem;">🖨️ Print Weather Plan Field Form</button>
+                <div style="font-size:0.7rem;color:#64748b;margin-top:6px;padding:4px 2px;">
+                    💡 El Paso averages 115°F ambient summers — one of the highest plastic shrinkage risk environments in the US. ACI 305R limits fresh concrete temp at 95°F max (90°F preferred). Cold snaps in Jan/Feb can dip below 28°F. A documented weather plan = no disputes over cracking later.
+                </div>
+            </div>
+            <button onclick="toggleWeatherPlan()" id="weatherPlanBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fb923c;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;">🌡️ Show Hot/Cold Weather Plan</button>`;
+
+            specBtn.parentNode.insertBefore(wrapper, specBtn.nextSibling);
+
+            // Restore saved
+            const saved = loadWP();
+            if (saved.ambient)   { document.getElementById('wpAmbient').value   = saved.ambient; }
+            if (saved.wind)      { document.getElementById('wpWind').value      = saved.wind; }
+            if (saved.humidity)  { document.getElementById('wpHumidity').value  = saved.humidity; }
+            if (saved.ctTemp)    { document.getElementById('wpConcreteTemp').value = saved.ctTemp; }
+            if (saved.nightTemp) { document.getElementById('wpNightTemp').value  = saved.nightTemp; }
+            if (saved.notes)     { document.getElementById('wpNotes').value      = saved.notes; }
+            if (saved.hw) saved.hw.forEach(id => { const el = document.getElementById(`hw_${id}`); if (el) el.checked = true; });
+            if (saved.cw) saved.cw.forEach(id => { const el = document.getElementById(`cw_${id}`); if (el) el.checked = true; });
+            if (saved.ambient) evalWeatherConditions();
+        })();
+
+        window.saveWPState = function() {
+            const d = {
+                ambient:   (document.getElementById('wpAmbient')  || {}).value,
+                wind:      (document.getElementById('wpWind')      || {}).value,
+                humidity:  (document.getElementById('wpHumidity') || {}).value,
+                ctTemp:    (document.getElementById('wpConcreteTemp') || {}).value,
+                nightTemp: (document.getElementById('wpNightTemp') || {}).value,
+                notes:     (document.getElementById('wpNotes')    || {}).value,
+                hw: ['hw1','hw2','hw3','hw4','hw5','hw6','hw7','hw8','hw9','hw10','hw11','hw12']
+                    .filter(id => { const el = document.getElementById(`hw_${id}`); return el && el.checked; }),
+                cw: ['cw1','cw2','cw3','cw4','cw5','cw6','cw7','cw8','cw9','cw10']
+                    .filter(id => { const el = document.getElementById(`cw_${id}`); return el && el.checked; }),
+            };
+            localStorage.setItem('oncor_weatherplan_v1', JSON.stringify(d));
+        };
+
+        function evalWeatherConditions() {
+            saveWPState();
+            const ambient   = parseFloat((document.getElementById('wpAmbient')      || {}).value);
+            const ctTemp    = parseFloat((document.getElementById('wpConcreteTemp') || {}).value);
+            const nightTemp = parseFloat((document.getElementById('wpNightTemp')    || {}).value);
+            const el = document.getElementById('wpAlert');
+            if (!el) return;
+            const alerts = [];
+            if (!isNaN(ambient)) {
+                if (ambient >= 100) alerts.push({ level:'high', msg:`🔴 Extreme heat (${ambient}°F): ACI 305R requires documented hot weather plan, evaporation retarder, and early morning pour. Consider night pour.` });
+                else if (ambient >= 90) alerts.push({ level:'warn', msg:`⚠️ Hot weather (${ambient}°F): ACI 305R precautions required. Pre-wet subgrade, request retarder, plan early.` });
+                else if (ambient <= 32) alerts.push({ level:'high', msg:`🔴 Freezing ambient (${ambient}°F): ACI 306R cold weather plan REQUIRED. Do not pour without enclosure + heating.` });
+                else if (ambient <= 40) alerts.push({ level:'warn', msg:`⚠️ Cold weather (${ambient}°F): ACI 306R precautions — insulating blankets, heated mix water, monitor concrete temps.` });
+            }
+            if (!isNaN(ctTemp)) {
+                if (ctTemp > 90) alerts.push({ level:'high', msg:`🔴 Concrete delivery temp ${ctTemp}°F exceeds ACI 305R 90°F max. Reject load or request cold batch.` });
+                else if (ctTemp > 85) alerts.push({ level:'warn', msg:`⚠️ Concrete temp ${ctTemp}°F approaching ACI 305R 90°F limit. Flag to plant.` });
+                if (ctTemp < 55) alerts.push({ level:'high', msg:`🔴 Concrete temp ${ctTemp}°F below ACI 306R 55°F minimum for placement. Reject and reheat or use accelerator.` });
+            }
+            if (!isNaN(nightTemp) && nightTemp <= 35) {
+                alerts.push({ level: nightTemp <= 28 ? 'high' : 'warn', msg:`${nightTemp<=28?'🔴 Freeze risk':'⚠️ Near-freeze'}: Overnight low ${nightTemp}°F — insulating blankets required for at least ${nightTemp<=28?'7':'3'} days after pour.` });
+            }
+            if (alerts.length === 0) {
+                el.innerHTML = `<div style="padding:5px 8px;border-radius:4px;background:rgba(22,101,52,0.3);color:#86efac;font-size:0.75rem;">✅ Conditions look acceptable for standard placement procedures.</div>`;
+            } else {
+                el.innerHTML = alerts.map(a => `<div style="padding:5px 8px;border-radius:4px;background:${a.level==='high'?'rgba(127,29,29,0.4)':'rgba(120,53,15,0.3)'};color:${a.level==='high'?'#fca5a5':'#fcd34d'};font-size:0.74rem;margin-bottom:3px;">${a.msg}</div>`).join('');
+            }
+        }
+
+        function calcEvapRate() {
+            // ACI 305R Nomograph approximation: E = (Tc^2.5 - r * Ta^2.5) * (1 + 0.4V) * 10^-6 (lb/ft²/hr)
+            // where Tc=concrete surface temp, Ta=air temp, r=relative humidity/100, V=wind mph
+            const Ta = parseFloat((document.getElementById('wpAmbient')      || {}).value);
+            const Tc = parseFloat((document.getElementById('wpConcreteTemp') || {}).value);
+            const RH = parseFloat((document.getElementById('wpHumidity')     || {}).value);
+            const V  = parseFloat((document.getElementById('wpWind')         || {}).value);
+            const el = document.getElementById('wpEvapResult');
+            if (!el) return;
+            if ([Ta, Tc, RH, V].some(isNaN)) { el.textContent = 'Enter all four conditions to calculate.'; return; }
+            const r  = RH / 100;
+            // Simplified ACI 305R evaporation approximation (Uno 1998 / ACI nomograph digitized)
+            const Ec = (Tc + 18) ** 2.5;
+            const Ea = (Ta + 18) ** 2.5 * r;
+            const E  = (Ec - Ea) * (1 + 0.4 * V) * 5e-6;
+            const clamped = Math.max(0, E);
+            const risk = clamped >= 0.20 ? 'high' : clamped >= 0.10 ? 'medium' : 'low';
+            const riskColor = { high:'#fca5a5', medium:'#fcd34d', low:'#86efac' }[risk];
+            const riskBg    = { high:'rgba(127,29,29,0.4)', medium:'rgba(120,53,15,0.3)', low:'rgba(22,101,52,0.3)' }[risk];
+            const riskMsg   = { high:'🔴 HIGH RISK — plastic shrinkage cracking likely without immediate protective measures', medium:'⚠️ MODERATE — monitor closely, have evaporation retarder ready', low:'✅ LOW RISK — standard curing precautions sufficient' }[risk];
+            el.innerHTML = `<div style="padding:6px 8px;border-radius:4px;background:${riskBg};color:${riskColor};font-size:0.75rem;">
+                Estimated evaporation rate: <strong>${clamped.toFixed(2)} lb/ft²/hr</strong><br>${riskMsg}
+                ${clamped >= 0.20 ? '<div style="margin-top:4px;font-size:0.7rem;opacity:0.85;">Recommended: apply Confilm or equivalent evaporation retarder immediately after strike-off. Set up wind breaks. Mist fog (not water) over surface. Begin curing compound as soon as bleed water disappears.</div>' : ''}
+            </div>`;
+        }
+
+        function printWeatherPlan() {
+            const proj    = (document.getElementById('projectNameInput') || {}).value || 'Unnamed Project';
+            const today   = new Date().toLocaleDateString();
+            const ambient = (document.getElementById('wpAmbient')      || {}).value || '—';
+            const wind    = (document.getElementById('wpWind')          || {}).value || '—';
+            const rh      = (document.getElementById('wpHumidity')     || {}).value || '—';
+            const ctTemp  = (document.getElementById('wpConcreteTemp') || {}).value || '—';
+            const nightT  = (document.getElementById('wpNightTemp')    || {}).value || '—';
+            const notes   = (document.getElementById('wpNotes')        || {}).value || '';
+
+            const hotItems  = ['hw1','hw2','hw3','hw4','hw5','hw6','hw7','hw8','hw9','hw10','hw11','hw12'];
+            const coldItems = ['cw1','cw2','cw3','cw4','cw5','cw6','cw7','cw8','cw9','cw10'];
+            const hotLabels  = ['Pre-wet subgrade and forms','Schedule pour before 7 AM','Request chilled mix water from plant','Request ice in mix water','Specify retarder admixture','Shade concrete truck drums','Moisten subgrade to reduce absorption','Have fogging/misting equipment on-site','Evaporation retarder (Confilm or equiv.)','Increase vibrator crew — faster placement','Plastic sheeting ready for wind breaks','Curing compound applied immediately after finish'];
+            const coldLabels = ['Heated enclosure or wind break','Insulating blankets ordered','Request heated mix water from plant','Accelerator (non-chloride) in mix','Min concrete temp 55°F at delivery','Min concrete temp 50°F during protection','No frozen sub-base — verify temp >32°F','Thermometers on-site, log every 4 hrs','Protection plan: minimum 7 days (>3000 PSI)','GC written notification of cold weather plan'];
+
+            const makeChecklist = (ids, labels) => ids.map((id, i) => {
+                const checked = (document.getElementById(id) || {}).checked;
+                return `<tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:4px 6px;text-align:center;">${checked ? '☑' : '☐'}</td><td style="padding:4px 6px;font-size:8.5pt;">${labels[i]}</td></tr>`;
+            }).join('');
+
+            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Weather Plan — ${proj}</title>
+            <style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px;font-size:9pt;}
+            h3{font-size:10pt;margin:8px 0 4px;}table{width:100%;border-collapse:collapse;}
+            .label{color:#555;font-size:8pt;}@media print{body{padding:8px;}}</style></head><body>
+            <div style="display:flex;justify-content:space-between;border-bottom:2px solid #1e3a5f;padding-bottom:8px;margin-bottom:10px;">
+                <div><h2 style="margin:0;font-size:12pt;">🌡️ Hot/Cold Weather Concrete Plan</h2><div class="label">${proj}</div></div>
+                <div style="text-align:right;font-size:8.5pt;color:#555;">Date: ${today}</div>
+            </div>
+            <table style="width:100%;margin-bottom:10px;"><tr>
+                <td style="padding:4px 10px 4px 0;"><div class="label">Ambient Temp</div><strong>${ambient}°F</strong></td>
+                <td style="padding:4px 10px 4px 0;"><div class="label">Wind Speed</div><strong>${wind} mph</strong></td>
+                <td style="padding:4px 10px 4px 0;"><div class="label">Relative Humidity</div><strong>${rh}%</strong></td>
+                <td style="padding:4px 10px 4px 0;"><div class="label">Concrete Temp</div><strong>${ctTemp}°F</strong></td>
+                <td style="padding:4px;"><div class="label">Min Overnight</div><strong>${nightT}°F</strong></td>
+            </tr></table>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                    <h3 style="color:#b45309;">🔆 Hot Weather Measures (ACI 305R)</h3>
+                    <table>${makeChecklist(hotItems.map(id=>`hw_${id}`), hotLabels)}</table>
+                </div>
+                <div>
+                    <h3 style="color:#1d4ed8;">❄️ Cold Weather Measures (ACI 306R)</h3>
+                    <table>${makeChecklist(coldItems.map(id=>`cw_${id}`), coldLabels)}</table>
+                </div>
+            </div>
+            ${notes ? `<div style="margin-top:10px;border-top:1px solid #ddd;padding-top:8px;font-size:8.5pt;"><strong>Notes:</strong> ${notes}</div>` : ''}
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:14px;border-top:1px solid #ddd;padding-top:10px;">
+                <div>
+                    <div style="font-size:7.5pt;color:#888;margin-bottom:12px;">Foreman Signature / Date</div>
+                    <div style="border-bottom:1px solid #333;width:90%;margin-bottom:4px;">&nbsp;</div>
+                    <div style="font-size:7.5pt;color:#555;">Foreman: ________________________________</div>
+                </div>
+                <div>
+                    <div style="font-size:7.5pt;color:#888;margin-bottom:12px;">GC/Inspector Signature / Date</div>
+                    <div style="border-bottom:1px solid #333;width:90%;margin-bottom:4px;">&nbsp;</div>
+                    <div style="font-size:7.5pt;color:#555;">GC Rep: ________________________________</div>
+                </div>
+            </div>
+            <div style="font-size:7.5pt;color:#666;margin-top:10px;border-top:1px solid #ddd;padding-top:8px;">Reference: ACI 305R (Hot Weather Concreting) · ACI 306R (Cold Weather Concreting) · ACI 308R (Guide to External Curing). This plan is for field documentation purposes. Contractor is responsible for compliance with project specifications and applicable ACI standards.</div>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`;
+            const w = window.open('', '_blank');
+            if (w) { w.document.write(html); w.document.close(); }
+        }
+
     </script>
 
 </body>
