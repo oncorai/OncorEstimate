@@ -2722,6 +2722,11 @@
                     <button class="action-btn secondary" onclick="toggleTMTracker()" title="Track time & materials for extra work orders — log crew hours + materials, print T&M ticket">⏱️ T&M Tracker</button>
                 </div>
                 <div class="action-row">
+                    <button class="action-btn secondary" onclick="togglePunchList()" title="Punch list tracker — log deficiencies, assign responsibility, track completion for project closeout">🔧 Punch List</button>
+                    <button class="action-btn secondary" onclick="toggleWeatherDelay()" title="Weather delay log — document rain/heat/cold delays for time extension claims and dispute backup">🌧️ Weather Delays</button>
+                </div>
+                <div class="action-row">
+                    <button class="action-btn secondary" onclick="toggleARTracker()" title="AR Aging / Invoice Tracker — log invoices submitted, track what's paid, outstanding, and overdue">💰 AR Tracker</button>
                     <button class="action-btn secondary" onclick="clearAll()">🗑️ Clear All</button>
                 </div>
             </div>
@@ -14149,6 +14154,670 @@ ${bidTotal > 0 ? `
             const w = window.open('', '_blank');
             if (w) { w.document.write(html); w.document.close(); }
         }
+    </script>
+
+    <!-- ============================================================
+         PUNCH LIST TRACKER
+    ============================================================ -->
+    <script>
+        // Punch list stored globally (cross-project)
+        function getPunchList() {
+            try { return JSON.parse(localStorage.getItem('oncorPunchList') || '[]'); } catch(e) { return []; }
+        }
+        function savePunchList(list) {
+            localStorage.setItem('oncorPunchList', JSON.stringify(list));
+        }
+
+        function togglePunchList() {
+            const panel = document.getElementById('punchListPanel');
+            const btn   = document.getElementById('punchListToggleBtn');
+            if (!panel) return;
+            const open = panel.style.display !== 'none';
+            panel.style.display = open ? 'none' : 'block';
+            if (btn) btn.textContent = open ? '🔧 Show Punch List' : '🔧 Hide Punch List';
+            if (!open) renderPunchList();
+        }
+
+        function renderPunchList() {
+            const list = getPunchList();
+            const container = document.getElementById('punchListItems');
+            const summary   = document.getElementById('punchListSummary');
+            if (!container) return;
+            const open = list.filter(i => i.status !== 'closed').length;
+            const closed = list.filter(i => i.status === 'closed').length;
+            if (summary) summary.textContent = `${open} open · ${closed} closed`;
+            if (list.length === 0) {
+                container.innerHTML = '<div style="color:#888;font-size:0.78rem;padding:8px 0;">No punch list items yet.</div>';
+                return;
+            }
+            container.innerHTML = list.map((item, idx) => {
+                const statusColor = item.status === 'closed' ? '#4ade80' : item.status === 'in-progress' ? '#fbbf24' : '#f87171';
+                const statusLabel = item.status === 'closed' ? '✓ Closed' : item.status === 'in-progress' ? '⟳ In Progress' : '● Open';
+                return `<div style="border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:8px;margin-bottom:6px;background:rgba(0,0,0,0.2);">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;">
+                        <div style="flex:1;">
+                            <div style="font-size:0.8rem;font-weight:600;color:#e2e8f0;">#${String(idx+1).padStart(2,'0')} — ${item.desc || '(no description)'}</div>
+                            <div style="font-size:0.73rem;color:#888;margin-top:2px;">
+                                Area: ${item.area || '—'} · Resp: ${item.resp || '—'} · Due: ${item.due || '—'}
+                            </div>
+                            ${item.notes ? `<div style="font-size:0.73rem;color:#a3a3a3;margin-top:2px;font-style:italic;">${item.notes}</div>` : ''}
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;">
+                            <span style="font-size:0.7rem;color:${statusColor};white-space:nowrap;">${statusLabel}</span>
+                            <div style="display:flex;gap:3px;">
+                                <button onclick="cyclePunchStatus(${idx})" style="font-size:0.65rem;background:rgba(255,255,255,0.08);border:none;color:#94a3b8;border-radius:3px;padding:2px 4px;cursor:pointer;" title="Cycle status">↻</button>
+                                <button onclick="deletePunchItem(${idx})" style="font-size:0.65rem;background:rgba(255,0,0,0.1);border:none;color:#f87171;border-radius:3px;padding:2px 4px;cursor:pointer;" title="Delete">✕</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function cyclePunchStatus(idx) {
+            const list = getPunchList();
+            if (!list[idx]) return;
+            const cycle = { 'open': 'in-progress', 'in-progress': 'closed', 'closed': 'open' };
+            list[idx].status = cycle[list[idx].status] || 'open';
+            if (list[idx].status === 'closed') list[idx].closedDate = new Date().toISOString().slice(0,10);
+            savePunchList(list);
+            renderPunchList();
+        }
+
+        function deletePunchItem(idx) {
+            const list = getPunchList();
+            list.splice(idx, 1);
+            savePunchList(list);
+            renderPunchList();
+        }
+
+        function addPunchItem() {
+            const desc  = (document.getElementById('punchDesc')?.value || '').trim();
+            const area  = (document.getElementById('punchArea')?.value || '').trim();
+            const resp  = (document.getElementById('punchResp')?.value || '').trim();
+            const due   = (document.getElementById('punchDue')?.value || '').trim();
+            const notes = (document.getElementById('punchNotes')?.value || '').trim();
+            if (!desc) { alert('Enter a description for the punch item.'); return; }
+            const list = getPunchList();
+            list.push({ desc, area, resp, due, notes, status: 'open', created: new Date().toISOString().slice(0,10) });
+            savePunchList(list);
+            document.getElementById('punchDesc').value = '';
+            document.getElementById('punchArea').value = '';
+            document.getElementById('punchResp').value = '';
+            document.getElementById('punchDue').value = '';
+            document.getElementById('punchNotes').value = '';
+            renderPunchList();
+        }
+
+        function printPunchList() {
+            const list = getPunchList();
+            const proj = document.getElementById('projectName')?.value || 'Project';
+            const co   = localStorage.getItem('oncor_company_name') || 'Oncor Concrete';
+            const today = new Date().toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+            const open   = list.filter(i => i.status !== 'closed').length;
+            const closed = list.filter(i => i.status === 'closed').length;
+            const rows = list.map((item, idx) => {
+                const statusLabel = item.status === 'closed' ? '✓ Closed' : item.status === 'in-progress' ? '⟳ In Prog.' : '○ Open';
+                const statusBg = item.status === 'closed' ? '#d1fae5' : item.status === 'in-progress' ? '#fef3c7' : '#fee2e2';
+                return `<tr style="border-bottom:1px solid #eee;">
+                    <td style="padding:5px 6px;text-align:center;font-size:9pt;">${String(idx+1).padStart(2,'0')}</td>
+                    <td style="padding:5px 6px;font-size:9pt;">${item.desc || ''}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;color:#555;">${item.area || ''}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;color:#555;">${item.resp || ''}</td>
+                    <td style="padding:5px 6px;font-size:8.5pt;color:#555;">${item.due || ''}</td>
+                    <td style="padding:5px 6px;text-align:center;font-size:8.5pt;background:${statusBg};border-radius:3px;">${statusLabel}</td>
+                    <td style="padding:5px 6px;font-size:8pt;color:#666;">${item.notes || ''}</td>
+                </tr>`;
+            }).join('');
+            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Punch List — ${proj}</title>
+            <style>body{font-family:Arial,sans-serif;font-size:9.5pt;max-width:900px;margin:0 auto;padding:24px;color:#111;}
+            h1{font-size:13pt;margin:0 0 4px;}h2{font-size:10pt;color:#555;font-weight:normal;margin:0 0 16px;}
+            table{width:100%;border-collapse:collapse;}th{background:#f3f4f6;padding:6px 6px;text-align:left;font-size:8.5pt;border-bottom:2px solid #ddd;}
+            .summary{display:flex;gap:20px;margin-bottom:16px;font-size:9.5pt;}
+            .summary span{padding:4px 10px;border-radius:4px;}
+            @media print{body{padding:10px;}}</style></head><body>
+            <h1>Punch List — ${proj}</h1>
+            <h2>${co} · Generated ${today}</h2>
+            <div class="summary">
+                <span style="background:#fee2e2;color:#b91c1c;">○ Open: ${open}</span>
+                <span style="background:#d1fae5;color:#065f46;">✓ Closed: ${closed}</span>
+                <span style="background:#f3f4f6;color:#374151;">Total: ${list.length}</span>
+            </div>
+            <table><thead><tr>
+                <th style="width:32px;">#</th><th>Description</th><th>Area/Location</th>
+                <th>Responsible</th><th>Due Date</th><th>Status</th><th>Notes</th>
+            </tr></thead><tbody>${rows}</tbody></table>
+            <div style="margin-top:32px;display:grid;grid-template-columns:1fr 1fr;gap:30px;">
+                <div><div style="font-weight:600;">Reviewed By (Sub):</div>
+                <div style="border-top:1px solid #333;margin-top:28px;padding-top:4px;font-size:8.5pt;color:#777;">Signature / Date</div></div>
+                <div><div style="font-weight:600;">Accepted By (GC/Owner):</div>
+                <div style="border-top:1px solid #333;margin-top:28px;padding-top:4px;font-size:8.5pt;color:#777;">Signature / Date</div></div>
+            </div>
+            <div style="text-align:center;font-size:7.5pt;color:#bbb;margin-top:20px;border-top:1px solid #eee;padding-top:8px;">Generated by Oncor Takeoff Tool</div>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`;
+            const w = window.open('', '_blank');
+            if (w) { w.document.write(html); w.document.close(); }
+        }
+
+        function copyPunchList() {
+            const list = getPunchList();
+            if (list.length === 0) { alert('No punch list items to copy.'); return; }
+            const proj = document.getElementById('projectName')?.value || 'Project';
+            const lines = [`PUNCH LIST — ${proj}`, `Generated: ${new Date().toLocaleDateString()}`, ''];
+            list.forEach((item, idx) => {
+                const s = item.status === 'closed' ? '[CLOSED]' : item.status === 'in-progress' ? '[IN PROGRESS]' : '[OPEN]';
+                lines.push(`${String(idx+1).padStart(2,'0')}. ${s} ${item.desc}`);
+                if (item.area) lines.push(`   Area: ${item.area}`);
+                if (item.resp) lines.push(`   Responsible: ${item.resp}`);
+                if (item.due)  lines.push(`   Due: ${item.due}`);
+                if (item.notes) lines.push(`   Notes: ${item.notes}`);
+                lines.push('');
+            });
+            const open = list.filter(i => i.status !== 'closed').length;
+            const closed = list.filter(i => i.status === 'closed').length;
+            lines.push(`Summary: ${open} open · ${closed} closed · ${list.length} total`);
+            navigator.clipboard.writeText(lines.join('\n')).then(() => {
+                const btn = document.getElementById('punchCopyBtn');
+                if (btn) { const orig = btn.textContent; btn.textContent = '✅ Copied!'; setTimeout(() => btn.textContent = orig, 2000); }
+            });
+        }
+    </script>
+
+    <!-- Panel HTML injected via sidebar -->
+    <script>
+        (function() {
+            // Inject Punch List panel into sidebar after TM tracker panel
+            const tmBtn = document.getElementById('tmTrackerToggleBtn');
+            if (!tmBtn) return;
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'margin-bottom:6px;';
+            wrapper.innerHTML = `
+            <div id="punchListPanel" style="display:none;background:rgba(0,0,0,0.25);border:1px solid rgba(251,191,36,0.25);border-radius:8px;padding:10px;font-size:0.82rem;margin-bottom:6px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-weight:700;color:#fbbf24;">🔧 Punch List</span>
+                    <span id="punchListSummary" style="font-size:0.72rem;color:#888;">0 open · 0 closed</span>
+                </div>
+                <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px;margin-bottom:8px;">
+                    <input id="punchDesc" placeholder="Description / deficiency *" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.78rem;margin-bottom:4px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">
+                        <input id="punchArea"  placeholder="Area/Location" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.78rem;">
+                        <input id="punchResp"  placeholder="Responsible Party" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.78rem;">
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">
+                        <input id="punchDue"   type="date" placeholder="Due date" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.78rem;">
+                        <input id="punchNotes" placeholder="Notes" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.78rem;">
+                    </div>
+                    <button onclick="addPunchItem()" style="width:100%;background:#fbbf24;border:none;color:#000;border-radius:4px;padding:5px;cursor:pointer;font-size:0.78rem;font-weight:600;">+ Add Punch Item</button>
+                </div>
+                <div id="punchListItems"></div>
+                <div style="display:flex;gap:4px;margin-top:6px;">
+                    <button id="punchCopyBtn" onclick="copyPunchList()" style="flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.73rem;">📋 Copy</button>
+                    <button onclick="printPunchList()" style="flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.73rem;">🖨️ Print</button>
+                </div>
+            </div>
+            <button onclick="togglePunchList()" id="punchListToggleBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fbbf24;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;">🔧 Show Punch List</button>`;
+            tmBtn.parentNode.insertBefore(wrapper, tmBtn.nextSibling);
+        })();
+    </script>
+
+    <!-- ============================================================
+         WEATHER DELAY LOG
+    ============================================================ -->
+    <script>
+        function getWeatherDelays() {
+            try { return JSON.parse(localStorage.getItem('oncorWeatherDelays') || '[]'); } catch(e) { return []; }
+        }
+        function saveWeatherDelays(list) {
+            localStorage.setItem('oncorWeatherDelays', JSON.stringify(list));
+        }
+
+        function toggleWeatherDelay() {
+            const panel = document.getElementById('weatherDelayPanel');
+            const btn   = document.getElementById('weatherDelayBtn');
+            if (!panel) return;
+            const open = panel.style.display !== 'none';
+            panel.style.display = open ? 'none' : 'block';
+            if (btn) btn.textContent = open ? '🌧️ Show Weather Delays' : '🌧️ Hide Weather Delays';
+            if (!open) renderWeatherDelays();
+        }
+
+        function renderWeatherDelays() {
+            const list = getWeatherDelays();
+            const container = document.getElementById('weatherDelayItems');
+            const summary   = document.getElementById('weatherDelaySummary');
+            if (!container) return;
+            const totalDays = list.reduce((s, i) => s + (parseFloat(i.days) || 0), 0);
+            if (summary) summary.textContent = `${list.length} events · ${totalDays.toFixed(1)} days lost`;
+            if (list.length === 0) {
+                container.innerHTML = '<div style="color:#888;font-size:0.78rem;padding:8px 0;">No weather delays logged yet.</div>';
+                return;
+            }
+            const typeIcon = { rain:'🌧️', heat:'🌡️', cold:'❄️', wind:'💨', other:'⚡' };
+            container.innerHTML = list.map((item, idx) => `
+                <div style="border:1px solid rgba(255,255,255,0.08);border-radius:5px;padding:6px 8px;margin-bottom:5px;background:rgba(0,0,0,0.2);display:flex;justify-content:space-between;align-items:flex-start;">
+                    <div style="flex:1;">
+                        <div style="font-size:0.78rem;color:#e2e8f0;">${typeIcon[item.type]||'⚡'} ${item.date || '—'} — ${item.desc || '(no description)'}</div>
+                        <div style="font-size:0.72rem;color:#888;margin-top:1px;">
+                            <span style="color:#60a5fa;">${(parseFloat(item.days)||0).toFixed(1)} day(s) lost</span>
+                            ${item.notified ? ' · <span style="color:#4ade80;">GC Notified ✓</span>' : ' · <span style="color:#f87171;">GC NOT Notified</span>'}
+                            ${item.notes ? ` · ${item.notes}` : ''}
+                        </div>
+                    </div>
+                    <button onclick="deleteWeatherDelay(${idx})" style="font-size:0.65rem;background:rgba(255,0,0,0.1);border:none;color:#f87171;border-radius:3px;padding:2px 5px;cursor:pointer;margin-left:6px;">✕</button>
+                </div>`).join('');
+        }
+
+        function deleteWeatherDelay(idx) {
+            const list = getWeatherDelays();
+            list.splice(idx, 1);
+            saveWeatherDelays(list);
+            renderWeatherDelays();
+        }
+
+        function addWeatherDelay() {
+            const date     = (document.getElementById('wdDate')?.value || '').trim();
+            const type     = (document.getElementById('wdType')?.value || 'rain');
+            const days     = parseFloat(document.getElementById('wdDays')?.value || '0');
+            const desc     = (document.getElementById('wdDesc')?.value || '').trim();
+            const notified = document.getElementById('wdNotified')?.checked;
+            const notes    = (document.getElementById('wdNotes')?.value || '').trim();
+            if (!date || !desc) { alert('Enter a date and description.'); return; }
+            if (isNaN(days) || days <= 0) { alert('Enter a valid number of days delayed.'); return; }
+            const list = getWeatherDelays();
+            list.push({ date, type, days, desc, notified, notes });
+            saveWeatherDelays(list);
+            document.getElementById('wdDate').value  = '';
+            document.getElementById('wdDays').value  = '';
+            document.getElementById('wdDesc').value  = '';
+            document.getElementById('wdNotes').value = '';
+            document.getElementById('wdNotified').checked = false;
+            renderWeatherDelays();
+        }
+
+        function printWeatherDelayLog() {
+            const list = getWeatherDelays();
+            const proj = document.getElementById('projectName')?.value || 'Project';
+            const co   = localStorage.getItem('oncor_company_name') || 'Oncor Concrete';
+            const today = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+            const totalDays = list.reduce((s, i) => s + (parseFloat(i.days)||0), 0);
+            const typeIcon = { rain:'Rain', heat:'Extreme Heat', cold:'Cold/Freeze', wind:'High Wind', other:'Other' };
+            const rows = list.map((item, idx) => `<tr style="border-bottom:1px solid #eee;">
+                <td style="padding:4px 6px;font-size:9pt;">${item.date||''}</td>
+                <td style="padding:4px 6px;font-size:9pt;">${typeIcon[item.type]||item.type||''}</td>
+                <td style="padding:4px 6px;font-size:9pt;">${item.desc||''}</td>
+                <td style="padding:4px 6px;text-align:center;font-size:9pt;">${(parseFloat(item.days)||0).toFixed(1)}</td>
+                <td style="padding:4px 6px;text-align:center;font-size:9pt;">${item.notified ? 'Yes ✓' : 'No'}</td>
+                <td style="padding:4px 6px;font-size:8.5pt;color:#666;">${item.notes||''}</td>
+            </tr>`).join('');
+            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Weather Delay Log — ${proj}</title>
+            <style>body{font-family:Arial,sans-serif;font-size:9.5pt;max-width:800px;margin:0 auto;padding:24px;color:#111;}
+            h1{font-size:13pt;margin:0 0 4px;}h2{font-size:10pt;color:#555;font-weight:normal;margin:0 0 14px;}
+            table{width:100%;border-collapse:collapse;}th{background:#dbeafe;padding:6px;text-align:left;font-size:8.5pt;border-bottom:2px solid #93c5fd;}
+            .note{font-size:8.5pt;color:#555;margin-top:12px;border:1px solid #ddd;padding:8px;border-radius:4px;background:#f9fafb;}
+            @media print{body{padding:10px;}}</style></head><body>
+            <h1>Weather Delay Log — ${proj}</h1>
+            <h2>${co} · Generated ${today}</h2>
+            <div style="display:flex;gap:20px;margin-bottom:14px;font-size:9.5pt;">
+                <span style="background:#dbeafe;color:#1d4ed8;padding:3px 10px;border-radius:4px;">${list.length} delay event(s)</span>
+                <span style="background:#fee2e2;color:#b91c1c;padding:3px 10px;border-radius:4px;">${totalDays.toFixed(1)} total days lost</span>
+            </div>
+            <table><thead><tr>
+                <th>Date</th><th>Type</th><th>Description / Conditions</th><th>Days Lost</th><th>GC Notified</th><th>Notes</th>
+            </tr></thead><tbody>${rows}</tbody></table>
+            <div style="margin-top:10px;text-align:right;font-size:9.5pt;font-weight:bold;">Total Days Lost: ${totalDays.toFixed(1)}</div>
+            <div class="note">⚠ Pursuant to the subcontract agreement, written notice of weather delays shall be provided to the GC within the timeframe specified (typically 24-48 hours of the delay event). This log serves as supporting documentation for time extension requests and schedule impact analysis. Consult your contract for exact notice requirements.</div>
+            <div style="margin-top:28px;display:grid;grid-template-columns:1fr 1fr;gap:28px;">
+                <div><div style="font-weight:600;">Prepared By (Subcontractor):</div>
+                <div style="border-top:1px solid #333;margin-top:28px;padding-top:4px;font-size:8.5pt;color:#777;">Signature / Date</div></div>
+                <div><div style="font-weight:600;">Acknowledged By (GC):</div>
+                <div style="border-top:1px solid #333;margin-top:28px;padding-top:4px;font-size:8.5pt;color:#777;">Signature / Date</div></div>
+            </div>
+            <div style="text-align:center;font-size:7.5pt;color:#bbb;margin-top:20px;border-top:1px solid #eee;padding-top:8px;">Generated by Oncor Takeoff Tool</div>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`;
+            const w = window.open('', '_blank');
+            if (w) { w.document.write(html); w.document.close(); }
+        }
+
+        function copyWeatherDelayLog() {
+            const list = getWeatherDelays();
+            if (list.length === 0) { alert('No weather delays to copy.'); return; }
+            const proj = document.getElementById('projectName')?.value || 'Project';
+            const totalDays = list.reduce((s, i) => s + (parseFloat(i.days)||0), 0);
+            const typeLabel = { rain:'Rain', heat:'Extreme Heat', cold:'Cold/Freeze', wind:'High Wind', other:'Other' };
+            const lines = [`WEATHER DELAY LOG — ${proj}`, `Generated: ${new Date().toLocaleDateString()}`, ''];
+            list.forEach((item, idx) => {
+                lines.push(`${String(idx+1).padStart(2,'0')}. [${item.date}] ${typeLabel[item.type]||item.type} — ${item.desc}`);
+                lines.push(`    Days Lost: ${(parseFloat(item.days)||0).toFixed(1)} · GC Notified: ${item.notified ? 'Yes' : 'No'}${item.notes ? ` · ${item.notes}` : ''}`);
+            });
+            lines.push('', `Total Days Lost: ${totalDays.toFixed(1)}`);
+            navigator.clipboard.writeText(lines.join('\n')).then(() => {
+                const btn = document.getElementById('wdCopyBtn');
+                if (btn) { const orig = btn.textContent; btn.textContent = '✅ Copied!'; setTimeout(() => btn.textContent = orig, 2000); }
+            });
+        }
+    </script>
+
+    <!-- Weather Delay Panel HTML injection -->
+    <script>
+        (function() {
+            const punchBtn = document.getElementById('punchListToggleBtn');
+            if (!punchBtn) return;
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'margin-bottom:6px;';
+            wrapper.innerHTML = `
+            <div id="weatherDelayPanel" style="display:none;background:rgba(0,0,0,0.25);border:1px solid rgba(96,165,250,0.25);border-radius:8px;padding:10px;font-size:0.82rem;margin-bottom:6px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-weight:700;color:#60a5fa;">🌧️ Weather Delay Log</span>
+                    <span id="weatherDelaySummary" style="font-size:0.72rem;color:#888;">0 events · 0 days lost</span>
+                </div>
+                <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px;margin-bottom:8px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">
+                        <input id="wdDate" type="date" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.78rem;">
+                        <select id="wdType" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.78rem;">
+                            <option value="rain">🌧️ Rain</option>
+                            <option value="heat">🌡️ Extreme Heat</option>
+                            <option value="cold">❄️ Cold/Freeze</option>
+                            <option value="wind">💨 High Wind</option>
+                            <option value="other">⚡ Other</option>
+                        </select>
+                    </div>
+                    <input id="wdDesc" placeholder="Conditions / impact description *" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.78rem;margin-bottom:4px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">
+                        <input id="wdDays" type="number" min="0.25" step="0.25" placeholder="Days lost *" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.78rem;">
+                        <input id="wdNotes" placeholder="Notes / temp / inches" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.78rem;">
+                    </div>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:0.75rem;color:#94a3b8;margin-bottom:6px;cursor:pointer;">
+                        <input id="wdNotified" type="checkbox" style="accent-color:#60a5fa;"> GC notified in writing
+                    </label>
+                    <button onclick="addWeatherDelay()" style="width:100%;background:#3b82f6;border:none;color:#fff;border-radius:4px;padding:5px;cursor:pointer;font-size:0.78rem;font-weight:600;">+ Log Delay</button>
+                </div>
+                <div id="weatherDelayItems"></div>
+                <div style="display:flex;gap:4px;margin-top:6px;">
+                    <button id="wdCopyBtn" onclick="copyWeatherDelayLog()" style="flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.73rem;">📋 Copy</button>
+                    <button onclick="printWeatherDelayLog()" style="flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.73rem;">🖨️ Print</button>
+                </div>
+            </div>
+            <button onclick="toggleWeatherDelay()" id="weatherDelayBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#60a5fa;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;">🌧️ Show Weather Delays</button>`;
+            punchBtn.parentNode.insertBefore(wrapper, punchBtn.nextSibling);
+        })();
+    </script>
+
+    <!-- ============================================================
+         AR AGING / INVOICE TRACKER
+    ============================================================ -->
+    <script>
+        function getARInvoices() {
+            try { return JSON.parse(localStorage.getItem('oncorARInvoices') || '[]'); } catch(e) { return []; }
+        }
+        function saveARInvoices(list) {
+            localStorage.setItem('oncorARInvoices', JSON.stringify(list));
+        }
+
+        function toggleARTracker() {
+            const panel = document.getElementById('arTrackerPanel');
+            const btn   = document.getElementById('arTrackerBtn');
+            if (!panel) return;
+            const open = panel.style.display !== 'none';
+            panel.style.display = open ? 'none' : 'block';
+            if (btn) btn.textContent = open ? '💰 Show AR Tracker' : '💰 Hide AR Tracker';
+            if (!open) renderARTracker();
+        }
+
+        function renderARTracker() {
+            const list = getARInvoices();
+            const container = document.getElementById('arInvoiceItems');
+            const summary   = document.getElementById('arSummary');
+            if (!container) return;
+
+            const today = new Date();
+            let totalBilled = 0, totalPaid = 0, totalOutstanding = 0, totalOverdue = 0;
+            list.forEach(inv => {
+                const amount = parseFloat(inv.amount) || 0;
+                const paid   = parseFloat(inv.paid) || 0;
+                const outstanding = amount - paid;
+                totalBilled += amount;
+                totalPaid   += paid;
+                totalOutstanding += outstanding;
+                if (outstanding > 0 && inv.dueDate) {
+                    const dueD = new Date(inv.dueDate + 'T00:00:00');
+                    if (dueD < today) totalOverdue += outstanding;
+                }
+            });
+
+            const fmt = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+            if (summary) summary.innerHTML = `
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:0.72rem;margin-bottom:6px;">
+                    <span style="color:#94a3b8;">Billed: <strong style="color:#e2e8f0;">${fmt(totalBilled)}</strong></span>
+                    <span style="color:#94a3b8;">Paid: <strong style="color:#4ade80;">${fmt(totalPaid)}</strong></span>
+                    <span style="color:#94a3b8;">Outstanding: <strong style="color:#60a5fa;">${fmt(totalOutstanding)}</strong></span>
+                    <span style="color:#94a3b8;">Overdue: <strong style="color:${totalOverdue>0?'#f87171':'#4ade80'};">${fmt(totalOverdue)}</strong></span>
+                </div>`;
+
+            if (list.length === 0) {
+                container.innerHTML = '<div style="color:#888;font-size:0.78rem;padding:8px 0;">No invoices logged yet.</div>';
+                return;
+            }
+
+            container.innerHTML = list.map((inv, idx) => {
+                const amount = parseFloat(inv.amount) || 0;
+                const paid   = parseFloat(inv.paid) || 0;
+                const outstanding = amount - paid;
+                let daysOverdue = 0, overdueLabel = '';
+                if (inv.dueDate && outstanding > 0) {
+                    const dueD = new Date(inv.dueDate + 'T00:00:00');
+                    daysOverdue = Math.floor((today - dueD) / 86400000);
+                    if (daysOverdue > 0) overdueLabel = `<span style="color:#f87171;font-size:0.68rem;">⚠ ${daysOverdue}d overdue</span>`;
+                }
+                const statusColor = outstanding <= 0 ? '#4ade80' : overdueLabel ? '#f87171' : '#60a5fa';
+                const statusLabel = outstanding <= 0 ? '✓ Paid' : overdueLabel ? 'Overdue' : 'Outstanding';
+                const fmt = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+                return `<div style="border:1px solid rgba(255,255,255,0.08);border-radius:5px;padding:7px 8px;margin-bottom:5px;background:rgba(0,0,0,0.2);">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                        <div style="flex:1;">
+                            <div style="font-size:0.8rem;font-weight:600;color:#e2e8f0;">
+                                ${inv.invoiceNum ? `<span style="color:#a5b4fc;font-size:0.73rem;">#${inv.invoiceNum}</span> ` : ''}${inv.desc || '(no description)'}
+                            </div>
+                            <div style="font-size:0.72rem;color:#888;margin-top:2px;">
+                                Submitted: ${inv.submitDate||'—'} · Due: ${inv.dueDate||'—'}
+                                ${inv.project ? ` · ${inv.project}` : ''}
+                            </div>
+                            <div style="font-size:0.72rem;margin-top:3px;display:flex;align-items:center;gap:6px;">
+                                <span>Billed: <strong style="color:#e2e8f0;">${fmt(amount)}</strong></span>
+                                <span>Paid: <strong style="color:#4ade80;">${fmt(paid)}</strong></span>
+                                <span>Owed: <strong style="color:${statusColor};">${fmt(outstanding)}</strong></span>
+                                ${overdueLabel}
+                            </div>
+                        </div>
+                        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;margin-left:6px;">
+                            <span style="font-size:0.68rem;color:${statusColor};">${statusLabel}</span>
+                            <div style="display:flex;gap:3px;">
+                                ${outstanding > 0 ? `<button onclick="markARPaid(${idx})" style="font-size:0.65rem;background:rgba(74,222,128,0.15);border:none;color:#4ade80;border-radius:3px;padding:2px 5px;cursor:pointer;" title="Mark as fully paid">✓ Paid</button>` : ''}
+                                <button onclick="deleteARInvoice(${idx})" style="font-size:0.65rem;background:rgba(255,0,0,0.1);border:none;color:#f87171;border-radius:3px;padding:2px 5px;cursor:pointer;" title="Delete">✕</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function markARPaid(idx) {
+            const list = getARInvoices();
+            if (!list[idx]) return;
+            list[idx].paid = list[idx].amount;
+            list[idx].paidDate = new Date().toISOString().slice(0,10);
+            saveARInvoices(list);
+            renderARTracker();
+        }
+
+        function deleteARInvoice(idx) {
+            const list = getARInvoices();
+            list.splice(idx, 1);
+            saveARInvoices(list);
+            renderARTracker();
+        }
+
+        function addARInvoice() {
+            const invoiceNum  = (document.getElementById('arInvoiceNum')?.value  || '').trim();
+            const desc        = (document.getElementById('arDesc')?.value         || '').trim();
+            const project     = (document.getElementById('arProject')?.value      || document.getElementById('projectName')?.value || '').trim();
+            const amount      = parseFloat(document.getElementById('arAmount')?.value || '0');
+            const submitDate  = (document.getElementById('arSubmitDate')?.value   || '').trim();
+            const dueDate     = (document.getElementById('arDueDate')?.value      || '').trim();
+            if (!desc || isNaN(amount) || amount <= 0) { alert('Enter a description and a valid amount.'); return; }
+            const list = getARInvoices();
+            list.push({ invoiceNum, desc, project, amount, paid: 0, submitDate, dueDate });
+            saveARInvoices(list);
+            document.getElementById('arInvoiceNum').value  = '';
+            document.getElementById('arDesc').value        = '';
+            document.getElementById('arAmount').value      = '';
+            document.getElementById('arSubmitDate').value  = '';
+            document.getElementById('arDueDate').value     = '';
+            renderARTracker();
+        }
+
+        function printARAgingReport() {
+            const list = getARInvoices();
+            const proj = document.getElementById('projectName')?.value || 'All Projects';
+            const co   = localStorage.getItem('oncor_company_name') || 'Oncor Concrete';
+            const today = new Date();
+            const todayLabel = today.toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+            const fmt = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+
+            let totalBilled=0, totalPaid=0, totalOutstanding=0;
+            const rows = list.map((inv, idx) => {
+                const amount = parseFloat(inv.amount)||0;
+                const paid   = parseFloat(inv.paid)||0;
+                const outstanding = amount - paid;
+                totalBilled += amount; totalPaid += paid; totalOutstanding += outstanding;
+                let daysOverdue = 0;
+                if (inv.dueDate && outstanding > 0) {
+                    const dueD = new Date(inv.dueDate + 'T00:00:00');
+                    daysOverdue = Math.floor((today - dueD) / 86400000);
+                }
+                const aging = outstanding <= 0 ? 'Paid' : daysOverdue <= 0 ? 'Current' : daysOverdue <= 30 ? '1-30 days' : daysOverdue <= 60 ? '31-60 days' : daysOverdue <= 90 ? '61-90 days' : '90+ days';
+                const agingBg = outstanding <= 0 ? '#d1fae5' : daysOverdue <= 0 ? '#dbeafe' : daysOverdue <= 30 ? '#fef3c7' : daysOverdue <= 60 ? '#fed7aa' : '#fee2e2';
+                return `<tr style="border-bottom:1px solid #eee;">
+                    <td style="padding:4px 6px;font-size:8.5pt;">${inv.invoiceNum||''}</td>
+                    <td style="padding:4px 6px;font-size:9pt;">${inv.desc||''}</td>
+                    <td style="padding:4px 6px;font-size:8.5pt;color:#555;">${inv.project||''}</td>
+                    <td style="padding:4px 6px;font-size:8.5pt;">${inv.submitDate||''}</td>
+                    <td style="padding:4px 6px;font-size:8.5pt;">${inv.dueDate||''}</td>
+                    <td style="padding:4px 6px;text-align:right;font-size:9pt;">${fmt(amount)}</td>
+                    <td style="padding:4px 6px;text-align:right;font-size:9pt;color:#16a34a;">${fmt(paid)}</td>
+                    <td style="padding:4px 6px;text-align:right;font-size:9pt;font-weight:${outstanding>0?'600':'normal'};color:${outstanding>0?'#b91c1c':'#16a34a'};">${fmt(outstanding)}</td>
+                    <td style="padding:4px 6px;text-align:center;font-size:8pt;background:${agingBg};border-radius:3px;">${aging}</td>
+                </tr>`;
+            }).join('');
+
+            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>AR Aging Report — ${co}</title>
+            <style>body{font-family:Arial,sans-serif;font-size:9.5pt;max-width:980px;margin:0 auto;padding:24px;color:#111;}
+            h1{font-size:13pt;margin:0 0 4px;}h2{font-size:10pt;color:#555;font-weight:normal;margin:0 0 14px;}
+            table{width:100%;border-collapse:collapse;}th{background:#f3f4f6;padding:5px 6px;text-align:left;font-size:8pt;border-bottom:2px solid #ddd;}
+            .total-row td{font-weight:700;background:#f9fafb;border-top:2px solid #ddd;}
+            @media print{body{padding:10px;}}</style></head><body>
+            <h1>Accounts Receivable Aging Report</h1>
+            <h2>${co} · As of ${todayLabel}</h2>
+            <div style="display:flex;gap:16px;margin-bottom:14px;font-size:9.5pt;">
+                <span style="background:#f3f4f6;padding:3px 10px;border-radius:4px;">Total Billed: <strong>${fmt(totalBilled)}</strong></span>
+                <span style="background:#d1fae5;color:#065f46;padding:3px 10px;border-radius:4px;">Paid: <strong>${fmt(totalPaid)}</strong></span>
+                <span style="background:#fee2e2;color:#b91c1c;padding:3px 10px;border-radius:4px;">Outstanding: <strong>${fmt(totalOutstanding)}</strong></span>
+            </div>
+            <table><thead><tr>
+                <th>Inv #</th><th>Description</th><th>Project</th>
+                <th>Submitted</th><th>Due Date</th>
+                <th style="text-align:right;">Billed</th>
+                <th style="text-align:right;">Paid</th>
+                <th style="text-align:right;">Outstanding</th>
+                <th style="text-align:center;">Aging</th>
+            </tr></thead><tbody>
+            ${rows}
+            <tr class="total-row">
+                <td colspan="5" style="padding:5px 6px;font-size:9pt;">TOTALS</td>
+                <td style="padding:5px 6px;text-align:right;font-size:9pt;">${fmt(totalBilled)}</td>
+                <td style="padding:5px 6px;text-align:right;font-size:9pt;color:#16a34a;">${fmt(totalPaid)}</td>
+                <td style="padding:5px 6px;text-align:right;font-size:9pt;color:${totalOutstanding>0?'#b91c1c':'#16a34a'};">${fmt(totalOutstanding)}</td>
+                <td></td>
+            </tr>
+            </tbody></table>
+            <div style="text-align:center;font-size:7.5pt;color:#bbb;margin-top:20px;border-top:1px solid #eee;padding-top:8px;">Generated by Oncor Takeoff Tool · ${todayLabel}</div>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`;
+            const w = window.open('', '_blank');
+            if (w) { w.document.write(html); w.document.close(); }
+        }
+
+        function copyARSummary() {
+            const list = getARInvoices();
+            if (list.length === 0) { alert('No invoices to copy.'); return; }
+            const today = new Date();
+            const fmt = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+            let totalBilled=0, totalPaid=0, totalOutstanding=0, totalOverdue=0;
+            const lines = [`AR SUMMARY — ${new Date().toLocaleDateString()}`, ''];
+            list.forEach((inv, idx) => {
+                const amount = parseFloat(inv.amount)||0;
+                const paid   = parseFloat(inv.paid)||0;
+                const outstanding = amount - paid;
+                totalBilled += amount; totalPaid += paid; totalOutstanding += outstanding;
+                let daysOverdue = 0;
+                if (inv.dueDate && outstanding > 0) {
+                    const dueD = new Date(inv.dueDate + 'T00:00:00');
+                    daysOverdue = Math.floor((today - dueD) / 86400000);
+                    if (daysOverdue > 0) totalOverdue += outstanding;
+                }
+                const status = outstanding <= 0 ? 'PAID' : daysOverdue > 0 ? `OVERDUE ${daysOverdue}d` : 'OUTSTANDING';
+                lines.push(`${String(idx+1).padStart(2,'0')}. ${inv.invoiceNum ? '#'+inv.invoiceNum+' ' : ''}${inv.desc}`);
+                lines.push(`    Billed: ${fmt(amount)} · Paid: ${fmt(paid)} · Owed: ${fmt(outstanding)} [${status}]`);
+                if (inv.dueDate) lines.push(`    Due: ${inv.dueDate}`);
+                lines.push('');
+            });
+            lines.push(`TOTAL BILLED: ${fmt(totalBilled)}`);
+            lines.push(`TOTAL PAID:   ${fmt(totalPaid)}`);
+            lines.push(`OUTSTANDING:  ${fmt(totalOutstanding)}`);
+            lines.push(`OVERDUE:      ${fmt(totalOverdue)}`);
+            navigator.clipboard.writeText(lines.join('\n')).then(() => {
+                const btn = document.getElementById('arCopyBtn');
+                if (btn) { const orig = btn.textContent; btn.textContent = '✅ Copied!'; setTimeout(() => btn.textContent = orig, 2000); }
+            });
+        }
+    </script>
+
+    <!-- AR Tracker Panel HTML injection -->
+    <script>
+        (function() {
+            const wdBtn = document.getElementById('weatherDelayBtn');
+            if (!wdBtn) return;
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'margin-bottom:6px;';
+            wrapper.innerHTML = `
+            <div id="arTrackerPanel" style="display:none;background:rgba(0,0,0,0.25);border:1px solid rgba(74,222,128,0.2);border-radius:8px;padding:10px;font-size:0.82rem;margin-bottom:6px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span style="font-weight:700;color:#4ade80;">💰 AR / Invoice Tracker</span>
+                    <span style="font-size:0.68rem;color:#888;">Track what you've billed &amp; collected</span>
+                </div>
+                <div id="arSummary"></div>
+                <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px;margin-bottom:8px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">
+                        <input id="arInvoiceNum" placeholder="Invoice # (opt)" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.78rem;">
+                        <input id="arAmount" type="number" min="0" step="0.01" placeholder="Amount billed *" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.78rem;">
+                    </div>
+                    <input id="arDesc" placeholder="Description *" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.78rem;margin-bottom:4px;">
+                    <input id="arProject" placeholder="Project name (auto-fills)" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.78rem;margin-bottom:4px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px;">
+                        <div><div style="font-size:0.7rem;color:#888;margin-bottom:2px;">Submitted</div>
+                        <input id="arSubmitDate" type="date" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.78rem;"></div>
+                        <div><div style="font-size:0.7rem;color:#888;margin-bottom:2px;">Due Date</div>
+                        <input id="arDueDate" type="date" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 6px;color:#fff;font-size:0.78rem;"></div>
+                    </div>
+                    <button onclick="addARInvoice()" style="width:100%;background:#16a34a;border:none;color:#fff;border-radius:4px;padding:5px;cursor:pointer;font-size:0.78rem;font-weight:600;">+ Add Invoice</button>
+                </div>
+                <div id="arInvoiceItems"></div>
+                <div style="display:flex;gap:4px;margin-top:6px;">
+                    <button id="arCopyBtn" onclick="copyARSummary()" style="flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.73rem;">📋 Copy Summary</button>
+                    <button onclick="printARAgingReport()" style="flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:0.73rem;">🖨️ AR Aging Report</button>
+                </div>
+            </div>
+            <button onclick="toggleARTracker()" id="arTrackerBtn" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#4ade80;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;">💰 Show AR Tracker</button>`;
+            wdBtn.parentNode.insertBefore(wrapper, wdBtn.nextSibling);
+        })();
     </script>
 
 </body>
