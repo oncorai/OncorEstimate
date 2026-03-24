@@ -37532,3 +37532,541 @@ Retain one (1) copy for your records. Return stamped copies as indicated above.
     if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
 })();
 </script>
+
+<!-- ==================== POUR TIMER ==================== -->
+<script>
+(function(){
+    var BTN_ID='pourTimerBtn', WRAP_ID='pourTimerWrap';
+    var STORE='pourTimerData_v1';
+    function load(){try{return JSON.parse(localStorage.getItem(STORE))||{pours:[]};}catch(e){return{pours:[]};}}
+    function save(d){localStorage.setItem(STORE,JSON.stringify(d));}
+    var _timerIntvl=null;
+
+    function createButton(){
+        var actions=document.getElementById('actions');
+        if(!actions)return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;btn.className='btn';
+        btn.style.cssText='margin:4px 2px;padding:6px 10px;font-size:13px;';
+        btn.textContent='⏱️ Pour Timer';
+        btn.onclick=togglePanel;
+        actions.parentNode.insertBefore(btn,actions.nextSibling);
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;wrap.style.display='none';
+        wrap.style.cssText='background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:12px 0;font-size:13px;';
+        btn.parentNode.insertBefore(wrap,btn.nextSibling);
+        render();
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap||wrap.style.display==='none')return;
+        var d=load();
+        var activeHtml='';
+        d.pours.forEach(function(p,i){
+            if(p.status!=='Active')return;
+            var elapsed=p.lastPause?p.elapsed:(Date.now()-p.startMs+p.elapsed);
+            var window_ms=p.windowMin*60000;
+            var pct=Math.min(100,elapsed/window_ms*100);
+            var remaining=Math.max(0,window_ms-elapsed);
+            var rmMin=Math.floor(remaining/60000);
+            var rmSec=Math.floor((remaining%60000)/1000);
+            var danger=pct>=90;var warn=pct>=70;
+            var barColor=danger?'#dc2626':warn?'#f59e0b':'#16a34a';
+            activeHtml+='<div id="pourTimer_active_'+i+'" style="background:'+(danger?'#fee2e2':warn?'#fef3c7':'#f0fdf4')+';border:2px solid '+(danger?'#dc2626':warn?'#f59e0b':'#16a34a')+';border-radius:8px;padding:12px;margin-bottom:10px;">'
+                +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+                +'<b style="font-size:14px;">'+p.name+'</b>'
+                +'<span style="font-size:11px;color:#6b7280;">'+p.element+' | '+p.totalYd+'yd³ | Window: '+p.windowMin+'min</span>'
+                +'</div>'
+                +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">'
+                +'<div style="font-size:32px;font-weight:700;font-family:monospace;color:'+(danger?'#991b1b':warn?'#92400e':'#166534')+';" id="pourTimerDisp_'+i+'">'+fmtMs(elapsed)+'</div>'
+                +'<div><div style="font-size:11px;color:#6b7280;">Time remaining</div><div style="font-size:22px;font-weight:700;font-family:monospace;color:'+(danger?'#dc2626':warn?'#d97706':'#16a34a')+';" id="pourTimerRem_'+i+'">'+rmMin+'m '+rmSec+'s</div></div>'
+                +(danger?'<div style="background:#dc2626;color:#fff;padding:6px 10px;border-radius:6px;font-weight:700;font-size:12px;">⚠️ COLD JOINT RISK</div>':warn?'<div style="background:#f59e0b;color:#fff;padding:6px 10px;border-radius:6px;font-weight:700;font-size:12px;">⚠️ WINDOW CLOSING</div>':'')
+                +'</div>'
+                +'<div style="background:#e5e7eb;border-radius:6px;height:10px;margin-bottom:8px;"><div style="background:'+barColor+';height:10px;border-radius:6px;width:'+pct+'%;transition:width 1s;"></div></div>'
+                +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+                +'<button onclick="window._pourPause('+i+')" style="background:#6b7280;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px;">⏸ Pause</button>'
+                +'<button onclick="window._pourReset('+i+')" style="background:#d97706;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px;">↺ Reset</button>'
+                +'<button onclick="window._pourEnd('+i+')" style="background:#16a34a;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px;">✓ Pour Complete</button>'
+                +'<button onclick="window._pourDelete('+i+')" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px;">✕ Remove</button>'
+                +'</div>'
+                +'</div>';
+        });
+        d.pours.forEach(function(p,i){
+            if(p.status!=='Paused')return;
+            activeHtml+='<div style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:8px;padding:10px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">'
+                +'<div><b>'+p.name+'</b> <span style="font-size:11px;color:#6b7280;">(Paused)</span> <span style="font-family:monospace;font-weight:600;margin-left:8px;">'+fmtMs(p.elapsed)+'</span></div>'
+                +'<div style="display:flex;gap:6px;">'
+                +'<button onclick="window._pourResume('+i+')" style="background:#1d4ed8;color:#fff;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px;">▶ Resume</button>'
+                +'<button onclick="window._pourDelete('+i+')" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px;">✕</button>'
+                +'</div>'
+                +'</div>';
+        });
+        var completed=d.pours.filter(function(p){return p.status==='Complete';});
+        var compHtml=completed.length>0?'<div style="font-size:12px;color:#6b7280;margin-top:8px;"><b>Completed Pours:</b> '+completed.map(function(p){return p.name+' ('+fmtMs(p.elapsed)+')';}).join(' | ')+'</div>':'';
+
+        wrap.innerHTML='<h3 style="margin:0 0 12px;font-size:15px;">⏱️ Real-Time Pour Timer <span style="font-size:11px;color:#6b7280;">ACI 304R Cold Joint Window</span></h3>'
+            +'<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:8px;margin-bottom:10px;font-size:11px;color:#1e40af;">'
+            +'<b>ACI 304R §5.3:</b> Concrete layers must be placed before initial set of underlying layer — typically 90 minutes in normal conditions, reduced in heat/sun. Cold joint = structural defect. Set your pour window based on conditions (El Paso summer: 45-60 min; cool weather: 90 min).'
+            +'</div>'
+            +activeHtml
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:8px;">'
+            +'<div style="font-weight:600;font-size:12px;margin-bottom:8px;">Start New Pour Timer</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Pour / Zone Name</label><br><input id="pt-name" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;" placeholder="Zone A, North Wing, Building 1..."></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Element Type</label><br><select id="pt-elem" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;">'
+            +'<option>SOG / Flatwork</option><option>Wall</option><option>Column</option><option>Footing</option><option>Grade Beam</option><option>Elevated Deck</option><option>Tilt-Up Bed</option><option>Other</option>'
+            +'</select></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Total yd³</label><br><input type="number" id="pt-yds" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;" placeholder="0"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Cold Joint Window (min)</label><br>'
+            +'<div style="display:flex;gap:4px;">'
+            +'<input type="number" id="pt-window" style="width:80px;border:1px solid #d1d5db;border-radius:4px;padding:5px;" value="90">'
+            +'<button onclick="document.getElementById(\'pt-window\').value=45;" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:11px;">45m</button>'
+            +'<button onclick="document.getElementById(\'pt-window\').value=60;" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:11px;">60m</button>'
+            +'<button onclick="document.getElementById(\'pt-window\').value=90;" style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:11px;">90m</button>'
+            +'</div>'
+            +'</div>'
+            +'</div>'
+            +'<button onclick="window._pourStart()" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;font-weight:700;font-size:13px;">▶ START POUR TIMER</button>'
+            +'</div>'
+            +compHtml;
+        startTick();
+    }
+
+    function fmtMs(ms){
+        var s=Math.floor(ms/1000);var m=Math.floor(s/60);var h=Math.floor(m/60);
+        if(h>0)return h+'h '+(m%60)+'m '+(s%60)+'s';
+        return (m%60)+'m '+(s%60)+'s';
+    }
+
+    function startTick(){
+        if(_timerIntvl)clearInterval(_timerIntvl);
+        var d=load();
+        var hasActive=d.pours.some(function(p){return p.status==='Active';});
+        if(!hasActive)return;
+        _timerIntvl=setInterval(function(){
+            var d2=load();
+            var hasAny=false;
+            d2.pours.forEach(function(p,i){
+                if(p.status!=='Active')return;
+                hasAny=true;
+                var elapsed=Date.now()-p.startMs+p.elapsed;
+                var window_ms=p.windowMin*60000;
+                var pct=Math.min(100,elapsed/window_ms*100);
+                var remaining=Math.max(0,window_ms-elapsed);
+                var rmMin=Math.floor(remaining/60000);
+                var rmSec=Math.floor((remaining%60000)/1000);
+                var disp=document.getElementById('pourTimerDisp_'+i);
+                var rem=document.getElementById('pourTimerRem_'+i);
+                if(disp)disp.textContent=fmtMs(elapsed);
+                if(rem)rem.textContent=rmMin+'m '+rmSec+'s';
+            });
+            if(!hasAny){clearInterval(_timerIntvl);_timerIntvl=null;}
+        },1000);
+    }
+
+    window._pourStart=function(){
+        var name=(document.getElementById('pt-name')||{}).value||'';
+        var elem=(document.getElementById('pt-elem')||{}).value||'';
+        var yds=parseFloat((document.getElementById('pt-yds')||{}).value)||0;
+        var win=parseInt((document.getElementById('pt-window')||{}).value)||90;
+        if(!name){alert('Enter a pour name.');return;}
+        var d=load();
+        d.pours.push({name:name,element:elem,totalYd:yds,windowMin:win,status:'Active',startMs:Date.now(),elapsed:0,lastPause:null});
+        save(d);render();
+    };
+    window._pourPause=function(i){
+        var d=load();if(d.pours[i]&&d.pours[i].status==='Active'){
+            d.pours[i].elapsed=Date.now()-d.pours[i].startMs+d.pours[i].elapsed;
+            d.pours[i].status='Paused';d.pours[i].lastPause=Date.now();
+        }save(d);render();
+    };
+    window._pourResume=function(i){
+        var d=load();if(d.pours[i]&&d.pours[i].status==='Paused'){
+            d.pours[i].startMs=Date.now();d.pours[i].status='Active';d.pours[i].lastPause=null;
+        }save(d);render();
+    };
+    window._pourReset=function(i){
+        if(!confirm('Reset this timer to 0?'))return;
+        var d=load();if(d.pours[i]){d.pours[i].elapsed=0;d.pours[i].startMs=Date.now();d.pours[i].status='Active';}
+        save(d);render();
+    };
+    window._pourEnd=function(i){
+        var d=load();if(d.pours[i]){d.pours[i].elapsed=Date.now()-d.pours[i].startMs+d.pours[i].elapsed;d.pours[i].status='Complete';}
+        save(d);render();
+    };
+    window._pourDelete=function(i){
+        var d=load();d.pours.splice(i,1);save(d);render();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);
+        if(!wrap)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        document.getElementById(BTN_ID).textContent=show?'⏱️ Hide Pour Timer':'⏱️ Pour Timer';
+        if(show)render();else if(_timerIntvl){clearInterval(_timerIntvl);_timerIntvl=null;}
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ==================== VENDOR PAY APPLICATION TRACKER ==================== -->
+<script>
+(function(){
+    var BTN_ID='vendorPayAppBtn', WRAP_ID='vendorPayAppWrap';
+    var STORE='vendorPayApp_v1';
+    function load(){try{return JSON.parse(localStorage.getItem(STORE))||{contracts:[]};}catch(e){return{contracts:[]};}};
+    function save(d){localStorage.setItem(STORE,JSON.stringify(d));}
+    function fmt$(n){return'$'+(parseFloat(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+    function fmtd(s){if(!s)return'—';var d=new Date(s+'T12:00:00');return isNaN(d)?s:d.toLocaleDateString();}
+
+    function createButton(){
+        var actions=document.getElementById('actions');if(!actions)return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;btn.className='btn';
+        btn.style.cssText='margin:4px 2px;padding:6px 10px;font-size:13px;';
+        btn.textContent='💵 Sub Pay App Tracker';
+        btn.onclick=togglePanel;
+        actions.parentNode.insertBefore(btn,actions.nextSibling);
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;wrap.style.display='none';
+        wrap.style.cssText='background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:12px 0;font-size:13px;';
+        btn.parentNode.insertBefore(wrap,btn.nextSibling);
+        render();
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap||wrap.style.display==='none')return;
+        var d=load();
+        var totalCommit=0,totalBilled=0,totalRet=0,totalPaid=0;
+        d.contracts.forEach(function(c){
+            totalCommit+=parseFloat(c.contract)||0;
+            var billed=(c.draws||[]).reduce(function(s,dr){return s+(parseFloat(dr.thisAmount)||0);},0);
+            var retPct=parseFloat(c.retainagePct)||0;
+            var ret=billed*retPct/100;
+            var paid=(c.draws||[]).reduce(function(s,dr){return s+(parseFloat(dr.paid)||0);},0);
+            totalBilled+=billed;totalRet+=ret;totalPaid+=paid;
+        });
+
+        var contractRows=d.contracts.map(function(c,ci){
+            var billed=(c.draws||[]).reduce(function(s,dr){return s+(parseFloat(dr.thisAmount)||0);},0);
+            var retPct=parseFloat(c.retainagePct)||0;
+            var totalRet=billed*retPct/100;
+            var netBilled=billed-totalRet;
+            var paid=(c.draws||[]).reduce(function(s,dr){return s+(parseFloat(dr.paid)||0);},0);
+            var owed=netBilled-paid;
+            var pctComplete=parseFloat(c.contract)>0?Math.round(billed/parseFloat(c.contract)*100):0;
+            var drawRows=(c.draws||[]).map(function(dr,di){
+                var drRet=(parseFloat(dr.thisAmount)||0)*retPct/100;
+                var drNet=(parseFloat(dr.thisAmount)||0)-drRet;
+                return '<tr style="background:#f9fafb;">'
+                    +'<td style="padding:3px 6px;font-size:11px;">Draw '+dr.drawNum+'</td>'
+                    +'<td style="padding:3px 6px;font-size:11px;">'+fmtd(dr.date)+'</td>'
+                    +'<td style="padding:3px 6px;font-size:11px;">'+fmt$(dr.thisAmount)+'</td>'
+                    +'<td style="padding:3px 6px;font-size:11px;color:#dc2626;">'+fmt$(drRet)+'</td>'
+                    +'<td style="padding:3px 6px;font-size:11px;">'+fmt$(drNet)+'</td>'
+                    +'<td style="padding:3px 6px;font-size:11px;">'+fmt$(dr.paid||0)+'</td>'
+                    +'<td style="padding:3px 6px;font-size:11px;">'+dr.lienWaiver+'</td>'
+                    +'<td style="padding:3px 6px;">'
+                    +'<button onclick="window._vpaMarkPaid('+ci+','+di+')" style="background:#d1fae5;color:#065f46;border:none;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:10px;">✓ Paid</button> '
+                    +'<button onclick="window._vpaDeleteDraw('+ci+','+di+')" style="background:#fee2e2;color:#991b1b;border:none;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:10px;">✕</button>'
+                    +'</td>'
+                    +'</tr>';
+            }).join('');
+            var drawInputHtml='<tr><td colspan="8" style="padding:8px 6px;background:#eff6ff;">'
+                +'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;">'
+                +'<div><label style="font-size:10px;color:#6b7280;">Draw #</label><br><input type="number" id="vpa-draw-num-'+ci+'" value="'+((c.draws||[]).length+1)+'" style="width:55px;border:1px solid #d1d5db;border-radius:4px;padding:3px;font-size:11px;"></div>'
+                +'<div><label style="font-size:10px;color:#6b7280;">Date</label><br><input type="date" id="vpa-draw-date-'+ci+'" style="width:130px;border:1px solid #d1d5db;border-radius:4px;padding:3px;font-size:11px;"></div>'
+                +'<div><label style="font-size:10px;color:#6b7280;">This Application $</label><br><input type="number" id="vpa-draw-amt-'+ci+'" style="width:100px;border:1px solid #d1d5db;border-radius:4px;padding:3px;font-size:11px;" placeholder="0.00"></div>'
+                +'<div><label style="font-size:10px;color:#6b7280;">Lien Waiver</label><br><select id="vpa-draw-lw-'+ci+'" style="border:1px solid #d1d5db;border-radius:4px;padding:3px;font-size:11px;">'
+                +'<option>Cond. Partial</option><option>Cond. Final</option><option>Uncond. Partial</option><option>Uncond. Final</option><option>Pending</option><option>N/A</option>'
+                +'</select></div>'
+                +'<button onclick="window._vpaAddDraw('+ci+')" style="background:#1d4ed8;color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:600;">+ Add Draw</button>'
+                +'</div></td></tr>';
+
+            return'<div style="border:1px solid #e5e7eb;border-radius:8px;margin-bottom:12px;overflow:hidden;">'
+                +'<div style="background:#f3f4f6;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;">'
+                +'<div><b style="font-size:14px;">'+c.sub+'</b> <span style="font-size:11px;color:#6b7280;margin-left:8px;">'+c.scope+' | '+c.project+'</span></div>'
+                +'<div style="display:flex;gap:8px;align-items:center;">'
+                +'<span style="font-size:11px;background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:12px;">'+pctComplete+'% billed</span>'
+                +'<button onclick="window._vpaDeleteContract('+ci+')" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:11px;">✕ Remove</button>'
+                +'</div></div>'
+                +'<div style="padding:10px 14px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;border-bottom:1px solid #e5e7eb;">'
+                +'<div><div style="font-size:10px;color:#6b7280;">Contract</div><div style="font-weight:700;font-size:15px;">'+fmt$(c.contract)+'</div></div>'
+                +'<div><div style="font-size:10px;color:#6b7280;">Billed (gross)</div><div style="font-weight:700;font-size:15px;">'+fmt$(billed)+'</div></div>'
+                +'<div><div style="font-size:10px;color:#6b7280;">Retainage Held ('+retPct+'%)</div><div style="font-weight:700;font-size:15px;color:#dc2626;">'+fmt$(totalRet)+'</div></div>'
+                +'<div><div style="font-size:10px;color:#6b7280;">Owed Net</div><div style="font-weight:700;font-size:15px;color:'+(owed>0?'#d97706':'#16a34a')+';">'+fmt$(owed)+'</div></div>'
+                +'</div>'
+                +(c.draws&&c.draws.length>0?'<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
+                    +'<tr style="background:#e5e7eb;"><th style="padding:4px 6px;text-align:left;font-size:10px;">Draw</th><th style="padding:4px 6px;font-size:10px;">Date</th><th style="padding:4px 6px;font-size:10px;">This App</th><th style="padding:4px 6px;font-size:10px;">Retainage</th><th style="padding:4px 6px;font-size:10px;">Net Due</th><th style="padding:4px 6px;font-size:10px;">Paid</th><th style="padding:4px 6px;font-size:10px;">Lien Waiver</th><th></th></tr>'
+                    +drawRows+drawInputHtml
+                    +'</table></div>':'<div style="padding:8px 14px;background:#eff6ff;"><table style="width:100%;border-collapse:collapse;">'+drawInputHtml+'</table></div>')
+                +'</div>';
+        }).join('');
+
+        var pendingWaiver=0;
+        d.contracts.forEach(function(c){(c.draws||[]).forEach(function(dr){if(dr.lienWaiver==='Pending'&&parseFloat(dr.paid||0)>0)pendingWaiver++;});});
+
+        wrap.innerHTML='<h3 style="margin:0 0 12px;font-size:15px;">💵 Sub Pay Application Tracker <span style="font-size:11px;color:#6b7280;">AIA G702/G703 style</span></h3>'
+            +(pendingWaiver>0?'<div style="background:#fee2e2;color:#991b1b;padding:8px;border-radius:4px;margin-bottom:10px;font-weight:600;">⚠️ '+pendingWaiver+' draw(s) paid without received lien waivers — payment hold risk</div>':'')
+            +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">'
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:8px;"><div style="font-size:11px;color:#6b7280;">Total Commitments</div><div style="font-size:18px;font-weight:700;">'+fmt$(totalCommit)+'</div></div>'
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:8px;"><div style="font-size:11px;color:#6b7280;">Total Billed (Gross)</div><div style="font-size:18px;font-weight:700;">'+fmt$(totalBilled)+'</div></div>'
+            +'<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:8px;"><div style="font-size:11px;color:#6b7280;">Retainage Held</div><div style="font-size:18px;font-weight:700;color:#92400e;">'+fmt$(totalRet)+'</div></div>'
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:8px;"><div style="font-size:11px;color:#6b7280;">Total Paid Out</div><div style="font-size:18px;font-weight:700;color:#16a34a;">'+fmt$(totalPaid)+'</div></div>'
+            +'</div>'
+            +contractRows
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;">'
+            +'<div style="font-weight:600;font-size:12px;margin-bottom:8px;">Add Sub Contract</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Sub / Vendor</label><br><input id="vpa-sub" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;" placeholder="ABC Pumping"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Scope</label><br><select id="vpa-scope" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;">'
+            +'<option>Concrete Pump</option><option>Rebar Fab</option><option>Forming</option><option>Saw Cutting</option><option>Post-Tension</option><option>Testing Lab</option><option>Earthwork</option><option>Vapor Barrier</option><option>Epoxy Dowels</option><option>Other</option>'
+            +'</select></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Project</label><br><input id="vpa-proj" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;" placeholder="Project name"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Contract Amount ($)</label><br><input type="number" id="vpa-contract" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;"></div>'
+            +'</div>'
+            +'<div style="display:flex;gap:8px;align-items:flex-end;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Retainage %</label><br><input type="number" id="vpa-ret" style="width:80px;border:1px solid #d1d5db;border-radius:4px;padding:5px;" value="10" step="0.5"></div>'
+            +'<button onclick="window._vpaAddContract()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:7px 18px;cursor:pointer;font-weight:600;">+ Add Contract</button>'
+            +'<button onclick="window._vpaPrint()" style="background:#6b7280;color:#fff;border:none;border-radius:6px;padding:7px 18px;cursor:pointer;font-size:12px;">🖨 Print Report</button>'
+            +'</div>'
+            +'</div>';
+    }
+
+    window._vpaAddContract=function(){
+        var sub=(document.getElementById('vpa-sub')||{}).value||'';
+        var scope=(document.getElementById('vpa-scope')||{}).value||'';
+        var proj=(document.getElementById('vpa-proj')||{}).value||'';
+        var contract=parseFloat((document.getElementById('vpa-contract')||{}).value)||0;
+        var ret=parseFloat((document.getElementById('vpa-ret')||{}).value)||10;
+        if(!sub||!contract){alert('Enter sub name and contract amount.');return;}
+        var d=load();d.contracts.push({sub:sub,scope:scope,project:proj,contract:contract,retainagePct:ret,draws:[]});
+        save(d);render();
+    };
+    window._vpaAddDraw=function(ci){
+        var num=(document.getElementById('vpa-draw-num-'+ci)||{}).value||'1';
+        var date=(document.getElementById('vpa-draw-date-'+ci)||{}).value||'';
+        var amt=parseFloat((document.getElementById('vpa-draw-amt-'+ci)||{}).value)||0;
+        var lw=(document.getElementById('vpa-draw-lw-'+ci)||{}).value||'Pending';
+        if(!amt){alert('Enter draw amount.');return;}
+        var d=load();if(!d.contracts[ci])return;
+        d.contracts[ci].draws=d.contracts[ci].draws||[];
+        d.contracts[ci].draws.push({drawNum:num,date:date,thisAmount:amt,paid:0,lienWaiver:lw});
+        save(d);render();
+    };
+    window._vpaMarkPaid=function(ci,di){
+        var d=load();if(!d.contracts[ci]||!d.contracts[ci].draws[di])return;
+        var dr=d.contracts[ci].draws[di];
+        var retPct=parseFloat(d.contracts[ci].retainagePct)||0;
+        var netDue=(parseFloat(dr.thisAmount)||0)*(1-retPct/100);
+        d.contracts[ci].draws[di].paid=netDue;
+        save(d);render();
+    };
+    window._vpaDeleteDraw=function(ci,di){
+        var d=load();if(!d.contracts[ci])return;
+        d.contracts[ci].draws.splice(di,1);save(d);render();
+    };
+    window._vpaDeleteContract=function(ci){
+        if(!confirm('Remove this sub contract?'))return;
+        var d=load();d.contracts.splice(ci,1);save(d);render();
+    };
+    window._vpaPrint=function(){
+        var d=load();
+        var rows=d.contracts.map(function(c){
+            var billed=(c.draws||[]).reduce(function(s,dr){return s+(parseFloat(dr.thisAmount)||0);},0);
+            var retPct=parseFloat(c.retainagePct)||0;
+            var ret=billed*retPct/100;
+            var paid=(c.draws||[]).reduce(function(s,dr){return s+(parseFloat(dr.paid)||0);},0);
+            var owed=billed-ret-paid;
+            var drawDetail=(c.draws||[]).map(function(dr){
+                var drRet=(parseFloat(dr.thisAmount)||0)*retPct/100;
+                return'<tr style="background:#f9f9f9;"><td colspan="2" style="padding:2px 6px;font-size:8px;">Draw '+dr.drawNum+' | '+fmtd(dr.date)+'</td><td>'+fmt$(dr.thisAmount)+'</td><td>'+fmt$(drRet)+'</td><td>'+fmt$(parseFloat(dr.thisAmount)-drRet)+'</td><td>'+fmt$(dr.paid||0)+'</td><td>'+dr.lienWaiver+'</td><td></td></tr>';
+            }).join('');
+            return'<tr style="font-weight:600;border-top:2px solid #000;">'
+                +'<td>'+c.sub+'</td><td>'+c.scope+' | '+c.project+'</td>'
+                +'<td>'+fmt$(c.contract)+'</td><td style="color:#dc2626;">'+fmt$(ret)+'</td><td>'+fmt$(billed-ret)+'</td><td style="color:#16a34a;">'+fmt$(paid)+'</td>'
+                +'<td style="color:'+(owed>0?'#d97706':'#16a34a')+';">'+fmt$(owed)+'</td><td>'+retPct+'%</td></tr>'+drawDetail;
+        }).join('');
+        var w=window.open('','_blank','width=1100,height=700');
+        w.document.write('<!DOCTYPE html><html><head><title>Sub Pay Application Tracker</title><style>body{font-family:Arial,sans-serif;font-size:10px;padding:16px;}h1{font-size:13px;border-bottom:2px solid #000;}table{width:100%;border-collapse:collapse;margin:8px 0;}th,td{border:1px solid #999;padding:3px 5px;font-size:9px;}th{background:#f3f4f6;}.sig td{height:40px;}.note{font-size:8px;color:#666;font-style:italic;}@media print{button{display:none;}}</style></head><body>'
+            +'<h1>SUBCONTRACTOR PAY APPLICATION TRACKER</h1>'
+            +'<p>Date: '+new Date().toLocaleDateString()+' | Contracts: '+d.contracts.length+'</p>'
+            +'<table><tr><th>Sub / Vendor</th><th>Scope / Project</th><th>Contract</th><th>Retainage Held</th><th>Net Billed</th><th>Paid</th><th>Owed</th><th>Ret%</th></tr>'+rows+'</table>'
+            +'<p class="note">Pay-when-paid clause applies per subcontract agreement. Retainage released per contract terms upon project completion and lien waiver exchange. TX Property Code §53: conditional lien waivers must accompany each payment application.</p>'
+            +'<table class="sig"><tr><th>Project Manager</th><th>Accounts Payable</th><th>Controller / Principal</th></tr><tr style="height:40px;"><td></td><td></td><td></td></tr></table>'
+            +'<button onclick="window.print()" style="margin-top:12px;padding:8px 20px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;">Print</button>'
+            +'</body></html>');
+        w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        document.getElementById(BTN_ID).textContent=show?'💵 Hide Sub Pay App Tracker':'💵 Sub Pay App Tracker';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ==================== DAILY WEATHER LOG ==================== -->
+<script>
+(function(){
+    var BTN_ID='weatherLogBtn', WRAP_ID='weatherLogWrap';
+    var STORE='weatherLog_v1';
+    function load(){try{return JSON.parse(localStorage.getItem(STORE))||{project:'',logs:[]};}catch(e){return{project:'',logs:[]};}}
+    function save(d){localStorage.setItem(STORE,JSON.stringify(d));}
+    function fmtd(s){if(!s)return'—';var d=new Date(s+'T12:00:00');return isNaN(d)?s:d.toLocaleDateString();}
+
+    var CONDITIONS=['Clear','Partly Cloudy','Overcast','Light Rain','Heavy Rain','Thunderstorm','High Wind (>20mph)','Dust Storm','Fog','Snow/Ice','Extreme Heat (>100°F)','Cold (≤32°F)'];
+    var IMPACT=['No Impact','Minor Delay','Significant Delay','Work Stopped','Pour Cancelled','Restricted Operations'];
+
+    function createButton(){
+        var actions=document.getElementById('actions');if(!actions)return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;btn.className='btn';
+        btn.style.cssText='margin:4px 2px;padding:6px 10px;font-size:13px;';
+        btn.textContent='🌤️ Daily Weather Log';
+        btn.onclick=togglePanel;
+        actions.parentNode.insertBefore(btn,actions.nextSibling);
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;wrap.style.display='none';
+        wrap.style.cssText='background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:12px 0;font-size:13px;';
+        btn.parentNode.insertBefore(wrap,btn.nextSibling);
+        render();
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap||wrap.style.display==='none')return;
+        var d=load();
+        var delayDays=d.logs.filter(function(l){return l.impact==='Significant Delay'||l.impact==='Work Stopped'||l.impact==='Pour Cancelled';}).length;
+        var stopDays=d.logs.filter(function(l){return l.impact==='Work Stopped'||l.impact==='Pour Cancelled';}).length;
+        var totalDelay=d.logs.reduce(function(s,l){return s+(parseFloat(l.delayHrs)||0);},0);
+        var unnotified=d.logs.filter(function(l){return (l.impact==='Significant Delay'||l.impact==='Work Stopped'||l.impact==='Pour Cancelled')&&!l.gcNotified;}).length;
+
+        var rows=d.logs.slice().reverse().map(function(l,ri){
+            var i=d.logs.length-1-ri;
+            var needNotice=l.impact==='Significant Delay'||l.impact==='Work Stopped'||l.impact==='Pour Cancelled';
+            var border=stopDays>0&&needNotice?'border-left:4px solid #dc2626;':l.impact==='Minor Delay'?'border-left:4px solid #f59e0b;':'';
+            return'<tr style="'+border+'">'
+                +'<td style="padding:5px 6px;font-weight:600;">'+fmtd(l.date)+'</td>'
+                +'<td style="padding:5px 6px;font-size:11px;">'+l.condition+'</td>'
+                +'<td style="padding:5px 6px;font-size:11px;">'+l.hiTemp+'°F / '+l.loTemp+'°F</td>'
+                +'<td style="padding:5px 6px;font-size:11px;">'+l.windMph+' mph</td>'
+                +'<td style="padding:5px 6px;font-size:11px;">'+l.humidity+'%</td>'
+                +'<td style="padding:5px 6px;">'
+                +'<span style="background:'+(l.impact==='No Impact'?'#f0fdf4':l.impact==='Minor Delay'?'#fef3c7':l.impact==='Significant Delay'?'#fed7aa':l.impact==='Work Stopped'||l.impact==='Pour Cancelled'?'#fee2e2':'#f3f4f6')+';'
+                +'color:'+(l.impact==='No Impact'?'#166534':l.impact==='Minor Delay'?'#92400e':l.impact==='Significant Delay'?'#c2410c':l.impact==='Work Stopped'||l.impact==='Pour Cancelled'?'#991b1b':'#374151')+';'
+                +'padding:1px 6px;border-radius:8px;font-size:10px;font-weight:600;">'+l.impact+'</span>'
+                +'</td>'
+                +'<td style="padding:5px 6px;font-size:11px;">'+l.delayHrs+'h</td>'
+                +'<td style="padding:5px 6px;font-size:11px;">'+(needNotice?(l.gcNotified?'<span style="color:#16a34a;font-weight:600;">✓ '+l.gcNotified+'</span>':'<span style="color:#dc2626;font-weight:600;">⚠ REQUIRED</span>'):'N/A')+'</td>'
+                +'<td style="padding:5px 6px;font-size:11px;">'+l.notes+'</td>'
+                +'<td style="padding:5px 6px;"><button onclick="window._wxDelete('+i+')" style="background:#fee2e2;border:none;border-radius:3px;padding:2px 6px;cursor:pointer;color:#991b1b;font-size:10px;">✕</button></td>'
+                +'</tr>';
+        }).join('');
+
+        wrap.innerHTML='<h3 style="margin:0 0 12px;font-size:15px;">🌤️ Daily Weather Log <span style="font-size:11px;color:#6b7280;">Force Majeure / Delay Claims</span></h3>'
+            +(unnotified>0?'<div style="background:#fee2e2;color:#991b1b;padding:8px;border-radius:4px;margin-bottom:8px;font-weight:600;">⚠️ '+unnotified+' delay event(s) without GC notification — most contracts require written notice within 24-48 hours to preserve time extension rights</div>':'')
+            +'<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:8px;margin-bottom:10px;font-size:11px;color:#1e40af;">'
+            +'<b>Contract Notice Requirement:</b> Most commercial contracts (AIA A201 §8.3, ConsensusDocs) require written notice of weather delays within 24-48 hours to preserve time extension and potential cost claims. Failure to give timely notice = waiver of the claim. El Paso: extreme heat ACI 305R (>90°F/evap rate >0.20 lb/ft²/hr) and freeze events ACI 306R (<40°F) are qualifying force majeure conditions in most contracts.'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">'
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:8px;"><div style="font-size:11px;color:#6b7280;">Days Logged</div><div style="font-size:18px;font-weight:700;">'+d.logs.length+'</div></div>'
+            +'<div style="background:'+(delayDays>0?'#fef3c7':'#f9fafb')+';border:1px solid '+(delayDays>0?'#fcd34d':'#e5e7eb')+';border-radius:6px;padding:8px;"><div style="font-size:11px;color:#6b7280;">Delay Days</div><div style="font-size:18px;font-weight:700;color:'+(delayDays>0?'#92400e':'#6b7280')+';">'+delayDays+'</div></div>'
+            +'<div style="background:'+(stopDays>0?'#fee2e2':'#f9fafb')+';border:1px solid '+(stopDays>0?'#fca5a5':'#e5e7eb')+';border-radius:6px;padding:8px;"><div style="font-size:11px;color:#6b7280;">Work Stopped Days</div><div style="font-size:18px;font-weight:700;color:'+(stopDays>0?'#991b1b':'#6b7280')+';">'+stopDays+'</div></div>'
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:8px;"><div style="font-size:11px;color:#6b7280;">Total Hours Lost</div><div style="font-size:18px;font-weight:700;">'+totalDelay.toFixed(1)+'h</div></div>'
+            +'</div>'
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:12px;">'
+            +'<div style="font-weight:600;font-size:12px;margin-bottom:8px;">Log Weather Event</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Date</label><br><input type="date" id="wx-date" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Condition</label><br><select id="wx-cond" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;">'+CONDITIONS.map(function(c){return'<option>'+c+'</option>';}).join('')+'</select></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">High Temp (°F)</label><br><input type="number" id="wx-hi" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;" placeholder="95"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Low Temp (°F)</label><br><input type="number" id="wx-lo" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;" placeholder="72"></div>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Wind (mph)</label><br><input type="number" id="wx-wind" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;" placeholder="0"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Humidity (%)</label><br><input type="number" id="wx-hum" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;" placeholder="30"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Impact</label><br><select id="wx-impact" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;">'+IMPACT.map(function(i){return'<option>'+i+'</option>';}).join('')+'</select></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Hours Delayed</label><br><input type="number" id="wx-hrs" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;" value="0" step="0.5"></div>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">GC Notified (name/time, if required)</label><br><input id="wx-gcn" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;" placeholder="John Smith, 8:15am via email"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Notes</label><br><input id="wx-notes" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;" placeholder="Details, ACI thresholds triggered..."></div>'
+            +'</div>'
+            +'<div style="display:flex;gap:8px;">'
+            +'<button onclick="window._wxAdd()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:7px 18px;cursor:pointer;font-weight:600;">Log Weather Event</button>'
+            +'<button onclick="window._wxPrint()" style="background:#6b7280;color:#fff;border:none;border-radius:6px;padding:7px 18px;cursor:pointer;font-size:12px;">🖨 Print Delay Log</button>'
+            +'<button onclick="window._wxCopy()" style="background:#e5e7eb;color:#374151;border:none;border-radius:6px;padding:7px 18px;cursor:pointer;font-size:12px;">📋 Copy</button>'
+            +'</div>'
+            +'</div>'
+            +(d.logs.length>0?'<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
+                +'<tr style="background:#f3f4f6;"><th style="padding:4px 6px;text-align:left;">Date</th><th style="padding:4px 6px;">Condition</th><th style="padding:4px 6px;">Hi/Lo °F</th><th style="padding:4px 6px;">Wind</th><th style="padding:4px 6px;">Humidity</th><th style="padding:4px 6px;">Impact</th><th style="padding:4px 6px;">Hrs Lost</th><th style="padding:4px 6px;">GC Notified</th><th style="padding:4px 6px;">Notes</th><th></th></tr>'
+                +rows+'</table></div>':'<p style="color:#9ca3af;text-align:center;margin:20px 0;">No weather events logged yet</p>');
+    }
+
+    window._wxAdd=function(){
+        var date=(document.getElementById('wx-date')||{}).value||'';
+        var cond=(document.getElementById('wx-cond')||{}).value||'';
+        var hi=(document.getElementById('wx-hi')||{}).value||'';
+        var lo=(document.getElementById('wx-lo')||{}).value||'';
+        var wind=(document.getElementById('wx-wind')||{}).value||'0';
+        var hum=(document.getElementById('wx-hum')||{}).value||'';
+        var impact=(document.getElementById('wx-impact')||{}).value||'No Impact';
+        var hrs=(document.getElementById('wx-hrs')||{}).value||'0';
+        var gcn=(document.getElementById('wx-gcn')||{}).value||'';
+        var notes=(document.getElementById('wx-notes')||{}).value||'';
+        if(!date){alert('Enter date.');return;}
+        var d=load();
+        d.logs.push({date:date,condition:cond,hiTemp:hi,loTemp:lo,windMph:wind,humidity:hum,impact:impact,delayHrs:hrs,gcNotified:gcn,notes:notes});
+        save(d);render();
+    };
+    window._wxDelete=function(i){
+        var d=load();d.logs.splice(i,1);save(d);render();
+    };
+    window._wxCopy=function(){
+        var d=load();
+        var lines=['DAILY WEATHER LOG','Project: '+(d.project||'—'),'Generated: '+new Date().toLocaleDateString(),''];
+        d.logs.forEach(function(l){
+            lines.push(fmtd(l.date)+' | '+l.condition+' | Hi:'+l.hiTemp+'°F Lo:'+l.loTemp+'°F | Wind:'+l.windMph+'mph | '+l.impact+(l.delayHrs>0?' ('+l.delayHrs+'h lost)':'')+(l.gcNotified?' | GC: '+l.gcNotified:'')+(l.notes?' | '+l.notes:''));
+        });
+        navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Copied!');});
+    };
+    window._wxPrint=function(){
+        var d=load();
+        var delayDays=d.logs.filter(function(l){return l.impact==='Significant Delay'||l.impact==='Work Stopped'||l.impact==='Pour Cancelled';}).length;
+        var totalHrs=d.logs.reduce(function(s,l){return s+(parseFloat(l.delayHrs)||0);},0);
+        var rows=d.logs.map(function(l){
+            var needNotice=l.impact==='Significant Delay'||l.impact==='Work Stopped'||l.impact==='Pour Cancelled';
+            return'<tr style="'+(needNotice&&!l.gcNotified?'background:#fee2e2;':'needNotice&&l.gcNotified'?'background:#fef3c7;':'')+'">'
+                +'<td>'+fmtd(l.date)+'</td><td>'+l.condition+'</td>'
+                +'<td>'+l.hiTemp+'°F / '+l.loTemp+'°F</td><td>'+l.windMph+' mph</td><td>'+l.humidity+'%</td>'
+                +'<td style="font-weight:600;">'+l.impact+'</td><td>'+l.delayHrs+'h</td>'
+                +'<td>'+(l.gcNotified||'—')+'</td><td>'+l.notes+'</td>'
+                +'</tr>';
+        }).join('');
+        var w=window.open('','_blank','width=1100,height=700');
+        w.document.write('<!DOCTYPE html><html><head><title>Weather Delay Log</title><style>body{font-family:Arial,sans-serif;font-size:10px;padding:16px;}h1{font-size:13px;border-bottom:2px solid #000;}table{width:100%;border-collapse:collapse;margin:8px 0;}th,td{border:1px solid #999;padding:3px 5px;font-size:9px;}th{background:#f3f4f6;}.sig td{height:40px;}.note{font-size:8px;color:#666;font-style:italic;}@media print{button{display:none;}}</style></head><body>'
+            +'<h1>DAILY WEATHER &amp; DELAY LOG — FORCE MAJEURE RECORD</h1>'
+            +'<p>Project: <b>'+(d.project||'—')+'</b> | Generated: '+new Date().toLocaleDateString()+' | Total Events: '+d.logs.length+' | Delay Days: '+delayDays+' | Total Hours Lost: '+totalHrs.toFixed(1)+'h</p>'
+            +'<table><tr><th>Date</th><th>Condition</th><th>Hi/Lo Temp</th><th>Wind</th><th>Humidity</th><th>Impact</th><th>Hrs Lost</th><th>GC Notified</th><th>Notes</th></tr>'+rows+'</table>'
+            +'<p class="note">ACI 305R-10 Hot Weather: evaporation rate >0.20 lb/ft²/hr or ambient >90°F requires hot weather plan. ACI 306R-16 Cold Weather: concrete or ambient ≤40°F requires cold weather plan; ≤32°F = freeze risk. AIA A201-2017 §8.3: contractor entitled to time extension for adverse weather exceeding historical averages — requires contemporaneous notice per §15.1.3 (21 days). ConsensusDocs 200 §6.3.1: written notice within 7 days of delay discovery. Failure to give timely notice constitutes waiver. TX common law: force majeure defense requires documentation of event, impact, and notice. 5-year records retention recommended.</p>'
+            +'<table class="sig"><tr><th>Foreman / Superintendent</th><th>Project Manager</th><th>GC Representative (if provided)</th></tr><tr style="height:40px;"><td></td><td></td><td></td></tr></table>'
+            +'<button onclick="window.print()" style="margin-top:12px;padding:8px 20px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;">Print</button>'
+            +'</body></html>');
+        w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        document.getElementById(BTN_ID).textContent=show?'🌤️ Hide Weather Log':'🌤️ Daily Weather Log';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
