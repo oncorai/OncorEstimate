@@ -36949,3 +36949,586 @@ Retain one (1) copy for your records. Return stamped copies as indicated above.
     if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
 })();
 </script>
+
+<!-- ============================================================
+     POST-TENSION STRESSING LOG — PTI DC10.5-12 / ACI 318-19 §26.10
+     ============================================================ -->
+<script>
+(function(){
+    var BTN_ID='pt-stress-btn';
+    var WRAP_ID='pt-stress-wrap';
+    var KEY='oncor_pt_stressing_v1';
+
+    function load(){try{return JSON.parse(localStorage.getItem(KEY))||{project:'',element:'',tendons:[]};}catch(e){return{project:'',element:'',tendons:[]};}}
+    function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+    function fmtd(s){if(!s)return'—';var d=new Date(s+'T12:00:00');return isNaN(d)?s:d.toLocaleDateString();}
+    function $id(id){return document.getElementById(id);}
+
+    var PROFILES=['Flat','Single parabola','Harped/kinked','Banded','Double parabola','Custom'];
+
+    function createButton(){
+        var actions=document.getElementById('actions');
+        if(!actions)return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.className='btn';
+        btn.style.cssText='margin:4px 2px;padding:6px 10px;font-size:13px;';
+        btn.textContent='🔩 PT Stressing Log';
+        btn.onclick=togglePanel;
+        actions.parentNode.insertBefore(btn,actions.nextSibling);
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.display='none';
+        wrap.style.cssText='background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:12px 0;font-size:13px;';
+        btn.parentNode.insertBefore(wrap,btn.nextSibling);
+        render();
+    }
+
+    function render(){
+        var wrap=$id(WRAP_ID);if(!wrap||wrap.style.display==='none')return;
+        var d=load();
+        var passCount=0,failCount=0;
+        d.tendons.forEach(function(t){
+            var v=+t.varPct;
+            if(!isNaN(v)){if(Math.abs(v)<=7)passCount++;else failCount++;}
+        });
+        var alertHtml=failCount>0?'<div style="background:#fee2e2;color:#991b1b;padding:8px;border-radius:4px;margin-bottom:8px;font-weight:600;">⚠️ '+failCount+' tendon(s) exceed PTI DC10.5 ±7% elongation tolerance — Engineering review required</div>':'';
+        var clearHtml=d.tendons.length>0&&failCount===0?'<div style="background:#dcfce7;color:#166534;padding:8px;border-radius:4px;margin-bottom:8px;font-weight:600;">✅ All tendons within PTI DC10.5 elongation tolerance</div>':'';
+
+        var rows=d.tendons.map(function(t,i){
+            var v=+t.varPct;var ok=!isNaN(v)&&Math.abs(v)<=7;
+            var clr=isNaN(v)?'#6b7280':ok?'#166534':'#991b1b';
+            var badge=isNaN(v)?'—':ok?'<span style="background:#dcfce7;color:#166534;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;">PASS</span>':'<span style="background:#fee2e2;color:#991b1b;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;">FAIL</span>';
+            return '<tr style="border-bottom:1px solid #e5e7eb;"><td style="padding:4px 6px;">'+t.mark+'</td>'
+                +'<td style="padding:4px 6px;">'+t.profile+'</td>'
+                +'<td style="padding:4px 6px;">'+fmtd(t.date)+'</td>'
+                +'<td style="padding:4px 6px;">'+t.jackSerial+'</td>'
+                +'<td style="padding:4px 6px;">'+t.gaugePsi+' psi</td>'
+                +'<td style="padding:4px 6px;">'+t.specElong+'"</td>'
+                +'<td style="padding:4px 6px;">'+t.measElong+'"</td>'
+                +'<td style="padding:4px 6px;color:'+clr+';">'+(isNaN(v)?'—':(v>0?'+':'')+v.toFixed(1)+'%')+'</td>'
+                +'<td style="padding:4px 6px;">'+t.lockoffPsi+' psi</td>'
+                +'<td style="padding:4px 6px;">'+t.tech+'</td>'
+                +'<td style="padding:4px 6px;">'+badge+'</td>'
+                +'<td style="padding:4px 6px;"><button onclick="window._ptStressDelete('+i+')" style="background:#fee2e2;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;color:#991b1b;">✕</button></td>'
+                +'</tr>';
+        }).join('');
+
+        wrap.innerHTML='<h3 style="margin:0 0 12px;font-size:15px;">🔩 Post-Tension Stressing Log <span style="font-size:11px;color:#6b7280;">PTI DC10.5-12 / ACI 318-19 §26.10</span></h3>'
+            +alertHtml+clearHtml
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Project</label><br><input id="pts-proj" value="'+d.project+'" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;" placeholder="Project name"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Element / Area</label><br><input id="pts-elem" value="'+d.element+'" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;" placeholder="e.g. Level 2 PT Slab, Grid A-D"></div>'
+            +'</div>'
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px;margin-bottom:12px;">'
+            +'<div style="font-weight:600;font-size:12px;margin-bottom:8px;">Log Stressing Event</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Tendon Mark</label><br><input id="pts-mark" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;" placeholder="T-1A"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Profile</label><br><select id="pts-profile" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;">'+PROFILES.map(function(p){return'<option>'+p+'</option>';}).join('')+'</select></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Date</label><br><input type="date" id="pts-date" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;"></div>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:6px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Jack Serial #</label><br><input id="pts-jack" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;" placeholder="SN-1234"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Gauge Pressure (psi)</label><br><input type="number" id="pts-gauge" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;" placeholder="33200"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Spec Elongation (in)</label><br><input type="number" id="pts-spece" step="0.1" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;" placeholder="6.0"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Measured Elong (in)</label><br><input type="number" id="pts-meae" step="0.1" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;" placeholder="6.2"></div>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Lock-off Pressure (psi)</label><br><input type="number" id="pts-lockoff" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;" placeholder="29800"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Stressing Tech</label><br><input id="pts-tech" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;" placeholder="Initials/Name"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Notes</label><br><input id="pts-notes" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;" placeholder="Re-stress, tail blowout, etc."></div>'
+            +'</div>'
+            +'<button onclick="window._ptStressAdd()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:7px 18px;cursor:pointer;font-weight:600;">Log Stressing Event</button>'
+            +'</div>'
+            +'<div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">'
+            +'<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:8px 14px;"><span style="font-size:18px;font-weight:700;">'+d.tendons.length+'</span><br><span style="font-size:11px;color:#6b7280;">Total Tendons</span></div>'
+            +'<div style="background:#dcfce7;border:1px solid #86efac;border-radius:6px;padding:8px 14px;"><span style="font-size:18px;font-weight:700;color:#166534;">'+passCount+'</span><br><span style="font-size:11px;color:#6b7280;">PASS</span></div>'
+            +'<div style="background:'+(failCount>0?'#fee2e2':'#f9fafb')+';border:1px solid '+(failCount>0?'#fca5a5':'#e5e7eb')+';border-radius:6px;padding:8px 14px;"><span style="font-size:18px;font-weight:700;color:'+(failCount>0?'#991b1b':'#6b7280')+';">'+failCount+'</span><br><span style="font-size:11px;color:#6b7280;">FAIL (>±7%)</span></div>'
+            +'</div>'
+            +(d.tendons.length>0?'<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="background:#f3f4f6;"><th style="padding:4px 6px;text-align:left;">Mark</th><th style="padding:4px 6px;">Profile</th><th style="padding:4px 6px;">Date</th><th style="padding:4px 6px;">Jack SN</th><th style="padding:4px 6px;">Gauge</th><th style="padding:4px 6px;">Spec Elong</th><th style="padding:4px 6px;">Meas Elong</th><th style="padding:4px 6px;">Var%</th><th style="padding:4px 6px;">Lock-off</th><th style="padding:4px 6px;">Tech</th><th style="padding:4px 6px;">Status</th><th style="padding:4px 6px;"></th></tr>'+rows+'</table></div>':'<p style="color:#9ca3af;text-align:center;margin:20px 0;">No tendons logged yet</p>')
+            +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">'
+            +'<button onclick="window._ptStressPrint()" style="background:#0f766e;color:#fff;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨️ Print PTI Stressing Log</button>'
+            +'<button onclick="window._ptStressCopy()" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">📋 Copy Plain-Text</button>'
+            +'<button onclick="window._ptStressClear()" style="background:#fff;border:1px solid #fca5a5;color:#991b1b;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🗑️ Clear All</button>'
+            +'</div>'
+            +'<p style="font-size:10px;color:#9ca3af;margin-top:8px;">PTI DC10.5-12 §3.3: Measured elongation must be within ±7% of calculated elongation. Exceeding tolerance requires engineering investigation before grouting or covering tendons. ACI 318-19 §26.10.3: Stressing records shall be retained for life of structure.</p>';
+    }
+
+    window._ptStressAdd=function(){
+        var d=load();
+        d.project=$id('pts-proj').value.trim();
+        d.element=$id('pts-elem').value.trim();
+        var spec=parseFloat($id('pts-spece').value)||0;
+        var meas=parseFloat($id('pts-meae').value)||0;
+        var varPct=spec>0?((meas-spec)/spec*100):NaN;
+        d.tendons.push({
+            mark:$id('pts-mark').value.trim()||'T-?',
+            profile:$id('pts-profile').value,
+            date:$id('pts-date').value,
+            jackSerial:$id('pts-jack').value.trim(),
+            gaugePsi:$id('pts-gauge').value,
+            specElong:$id('pts-spece').value,
+            measElong:$id('pts-meae').value,
+            varPct:isNaN(varPct)?'':varPct.toFixed(1),
+            lockoffPsi:$id('pts-lockoff').value,
+            tech:$id('pts-tech').value.trim(),
+            notes:$id('pts-notes').value.trim()
+        });
+        save(d);render();
+    };
+
+    window._ptStressDelete=function(i){
+        var d=load();d.tendons.splice(i,1);save(d);render();
+    };
+
+    window._ptStressClear=function(){
+        if(confirm('Clear all stressing log entries?')){var d=load();d.tendons=[];save(d);render();}
+    };
+
+    window._ptStressCopy=function(){
+        var d=load();
+        var lines=['POST-TENSION STRESSING LOG','Project: '+d.project,'Element: '+d.element,'Generated: '+new Date().toLocaleDateString(),''];
+        d.tendons.forEach(function(t){
+            var v=parseFloat(t.varPct);var ok=!isNaN(v)&&Math.abs(v)<=7;
+            lines.push(t.mark+' | '+t.profile+' | '+fmtd(t.date)+' | Spec: '+t.specElong+'" | Meas: '+t.measElong+'" | Var: '+(isNaN(v)?'N/A':(v>0?'+':'')+v.toFixed(1)+'%')+' | '+(isNaN(v)?'—':ok?'PASS':'FAIL')+' | Lock-off: '+t.lockoffPsi+' psi | Tech: '+t.tech);
+        });
+        navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Copied to clipboard!');});
+    };
+
+    window._ptStressPrint=function(){
+        var d=load();
+        var failCount=d.tendons.filter(function(t){return !isNaN(parseFloat(t.varPct))&&Math.abs(parseFloat(t.varPct))>7;}).length;
+        var rows=d.tendons.map(function(t){
+            var v=parseFloat(t.varPct);var ok=!isNaN(v)&&Math.abs(v)<=7;
+            return'<tr style="'+((!isNaN(v)&&!ok)?'background:#fee2e2;':'')+'">'
+                +'<td>'+t.mark+'</td><td>'+t.profile+'</td><td>'+fmtd(t.date)+'</td><td>'+t.jackSerial+'</td>'
+                +'<td style="text-align:right;">'+t.gaugePsi+' psi</td>'
+                +'<td style="text-align:right;">'+t.specElong+'"</td>'
+                +'<td style="text-align:right;">'+t.measElong+'"</td>'
+                +'<td style="text-align:right;font-weight:700;color:'+(isNaN(v)?'#000':ok?'green':'red')+';">'+(isNaN(v)?'—':(v>0?'+':'')+v.toFixed(1)+'%')+'</td>'
+                +'<td style="text-align:center;font-weight:700;">'+(isNaN(v)?'—':ok?'PASS':'FAIL')+'</td>'
+                +'<td>'+t.lockoffPsi+' psi</td><td>'+t.tech+'</td><td>'+t.notes+'</td></tr>';
+        }).join('');
+        var w=window.open('','_blank','width=1000,height=700');
+        w.document.write('<!DOCTYPE html><html><head><title>PT Stressing Log</title><style>body{font-family:Arial,sans-serif;font-size:10px;padding:16px;}h1{font-size:13px;border-bottom:2px solid #000;margin-bottom:4px;}table{width:100%;border-collapse:collapse;margin:8px 0;}th,td{border:1px solid #999;padding:3px 5px;font-size:9px;}th{background:#f3f4f6;font-weight:700;}.alert{background:#fee2e2;color:#991b1b;padding:6px;border-radius:4px;font-weight:700;margin:6px 0;}.clear{background:#dcfce7;color:#166534;padding:6px;border-radius:4px;font-weight:700;margin:6px 0;}.note{font-size:8px;color:#666;font-style:italic;}.sig{margin-top:16px;}.sig td{height:36px;width:25%;border:1px solid #999;font-size:9px;}@media print{button{display:none;}}</style></head><body>'
+            +'<h1>POST-TENSION STRESSING LOG — PTI DC10.5-12 / ACI 318-19 §26.10</h1>'
+            +'<p>Project: <b>'+d.project+'</b> | Element: <b>'+d.element+'</b> | Date: '+new Date().toLocaleDateString()+' | Tendons Logged: '+d.tendons.length+'</p>'
+            +(failCount>0?'<div class="alert">⚠️ '+failCount+' tendon(s) exceed PTI DC10.5 ±7% elongation tolerance — STOP: Engineering investigation required before grouting or covering</div>':'<div class="clear">All logged tendons within PTI DC10.5 ±7% elongation tolerance</div>')
+            +'<table><tr><th>Mark</th><th>Profile</th><th>Date</th><th>Jack SN</th><th>Gauge Pressure</th><th>Spec Elong</th><th>Meas Elong</th><th>Var %</th><th>Pass/Fail</th><th>Lock-off</th><th>Tech</th><th>Notes</th></tr>'+rows+'</table>'
+            +'<p class="note">PTI DC10.5-12 §3.3: Elongation acceptance criteria ±7% of calculated elongation. Friction losses computed per PTI. If elongation out of tolerance: check for duct displacement, anchor seating issues, friction loss calibration, or tendon damage. Do not grout or cover tendons with failing elongation without written engineer approval. ACI 318-19 §26.10.3: Records of PT installation and stressing shall be retained for the life of the structure.</p>'
+            +'<table class="sig"><tr><th>Stressing Contractor</th><th>PT Engineer / Specialty Eng.</th><th>GC Superintendent</th><th>Date Approved</th></tr><tr style="height:36px;"><td></td><td></td><td></td><td></td></tr></table>'
+            +'<button onclick="window.print()" style="margin-top:12px;padding:8px 20px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;">Print</button>'
+            +'</body></html>');
+        w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=$id(WRAP_ID);var btn=$id(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🔩 Hide PT Stressing Log':'🔩 PT Stressing Log';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ============================================================
+     EQUIPMENT PRE-OPERATION INSPECTION LOG — OSHA 1926.1412 / ASME B30
+     ============================================================ -->
+<script>
+(function(){
+    var BTN_ID='equip-preinsp-btn';
+    var WRAP_ID='equip-preinsp-wrap';
+    var KEY='oncor_equip_preinsp_v1';
+
+    function load(){try{return JSON.parse(localStorage.getItem(KEY))||{inspections:[]};}catch(e){return{inspections:[]};}  }
+    function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+    function fmtd(s){if(!s)return'—';var d=new Date(s+'T12:00:00');return isNaN(d)?s:d.toLocaleDateString();}
+    function $id(id){return document.getElementById(id);}
+
+    var EQUIP_TYPES=['Boom Pump (truck-mounted)','Line/Trailer Pump','Concrete Mixer Truck','Telescoping Boom/Telehandler','Skid Steer / Compact Track Loader','Ride-On Power Trowel','Walk-Behind Power Trowel','Plate Compactor','Generator','Laser Screed','Tower Crane','Mobile Crane','Rough-Terrain Forklift','Personnel Lift / Scissor Lift','Flatsaw / Saw-Cart','Other'];
+
+    var CHECKLIST=[
+        {cat:'Fluids & Engine',items:['Engine oil level OK','Coolant level OK','Hydraulic fluid level OK','Fuel level adequate','No visible leaks (oil, hydraulic, fuel, coolant)']},
+        {cat:'Safety Devices',items:['Horn/warning devices operational','Backup alarm functional (if applicable)','Fire extinguisher present and charged','ROPS/FOPS cage intact (if applicable)','Safety interlocks functional']},
+        {cat:'Structural / Mechanical',items:['Outriggers / outrigger pads present and undamaged','Boom/arm — no visible cracks, bends, or damage','Tires / tracks — no damage, proper inflation','Lights and beacon operational','Load chart posted and legible (cranes/lifts)']},
+        {cat:'Controls & Rigging',items:['Controls labeled and functional','Rigging / slings — no fraying, kinks, or damage','Quick-disconnects and pins secured','Ground conditions verified adequate for outrigger loading','Pre-operation run-up completed, no unusual noises']}
+    ];
+
+    function createButton(){
+        var actions=document.getElementById('actions');
+        if(!actions)return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.className='btn';
+        btn.style.cssText='margin:4px 2px;padding:6px 10px;font-size:13px;';
+        btn.textContent='🔧 Equipment Pre-Op Log';
+        btn.onclick=togglePanel;
+        actions.parentNode.insertBefore(btn,actions.nextSibling);
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.display='none';
+        wrap.style.cssText='background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:12px 0;font-size:13px;';
+        btn.parentNode.insertBefore(wrap,btn.nextSibling);
+        render();
+    }
+
+    function render(){
+        var wrap=$id(WRAP_ID);if(!wrap||wrap.style.display==='none')return;
+        var d=load();
+        var failCount=d.inspections.filter(function(ins){return ins.overall==='FAIL'||ins.overall==='TAGGED OUT';}).length;
+        var condCount=d.inspections.filter(function(ins){return ins.overall==='CONDITIONAL';}).length;
+
+        var alertHtml=failCount>0?'<div style="background:#fee2e2;color:#991b1b;padding:8px;border-radius:4px;margin-bottom:8px;font-weight:600;">🚫 '+failCount+' equipment inspection(s) FAILED or TAGGED OUT — Do Not Operate</div>':'';
+        var condHtml=condCount>0?'<div style="background:#fef3c7;color:#92400e;padding:8px;border-radius:4px;margin-bottom:8px;font-weight:600;">⚠️ '+condCount+' equipment inspection(s) CONDITIONAL — Review before operation</div>':'';
+
+        var rows=d.inspections.slice().reverse().map(function(ins,ri){
+            var i=d.inspections.length-1-ri;
+            var clr=ins.overall==='PASS'?'#166534':ins.overall==='CONDITIONAL'?'#92400e':'#991b1b';
+            var bg=ins.overall==='PASS'?'#dcfce7':ins.overall==='CONDITIONAL'?'#fef3c7':'#fee2e2';
+            var failItems=ins.items.filter(function(it){return it.status==='FAIL';});
+            return '<tr style="border-bottom:1px solid #e5e7eb;">'
+                +'<td style="padding:5px 6px;font-weight:600;">'+ins.equipType+'</td>'
+                +'<td style="padding:5px 6px;">'+ins.equipId+'</td>'
+                +'<td style="padding:5px 6px;">'+fmtd(ins.date)+'</td>'
+                +'<td style="padding:5px 6px;">'+ins.project+'</td>'
+                +'<td style="padding:5px 6px;">'+ins.inspector+'</td>'
+                +'<td style="padding:5px 6px;"><span style="background:'+bg+';color:'+clr+';padding:2px 7px;border-radius:4px;font-weight:700;font-size:11px;">'+ins.overall+'</span></td>'
+                +'<td style="padding:5px 6px;font-size:11px;color:#991b1b;">'+(failItems.length>0?failItems.map(function(it){return it.item;}).join('; '):'—')+'</td>'
+                +'<td style="padding:5px 6px;"><button onclick="window._equipInspDelete('+i+')" style="background:#fee2e2;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;color:#991b1b;">✕</button></td>'
+                +'</tr>';
+        }).join('');
+
+        // Build checklist form
+        var checklistHtml='<div style="margin-bottom:10px;">';
+        CHECKLIST.forEach(function(cat,ci){
+            checklistHtml+='<div style="font-weight:600;font-size:12px;color:#1d4ed8;margin-top:8px;margin-bottom:4px;">'+cat.cat+'</div>';
+            cat.items.forEach(function(item,ii){
+                var fid='epi-'+ci+'-'+ii;
+                checklistHtml+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;font-size:12px;">'
+                    +'<select id="'+fid+'" style="padding:2px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;">'
+                    +'<option value="OK">✅ OK</option><option value="FAIL">❌ FAIL</option><option value="NA">N/A</option>'
+                    +'</select>'
+                    +'<span>'+item+'</span>'
+                    +'</div>';
+            });
+        });
+        checklistHtml+='</div>';
+
+        wrap.innerHTML='<h3 style="margin:0 0 12px;font-size:15px;">🔧 Equipment Pre-Operation Inspection Log <span style="font-size:11px;color:#6b7280;">OSHA 1926.1412 / ASME B30</span></h3>'
+            +alertHtml+condHtml
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px;margin-bottom:12px;">'
+            +'<div style="font-weight:600;font-size:12px;margin-bottom:8px;">New Inspection</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Equipment Type</label><br><select id="epi-type" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;">'+EQUIP_TYPES.map(function(t){return'<option>'+t+'</option>';}).join('')+'</select></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Equipment ID / Serial</label><br><input id="epi-id" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;" placeholder="Unit #, plate, or serial"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Date</label><br><input type="date" id="epi-date" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Project</label><br><input id="epi-proj" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;" placeholder="Project name"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Inspector (initials/name)</label><br><input id="epi-inspector" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Overall Result</label><br><select id="epi-overall" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;"><option>PASS</option><option>CONDITIONAL</option><option>FAIL</option><option>TAGGED OUT</option></select></div>'
+            +'</div>'
+            +checklistHtml
+            +'<div><label style="font-size:11px;color:#6b7280;">Notes / Corrective Actions</label><br><textarea id="epi-notes" rows="2" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;"></textarea></div>'
+            +'<button onclick="window._equipInspAdd()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:7px 18px;cursor:pointer;font-weight:600;margin-top:8px;">Save Inspection</button>'
+            +'</div>'
+            +'<div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">'
+            +'<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:8px 14px;"><span style="font-size:18px;font-weight:700;">'+d.inspections.length+'</span><br><span style="font-size:11px;color:#6b7280;">Total Inspections</span></div>'
+            +'<div style="background:'+(failCount>0?'#fee2e2':'#f9fafb')+';border:1px solid '+(failCount>0?'#fca5a5':'#e5e7eb')+';border-radius:6px;padding:8px 14px;"><span style="font-size:18px;font-weight:700;color:'+(failCount>0?'#991b1b':'#6b7280')+';">'+failCount+'</span><br><span style="font-size:11px;color:#6b7280;">FAIL / Tagged Out</span></div>'
+            +'<div style="background:'+(condCount>0?'#fef3c7':'#f9fafb')+';border:1px solid '+(condCount>0?'#fcd34d':'#e5e7eb')+';border-radius:6px;padding:8px 14px;"><span style="font-size:18px;font-weight:700;color:'+(condCount>0?'#92400e':'#6b7280')+';">'+condCount+'</span><br><span style="font-size:11px;color:#6b7280;">Conditional</span></div>'
+            +'</div>'
+            +(d.inspections.length>0?'<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="background:#f3f4f6;"><th style="padding:4px 6px;text-align:left;">Equipment</th><th style="padding:4px 6px;">ID</th><th style="padding:4px 6px;">Date</th><th style="padding:4px 6px;">Project</th><th style="padding:4px 6px;">Inspector</th><th style="padding:4px 6px;">Result</th><th style="padding:4px 6px;">Failed Items</th><th></th></tr>'+rows+'</table></div>':'<p style="color:#9ca3af;text-align:center;margin:20px 0;">No inspections logged yet</p>')
+            +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">'
+            +'<button onclick="window._equipInspPrint()" style="background:#0f766e;color:#fff;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨️ Print OSHA 1926.1412 Log</button>'
+            +'<button onclick="window._equipInspCopy()" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">📋 Copy Plain-Text</button>'
+            +'</div>'
+            +'<p style="font-size:10px;color:#9ca3af;margin-top:8px;">OSHA 29 CFR §1926.1412 requires documented daily crane inspections before each shift. ASME B30.5 (mobile cranes) and B30.22 (articulating boom cranes) require operator pre-shift inspections. Many GC safety plans extend this requirement to all major equipment. Tagged-out equipment shall not be operated until deficiency is corrected and tag removed by qualified person.</p>';
+    }
+
+    window._equipInspAdd=function(){
+        var d=load();
+        var items=[];
+        CHECKLIST.forEach(function(cat,ci){
+            cat.items.forEach(function(item,ii){
+                var sel=document.getElementById('epi-'+ci+'-'+ii);
+                items.push({item:item,cat:cat.cat,status:sel?sel.value:'OK'});
+            });
+        });
+        d.inspections.push({
+            equipType:$id('epi-type').value,
+            equipId:$id('epi-id').value.trim(),
+            date:$id('epi-date').value,
+            project:$id('epi-proj').value.trim(),
+            inspector:$id('epi-inspector').value.trim(),
+            overall:$id('epi-overall').value,
+            items:items,
+            notes:$id('epi-notes').value.trim()
+        });
+        save(d);render();
+    };
+
+    window._equipInspDelete=function(i){
+        var d=load();d.inspections.splice(i,1);save(d);render();
+    };
+
+    window._equipInspCopy=function(){
+        var d=load();
+        var lines=['EQUIPMENT PRE-OPERATION INSPECTION LOG','Generated: '+new Date().toLocaleDateString(),'Total inspections: '+d.inspections.length,''];
+        d.inspections.forEach(function(ins){
+            lines.push(ins.equipType+' ('+ins.equipId+') | '+fmtd(ins.date)+' | '+ins.project+' | Inspector: '+ins.inspector+' | Result: '+ins.overall);
+            var fails=ins.items.filter(function(it){return it.status==='FAIL';});
+            if(fails.length)lines.push('  Failed items: '+fails.map(function(it){return it.item;}).join('; '));
+            if(ins.notes)lines.push('  Notes: '+ins.notes);
+        });
+        navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Copied!');});
+    };
+
+    window._equipInspPrint=function(){
+        var d=load();
+        var failCount=d.inspections.filter(function(ins){return ins.overall==='FAIL'||ins.overall==='TAGGED OUT';}).length;
+        var rows=d.inspections.slice().reverse().map(function(ins){
+            var fails=ins.items.filter(function(it){return it.status==='FAIL';});
+            var clr=ins.overall==='PASS'?'#166534':ins.overall==='CONDITIONAL'?'#92400e':'#991b1b';
+            return'<tr style="'+(ins.overall==='FAIL'||ins.overall==='TAGGED OUT'?'background:#fee2e2;':ins.overall==='CONDITIONAL'?'background:#fef3c7;':'')+'">'
+                +'<td>'+ins.equipType+'</td><td>'+ins.equipId+'</td><td>'+fmtd(ins.date)+'</td><td>'+ins.project+'</td><td>'+ins.inspector+'</td>'
+                +'<td style="font-weight:700;color:'+clr+';">'+ins.overall+'</td>'
+                +'<td style="font-size:9px;color:#991b1b;">'+(fails.length?fails.map(function(it){return it.item;}).join('; '):'—')+'</td>'
+                +'<td>'+ins.notes+'</td></tr>';
+        }).join('');
+        var w=window.open('','_blank','width=1000,height=700');
+        w.document.write('<!DOCTYPE html><html><head><title>Equipment Pre-Op Log</title><style>body{font-family:Arial,sans-serif;font-size:10px;padding:16px;}h1{font-size:13px;border-bottom:2px solid #000;}table{width:100%;border-collapse:collapse;margin:8px 0;}th,td{border:1px solid #999;padding:3px 5px;font-size:9px;}th{background:#f3f4f6;font-weight:700;}.alert{background:#fee2e2;color:#991b1b;padding:6px;border-radius:4px;font-weight:700;margin:6px 0;}.note{font-size:8px;color:#666;font-style:italic;}.sig td{height:36px;width:33%;border:1px solid #999;font-size:9px;}@media print{button{display:none;}}</style></head><body>'
+            +'<h1>EQUIPMENT PRE-OPERATION INSPECTION LOG — OSHA 29 CFR §1926.1412 / ASME B30</h1>'
+            +'<p>Generated: '+new Date().toLocaleDateString()+' | Total Inspections: '+d.inspections.length+'</p>'
+            +(failCount>0?'<div class="alert">🚫 '+failCount+' inspection(s) FAILED or TAGGED OUT — Equipment must not be operated until deficiency corrected and tag removed by qualified person</div>':'')
+            +'<table><tr><th>Equipment Type</th><th>ID/Serial</th><th>Date</th><th>Project</th><th>Inspector</th><th>Result</th><th>Failed Items</th><th>Notes</th></tr>'+rows+'</table>'
+            +'<p class="note">OSHA 29 CFR §1926.1412(d): Cranes must be inspected by a qualified person before each shift. ASME B30.5 §5-2.1.1: Operator pre-shift inspection required before lift operations. OSHA 29 CFR §1926.1417: Operators shall not operate equipment with known deficiencies affecting safe operation. Tagged-out equipment (red tag) shall not be operated until corrected and released in writing by qualified person.</p>'
+            +'<table class="sig"><tr><th>Equipment Operator</th><th>Safety Lead / Foreman</th><th>GC Safety Officer / Date</th></tr><tr style="height:36px;"><td></td><td></td><td></td></tr></table>'
+            +'<button onclick="window.print()" style="margin-top:12px;padding:8px 20px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;">Print</button>'
+            +'</body></html>');
+        w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=$id(WRAP_ID);var btn=$id(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🔧 Hide Equipment Pre-Op Log':'🔧 Equipment Pre-Op Log';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ============================================================
+     STRUCTURAL CRACK MONITORING LOG — ACI 224R-01
+     ============================================================ -->
+<script>
+(function(){
+    var BTN_ID='crack-monitor-btn';
+    var WRAP_ID='crack-monitor-wrap';
+    var KEY='oncor_crack_monitor_v1';
+
+    function load(){try{return JSON.parse(localStorage.getItem(KEY))||{project:'',element:'',cracks:[]};}catch(e){return{project:'',element:'',cracks:[]};}}
+    function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+    function fmtd(s){if(!s)return'—';var d=new Date(s+'T12:00:00');return isNaN(d)?s:d.toLocaleDateString();}
+    function $id(id){return document.getElementById(id);}
+
+    var CRACK_TYPES=['Hairline (cosmetic)','Plastic shrinkage','Drying shrinkage','Settlement / subgrade','Structural (flexure)','Structural (shear)','Thermal expansion/contraction','Alkali-silica reaction (ASR)','Corrosion-related','Cold joint','Construction joint offset','Unknown — investigate'];
+    var ORIENTATIONS=['Horizontal','Vertical','Diagonal (45°)','Random/map cracking','Radial','Longitudinal','Transverse'];
+    var DISPOSITIONS=['Monitor — within ACI 224R limits','Cosmetic repair — surface seal','Structural repair required — epoxy injection','Engineer evaluation required','Rejected — out of specification','Core sample ordered','Accepted with conditions','No action required'];
+
+    function getWidthCategory(mils){
+        var w=parseFloat(mils);
+        if(isNaN(w))return{label:'Unknown',color:'#6b7280'};
+        if(w<=10)return{label:'Hairline (≤10 mil)',color:'#166534'};
+        if(w<=13)return{label:'ACI 224R limit – Interior (≤13 mil)',color:'#166534'};
+        if(w<=16)return{label:'ACI 224R limit – Exterior (≤16 mil)',color:'#d97706'};
+        if(w<=30)return{label:'Exceeds ACI 224R – Monitor',color:'#dc2626'};
+        return{label:'Structural concern – Engineer required',color:'#991b1b'};
+    }
+
+    function createButton(){
+        var actions=document.getElementById('actions');
+        if(!actions)return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.className='btn';
+        btn.style.cssText='margin:4px 2px;padding:6px 10px;font-size:13px;';
+        btn.textContent='🔬 Crack Monitoring Log';
+        btn.onclick=togglePanel;
+        actions.parentNode.insertBefore(btn,actions.nextSibling);
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.display='none';
+        wrap.style.cssText='background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:12px 0;font-size:13px;';
+        btn.parentNode.insertBefore(wrap,btn.nextSibling);
+        render();
+    }
+
+    function render(){
+        var wrap=$id(WRAP_ID);if(!wrap||wrap.style.display==='none')return;
+        var d=load();
+        var engNeeded=d.cracks.filter(function(c){return c.disposition.indexOf('Engineer')>=0||c.disposition.indexOf('Structural repair')>=0||c.disposition.indexOf('Core')>=0;}).length;
+        var exceeds=d.cracks.filter(function(c){return parseFloat(c.widthMil)>16;}).length;
+        var alertHtml=engNeeded>0?'<div style="background:#fee2e2;color:#991b1b;padding:8px;border-radius:4px;margin-bottom:8px;font-weight:600;">⚠️ '+engNeeded+' crack(s) require engineering evaluation or structural repair</div>':'';
+        var warnHtml=exceeds>0&&engNeeded===0?'<div style="background:#fef3c7;color:#92400e;padding:8px;border-radius:4px;margin-bottom:8px;font-weight:600;">⚠️ '+exceeds+' crack(s) exceed ACI 224R exterior limit (0.016") — monitor or repair</div>':'';
+
+        var rows=d.cracks.slice().reverse().map(function(c,ri){
+            var i=d.cracks.length-1-ri;
+            var wcat=getWidthCategory(c.widthMil);
+            var openItems=c.readings.filter(function(r){return parseFloat(r.width)>(parseFloat(c.widthMil)||0)*1.1;}).length;
+            return'<tr style="border-bottom:1px solid #e5e7eb;">'
+                +'<td style="padding:5px 6px;font-weight:600;">'+c.crackId+'</td>'
+                +'<td style="padding:5px 6px;font-size:11px;">'+c.location+'</td>'
+                +'<td style="padding:5px 6px;font-size:11px;">'+c.type+'</td>'
+                +'<td style="padding:5px 6px;font-size:11px;">'+c.orientation+'</td>'
+                +'<td style="padding:5px 6px;"><span style="color:'+wcat.color+';font-weight:600;">'+c.widthMil+' mil</span></td>'
+                +'<td style="padding:5px 6px;font-size:11px;">'+c.lengthIn+'"</td>'
+                +'<td style="padding:5px 6px;font-size:11px;">'+fmtd(c.firstObserved)+'</td>'
+                +'<td style="padding:5px 6px;font-size:11px;">'+c.readings.length+' rdg'+(openItems>0?' <span style="color:#dc2626;">↑</span>':'')+'</td>'
+                +'<td style="padding:5px 6px;font-size:11px;color:'+(c.disposition.indexOf('Engineer')>=0||c.disposition.indexOf('Structural')>=0?'#991b1b':'#374151')+';">'+c.disposition+'</td>'
+                +'<td style="padding:5px 6px;">'
+                +'<button onclick="window._crackAddReading('+i+')" style="background:#dbeafe;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;color:#1d4ed8;font-size:11px;">+ Reading</button> '
+                +'<button onclick="window._crackDelete('+i+')" style="background:#fee2e2;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;color:#991b1b;font-size:11px;">✕</button>'
+                +'</td>'
+                +'</tr>';
+        }).join('');
+
+        wrap.innerHTML='<h3 style="margin:0 0 12px;font-size:15px;">🔬 Structural Crack Monitoring Log <span style="font-size:11px;color:#6b7280;">ACI 224R-01</span></h3>'
+            +alertHtml+warnHtml
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Project</label><br><input id="crk-proj" value="'+d.project+'" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Element / Structure</label><br><input id="crk-elem" value="'+d.element+'" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;" placeholder="Slab, wall, column, footing..."></div>'
+            +'</div>'
+            +'<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:10px;margin-bottom:10px;font-size:11px;color:#1e40af;">'
+            +'<b>ACI 224R-01 Crack Width Limits:</b> Interior (dry) = 0.013" (13 mil) | Exterior (moist/humid) = 0.016" (16 mil) | Seawater exposure = 0.006" (6 mil) | 1 mil = 0.001 inch'
+            +'</div>'
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px;margin-bottom:12px;">'
+            +'<div style="font-weight:600;font-size:12px;margin-bottom:8px;">Log New Crack Observation</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Crack ID / Tag</label><br><input id="crk-id" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;" placeholder="CR-001"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Location on Structure</label><br><input id="crk-loc" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;" placeholder="Grid C3, mid-span"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">First Observed</label><br><input type="date" id="crk-date" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;"></div>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Crack Type</label><br><select id="crk-type" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;">'+CRACK_TYPES.map(function(t){return'<option>'+t+'</option>';}).join('')+'</select></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Orientation</label><br><select id="crk-orient" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;">'+ORIENTATIONS.map(function(o){return'<option>'+o+'</option>';}).join('')+'</select></div>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:6px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Initial Width (mil)</label><br><input type="number" id="crk-width" step="0.1" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;" placeholder="8"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Length (inches)</label><br><input type="number" id="crk-len" step="0.5" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;" placeholder="24"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Depth (if probed)</label><br><input id="crk-depth" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;" placeholder="Surface / thru"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Inspector</label><br><input id="crk-insp" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;"></div>'
+            +'</div>'
+            +'<div style="margin-bottom:6px;"><label style="font-size:11px;color:#6b7280;">Disposition</label><br><select id="crk-disp" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;">'+DISPOSITIONS.map(function(dp){return'<option>'+dp+'</option>';}).join('')+'</select></div>'
+            +'<div style="margin-bottom:8px;"><label style="font-size:11px;color:#6b7280;">Notes</label><br><textarea id="crk-notes" rows="2" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:4px;font-size:12px;"></textarea></div>'
+            +'<button onclick="window._crackAdd()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:7px 18px;cursor:pointer;font-weight:600;">Log Crack</button>'
+            +'</div>'
+            +'<div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">'
+            +'<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:8px 14px;"><span style="font-size:18px;font-weight:700;">'+d.cracks.length+'</span><br><span style="font-size:11px;color:#6b7280;">Cracks Documented</span></div>'
+            +'<div style="background:'+(exceeds>0?'#fef3c7':'#f9fafb')+';border:1px solid '+(exceeds>0?'#fcd34d':'#e5e7eb')+';border-radius:6px;padding:8px 14px;"><span style="font-size:18px;font-weight:700;color:'+(exceeds>0?'#92400e':'#6b7280')+';">'+exceeds+'</span><br><span style="font-size:11px;color:#6b7280;">Exceeds ACI Limit</span></div>'
+            +'<div style="background:'+(engNeeded>0?'#fee2e2':'#f9fafb')+';border:1px solid '+(engNeeded>0?'#fca5a5':'#e5e7eb')+';border-radius:6px;padding:8px 14px;"><span style="font-size:18px;font-weight:700;color:'+(engNeeded>0?'#991b1b':'#6b7280')+';">'+engNeeded+'</span><br><span style="font-size:11px;color:#6b7280;">Eng. Review Required</span></div>'
+            +'</div>'
+            +(d.cracks.length>0?'<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="background:#f3f4f6;"><th style="padding:4px 6px;text-align:left;">ID</th><th style="padding:4px 6px;">Location</th><th style="padding:4px 6px;">Type</th><th style="padding:4px 6px;">Orientation</th><th style="padding:4px 6px;">Width</th><th style="padding:4px 6px;">Length</th><th style="padding:4px 6px;">First Obs.</th><th style="padding:4px 6px;">Readings</th><th style="padding:4px 6px;">Disposition</th><th style="padding:4px 6px;"></th></tr>'+rows+'</table></div>':'<p style="color:#9ca3af;text-align:center;margin:20px 0;">No cracks documented yet</p>')
+            +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">'
+            +'<button onclick="window._crackPrint()" style="background:#0f766e;color:#fff;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨️ Print ACI 224R Crack Log</button>'
+            +'<button onclick="window._crackCopy()" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">📋 Copy Plain-Text</button>'
+            +'</div>'
+            +'<p style="font-size:10px;color:#9ca3af;margin-top:8px;">ACI 224R-01 Table 4.1: Crack width limits depend on exposure condition. Hairline cracks (≤0.010") generally not structurally significant but should be documented. Cracks >0.016" in exterior exposure or exhibiting active growth require engineering evaluation. Monitoring intervals: monthly during first year, quarterly thereafter or as directed by engineer. 1 mil = 0.001 inch. Use crack comparator card or feeler gauge for field measurement.</p>';
+    }
+
+    window._crackAdd=function(){
+        var d=load();
+        d.project=$id('crk-proj').value.trim();
+        d.element=$id('crk-elem').value.trim();
+        d.cracks.push({
+            crackId:$id('crk-id').value.trim()||('CR-'+String(d.cracks.length+1).padStart('0',3)),
+            location:$id('crk-loc').value.trim(),
+            date:$id('crk-date').value,
+            type:$id('crk-type').value,
+            orientation:$id('crk-orient').value,
+            widthMil:$id('crk-width').value,
+            lengthIn:$id('crk-len').value,
+            depth:$id('crk-depth').value.trim(),
+            inspector:$id('crk-insp').value.trim(),
+            disposition:$id('crk-disp').value,
+            notes:$id('crk-notes').value.trim(),
+            firstObserved:$id('crk-date').value,
+            readings:[{date:$id('crk-date').value,width:$id('crk-width').value,by:$id('crk-insp').value.trim(),notes:'Initial observation'}]
+        });
+        save(d);render();
+    };
+
+    window._crackDelete=function(i){
+        var d=load();d.cracks.splice(i,1);save(d);render();
+    };
+
+    window._crackAddReading=function(i){
+        var d=load();var c=d.cracks[i];
+        var date=prompt('Reading date (YYYY-MM-DD):',new Date().toISOString().slice(0,10));
+        if(!date)return;
+        var width=prompt('Measured width (mil):',c.widthMil);
+        if(!width)return;
+        var by=prompt('Inspector initials:','');
+        var notes=prompt('Notes (growth, repair, etc.):','');
+        c.readings.push({date:date,width:width,by:by,notes:notes});
+        save(d);render();
+    };
+
+    window._crackCopy=function(){
+        var d=load();
+        var lines=['STRUCTURAL CRACK MONITORING LOG — ACI 224R-01','Project: '+d.project,'Element: '+d.element,'Generated: '+new Date().toLocaleDateString(),''];
+        d.cracks.forEach(function(c){
+            var wcat=getWidthCategory(c.widthMil);
+            lines.push(c.crackId+' | '+c.type+' | '+c.orientation+' | Width: '+c.widthMil+' mil ('+wcat.label+') | Length: '+c.lengthIn+'" | First: '+fmtd(c.firstObserved));
+            lines.push('  Location: '+c.location+' | Disposition: '+c.disposition);
+            if(c.readings.length>1){
+                lines.push('  Monitoring readings ('+c.readings.length+'):');
+                c.readings.forEach(function(r){lines.push('    '+fmtd(r.date)+': '+r.width+' mil — '+r.notes);});
+            }
+        });
+        navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Copied!');});
+    };
+
+    window._crackPrint=function(){
+        var d=load();
+        var engNeeded=d.cracks.filter(function(c){return c.disposition.indexOf('Engineer')>=0||c.disposition.indexOf('Structural repair')>=0;}).length;
+        var rows=d.cracks.map(function(c){
+            var wcat=getWidthCategory(c.widthMil);
+            var readingRows=c.readings.map(function(r){return'<tr style="background:#f9f9f9;"><td colspan="3" style="padding:2px 6px;font-size:8px;color:#666;">Reading '+fmtd(r.date)+': '+r.width+' mil — '+r.notes+' ('+r.by+')</td></tr>';}).join('');
+            return'<tr style="'+(c.disposition.indexOf('Engineer')>=0||c.disposition.indexOf('Structural repair')>=0?'background:#fee2e2;':parseFloat(c.widthMil)>16?'background:#fef3c7;':'')+'">'
+                +'<td>'+c.crackId+'</td><td>'+c.location+'</td><td>'+c.type+'</td><td>'+c.orientation+'</td>'
+                +'<td style="font-weight:700;color:'+wcat.color+';">'+c.widthMil+' mil</td>'
+                +'<td>'+c.lengthIn+'"</td><td>'+c.depth+'</td><td>'+fmtd(c.firstObserved)+'</td>'
+                +'<td>'+c.inspector+'</td>'
+                +'<td style="font-weight:700;color:'+(c.disposition.indexOf('Engineer')>=0||c.disposition.indexOf('Structural repair')>=0?'#991b1b':'#000')+';">'+c.disposition+'</td>'
+                +'<td>'+c.notes+'</td></tr>'
+                +readingRows;
+        }).join('');
+        var w=window.open('','_blank','width=1100,height=700');
+        w.document.write('<!DOCTYPE html><html><head><title>Crack Monitoring Log</title><style>body{font-family:Arial,sans-serif;font-size:10px;padding:16px;}h1{font-size:13px;border-bottom:2px solid #000;}table{width:100%;border-collapse:collapse;margin:8px 0;}th,td{border:1px solid #999;padding:3px 5px;font-size:9px;}th{background:#f3f4f6;font-weight:700;}.alert{background:#fee2e2;color:#991b1b;padding:6px;border-radius:4px;font-weight:700;margin:6px 0;}.note{font-size:8px;color:#666;font-style:italic;}.sig td{height:36px;width:25%;border:1px solid #999;font-size:9px;}@media print{button{display:none;}}</style></head><body>'
+            +'<h1>STRUCTURAL CRACK MONITORING LOG — ACI 224R-01</h1>'
+            +'<p>Project: <b>'+d.project+'</b> | Element: <b>'+d.element+'</b> | Date: '+new Date().toLocaleDateString()+' | Cracks Documented: '+d.cracks.length+'</p>'
+            +(engNeeded>0?'<div class="alert">⚠️ '+engNeeded+' crack(s) require engineering evaluation or structural repair — DO NOT CONCEAL or COVER without written engineer authorization</div>':'')
+            +'<p class="note" style="margin-bottom:6px;">ACI 224R-01 Table 4.1 Width Limits: Interior exposure = 0.013" (13 mil) | Exterior/moist = 0.016" (16 mil) | Seawater = 0.006" (6 mil) | 1 mil = 0.001 inch</p>'
+            +'<table><tr><th>ID</th><th>Location</th><th>Type</th><th>Orientation</th><th>Width</th><th>Length</th><th>Depth</th><th>First Obs.</th><th>Inspector</th><th>Disposition</th><th>Notes</th></tr>'+rows+'</table>'
+            +'<p class="note">ACI 224R-01: Crack monitoring shall include periodic measurements at marked gauge points. Width growth >0.005" over 6 months warrants immediate engineering review. Active cracks (live load response) may indicate structural deficiency regardless of width. Cracks do not self-repair in concrete — early identification and repair prevents reinforcement corrosion and structural degradation. ACI 546R-14: Repair method selection based on crack cause, not width alone.</p>'
+            +'<table class="sig"><tr><th>QC Inspector</th><th>Project Engineer</th><th>Engineer of Record</th><th>GC / Owner Representative</th></tr><tr style="height:36px;"><td></td><td></td><td></td><td></td></tr></table>'
+            +'<button onclick="window.print()" style="margin-top:12px;padding:8px 20px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;">Print</button>'
+            +'</body></html>');
+        w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=$id(WRAP_ID);var btn=$id(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🔬 Hide Crack Monitoring Log':'🔬 Crack Monitoring Log';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
