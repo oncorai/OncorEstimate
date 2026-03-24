@@ -32286,3 +32286,662 @@ Retain one (1) copy for your records. Return stamped copies as indicated above.
     }
 })();
 </script>
+
+<!-- ============================================================
+     FEATURE: CONCRETE TEMPERATURE MONITORING LOG (🌡️)
+     ACI 305R hot weather / ACI 306R cold weather curing temperature log
+     ============================================================ -->
+<script>
+(function(){
+    var STORE='oncor_conc_temp_log_v1';
+    var BTN_ID='btn-conc-temp-log';
+    var WRAP_ID='wrap-conc-temp-log';
+    var ALERT_THRESHOLD_HIGH=95; // ACI 305R max concrete temp at delivery °F
+    var ALERT_THRESHOLD_LOW=50;  // ACI 306R min concrete temp °F during curing
+    var FREEZE_THRESHOLD=32;
+
+    function load(){try{return JSON.parse(localStorage.getItem(STORE)||'[]');}catch(e){return[];}}
+    function save(d){localStorage.setItem(STORE,JSON.stringify(d));}
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);
+        if(!wrap)return;
+        var data=load();
+        var totalReadings=data.reduce(function(s,e){return s+(e.readings?e.readings.length:0);},0);
+        var violations=0;
+        data.forEach(function(e){(e.readings||[]).forEach(function(r){if(r.tempF>ALERT_THRESHOLD_HIGH||r.tempF<ALERT_THRESHOLD_LOW)violations++;});});
+
+        var html='<div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">🌡️ Concrete Temperature Monitoring Log</div>';
+        html+='<div style="font-size:9.5px;color:#94a3b8;margin-bottom:8px;">ACI 305R hot weather (>95°F delivery) / ACI 306R cold weather (&lt;50°F curing). Log readings per pour, per time interval.</div>';
+
+        // Dashboard
+        html+='<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">';
+        html+='<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;padding:6px 10px;text-align:center;min-width:70px;"><div style="font-size:14px;font-weight:700;color:#38bdf8;">'+data.length+'</div><div style="font-size:8.5px;color:#94a3b8;">Pour Events</div></div>';
+        html+='<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;padding:6px 10px;text-align:center;min-width:70px;"><div style="font-size:14px;font-weight:700;color:#a3e635;">'+totalReadings+'</div><div style="font-size:8.5px;color:#94a3b8;">Total Readings</div></div>';
+        html+='<div style="background:#0f172a;border:1px solid '+(violations>0?'#dc2626':'#1e293b')+';border-radius:5px;padding:6px 10px;text-align:center;min-width:70px;"><div style="font-size:14px;font-weight:700;color:'+(violations>0?'#f87171':'#94a3b8')+';">'+violations+'</div><div style="font-size:8.5px;color:#94a3b8;">Violations</div></div>';
+        html+='</div>';
+
+        if(violations>0){
+            html+='<div style="background:#450a0a;border:1px solid #dc2626;border-radius:5px;padding:7px 10px;font-size:9.5px;color:#f87171;margin-bottom:8px;">⚠️ TEMPERATURE VIOLATIONS PRESENT — review readings below. ACI 305R max delivery temp: 95°F. ACI 306R min curing temp: 50°F. Document corrective actions.</div>';
+        }
+
+        // Add Pour Event form
+        html+='<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;padding:8px;margin-bottom:8px;">';
+        html+='<div style="font-size:9.5px;font-weight:600;color:#cbd5e1;margin-bottom:6px;">+ New Pour Event</div>';
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px;">';
+        html+='<input id="ctl-element" placeholder="Element (e.g. Slab-A)" style="background:#020617;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:4px;font-size:9.5px;">';
+        html+='<input id="ctl-pour-date" type="date" style="background:#020617;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:4px;font-size:9.5px;">';
+        html+='<input id="ctl-design-psi" placeholder="Design PSI (e.g. 4000)" style="background:#020617;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:4px;font-size:9.5px;">';
+        html+='<input id="ctl-pour-yds" placeholder="Pour Size (yd³)" style="background:#020617;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:4px;font-size:9.5px;">';
+        html+='</div>';
+        html+='<button onclick="window._ctlAddEvent()" style="background:#0369a1;color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:9.5px;cursor:pointer;">Add Pour Event</button>';
+        html+='</div>';
+
+        // Events list
+        if(data.length===0){
+            html+='<div style="font-size:9.5px;color:#475569;text-align:center;padding:15px;">No pour events logged. Add a pour event above, then log temperature readings per interval.</div>';
+        } else {
+            data.forEach(function(evt,ei){
+                var evtViolations=(evt.readings||[]).filter(function(r){return r.tempF>ALERT_THRESHOLD_HIGH||r.tempF<ALERT_THRESHOLD_LOW;}).length;
+                var minT=evt.readings&&evt.readings.length?Math.min.apply(null,evt.readings.map(function(r){return r.tempF;})):null;
+                var maxT=evt.readings&&evt.readings.length?Math.max.apply(null,evt.readings.map(function(r){return r.tempF;})):null;
+                html+='<div style="background:#0f172a;border:1px solid '+(evtViolations>0?'#dc2626':'#1e293b')+';border-radius:6px;padding:8px;margin-bottom:8px;">';
+                html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+                html+='<div><span style="font-size:10px;font-weight:700;color:#e2e8f0;">'+evt.element+'</span>';
+                html+='<span style="font-size:8.5px;color:#64748b;margin-left:6px;">'+evt.pourDate+' · '+evt.designPsi+' PSI · '+evt.pourYds+' yd³</span></div>';
+                html+='<button onclick="window._ctlDeleteEvent('+ei+')" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:11px;padding:0 4px;">🗑</button>';
+                html+='</div>';
+
+                if(evt.readings&&evt.readings.length>0){
+                    html+='<div style="font-size:8.5px;color:#94a3b8;margin-bottom:4px;">Readings: '+evt.readings.length+' | Min: '+(minT!==null?minT+'°F':'—')+' | Max: '+(maxT!==null?maxT+'°F':'—')+(evtViolations>0?' | <span style="color:#f87171;">'+evtViolations+' VIOLATION'+(evtViolations>1?'S':'')+'</span>':'')+'</div>';
+                    html+='<table style="width:100%;border-collapse:collapse;font-size:8.5px;margin-bottom:6px;">';
+                    html+='<tr style="color:#64748b;border-bottom:1px solid #1e293b;"><th style="text-align:left;padding:2px 4px;">Time</th><th style="text-align:left;padding:2px 4px;">Hours After Pour</th><th style="text-align:left;padding:2px 4px;">Concrete °F</th><th style="text-align:left;padding:2px 4px;">Ambient °F</th><th style="text-align:left;padding:2px 4px;">By</th><th style="text-align:left;padding:2px 4px;">Notes</th><th></th></tr>';
+                    evt.readings.forEach(function(r,ri){
+                        var vio=r.tempF>ALERT_THRESHOLD_HIGH||r.tempF<ALERT_THRESHOLD_LOW;
+                        var freeze=r.tempF<=FREEZE_THRESHOLD;
+                        var color=freeze?'#f97316':vio?'#f87171':'#a3e635';
+                        var label=freeze?'FREEZE RISK':r.tempF>ALERT_THRESHOLD_HIGH?'HOT >95°F':r.tempF<ALERT_THRESHOLD_LOW?'COLD <50°F':'OK';
+                        html+='<tr style="border-bottom:1px solid #0f172a;background:'+(vio?'rgba(220,38,38,0.07)':'transparent')+'">';
+                        html+='<td style="padding:2px 4px;color:#cbd5e1;">'+r.readingTime+'</td>';
+                        html+='<td style="padding:2px 4px;color:#94a3b8;">'+r.hoursAfter+'h</td>';
+                        html+='<td style="padding:2px 4px;font-weight:700;color:'+color+';">'+r.tempF+'°F <span style="font-size:7.5px;">'+label+'</span></td>';
+                        html+='<td style="padding:2px 4px;color:#94a3b8;">'+(r.ambientF||'—')+'°F</td>';
+                        html+='<td style="padding:2px 4px;color:#94a3b8;">'+r.by+'</td>';
+                        html+='<td style="padding:2px 4px;color:#94a3b8;max-width:100px;overflow:hidden;text-overflow:ellipsis;">'+r.notes+'</td>';
+                        html+='<td style="padding:2px 4px;"><button onclick="window._ctlDeleteReading('+ei+','+ri+')" style="background:none;border:none;color:#475569;cursor:pointer;font-size:9px;padding:0;">✕</button></td>';
+                        html+='</tr>';
+                    });
+                    html+='</table>';
+                }
+
+                // Add reading form
+                html+='<div style="background:#020617;border-radius:4px;padding:6px;display:flex;gap:5px;flex-wrap:wrap;align-items:center;">';
+                html+='<input id="ctlr-time-'+ei+'" type="time" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:3px;font-size:9px;width:80px;" title="Reading time">';
+                html+='<input id="ctlr-hours-'+ei+'" placeholder="hrs after" type="number" min="0" step="0.5" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:3px;font-size:9px;width:70px;">';
+                html+='<input id="ctlr-tempF-'+ei+'" placeholder="Conc °F" type="number" step="0.1" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:3px;font-size:9px;width:70px;">';
+                html+='<input id="ctlr-ambF-'+ei+'" placeholder="Ambient °F" type="number" step="0.1" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:3px;font-size:9px;width:80px;">';
+                html+='<input id="ctlr-by-'+ei+'" placeholder="By (initials)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:3px;font-size:9px;width:70px;">';
+                html+='<input id="ctlr-notes-'+ei+'" placeholder="Notes" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:3px;font-size:9px;flex:1;min-width:80px;">';
+                html+='<button onclick="window._ctlAddReading('+ei+')" style="background:#065f46;color:#fff;border:none;border-radius:3px;padding:3px 8px;font-size:9px;cursor:pointer;white-space:nowrap;">+ Log °F</button>';
+                html+='</div>';
+
+                html+='<div style="display:flex;gap:6px;margin-top:6px;">';
+                html+='<button onclick="window._ctlPrint('+ei+')" style="background:#1e293b;color:#94a3b8;border:none;border-radius:3px;padding:3px 8px;font-size:9px;cursor:pointer;">🖨 Print Log</button>';
+                html+='<button onclick="window._ctlCopy('+ei+')" style="background:#1e293b;color:#94a3b8;border:none;border-radius:3px;padding:3px 8px;font-size:9px;cursor:pointer;">📋 Copy</button>';
+                html+='</div>';
+                html+='</div>';
+            });
+        }
+
+        wrap.innerHTML=html;
+
+        // Set default date/time
+        var el=document.getElementById('ctl-pour-date');
+        if(el&&!el.value){var d=new Date();el.value=d.toISOString().slice(0,10);}
+    }
+
+    window._ctlAddEvent=function(){
+        var element=(document.getElementById('ctl-element')||{}).value||'';
+        var pourDate=(document.getElementById('ctl-pour-date')||{}).value||new Date().toISOString().slice(0,10);
+        var designPsi=(document.getElementById('ctl-design-psi')||{}).value||'4000';
+        var pourYds=(document.getElementById('ctl-pour-yds')||{}).value||'';
+        if(!element){alert('Enter element name');return;}
+        var data=load();
+        data.push({element:element,pourDate:pourDate,designPsi:designPsi,pourYds:pourYds,readings:[]});
+        save(data);
+        render();
+    };
+
+    window._ctlDeleteEvent=function(ei){
+        if(!confirm('Delete this pour event and all readings?'))return;
+        var data=load();data.splice(ei,1);save(data);render();
+    };
+
+    window._ctlAddReading=function(ei){
+        var time=(document.getElementById('ctlr-time-'+ei)||{}).value||new Date().toTimeString().slice(0,5);
+        var hours=parseFloat((document.getElementById('ctlr-hours-'+ei)||{}).value)||0;
+        var tempF=parseFloat((document.getElementById('ctlr-tempF-'+ei)||{}).value);
+        var ambientF=(document.getElementById('ctlr-ambF-'+ei)||{}).value||'';
+        var by=(document.getElementById('ctlr-by-'+ei)||{}).value||'';
+        var notes=(document.getElementById('ctlr-notes-'+ei)||{}).value||'';
+        if(isNaN(tempF)){alert('Enter concrete temperature °F');return;}
+        var data=load();
+        if(!data[ei])return;
+        data[ei].readings.push({readingTime:time,hoursAfter:hours,tempF:tempF,ambientF:ambientF,by:by,notes:notes});
+        save(data);render();
+    };
+
+    window._ctlDeleteReading=function(ei,ri){
+        var data=load();if(!data[ei])return;
+        data[ei].readings.splice(ri,1);save(data);render();
+    };
+
+    window._ctlCopy=function(ei){
+        var data=load();var evt=data[ei];if(!evt)return;
+        var txt='CONCRETE TEMPERATURE MONITORING LOG\n';
+        txt+='Element: '+evt.element+' | Pour Date: '+evt.pourDate+' | '+evt.designPsi+' PSI | '+evt.pourYds+' yd³\n';
+        txt+='ACI 305R limit: max 95°F delivery | ACI 306R limit: min 50°F during curing\n\n';
+        txt+='Time\tHours\tConc °F\tAmbient °F\tBy\tNotes\tStatus\n';
+        (evt.readings||[]).forEach(function(r){
+            var status=r.tempF>95?'HOT VIOLATION':r.tempF<50?'COLD VIOLATION':r.tempF<=32?'FREEZE RISK':'OK';
+            txt+=r.readingTime+'\t'+r.hoursAfter+'h\t'+r.tempF+'°F\t'+(r.ambientF||'—')+'°F\t'+r.by+'\t'+r.notes+'\t'+status+'\n';
+        });
+        navigator.clipboard.writeText(txt).catch(function(){var ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);});
+        alert('Copied!');
+    };
+
+    window._ctlPrint=function(ei){
+        var data=load();var evt=data[ei];if(!evt)return;
+        var violations=(evt.readings||[]).filter(function(r){return r.tempF>95||r.tempF<50;});
+        var rows=(evt.readings||[]).map(function(r){
+            var status=r.tempF>95?'<span style="color:red;font-weight:700;">HOT VIOLATION &gt;95°F</span>':r.tempF<50?'<span style="color:#b45309;font-weight:700;">COLD VIOLATION &lt;50°F</span>':r.tempF<=32?'<span style="color:orange;font-weight:700;">FREEZE RISK</span>':'OK';
+            return '<tr><td>'+r.readingTime+'</td><td>'+r.hoursAfter+'h</td><td style="font-weight:700;">'+r.tempF+'°F</td><td>'+(r.ambientF||'—')+'°F</td><td>'+r.by+'</td><td>'+r.notes+'</td><td>'+status+'</td></tr>';
+        }).join('');
+        var vioBlock=violations.length>0?'<div style="background:#fee2e2;border:2px solid red;border-radius:4px;padding:8px;margin:10px 0;"><b>⚠️ TEMPERATURE VIOLATIONS ('+violations.length+'):</b> Review and document corrective actions per ACI 305R/306R. Hot weather violations may require mix redesign, ice in water, retarder admixture, or shading. Cold weather violations require blankets, enclosures, or heated water per ACI 306R.</div>':'';
+        var w=window.open('','_blank');
+        w.document.write('<!DOCTYPE html><html><head><title>Temp Log - '+evt.element+'</title><style>body{font-family:Arial,sans-serif;font-size:9pt;margin:20px;}h2{font-size:13pt;margin-bottom:4px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:8.5pt;}th{background:#f3f4f6;font-weight:600;}@media print{body{margin:10px;}}</style></head><body>'
+        +'<h2>CONCRETE TEMPERATURE MONITORING LOG</h2>'
+        +'<p style="font-size:8pt;color:#555;">ACI 305R (Hot Weather Concreting) / ACI 306R (Cold Weather Concreting)</p>'
+        +'<table style="width:60%;border-collapse:collapse;margin-bottom:10px;"><tr><td style="border:none;font-size:9pt;"><b>Element:</b> '+evt.element+'</td><td style="border:none;font-size:9pt;"><b>Pour Date:</b> '+evt.pourDate+'</td><td style="border:none;font-size:9pt;"><b>Design:</b> '+evt.designPsi+' PSI</td><td style="border:none;font-size:9pt;"><b>Volume:</b> '+evt.pourYds+' yd³</td></tr></table>'
+        +'<p style="font-size:8pt;"><b>ACI 305R:</b> Max concrete temp at delivery: 95°F. Precautions required: ice in mix water, chilled aggregate, shading, night pours, hydration stabilizer. <b>ACI 306R:</b> Min curing temp: 50°F. Cold protection: insulating blankets, heated enclosures, hot water. Freeze risk &lt;32°F: immediate enclosure + heat required.</p>'
+        +vioBlock
+        +'<table><tr><th>Time</th><th>Hours After Pour</th><th>Concrete Temp (°F)</th><th>Ambient Temp (°F)</th><th>By</th><th>Notes</th><th>ACI Status</th></tr>'+rows+'</table>'
+        +'<p style="font-size:7.5pt;margin-top:14px;">Records retained per ACI 301-16 §1.6.8 and project QC plan. Violations require notation of corrective action taken.</p>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:20px;">'
+        +'<div><b>QC Inspector</b><br><br>___________________________<br><span style="font-size:7.5pt;">Signature / Date</span></div>'
+        +'<div><b>Foreman</b><br><br>___________________________<br><span style="font-size:7.5pt;">Signature / Date</span></div>'
+        +'<div><b>PM</b><br><br>___________________________<br><span style="font-size:7.5pt;">Signature / Date</span></div>'
+        +'</div>'
+        +'<script>window.onload=function(){window.print();};<\/script></body></html>');
+        w.document.close();
+    };
+
+    function createButton(){
+        var sidebar=document.getElementById('sidebar');
+        if(!sidebar||document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='🌡️ Temp Log';
+        btn.title='ACI 305R/306R concrete temperature monitoring log per pour event';
+        btn.style.cssText='padding:4px 8px;background:#0c1a0c;color:#86efac;border:1px solid #16a34a;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+        sidebar.appendChild(btn);
+        sidebar.appendChild(wrap);
+    }
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);
+        var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🌡️ Hide Temp Log':'🌡️ Temp Log';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',createButton);
+    }else{
+        createButton();
+    }
+})();
+</script>
+
+<!-- ============================================================
+     FEATURE: SUBGRADE INVESTIGATION LOG (🪨)
+     Document soil bearing observations per zone before concrete placement
+     ============================================================ -->
+<script>
+(function(){
+    var STORE='oncor_subgrade_log_v1';
+    var BTN_ID='btn-subgrade-log';
+    var WRAP_ID='wrap-subgrade-log';
+
+    var SOIL_TYPES=['Sandy loam','Clay (low plasticity)','Clay (high plasticity)','Caliche/lime stabilized','Gravel','Rock (competent)','Fill (compacted)','Fill (uncompacted)','Expansive soil','Unknown'];
+    var CONDITIONS=['Firm — no deflection','Slight yielding — probe 2-3"','Moderate yielding — probe 3-6"','Soft — probe >6"','Wet/saturated','Frozen','Other'];
+    var DISPOSITIONS=['Approved for pour','Approved — minor over-excavate','Proof-roll required','Lime/cement stabilization required','Sub-ex and replace required','On hold — engineer required','Rejected'];
+    var DISPO_COLORS={'Approved for pour':'#16a34a','Approved — minor over-excavate':'#65a30d','Proof-roll required':'#d97706','Lime/cement stabilization required':'#d97706','Sub-ex and replace required':'#dc2626','On hold — engineer required':'#7c3aed','Rejected':'#dc2626'};
+
+    function load(){
+        var proj=(document.getElementById('projectName')||{}).value||'default';
+        var key=STORE+'_'+proj;
+        try{return JSON.parse(localStorage.getItem(key)||'[]');}catch(e){return[];}
+    }
+    function save(d){
+        var proj=(document.getElementById('projectName')||{}).value||'default';
+        var key=STORE+'_'+proj;
+        localStorage.setItem(key,JSON.stringify(d));
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);
+        if(!wrap)return;
+        var data=load();
+        var holds=data.filter(function(z){return z.disposition==='On hold — engineer required'||z.disposition==='Rejected'||z.disposition==='Sub-ex and replace required';}).length;
+        var approved=data.filter(function(z){return z.disposition&&z.disposition.startsWith('Approved');}).length;
+
+        var html='<div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">🪨 Subgrade Investigation Log</div>';
+        html+='<div style="font-size:9.5px;color:#94a3b8;margin-bottom:8px;">Document soil conditions per zone before placement. Required for ACI 360R-10 slab design compliance and to protect against GC subgrade claims.</div>';
+
+        // Dashboard
+        html+='<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">';
+        html+='<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;padding:6px 10px;text-align:center;min-width:70px;"><div style="font-size:14px;font-weight:700;color:#38bdf8;">'+data.length+'</div><div style="font-size:8.5px;color:#94a3b8;">Zones Logged</div></div>';
+        html+='<div style="background:#0f172a;border:1px solid #16a34a;border-radius:5px;padding:6px 10px;text-align:center;min-width:70px;"><div style="font-size:14px;font-weight:700;color:#4ade80;">'+approved+'</div><div style="font-size:8.5px;color:#94a3b8;">Zones Approved</div></div>';
+        html+='<div style="background:#0f172a;border:1px solid '+(holds>0?'#dc2626':'#1e293b')+';border-radius:5px;padding:6px 10px;text-align:center;min-width:70px;"><div style="font-size:14px;font-weight:700;color:'+(holds>0?'#f87171':'#94a3b8')+';">'+holds+'</div><div style="font-size:8.5px;color:#94a3b8;">Problem Zones</div></div>';
+        html+='</div>';
+
+        if(holds>0){
+            html+='<div style="background:#450a0a;border:1px solid #dc2626;border-radius:5px;padding:7px 10px;font-size:9.5px;color:#f87171;margin-bottom:8px;">⚠️ '+holds+' ZONE(S) NOT CLEARED FOR POUR — resolve disposition before placing concrete.</div>';
+        }
+
+        // Add zone form
+        html+='<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;padding:8px;margin-bottom:8px;">';
+        html+='<div style="font-size:9.5px;font-weight:600;color:#cbd5e1;margin-bottom:6px;">+ Log Zone</div>';
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px;">';
+        html+='<input id="sg-zone" placeholder="Zone ID (e.g. NW corner, Grid A-B)" style="background:#020617;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:4px;font-size:9.5px;">';
+        html+='<input id="sg-date" type="date" style="background:#020617;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:4px;font-size:9.5px;">';
+        html+='<select id="sg-soil" style="background:#020617;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:4px;font-size:9.5px;">'
+            +'<option value="">Soil Type...</option>'
+            +SOIL_TYPES.map(function(t){return '<option value="'+t+'">'+t+'</option>';}).join('')
+            +'</select>';
+        html+='<select id="sg-condition" style="background:#020617;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:4px;font-size:9.5px;">'
+            +'<option value="">Condition...</option>'
+            +CONDITIONS.map(function(c){return '<option value="'+c+'">'+c+'</option>';}).join('')
+            +'</select>';
+        html+='<input id="sg-bearing" placeholder="Est. Bearing Capacity (PSF)" type="number" step="100" style="background:#020617;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:4px;font-size:9.5px;">';
+        html+='<input id="sg-by" placeholder="Inspected By (initials)" style="background:#020617;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:4px;font-size:9.5px;">';
+        html+='<select id="sg-dispo" style="background:#020617;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:4px;font-size:9.5px;grid-column:span 2;">'
+            +'<option value="">Disposition...</option>'
+            +DISPOSITIONS.map(function(d){return '<option value="'+d+'">'+d+'</option>';}).join('')
+            +'</select>';
+        html+='</div>';
+        html+='<input id="sg-notes" placeholder="Notes / Corrective action / Remediation details" style="background:#020617;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:4px;font-size:9.5px;width:100%;box-sizing:border-box;margin-bottom:5px;">';
+        html+='<button onclick="window._sgAdd()" style="background:#0369a1;color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:9.5px;cursor:pointer;">Log Zone</button>';
+        html+='</div>';
+
+        if(data.length===0){
+            html+='<div style="font-size:9.5px;color:#475569;text-align:center;padding:15px;">No zones logged yet. Log each zone before grade is finalized.</div>';
+        } else {
+            html+='<table style="width:100%;border-collapse:collapse;font-size:8.5px;margin-bottom:8px;">';
+            html+='<tr style="color:#64748b;border-bottom:1px solid #1e293b;"><th style="text-align:left;padding:3px 4px;">Zone</th><th style="text-align:left;padding:3px 4px;">Date</th><th style="text-align:left;padding:3px 4px;">Soil</th><th style="text-align:left;padding:3px 4px;">Condition</th><th style="text-align:left;padding:3px 4px;">Bearing</th><th style="text-align:left;padding:3px 4px;">By</th><th style="text-align:left;padding:3px 4px;">Disposition</th><th style="text-align:left;padding:3px 4px;">Notes</th><th></th></tr>';
+            data.forEach(function(z,zi){
+                var dColor=DISPO_COLORS[z.disposition]||'#94a3b8';
+                html+='<tr style="border-bottom:1px solid #0f172a;">';
+                html+='<td style="padding:3px 4px;font-weight:600;color:#e2e8f0;">'+z.zone+'</td>';
+                html+='<td style="padding:3px 4px;color:#94a3b8;">'+z.date+'</td>';
+                html+='<td style="padding:3px 4px;color:#94a3b8;">'+z.soil+'</td>';
+                html+='<td style="padding:3px 4px;color:#94a3b8;">'+z.condition+'</td>';
+                html+='<td style="padding:3px 4px;color:#94a3b8;">'+(z.bearing?z.bearing+' PSF':'—')+'</td>';
+                html+='<td style="padding:3px 4px;color:#94a3b8;">'+z.by+'</td>';
+                html+='<td style="padding:3px 4px;"><span style="color:'+dColor+';font-size:8px;font-weight:600;">'+z.disposition+'</span></td>';
+                html+='<td style="padding:3px 4px;color:#64748b;max-width:100px;overflow:hidden;text-overflow:ellipsis;">'+z.notes+'</td>';
+                html+='<td style="padding:3px 4px;"><button onclick="window._sgDelete('+zi+')" style="background:none;border:none;color:#475569;cursor:pointer;font-size:10px;padding:0;">🗑</button></td>';
+                html+='</tr>';
+            });
+            html+='</table>';
+            html+='<div style="display:flex;gap:6px;">';
+            html+='<button onclick="window._sgPrint()" style="background:#1e293b;color:#94a3b8;border:none;border-radius:3px;padding:4px 10px;font-size:9.5px;cursor:pointer;">🖨 Print Report</button>';
+            html+='<button onclick="window._sgCopy()" style="background:#1e293b;color:#94a3b8;border:none;border-radius:3px;padding:4px 10px;font-size:9.5px;cursor:pointer;">📋 Copy</button>';
+            html+='</div>';
+        }
+
+        wrap.innerHTML=html;
+        var d=document.getElementById('sg-date');
+        if(d&&!d.value){d.value=new Date().toISOString().slice(0,10);}
+    }
+
+    window._sgAdd=function(){
+        var zone=(document.getElementById('sg-zone')||{}).value||'';
+        var date=(document.getElementById('sg-date')||{}).value||new Date().toISOString().slice(0,10);
+        var soil=(document.getElementById('sg-soil')||{}).value||'';
+        var condition=(document.getElementById('sg-condition')||{}).value||'';
+        var bearing=(document.getElementById('sg-bearing')||{}).value||'';
+        var by=(document.getElementById('sg-by')||{}).value||'';
+        var dispo=(document.getElementById('sg-dispo')||{}).value||'';
+        var notes=(document.getElementById('sg-notes')||{}).value||'';
+        if(!zone){alert('Enter zone ID');return;}
+        if(!dispo){alert('Select a disposition');return;}
+        var data=load();
+        data.push({zone:zone,date:date,soil:soil,condition:condition,bearing:bearing,by:by,disposition:dispo,notes:notes});
+        save(data);render();
+    };
+
+    window._sgDelete=function(zi){
+        if(!confirm('Delete this zone entry?'))return;
+        var data=load();data.splice(zi,1);save(data);render();
+    };
+
+    window._sgCopy=function(){
+        var data=load();
+        var txt='SUBGRADE INVESTIGATION LOG\n';
+        txt+='Project: '+((document.getElementById('projectName')||{}).value||'Unnamed')+'\n\n';
+        txt+='Zone\tDate\tSoil Type\tCondition\tBearing (PSF)\tBy\tDisposition\tNotes\n';
+        data.forEach(function(z){txt+=z.zone+'\t'+z.date+'\t'+z.soil+'\t'+z.condition+'\t'+(z.bearing||'—')+'\t'+z.by+'\t'+z.disposition+'\t'+z.notes+'\n';});
+        navigator.clipboard.writeText(txt).catch(function(){var ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);});
+        alert('Copied!');
+    };
+
+    window._sgPrint=function(){
+        var data=load();
+        var proj=((document.getElementById('projectName')||{}).value||'Unnamed');
+        var holds=data.filter(function(z){return z.disposition==='On hold — engineer required'||z.disposition==='Rejected'||z.disposition==='Sub-ex and replace required';});
+        var holdBlock=holds.length>0?'<div style="background:#fee2e2;border:2px solid red;border-radius:4px;padding:8px;margin:10px 0;"><b>⚠️ UNRESOLVED ZONES ('+holds.length+'):</b><ul>'
+            +holds.map(function(z){return '<li>'+z.zone+' — '+z.disposition+(z.notes?' ('+z.notes+')':'')+'</li>';}).join('')
+            +'</ul>DO NOT PLACE CONCRETE in these zones without written engineer authorization or completed remediation.</div>':'';
+        var rows=data.map(function(z){
+            var color=z.disposition.startsWith('Approved')?'green':z.disposition.includes('hold')||z.disposition==='Rejected'||z.disposition.includes('replace')?'red':'#b45309';
+            return '<tr><td>'+z.zone+'</td><td>'+z.date+'</td><td>'+z.soil+'</td><td>'+z.condition+'</td><td>'+(z.bearing||'—')+' PSF</td><td>'+z.by+'</td><td style="font-weight:700;color:'+color+';">'+z.disposition+'</td><td>'+z.notes+'</td></tr>';
+        }).join('');
+        var w=window.open('','_blank');
+        w.document.write('<!DOCTYPE html><html><head><title>Subgrade Log - '+proj+'</title><style>body{font-family:Arial,sans-serif;font-size:9pt;margin:20px;}h2{font-size:13pt;margin-bottom:4px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:8.5pt;}th{background:#f3f4f6;font-weight:600;}@media print{body{margin:10px;}}</style></head><body>'
+        +'<h2>SUBGRADE INVESTIGATION LOG</h2>'
+        +'<p><b>Project:</b> '+proj+' &nbsp;&nbsp; <b>Date Generated:</b> '+new Date().toLocaleDateString()+'</p>'
+        +'<p style="font-size:8pt;color:#555;">ACI 360R-10: Subgrade must be uniform, compacted, and drained. High-plasticity clay subgrades may require lime/cement stabilization or sub-ex per geotech recommendations. Document bearing capacity observations and disposition before slab placement.</p>'
+        +holdBlock
+        +'<table><tr><th>Zone</th><th>Date</th><th>Soil Type</th><th>Condition</th><th>Bearing (PSF)</th><th>By</th><th>Disposition</th><th>Notes</th></tr>'+rows+'</table>'
+        +'<p style="font-size:7.5pt;margin-top:14px;">This log documents field observations only. For projects requiring formal geotechnical investigation, retain licensed geotechnical engineer. ACI 360R-10 §5 subgrade requirements apply.</p>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:20px;">'
+        +'<div><b>Field Inspector</b><br><br>___________________________<br><span style="font-size:7.5pt;">Signature / Date</span></div>'
+        +'<div><b>Foreman</b><br><br>___________________________<br><span style="font-size:7.5pt;">Signature / Date</span></div>'
+        +'<div><b>GC / Engineer Approval</b><br><br>___________________________<br><span style="font-size:7.5pt;">Signature / Date</span></div>'
+        +'</div>'
+        +'<script>window.onload=function(){window.print();};<\/script></body></html>');
+        w.document.close();
+    };
+
+    function createButton(){
+        var sidebar=document.getElementById('sidebar');
+        if(!sidebar||document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='🪨 Subgrade Log';
+        btn.title='Document soil conditions per zone before slab placement — ACI 360R-10';
+        btn.style.cssText='padding:4px 8px;background:#1c1400;color:#fbbf24;border:1px solid #d97706;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+        sidebar.appendChild(btn);
+        sidebar.appendChild(wrap);
+    }
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);
+        var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🪨 Hide Subgrade Log':'🪨 Subgrade Log';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',createButton);
+    }else{
+        createButton();
+    }
+})();
+</script>
+
+<!-- ============================================================
+     FEATURE: MOBILIZATION & DEMOBILIZATION CHECKLIST (🚚)
+     Pre-mob and demob task lists with site logistics and sign-offs
+     ============================================================ -->
+<script>
+(function(){
+    var STORE='oncor_mob_demob_v1';
+    var BTN_ID='btn-mob-demob';
+    var WRAP_ID='wrap-mob-demob';
+
+    var DEFAULT_MOB=[
+        {cat:'Permits & Notices',task:'Building/encroachment permit obtained and posted on site',state:'open'},
+        {cat:'Permits & Notices',task:'Inspector notification submitted (concrete/special inspection)',state:'open'},
+        {cat:'Permits & Notices',task:'SWPPP/NOI filed with TCEQ (if ≥1 acre disturbance)',state:'open'},
+        {cat:'Permits & Notices',task:'Utility locates called (TX811) — 3 business days minimum',state:'open'},
+        {cat:'Insurance & Bonds',task:'COIs received and verified for all subcontractors',state:'open'},
+        {cat:'Insurance & Bonds',task:'Bid/performance bond in place (if required)',state:'open'},
+        {cat:'Insurance & Bonds',task:'Builder\'s risk / installation floater confirmed',state:'open'},
+        {cat:'Site Logistics',task:'Site access confirmed — gate code/key obtained',state:'open'},
+        {cat:'Site Logistics',task:'Temporary access road / lay-down area established',state:'open'},
+        {cat:'Site Logistics',task:'Portable restroom ordered and delivered to site',state:'open'},
+        {cat:'Site Logistics',task:'Dumpster / debris removal arranged',state:'open'},
+        {cat:'Site Logistics',task:'Site safety signage posted (hard hat, no trespassing)',state:'open'},
+        {cat:'Equipment & Materials',task:'Ready-mix plant confirmed — mix design approved',state:'open'},
+        {cat:'Equipment & Materials',task:'Pump / equipment reserved and confirmed for pour date',state:'open'},
+        {cat:'Equipment & Materials',task:'Rebar delivered and organized on site',state:'open'},
+        {cat:'Equipment & Materials',task:'Forming materials staged and inventoried',state:'open'},
+        {cat:'Equipment & Materials',task:'Curing compounds / blankets / materials on site',state:'open'},
+        {cat:'Equipment & Materials',task:'PPE distributed to all crew (hard hat, vest, glasses, boots)',state:'open'},
+        {cat:'Subcontractors',task:'All sub POs / scopes signed and executed',state:'open'},
+        {cat:'Subcontractors',task:'Sub mobilization dates confirmed',state:'open'},
+        {cat:'Administrative',task:'Project file opened — RFI log, submittal log initialized',state:'open'},
+        {cat:'Administrative',task:'Baseline schedule issued to GC',state:'open'},
+        {cat:'Administrative',task:'Foreman briefed on scope, schedule, and site rules',state:'open'},
+    ];
+
+    var DEFAULT_DEMOB=[
+        {cat:'Work Completion',task:'All concrete placed and accepted (no outstanding rejections)',state:'open'},
+        {cat:'Work Completion',task:'Punch list items completed and signed off',state:'open'},
+        {cat:'Work Completion',task:'Final QC / inspection walk done with GC',state:'open'},
+        {cat:'Work Completion',task:'As-built measurements recorded',state:'open'},
+        {cat:'Site Cleanup',task:'All formwork removed and debris disposed',state:'open'},
+        {cat:'Site Cleanup',task:'Concrete washout area cleaned and disposed per SWPPP',state:'open'},
+        {cat:'Site Cleanup',task:'Dumpster hauled, site broom-swept',state:'open'},
+        {cat:'Site Cleanup',task:'Temporary restroom removed',state:'open'},
+        {cat:'Site Cleanup',task:'Rebar scraps and tie wire collected and disposed',state:'open'},
+        {cat:'Equipment',task:'All rented equipment returned / confirmed returned by sub',state:'open'},
+        {cat:'Equipment',task:'Company tools inventoried and loaded out',state:'open'},
+        {cat:'Documentation & Closeout',task:'Final test cylinder results received and filed',state:'open'},
+        {cat:'Documentation & Closeout',task:'Lien releases collected from all subs and suppliers',state:'open'},
+        {cat:'Documentation & Closeout',task:'Final pay application submitted to GC',state:'open'},
+        {cat:'Documentation & Closeout',task:'Warranty letter issued (if required)',state:'open'},
+        {cat:'Documentation & Closeout',task:'TCEQ NOT filed (if NOI was required)',state:'open'},
+        {cat:'Documentation & Closeout',task:'Job file archived (plans, photos, logs, contracts)',state:'open'},
+    ];
+
+    function load(){
+        var proj=(document.getElementById('projectName')||{}).value||'default';
+        var key=STORE+'_'+proj;
+        try{
+            var d=JSON.parse(localStorage.getItem(key)||'null');
+            if(!d){d={mob:JSON.parse(JSON.stringify(DEFAULT_MOB)),demob:JSON.parse(JSON.stringify(DEFAULT_DEMOB)),mobDate:'',demobDate:'',notes:''};}
+            return d;
+        }catch(e){return{mob:JSON.parse(JSON.stringify(DEFAULT_MOB)),demob:JSON.parse(JSON.stringify(DEFAULT_DEMOB)),mobDate:'',mobDate:'',notes:''};}
+    }
+    function save(d){
+        var proj=(document.getElementById('projectName')||{}).value||'default';
+        var key=STORE+'_'+proj;
+        localStorage.setItem(key,JSON.stringify(d));
+    }
+
+    function pct(list){
+        if(!list.length)return 0;
+        var done=list.filter(function(i){return i.state==='done'||i.state==='na';}).length;
+        return Math.round(done/list.length*100);
+    }
+
+    function renderList(list,type,html){
+        var cats={};
+        list.forEach(function(item,idx){var c=item.cat;if(!cats[c])cats[c]=[];cats[c].push({item:item,idx:idx});});
+        Object.keys(cats).forEach(function(cat){
+            html+='<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin:8px 0 4px;">' + cat + '</div>';
+            cats[cat].forEach(function(entry){
+                var item=entry.item;var idx=entry.idx;
+                var col=item.state==='done'?'#4ade80':item.state==='na'?'#94a3b8':'#e2e8f0';
+                var bg=item.state==='done'?'rgba(74,222,128,0.07)':item.state==='na'?'rgba(148,163,184,0.05)':'transparent';
+                html+='<div style="display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:3px;background:'+bg+';margin-bottom:1px;">';
+                html+='<button onclick="window._mobCycle(\''+type+'\','+idx+')" style="background:none;border:1px solid #334155;border-radius:3px;padding:1px 6px;font-size:9px;color:'+col+';cursor:pointer;min-width:40px;">'+(item.state==='done'?'✓ DONE':item.state==='na'?'N/A':'Open')+'</button>';
+                html+='<span style="font-size:9px;color:'+col+';'+(item.state==='done'?'text-decoration:line-through;':'')+'">'+item.task+'</span>';
+                html+='</div>';
+            });
+        });
+        return html;
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);
+        if(!wrap)return;
+        var data=load();
+        var mobPct=pct(data.mob);
+        var demobPct=pct(data.demob);
+
+        var html='<div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">🚚 Mobilization & Demobilization Checklist</div>';
+        html+='<div style="font-size:9.5px;color:#94a3b8;margin-bottom:8px;">Track pre-mob readiness and post-job closeout tasks. Print formal sign-off sheets for GC submission or project file.</div>';
+
+        // Header dates
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;">';
+        html+='<div><label style="font-size:9px;color:#94a3b8;display:block;margin-bottom:2px;">Mob Date</label><input id="mob-date" type="date" value="'+data.mobDate+'" onchange="window._mobSaveDates()" style="background:#020617;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:3px;font-size:9.5px;width:100%;box-sizing:border-box;"></div>';
+        html+='<div><label style="font-size:9px;color:#94a3b8;display:block;margin-bottom:2px;">Demob Date</label><input id="demob-date" type="date" value="'+data.demobDate+'" onchange="window._mobSaveDates()" style="background:#020617;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:3px;font-size:9.5px;width:100%;box-sizing:border-box;"></div>';
+        html+='<div><label style="font-size:9px;color:#94a3b8;display:block;margin-bottom:2px;">Notes</label><input id="mob-notes" placeholder="Site notes..." value="'+data.notes.replace(/"/g,'&quot;')+'" onchange="window._mobSaveDates()" style="background:#020617;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:3px;font-size:9.5px;width:100%;box-sizing:border-box;"></div>';
+        html+='</div>';
+
+        // Progress bars
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">';
+        ['mob','demob'].forEach(function(type){
+            var p=type==='mob'?mobPct:demobPct;
+            var label=type==='mob'?'Mobilization':'Demobilization';
+            var color=p===100?'#16a34a':p>50?'#d97706':'#dc2626';
+            html+='<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;padding:8px;">';
+            html+='<div style="font-size:9.5px;font-weight:600;color:#cbd5e1;margin-bottom:4px;">'+label+' — '+p+'% Ready</div>';
+            html+='<div style="background:#1e293b;border-radius:3px;height:6px;"><div style="background:'+color+';width:'+p+'%;height:6px;border-radius:3px;"></div></div>';
+            if(p===100)html+='<div style="font-size:8.5px;color:#4ade80;margin-top:3px;">✓ '+label.toUpperCase()+' COMPLETE</div>';
+            html+='</div>';
+        });
+        html+='</div>';
+
+        // Two columns: mob + demob lists
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
+
+        // MOB list
+        html+='<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;padding:8px;">';
+        html+='<div style="font-size:10px;font-weight:700;color:#38bdf8;margin-bottom:4px;">📋 PRE-MOBILIZATION</div>';
+        html = renderList(data.mob,'mob',html);
+        html+='<div style="display:flex;gap:5px;margin-top:8px;">';
+        html+='<button onclick="window._mobPrint(\'mob\')" style="background:#1e293b;color:#94a3b8;border:none;border-radius:3px;padding:3px 8px;font-size:9px;cursor:pointer;">🖨 Print</button>';
+        html+='<button onclick="window._mobReset(\'mob\')" style="background:#1e293b;color:#64748b;border:none;border-radius:3px;padding:3px 8px;font-size:9px;cursor:pointer;">↺ Reset</button>';
+        html+='</div>';
+        html+='</div>';
+
+        // DEMOB list
+        html+='<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;padding:8px;">';
+        html+='<div style="font-size:10px;font-weight:700;color:#f472b6;margin-bottom:4px;">📋 DEMOBILIZATION</div>';
+        html = renderList(data.demob,'demob',html);
+        html+='<div style="display:flex;gap:5px;margin-top:8px;">';
+        html+='<button onclick="window._mobPrint(\'demob\')" style="background:#1e293b;color:#94a3b8;border:none;border-radius:3px;padding:3px 8px;font-size:9px;cursor:pointer;">🖨 Print</button>';
+        html+='<button onclick="window._mobReset(\'demob\')" style="background:#1e293b;color:#64748b;border:none;border-radius:3px;padding:3px 8px;font-size:9px;cursor:pointer;">↺ Reset</button>';
+        html+='</div>';
+        html+='</div>';
+
+        html+='</div>'; // end grid
+
+        wrap.innerHTML=html;
+    }
+
+    window._mobCycle=function(type,idx){
+        var data=load();
+        var list=data[type];
+        if(!list||!list[idx])return;
+        var s=list[idx].state;
+        list[idx].state=s==='open'?'done':s==='done'?'na':'open';
+        save(data);render();
+    };
+
+    window._mobSaveDates=function(){
+        var data=load();
+        data.mobDate=(document.getElementById('mob-date')||{}).value||'';
+        data.demobDate=(document.getElementById('demob-date')||{}).value||'';
+        data.notes=(document.getElementById('mob-notes')||{}).value||'';
+        save(data);
+    };
+
+    window._mobReset=function(type){
+        if(!confirm('Reset '+type+' checklist to defaults?'))return;
+        var data=load();
+        data[type]=JSON.parse(JSON.stringify(type==='mob'?DEFAULT_MOB:DEFAULT_DEMOB));
+        save(data);render();
+    };
+
+    window._mobPrint=function(type){
+        var data=load();
+        var proj=((document.getElementById('projectName')||{}).value||'Unnamed');
+        var list=data[type];
+        var label=type==='mob'?'PRE-MOBILIZATION':'DEMOBILIZATION';
+        var dateVal=type==='mob'?data.mobDate:data.demobDate;
+        var cats={};
+        list.forEach(function(item,idx){var c=item.cat;if(!cats[c])cats[c]=[];cats[c].push(item);});
+        var rows='';
+        Object.keys(cats).forEach(function(cat){
+            rows+='<tr><td colspan="3" style="background:#f3f4f6;font-weight:700;font-size:8.5pt;">'+cat+'</td></tr>';
+            cats[cat].forEach(function(item){
+                var status=item.state==='done'?'✓ DONE':item.state==='na'?'N/A':'OPEN';
+                var color=item.state==='done'?'green':item.state==='na'?'gray':'black';
+                rows+='<tr><td>'+item.task+'</td><td style="text-align:center;font-weight:700;color:'+color+';">'+status+'</td><td style="width:120px;border-bottom:1px solid #ccc;">&nbsp;</td></tr>';
+            });
+        });
+        var open=list.filter(function(i){return i.state==='open';}).length;
+        var openBlock=open>0?'<div style="background:#fee2e2;border:2px solid red;border-radius:4px;padding:8px;margin:10px 0;"><b>⚠️ '+open+' OPEN ITEMS:</b> Review before '+(type==='mob'?'mobilizing to site':'releasing site')+'.</div>':'<div style="background:#dcfce7;border:2px solid green;border-radius:4px;padding:8px;margin:10px 0;"><b>✓ ALL ITEMS COMPLETE</b> — cleared for '+(type==='mob'?'mobilization':'site release')+'.</div>';
+        var w=window.open('','_blank');
+        w.document.write('<!DOCTYPE html><html><head><title>'+label+' Checklist - '+proj+'</title><style>body{font-family:Arial,sans-serif;font-size:9pt;margin:20px;}h2{font-size:13pt;margin-bottom:4px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:8.5pt;}th{background:#f3f4f6;font-weight:600;}@media print{body{margin:10px;}}</style></head><body>'
+        +'<h2>'+label+' CHECKLIST</h2>'
+        +'<p><b>Project:</b> '+proj+' &nbsp;&nbsp; <b>Client:</b> '+((document.getElementById('clientName')||{}).value||'—')+' &nbsp;&nbsp; <b>Date:</b> '+(dateVal||new Date().toLocaleDateString())+' &nbsp;&nbsp; <b>Notes:</b> '+(data.notes||'—')+'</p>'
+        +openBlock
+        +'<table><tr><th>Task</th><th style="width:80px;">Status</th><th style="width:120px;">Initials / Date</th></tr>'+rows+'</table>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:20px;">'
+        +'<div><b>Foreman / Superintendent</b><br><br>___________________________<br><span style="font-size:7.5pt;">Signature / Date</span></div>'
+        +'<div><b>Project Manager</b><br><br>___________________________<br><span style="font-size:7.5pt;">Signature / Date</span></div>'
+        +'<div><b>GC / Owner Acknowledged</b><br><br>___________________________<br><span style="font-size:7.5pt;">Signature / Date</span></div>'
+        +'</div>'
+        +'<script>window.onload=function(){window.print();};<\/script></body></html>');
+        w.document.close();
+    };
+
+    function createButton(){
+        var sidebar=document.getElementById('sidebar');
+        if(!sidebar||document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='🚚 Mob/Demob';
+        btn.title='Pre-mobilization and demobilization task checklist with printable sign-off sheets';
+        btn.style.cssText='padding:4px 8px;background:#0f0721;color:#c084fc;border:1px solid #7c3aed;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+        sidebar.appendChild(btn);
+        sidebar.appendChild(wrap);
+    }
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);
+        var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🚚 Hide Mob/Demob':'🚚 Mob/Demob';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',createButton);
+    }else{
+        createButton();
+    }
+})();
+</script>
