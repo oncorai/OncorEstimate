@@ -36023,3 +36023,406 @@ Retain one (1) copy for your records. Return stamped copies as indicated above.
     if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
 })();
 </script>
+
+<!-- ==================== TOOL 1: PERMIT FEE CALCULATOR ==================== -->
+<script>
+(function(){
+    'use strict';
+    var STORE_KEY='oncor_permit_fee_calc';
+    var BTN_ID='btn-permit-fee-calc';
+    var WRAP_ID='wrap-permit-fee-calc';
+    function load(){try{return JSON.parse(localStorage.getItem(STORE_KEY))||{history:[]};}catch(e){return{history:[]};}}
+    function save(d){localStorage.setItem(STORE_KEY,JSON.stringify(d));}
+
+    // Fee schedules vary by jurisdiction; these are representative Southwest municipality rates
+    var JURISDICTIONS={'El Paso, TX':{baseRate:0.0035,minFee:75,planReview:0.65,inspectionMult:1.0,surchargePct:0.10},'Las Cruces, NM':{baseRate:0.0040,minFee:50,planReview:0.65,inspectionMult:1.0,surchargePct:0.05},'Phoenix, AZ':{baseRate:0.0025,minFee:150,planReview:0.65,inspectionMult:1.05,surchargePct:0.08},'Dallas, TX':{baseRate:0.0030,minFee:100,planReview:0.65,inspectionMult:1.0,surchargePct:0.10},'Houston, TX':{baseRate:0.0028,minFee:125,planReview:0.65,inspectionMult:1.0,surchargePct:0.12},'Custom':null};
+    var ADDON_FEES=[{id:'grading',label:'Grading Permit',typical:250},{id:'demo',label:'Demolition Permit',typical:150},{id:'right_of_way',label:'Right-of-Way Permit',typical:300},{id:'fire',label:'Fire Marshal Review',typical:500},{id:'health',label:'Health Dept (food/medical)',typical:350},{id:'environmental',label:'Environmental Review (SWPPP)',typical:400},{id:'impact',label:'Impact Fees (varies by SF)',typical:2500},{id:'utility',label:'Utility Connection Fee',typical:1200}];
+
+    function createButton(){
+        if(document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='🏛️ Permit Fee Calculator';
+        btn.style.cssText='display:block;width:100%;margin:4px 0;padding:6px;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:6px;cursor:pointer;font-size:0.78rem;font-weight:600;text-align:left;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #3b82f6;border-radius:6px;padding:10px;margin-bottom:8px;font-size:0.76rem;color:#e2e8f0;';
+        var ref=document.getElementById('btn-apprentice-ratio');
+        if(ref&&ref.parentNode){ref.parentNode.insertBefore(wrap,ref.nextSibling);ref.parentNode.insertBefore(btn,wrap);}
+        else{document.body.appendChild(btn);document.body.appendChild(wrap);}
+    }
+
+    function renderCalc(){
+        var val=parseFloat(document.getElementById('pf-value').value)||0;
+        var jur=document.getElementById('pf-jurisdiction').value;
+        var j=JURISDICTIONS[jur];
+        var useCustom=!j;
+        var baseRate=useCustom?(parseFloat(document.getElementById('pf-custom-rate').value)||0.35)/100:(j.baseRate);
+        var minFee=useCustom?(parseFloat(document.getElementById('pf-custom-min').value)||75):(j.minFee);
+        var planReview=useCustom?0.65:(j.planReview);
+        var surchargePct=useCustom?(parseFloat(document.getElementById('pf-custom-surcharge').value)||10)/100:(j.surchargePct);
+        var baseFee=Math.max(minFee,val*baseRate);
+        var planFee=baseFee*planReview;
+        var surcharge=baseFee*surchargePct;
+        var addons=0;
+        ADDON_FEES.forEach(function(a){var el=document.getElementById('pf-addon-'+a.id);if(el&&el.checked){addons+=(parseFloat(document.getElementById('pf-addon-val-'+a.id).value)||a.typical);}});
+        var total=baseFee+planFee+surcharge+addons;
+        var resEl=document.getElementById('pf-result');if(!resEl)return;
+        resEl.innerHTML='<div style="background:#1e293b;border-radius:6px;padding:8px;margin-top:6px;">'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:6px;">Permit Fee Estimate — '+jur+'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:0.72rem;margin-bottom:6px;">'
+            +'<div>Construction Value:</div><div style="text-align:right;">$'+val.toLocaleString()+'</div>'
+            +'<div>Building Permit ('+((baseRate*100).toFixed(2))+'% or $'+minFee+' min):</div><div style="text-align:right;">$'+baseFee.toFixed(2)+'</div>'
+            +'<div>Plan Review ('+(planReview*100).toFixed(0)+'% of permit):</div><div style="text-align:right;">$'+planFee.toFixed(2)+'</div>'
+            +'<div>Technology/Admin Surcharge ('+(surchargePct*100).toFixed(0)+'%):</div><div style="text-align:right;">$'+surcharge.toFixed(2)+'</div>'
+            +(addons?'<div>Add-On Fees:</div><div style="text-align:right;">$'+addons.toFixed(2)+'</div>':'')
+            +'<div style="font-weight:700;border-top:1px solid #475569;padding-top:4px;">ESTIMATED TOTAL:</div><div style="font-weight:700;color:#4ade80;text-align:right;border-top:1px solid #475569;padding-top:4px;">$'+total.toFixed(2)+'</div>'
+            +'<div style="color:#94a3b8;">As % of project:</div><div style="color:#94a3b8;text-align:right;">'+(val?(total/val*100).toFixed(2)+'%':'—')+'</div>'
+            +'</div>'
+            +'<div style="font-size:0.68rem;color:#94a3b8;">⚠ Actual fees vary by jurisdiction, project type, and occupancy. Verify with local building department.</div>'
+            +'</div>';
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var d=load();
+        wrap.innerHTML='<div style="font-weight:700;color:#93c5fd;font-size:0.85rem;margin-bottom:6px;">🏛️ PERMIT FEE CALCULATOR</div>'
+            +'<div style="font-size:0.7rem;color:#94a3b8;margin-bottom:8px;">Estimate building permit fees based on construction value. Most TX/NM/AZ municipalities use valuation-based formulas + plan review + surcharges. Common range: 0.25%–0.50% of construction cost.</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px;">'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Construction Value ($)</label><input id="pf-value" type="number" min="0" step="1000" placeholder="Total project value" oninput="window._pfCalc()" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Jurisdiction</label><select id="pf-jurisdiction" onchange="window._pfJurChange();window._pfCalc()" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'+Object.keys(JURISDICTIONS).map(function(k){return'<option>'+k+'</option>';}).join('')+'</select></div>'
+            +'</div>'
+            +'<div id="pf-custom-fields" style="display:none;margin-bottom:6px;background:#1e293b;border-radius:4px;padding:6px;">'
+            +'<div style="font-size:0.68rem;color:#94a3b8;margin-bottom:4px;">Custom Jurisdiction Parameters:</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;">'
+            +'<div><label style="font-size:0.65rem;color:#94a3b8;">Base Rate (%)</label><input id="pf-custom-rate" type="number" min="0" max="2" step="0.01" value="0.35" oninput="window._pfCalc()" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'<div><label style="font-size:0.65rem;color:#94a3b8;">Min Fee ($)</label><input id="pf-custom-min" type="number" min="0" step="10" value="75" oninput="window._pfCalc()" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'<div><label style="font-size:0.65rem;color:#94a3b8;">Surcharge (%)</label><input id="pf-custom-surcharge" type="number" min="0" max="25" step="1" value="10" oninput="window._pfCalc()" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'</div></div>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Add-On Fees (check to include)</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:6px;">'
+            +ADDON_FEES.map(function(a){return'<div style="display:flex;align-items:center;gap:3px;"><input type="checkbox" id="pf-addon-'+a.id+'" onchange="window._pfCalc()"><label for="pf-addon-'+a.id+'" style="font-size:0.7rem;color:#e2e8f0;flex:1;">'+a.label+'</label><input id="pf-addon-val-'+a.id+'" type="number" min="0" step="50" value="'+a.typical+'" oninput="window._pfCalc()" style="width:60px;background:#1e293b;border:1px solid #334155;border-radius:3px;padding:2px;color:#f1f5f9;font-size:0.68rem;text-align:right;"></div>';}).join('')
+            +'</div>'
+            +'<button onclick="window._pfCalc()" style="width:100%;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:4px;padding:5px;cursor:pointer;font-size:0.75rem;font-weight:700;margin-bottom:4px;">Calculate Permit Fees</button>'
+            +'<div id="pf-result"></div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;">'
+            +'<button onclick="window._pfCopy()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">📋 Copy Estimate</button>'
+            +'<button onclick="window._pfPrint()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">🖨 Print Estimate</button></div>';
+    }
+
+    window._pfJurChange=function(){var jur=document.getElementById('pf-jurisdiction').value;var cf=document.getElementById('pf-custom-fields');if(cf)cf.style.display=jur==='Custom'?'block':'none';};
+    window._pfCalc=function(){renderCalc();};
+    window._pfCopy=function(){
+        var res=document.getElementById('pf-result');if(!res||!res.innerHTML){alert('Calculate first.');return;}
+        var txt=res.innerText;try{navigator.clipboard.writeText(txt);alert('Copied!');}catch(e){alert(txt);}
+    };
+    window._pfPrint=function(){
+        var res=document.getElementById('pf-result');if(!res||!res.innerHTML){alert('Calculate first.');return;}
+        var jur=document.getElementById('pf-jurisdiction').value;
+        var html='<html><head><title>Permit Fee Estimate</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:1in;}h2{font-size:13pt;}.sign{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;}.sign-box{border-bottom:1px solid #000;padding-top:30px;text-align:center;font-size:8.5pt;}</style></head><body>';
+        html+='<h2>PERMIT FEE ESTIMATE</h2><div style="font-size:9pt;">Jurisdiction: '+jur+' | Date: '+new Date().toLocaleDateString()+'</div><hr>';
+        html+='<div style="font-size:9pt;margin-bottom:12px;">'+res.innerText.replace(/\n/g,'<br>')+'</div>';
+        html+='<div style="font-size:8pt;color:#555;"><b>Disclaimer:</b> This is an estimate only. Actual permit fees are determined by the local building department and may vary based on occupancy type, project scope, and additional reviews required. Always verify with the permitting authority before budgeting.</div>';
+        html+='<div class="sign"><div class="sign-box">Prepared By / Date</div><div class="sign-box">Reviewed By / Date</div></div></body></html>';
+        var w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🏛️ Hide Permit Fee Calculator':'🏛️ Permit Fee Calculator';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ==================== TOOL 2: DELIVERY TICKET RECONCILIATION ==================== -->
+<script>
+(function(){
+    'use strict';
+    var STORE_KEY='oncor_delivery_recon';
+    var BTN_ID='btn-delivery-recon';
+    var WRAP_ID='wrap-delivery-recon';
+    function load(){try{return JSON.parse(localStorage.getItem(STORE_KEY))||{pos:[],deliveries:[]};}catch(e){return{pos:[],deliveries:[]};}}
+    function save(d){localStorage.setItem(STORE_KEY,JSON.stringify(d));}
+
+    var MATERIAL_TYPES=['Concrete (yd³)','Rebar #4 (LF)','Rebar #5 (LF)','Rebar Other (LF)','WWF Mesh (SF)','Form Lumber (BF)','Plywood (sheets)','Anchor Bolts (ea)','Curing Compound (gal)','Vapor Barrier (SF)','PT Strand (LF)','Other'];
+
+    function createButton(){
+        if(document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='📊 Delivery Ticket Reconciliation';
+        btn.style.cssText='display:block;width:100%;margin:4px 0;padding:6px;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:6px;cursor:pointer;font-size:0.78rem;font-weight:600;text-align:left;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #3b82f6;border-radius:6px;padding:10px;margin-bottom:8px;font-size:0.76rem;color:#e2e8f0;';
+        var ref=document.getElementById('btn-permit-fee-calc');
+        if(ref&&ref.parentNode){ref.parentNode.insertBefore(wrap,ref.nextSibling);ref.parentNode.insertBefore(btn,wrap);}
+        else{document.body.appendChild(btn);document.body.appendChild(wrap);}
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var d=load();
+        // Reconciliation summary per material/PO
+        var recon={};
+        d.pos.forEach(function(po){
+            var key=po.material+'|'+po.poNum;
+            recon[key]={material:po.material,poNum:po.poNum,supplier:po.supplier,ordered:po.qty,received:0,deliveries:[]};
+        });
+        d.deliveries.forEach(function(del){
+            var key=del.material+'|'+del.poNum;
+            if(!recon[key])recon[key]={material:del.material,poNum:del.poNum,supplier:'',ordered:0,received:0,deliveries:[]};
+            recon[key].received+=del.qty;
+            recon[key].deliveries.push(del);
+        });
+        var variances=Object.values(recon).filter(function(r){return Math.abs(r.received-r.ordered)>0.01*r.ordered;});
+
+        wrap.innerHTML='<div style="font-weight:700;color:#93c5fd;font-size:0.85rem;margin-bottom:6px;">📊 DELIVERY TICKET RECONCILIATION</div>'
+            +'<div style="font-size:0.7rem;color:#94a3b8;margin-bottom:8px;">Match delivery tickets against PO quantities. Flags over-deliveries (potential overbilling) and short deliveries (incomplete orders). Critical for material invoice verification and dispute resolution.</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:8px;">'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:#e2e8f0;font-size:1.1rem;font-weight:700;">'+d.pos.length+'</div><div style="color:#94a3b8;font-size:0.65rem;">POs Tracked</div></div>'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:#93c5fd;font-size:1.1rem;font-weight:700;">'+d.deliveries.length+'</div><div style="color:#94a3b8;font-size:0.65rem;">Deliveries</div></div>'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:'+(variances.length?'#f97316':'#4ade80')+';font-size:1.1rem;font-weight:700;">'+variances.length+'</div><div style="color:#94a3b8;font-size:0.65rem;">Variances</div></div>'
+            +'</div>'
+            +(variances.length?'<div style="background:#451a03;border:1px solid #f97316;border-radius:4px;padding:5px;margin-bottom:6px;font-size:0.71rem;"><b style="color:#f97316;">⚠ VARIANCES DETECTED:</b> '+variances.map(function(v){var delta=v.received-v.ordered;return v.material+' ('+v.poNum+'): '+(delta>0?'+':'')+delta.toFixed(1)+' ('+(delta>0?'OVER':'SHORT')+')';}).join('; ')+'</div>':'')
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Add Purchase Order</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<select id="dr-po-material" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'+MATERIAL_TYPES.map(function(t){return'<option>'+t+'</option>';}).join('')+'</select>'
+            +'<input id="dr-po-num" placeholder="PO #" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="dr-po-qty" type="number" min="0" step="1" placeholder="Qty ordered" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="dr-po-supplier" placeholder="Supplier" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<button onclick="window._drAddPO()" style="width:100%;background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;margin-bottom:8px;">+ Add PO</button>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Log Delivery</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<select id="dr-del-material" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'+MATERIAL_TYPES.map(function(t){return'<option>'+t+'</option>';}).join('')+'</select>'
+            +'<input id="dr-del-po" placeholder="PO # (ref)" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="dr-del-ticket" placeholder="Ticket #" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="dr-del-qty" type="number" min="0" step="0.1" placeholder="Qty received" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<input id="dr-del-date" type="date" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="dr-del-notes" placeholder="Notes" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<button onclick="window._drAddDel()" style="width:100%;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:4px;padding:5px;cursor:pointer;font-size:0.75rem;font-weight:700;margin-bottom:8px;">+ Log Delivery</button>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Reconciliation Summary</div>'
+            +(Object.keys(recon).length===0?'<div style="color:#64748b;font-size:0.72rem;">No POs or deliveries logged yet.</div>'
+                :Object.values(recon).map(function(r,idx){
+                    var delta=r.received-r.ordered;var pct=r.ordered?(delta/r.ordered*100).toFixed(1):0;
+                    var status=Math.abs(delta)<0.01*r.ordered?'✓ OK':(delta>0?'⚠ OVER':'⚠ SHORT');
+                    var sc=status.indexOf('OK')>=0?'#4ade80':(delta>0?'#f97316':'#ef4444');
+                    return'<div style="background:#1e293b;border-left:3px solid '+sc+';border-radius:4px;padding:5px 6px;margin-bottom:4px;">'
+                        +'<div style="display:flex;justify-content:space-between;">'
+                        +'<div><b style="color:#e2e8f0;">'+r.material+'</b> — PO: '+r.poNum+(r.supplier?' ('+r.supplier+')':'')+'</div>'
+                        +'<span style="color:'+sc+';font-size:0.7rem;font-weight:700;">'+status+'</span>'
+                        +'</div>'
+                        +'<div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;">Ordered: '+r.ordered+' | Received: '+r.received.toFixed(1)+' | Delta: '+(delta>0?'+':'')+delta.toFixed(1)+' ('+pct+'%)</div>'
+                        +(r.deliveries.length?'<div style="font-size:0.67rem;color:#64748b;margin-top:2px;">'+r.deliveries.length+' delivery ticket(s)</div>':'')
+                        +'</div>';
+                }).join(''))
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;">'
+            +'<button onclick="window._drCopy()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">📋 Copy Recon Report</button>'
+            +'<button onclick="window._drPrint()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">🖨 Print Recon Report</button></div>';
+    }
+
+    window._drAddPO=function(){
+        var d=load();
+        d.pos.push({material:document.getElementById('dr-po-material').value,poNum:document.getElementById('dr-po-num').value.trim()||'—',qty:parseFloat(document.getElementById('dr-po-qty').value)||0,supplier:document.getElementById('dr-po-supplier').value.trim(),ts:Date.now()});
+        save(d);['dr-po-num','dr-po-qty','dr-po-supplier'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});render();
+    };
+    window._drAddDel=function(){
+        var d=load();
+        d.deliveries.push({material:document.getElementById('dr-del-material').value,poNum:document.getElementById('dr-del-po').value.trim()||'—',ticket:document.getElementById('dr-del-ticket').value.trim(),qty:parseFloat(document.getElementById('dr-del-qty').value)||0,date:document.getElementById('dr-del-date').value,notes:document.getElementById('dr-del-notes').value.trim(),ts:Date.now()});
+        save(d);['dr-del-po','dr-del-ticket','dr-del-qty','dr-del-date','dr-del-notes'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});render();
+    };
+    window._drCopy=function(){
+        var d=load();if(!d.pos.length&&!d.deliveries.length){alert('No data.');return;}
+        var lines=['DELIVERY TICKET RECONCILIATION','Date: '+new Date().toLocaleDateString(),''];
+        var recon={};
+        d.pos.forEach(function(po){var key=po.material+'|'+po.poNum;recon[key]={material:po.material,poNum:po.poNum,supplier:po.supplier,ordered:po.qty,received:0};});
+        d.deliveries.forEach(function(del){var key=del.material+'|'+del.poNum;if(!recon[key])recon[key]={material:del.material,poNum:del.poNum,supplier:'',ordered:0,received:0};recon[key].received+=del.qty;});
+        Object.values(recon).forEach(function(r){var delta=r.received-r.ordered;lines.push(r.material+' (PO '+r.poNum+'): Ordered '+r.ordered+' | Received '+r.received.toFixed(1)+' | Delta '+(delta>0?'+':'')+delta.toFixed(1));});
+        try{navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');}catch(e){alert(lines.join('\n'));}
+    };
+    window._drPrint=function(){
+        var d=load();if(!d.pos.length&&!d.deliveries.length){alert('No data to print.');return;}
+        var recon={};
+        d.pos.forEach(function(po){var key=po.material+'|'+po.poNum;recon[key]={material:po.material,poNum:po.poNum,supplier:po.supplier,ordered:po.qty,received:0,tickets:[]};});
+        d.deliveries.forEach(function(del){var key=del.material+'|'+del.poNum;if(!recon[key])recon[key]={material:del.material,poNum:del.poNum,supplier:'',ordered:0,received:0,tickets:[]};recon[key].received+=del.qty;recon[key].tickets.push(del);});
+        var variances=Object.values(recon).filter(function(r){return Math.abs(r.received-r.ordered)>0.01*r.ordered;});
+        var html='<html><head><title>Delivery Reconciliation</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:1in;}h2{font-size:13pt;}table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:8.5pt;}th{background:#1e40af;color:white;padding:4px;}td{padding:3px 4px;border:1px solid #ccc;}.over{color:orange;font-weight:700;}.short{color:red;font-weight:700;}.ok{color:green;font-weight:700;}.sign{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:20px;}.sign-box{border-bottom:1px solid #000;padding-top:30px;text-align:center;font-size:8.5pt;}</style></head><body>';
+        html+='<h2>DELIVERY TICKET RECONCILIATION</h2><div style="font-size:9pt;">Date: '+new Date().toLocaleDateString()+'</div><hr>';
+        if(variances.length){html+='<div style="border:1px solid orange;padding:6px;margin-bottom:8px;font-size:9pt;"><b>⚠ VARIANCES:</b> '+variances.length+' item(s) with significant variance from PO quantity.</div>';}
+        html+='<table><tr><th>Material</th><th>PO #</th><th>Supplier</th><th>Ordered</th><th>Received</th><th>Delta</th><th>%</th><th>Status</th></tr>';
+        Object.values(recon).forEach(function(r){var delta=r.received-r.ordered;var pct=r.ordered?(delta/r.ordered*100).toFixed(1):'—';var status=Math.abs(delta)<0.01*r.ordered?'OK':(delta>0?'OVER':'SHORT');var cls=status==='OK'?'ok':(delta>0?'over':'short');html+='<tr><td>'+r.material+'</td><td>'+r.poNum+'</td><td>'+(r.supplier||'—')+'</td><td>'+r.ordered+'</td><td>'+r.received.toFixed(1)+'</td><td>'+(delta>0?'+':'')+delta.toFixed(1)+'</td><td>'+pct+'%</td><td class="'+cls+'">'+status+'</td></tr>';});
+        html+='</table>';
+        html+='<div class="sign"><div class="sign-box">Prepared By / Date</div><div class="sign-box">PM / Date</div><div class="sign-box">Accounting / Date</div></div></body></html>';
+        var w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'📊 Hide Delivery Ticket Reconciliation':'📊 Delivery Ticket Reconciliation';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ==================== TOOL 3: SUBGRADE COMPACTION LOG ==================== -->
+<script>
+(function(){
+    'use strict';
+    var STORE_KEY='oncor_compaction_log';
+    var BTN_ID='btn-compaction-log';
+    var WRAP_ID='wrap-compaction-log';
+    function load(){try{return JSON.parse(localStorage.getItem(STORE_KEY))||{proctors:[],fieldTests:[]};}catch(e){return{proctors:[],fieldTests:[]};}}
+    function save(d){localStorage.setItem(STORE_KEY,JSON.stringify(d));}
+
+    var SOIL_TYPES=['Clay (CL)','Sandy Clay (SC)','Silty Clay (CL-ML)','Sand (SW/SP)','Silty Sand (SM)','Gravel (GW/GP)','Caliche','Fill Material','Crusite Base','Other'];
+    var TEST_METHODS=[{id:'D698',label:'ASTM D698 (Standard Proctor)',energy:'12,400 ft-lbs/ft³'},{id:'D1557',label:'ASTM D1557 (Modified Proctor)',energy:'56,000 ft-lbs/ft³'}];
+
+    function createButton(){
+        if(document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='🪨 Subgrade Compaction Log';
+        btn.style.cssText='display:block;width:100%;margin:4px 0;padding:6px;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:6px;cursor:pointer;font-size:0.78rem;font-weight:600;text-align:left;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #3b82f6;border-radius:6px;padding:10px;margin-bottom:8px;font-size:0.76rem;color:#e2e8f0;';
+        var ref=document.getElementById('btn-delivery-recon');
+        if(ref&&ref.parentNode){ref.parentNode.insertBefore(wrap,ref.nextSibling);ref.parentNode.insertBefore(btn,wrap);}
+        else{document.body.appendChild(btn);document.body.appendChild(wrap);}
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var d=load();
+        var failedTests=d.fieldTests.filter(function(t){return t.passedSpec===false;});
+        wrap.innerHTML='<div style="font-weight:700;color:#93c5fd;font-size:0.85rem;margin-bottom:6px;">🪨 SUBGRADE COMPACTION LOG</div>'
+            +'<div style="font-size:0.7rem;color:#94a3b8;margin-bottom:8px;">ASTM D698/D1557 proctor test and field density test documentation. Required for structural fills and slab-on-grade subgrade verification per ACI 360R-10 §5.2 and most geotech reports. Typical spec: 95% relative compaction.</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:8px;">'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:#e2e8f0;font-size:1.1rem;font-weight:700;">'+d.proctors.length+'</div><div style="color:#94a3b8;font-size:0.65rem;">Proctor Tests</div></div>'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:#93c5fd;font-size:1.1rem;font-weight:700;">'+d.fieldTests.length+'</div><div style="color:#94a3b8;font-size:0.65rem;">Field Density Tests</div></div>'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:'+(failedTests.length?'#ef4444':'#4ade80')+';font-size:1.1rem;font-weight:700;">'+failedTests.length+'</div><div style="color:#94a3b8;font-size:0.65rem;">Failed Tests</div></div>'
+            +'</div>'
+            +(failedTests.length?'<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:4px;padding:5px;margin-bottom:6px;font-size:0.71rem;"><b style="color:#ef4444;">⚠ FAILED FIELD TESTS:</b> '+failedTests.map(function(t){return t.location+' ('+t.relativeCompaction+'% vs '+t.specPct+'% req)';}).join('; ')+'</div>':'')
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Log Proctor Test (Lab Reference)</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<select id="cp-method" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'+TEST_METHODS.map(function(m){return'<option value="'+m.id+'">'+m.label+'</option>';}).join('')+'</select>'
+            +'<select id="cp-soil" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'+SOIL_TYPES.map(function(s){return'<option>'+s+'</option>';}).join('')+'</select>'
+            +'<input id="cp-mdd" type="number" min="80" max="150" step="0.1" placeholder="Max Dry Density (pcf)" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="cp-omc" type="number" min="0" max="40" step="0.1" placeholder="Opt. Moisture %" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<input id="cp-lab" placeholder="Testing lab / report #" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="cp-date" type="date" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<button onclick="window._cpAddProctor()" style="width:100%;background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;margin-bottom:8px;">+ Add Proctor Reference</button>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Log Field Density Test</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<input id="cf-location" placeholder="Test location / grid" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="cf-depth" placeholder="Depth (in)" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="cf-wetdensity" type="number" min="80" max="160" step="0.1" placeholder="Wet Density (pcf)" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="cf-moisture" type="number" min="0" max="50" step="0.1" placeholder="Moisture %" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<input id="cf-mdd-ref" type="number" min="80" max="150" step="0.1" placeholder="MDD ref (pcf)" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="cf-spec" type="number" min="85" max="100" step="1" value="95" placeholder="Spec % req" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="cf-date" type="date" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="cf-by" placeholder="Tested by" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<button onclick="window._cpAddField()" style="width:100%;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:4px;padding:5px;cursor:pointer;font-size:0.75rem;font-weight:700;margin-bottom:8px;">+ Log Field Test</button>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Proctor References</div>'
+            +(d.proctors.length===0?'<div style="color:#64748b;font-size:0.72rem;">No proctor tests logged.</div>'
+                :d.proctors.map(function(p,idx){
+                    return'<div style="background:#1e293b;border-radius:4px;padding:5px 6px;margin-bottom:3px;display:flex;justify-content:space-between;align-items:center;">'
+                        +'<div><b style="color:#e2e8f0;font-size:0.72rem;">'+p.method+'</b> — '+p.soil+'<br><span style="font-size:0.68rem;color:#94a3b8;">MDD: '+p.mdd+' pcf | OMC: '+p.omc+'% | Lab: '+(p.lab||'—')+' | '+p.date+'</span></div>'
+                        +'<button onclick="window._cpDelProctor('+idx+')" style="background:#7f1d1d;border:none;color:#fff;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.65rem;">✕</button>'
+                        +'</div>';
+                }).join(''))
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;margin-top:8px;">Field Density Tests</div>'
+            +(d.fieldTests.length===0?'<div style="color:#64748b;font-size:0.72rem;">No field tests logged.</div>'
+                :d.fieldTests.map(function(t,idx){
+                    var sc=t.passedSpec?'#4ade80':'#ef4444';
+                    return'<div style="background:#1e293b;border-left:3px solid '+sc+';border-radius:4px;padding:5px 6px;margin-bottom:3px;display:flex;justify-content:space-between;align-items:center;">'
+                        +'<div><b style="color:#e2e8f0;font-size:0.72rem;">'+t.location+'</b> — '+t.date+'<br><span style="font-size:0.68rem;color:#94a3b8;">Depth: '+t.depth+'" | Dry Density: '+t.dryDensity.toFixed(1)+' pcf | Rel. Comp: <span style="color:'+sc+';font-weight:700;">'+t.relativeCompaction.toFixed(1)+'%</span> (req '+t.specPct+'%) | '+(t.passedSpec?'✓ PASS':'✗ FAIL')+'</span></div>'
+                        +'<button onclick="window._cpDelField('+idx+')" style="background:#7f1d1d;border:none;color:#fff;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.65rem;">✕</button>'
+                        +'</div>';
+                }).join(''))
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;">'
+            +'<button onclick="window._cpCopy()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">📋 Copy Compaction Report</button>'
+            +'<button onclick="window._cpPrint()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">🖨 Print Compaction Log</button></div>';
+    }
+
+    window._cpAddProctor=function(){
+        var d=load();
+        d.proctors.push({method:document.getElementById('cp-method').value,soil:document.getElementById('cp-soil').value,mdd:parseFloat(document.getElementById('cp-mdd').value)||0,omc:parseFloat(document.getElementById('cp-omc').value)||0,lab:document.getElementById('cp-lab').value.trim(),date:document.getElementById('cp-date').value,ts:Date.now()});
+        save(d);['cp-mdd','cp-omc','cp-lab','cp-date'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});render();
+    };
+    window._cpAddField=function(){
+        var d=load();
+        var wetDensity=parseFloat(document.getElementById('cf-wetdensity').value)||0;
+        var moisture=parseFloat(document.getElementById('cf-moisture').value)||0;
+        var mddRef=parseFloat(document.getElementById('cf-mdd-ref').value)||100;
+        var specPct=parseFloat(document.getElementById('cf-spec').value)||95;
+        var dryDensity=wetDensity/(1+moisture/100);
+        var relativeCompaction=(dryDensity/mddRef)*100;
+        var passedSpec=relativeCompaction>=specPct;
+        d.fieldTests.push({location:document.getElementById('cf-location').value.trim()||'—',depth:document.getElementById('cf-depth').value.trim()||'—',wetDensity:wetDensity,moisture:moisture,mddRef:mddRef,dryDensity:dryDensity,relativeCompaction:relativeCompaction,specPct:specPct,passedSpec:passedSpec,date:document.getElementById('cf-date').value,by:document.getElementById('cf-by').value.trim(),ts:Date.now()});
+        save(d);['cf-location','cf-depth','cf-wetdensity','cf-moisture','cf-mdd-ref','cf-date','cf-by'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});render();
+    };
+    window._cpDelProctor=function(i){var d=load();d.proctors.splice(i,1);save(d);render();};
+    window._cpDelField=function(i){var d=load();d.fieldTests.splice(i,1);save(d);render();};
+    window._cpCopy=function(){
+        var d=load();if(!d.proctors.length&&!d.fieldTests.length){alert('No data.');return;}
+        var lines=['SUBGRADE COMPACTION LOG','Date: '+new Date().toLocaleDateString(),'','PROCTOR REFERENCES:'];
+        d.proctors.forEach(function(p){lines.push(p.method+' | '+p.soil+' | MDD: '+p.mdd+' pcf | OMC: '+p.omc+'%');});
+        lines.push('','FIELD DENSITY TESTS:');
+        d.fieldTests.forEach(function(t){lines.push(t.location+' | '+t.date+' | Dry Density: '+t.dryDensity.toFixed(1)+' pcf | Rel. Comp: '+t.relativeCompaction.toFixed(1)+'% '+(t.passedSpec?'PASS':'FAIL'));});
+        try{navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');}catch(e){alert(lines.join('\n'));}
+    };
+    window._cpPrint=function(){
+        var d=load();if(!d.proctors.length&&!d.fieldTests.length){alert('No data to print.');return;}
+        var failed=d.fieldTests.filter(function(t){return!t.passedSpec;});
+        var html='<html><head><title>Compaction Log</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:1in;}h2{font-size:13pt;}table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:8.5pt;}th{background:#1e40af;color:white;padding:4px;}td{padding:3px 4px;border:1px solid #ccc;}.pass{color:green;font-weight:700;}.fail{color:red;font-weight:700;}.sign{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:20px;}.sign-box{border-bottom:1px solid #000;padding-top:30px;text-align:center;font-size:8.5pt;}.alert{border:1px solid red;padding:6px;margin-bottom:8px;font-size:9pt;}</style></head><body>';
+        html+='<h2>SUBGRADE COMPACTION LOG</h2><div style="font-size:9pt;">ASTM D698/D1557 Proctor Reference & Field Density Tests | Date: '+new Date().toLocaleDateString()+'</div><hr>';
+        if(failed.length){html+='<div class="alert"><b>⚠ FAILED TESTS ('+failed.length+'):</b> '+failed.map(function(t){return t.location+' — '+t.relativeCompaction.toFixed(1)+'% vs '+t.specPct+'% required';}).join('; ')+'</div>';}
+        if(d.proctors.length){
+            html+='<h3>Proctor References</h3><table><tr><th>Method</th><th>Soil Type</th><th>MDD (pcf)</th><th>OMC (%)</th><th>Lab / Report</th><th>Date</th></tr>';
+            d.proctors.forEach(function(p){html+='<tr><td>'+p.method+'</td><td>'+p.soil+'</td><td>'+p.mdd+'</td><td>'+p.omc+'</td><td>'+(p.lab||'—')+'</td><td>'+p.date+'</td></tr>';});
+            html+='</table>';
+        }
+        if(d.fieldTests.length){
+            html+='<h3>Field Density Tests</h3><table><tr><th>Location</th><th>Depth</th><th>Wet Density</th><th>Moisture %</th><th>Dry Density</th><th>MDD Ref</th><th>Rel. Comp %</th><th>Spec %</th><th>Status</th><th>Date</th><th>By</th></tr>';
+            d.fieldTests.forEach(function(t){html+='<tr><td>'+t.location+'</td><td>'+t.depth+'"</td><td>'+t.wetDensity+'</td><td>'+t.moisture+'</td><td>'+t.dryDensity.toFixed(1)+'</td><td>'+t.mddRef+'</td><td>'+t.relativeCompaction.toFixed(1)+'</td><td>'+t.specPct+'</td><td class="'+(t.passedSpec?'pass':'fail')+'">'+(t.passedSpec?'PASS':'FAIL')+'</td><td>'+t.date+'</td><td>'+(t.by||'—')+'</td></tr>';});
+            html+='</table>';
+        }
+        html+='<div style="font-size:8pt;color:#555;"><b>Reference:</b> ACI 360R-10 §5.2, ASTM D698 (Standard Proctor), ASTM D1557 (Modified Proctor), ASTM D6938 (Nuclear Gauge).</div>';
+        html+='<div class="sign"><div class="sign-box">Testing Technician / Date</div><div class="sign-box">PM / Date</div><div class="sign-box">Geotech Engineer / Date</div></div></body></html>';
+        var w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🪨 Hide Subgrade Compaction Log':'🪨 Subgrade Compaction Log';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
