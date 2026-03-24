@@ -36426,3 +36426,526 @@ Retain one (1) copy for your records. Return stamped copies as indicated above.
     if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
 })();
 </script>
+
+<!-- CONCRETE CYLINDER PICKUP SCHEDULER -->
+<script>
+(function(){
+    var STORAGE_KEY='oncor_cylinder_pickup';
+    var BTN_ID='btn-cyl-pickup';
+    var WRAP_ID='wrap-cyl-pickup';
+
+    function load(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||{pours:[]};}catch(e){return{pours:[]};}}
+    function save(d){localStorage.setItem(STORAGE_KEY,JSON.stringify(d));}
+
+    function createButton(){
+        if(document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='🧊 Cylinder Pickup Scheduler';
+        btn.style.cssText='width:100%;background:#374151;border:1px solid #4b5563;color:#f1f5f9;border-radius:6px;padding:6px;cursor:pointer;font-size:0.78rem;margin-top:4px;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:8px;margin-top:4px;';
+        var sidebar=document.querySelector('.sidebar');
+        if(sidebar){sidebar.appendChild(btn);sidebar.appendChild(wrap);}
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var d=load();
+        var today=new Date();today.setHours(0,0,0,0);
+        var upcoming=[];var overdue=[];
+        d.pours.forEach(function(p){
+            if(p.pickups){
+                p.pickups.forEach(function(pk){
+                    if(pk.pickedUp)return;
+                    var dt=new Date(pk.date);dt.setHours(0,0,0,0);
+                    var diff=Math.round((dt-today)/(1000*60*60*24));
+                    var item={pour:p,pickup:pk,date:pk.date,diff:diff,type:pk.type};
+                    if(diff<0)overdue.push(item);
+                    else if(diff<=7)upcoming.push(item);
+                });
+            }
+        });
+        overdue.sort(function(a,b){return a.diff-b.diff;});
+        upcoming.sort(function(a,b){return a.diff-b.diff;});
+
+        var alert='';
+        if(overdue.length)alert='<div style="background:#7f1d1d;border:1px solid #dc2626;padding:5px 8px;border-radius:4px;margin-bottom:6px;font-size:0.72rem;"><b>⚠ OVERDUE PICKUPS ('+overdue.length+'):</b> '+overdue.map(function(x){return x.pour.element+' — '+x.type+' ('+Math.abs(x.diff)+'d late)';}).join('; ')+'</div>';
+        else if(upcoming.length)alert='<div style="background:#065f46;border:1px solid #10b981;padding:5px 8px;border-radius:4px;margin-bottom:6px;font-size:0.72rem;"><b>📅 Upcoming pickups ('+upcoming.length+'):</b> '+upcoming.map(function(x){return x.pour.element+' — '+x.type+(x.diff===0?' TODAY':' in '+x.diff+'d');}).join('; ')+'</div>';
+
+        wrap.innerHTML='<div style="font-weight:700;color:#e2e8f0;margin-bottom:6px;">🧊 Cylinder Pickup Scheduler</div>'
+            +'<div style="font-size:0.68rem;color:#94a3b8;margin-bottom:6px;">ACI 301-16 §1.6.8 — schedule 7-day and 28-day cylinder pickups automatically from pour date.</div>'
+            +alert
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Add Pour Event</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<input id="cps-element" placeholder="Element / area" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="cps-pourdate" type="date" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<input id="cps-psi" type="number" placeholder="PSI" value="4000" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="cps-sets" type="number" min="1" value="1" placeholder="# sets" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="cps-lab" placeholder="Testing lab" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<button onclick="window._cpsAddPour()" style="width:100%;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:4px;padding:5px;cursor:pointer;font-size:0.75rem;font-weight:700;margin-bottom:8px;">+ Add Pour & Generate Pickups</button>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Pickup Schedule</div>'
+            +(d.pours.length===0?'<div style="color:#64748b;font-size:0.72rem;">No pours logged.</div>'
+                :d.pours.map(function(p,pidx){
+                    var html='<div style="background:#1e293b;border-radius:4px;padding:6px;margin-bottom:4px;">'
+                        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+                        +'<div><b style="color:#e2e8f0;font-size:0.75rem;">'+p.element+'</b> — '+p.pourDate+' | '+p.psi+' PSI | '+p.sets+' set(s)</div>'
+                        +'<button onclick="window._cpsDelPour('+pidx+')" style="background:#7f1d1d;border:none;color:#fff;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.65rem;">✕</button>'
+                        +'</div>';
+                    if(p.pickups&&p.pickups.length){
+                        p.pickups.forEach(function(pk,pkidx){
+                            var dt=new Date(pk.date);dt.setHours(0,0,0,0);
+                            var diff=Math.round((dt-today)/(1000*60*60*24));
+                            var sc=pk.pickedUp?'#4ade80':(diff<0?'#ef4444':(diff===0?'#f59e0b':'#64748b'));
+                            var badge=pk.pickedUp?'✓ PICKED UP':(diff<0?'OVERDUE '+Math.abs(diff)+'d':(diff===0?'TODAY':'in '+diff+'d'));
+                            html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid #334155;">'
+                                +'<span style="font-size:0.7rem;color:#cbd5e1;"><b>'+pk.type+'</b> — '+pk.date+' <span style="color:'+sc+';font-weight:700;">['+badge+']</span></span>'
+                                +(pk.pickedUp?'':'<button onclick="window._cpsMark('+pidx+','+pkidx+')" style="background:#065f46;border:none;color:#fff;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.62rem;">✓ Mark Picked Up</button>')
+                                +'</div>';
+                        });
+                    }
+                    html+='</div>';
+                    return html;
+                }).join(''))
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;">'
+            +'<button onclick="window._cpsCopy()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">📋 Copy Pickup Schedule</button>'
+            +'<button onclick="window._cpsPrint()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">🖨 Print Pickup Log</button></div>';
+    }
+
+    window._cpsAddPour=function(){
+        var d=load();
+        var element=document.getElementById('cps-element').value.trim()||'Pour';
+        var pourDate=document.getElementById('cps-pourdate').value;
+        if(!pourDate){alert('Enter pour date.');return;}
+        var psi=parseInt(document.getElementById('cps-psi').value)||4000;
+        var sets=parseInt(document.getElementById('cps-sets').value)||1;
+        var lab=document.getElementById('cps-lab').value.trim();
+        var base=new Date(pourDate);
+        var d7=new Date(base);d7.setDate(d7.getDate()+7);
+        var d28=new Date(base);d28.setDate(d28.getDate()+28);
+        var pickups=[
+            {type:'7-day break',date:d7.toISOString().slice(0,10),pickedUp:false},
+            {type:'28-day break',date:d28.toISOString().slice(0,10),pickedUp:false}
+        ];
+        d.pours.push({element:element,pourDate:pourDate,psi:psi,sets:sets,lab:lab,pickups:pickups,ts:Date.now()});
+        save(d);
+        ['cps-element','cps-lab'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+        render();
+    };
+    window._cpsDelPour=function(i){var d=load();d.pours.splice(i,1);save(d);render();};
+    window._cpsMark=function(pi,pki){var d=load();if(d.pours[pi]&&d.pours[pi].pickups[pki]){d.pours[pi].pickups[pki].pickedUp=true;d.pours[pi].pickups[pki].pickedUpDate=new Date().toISOString().slice(0,10);}save(d);render();};
+    window._cpsCopy=function(){
+        var d=load();if(!d.pours.length){alert('No data.');return;}
+        var lines=['CYLINDER PICKUP SCHEDULE','Date: '+new Date().toLocaleDateString(),''];
+        d.pours.forEach(function(p){
+            lines.push(p.element+' — Pour: '+p.pourDate+' | '+p.psi+' PSI | '+p.sets+' set(s)');
+            p.pickups.forEach(function(pk){lines.push('  '+pk.type+': '+pk.date+(pk.pickedUp?' [PICKED UP]':' [PENDING]'));});
+        });
+        try{navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');}catch(e){alert(lines.join('\n'));}
+    };
+    window._cpsPrint=function(){
+        var d=load();if(!d.pours.length){alert('No data.');return;}
+        var html='<html><head><title>Cylinder Pickup Schedule</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:1in;}h2{font-size:13pt;}table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:9pt;}th{background:#1e40af;color:white;padding:4px;}td{padding:3px 4px;border:1px solid #ccc;}.pending{color:orange;font-weight:700;}.done{color:green;font-weight:700;}.overdue{color:red;font-weight:700;}.sign{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:20px;}.sign-box{border-bottom:1px solid #000;padding-top:30px;text-align:center;font-size:8.5pt;}</style></head><body>';
+        html+='<h2>CYLINDER PICKUP SCHEDULE</h2><div style="font-size:9pt;">ACI 301-16 §1.6.8 Test Cylinder Breaks | Date: '+new Date().toLocaleDateString()+'</div><hr>';
+        html+='<table><tr><th>Element</th><th>Pour Date</th><th>PSI</th><th>Sets</th><th>Lab</th><th>Pickup Type</th><th>Pickup Date</th><th>Status</th></tr>';
+        d.pours.forEach(function(p){
+            p.pickups.forEach(function(pk,i){
+                var status=pk.pickedUp?'<span class="done">PICKED UP</span>':'<span class="pending">PENDING</span>';
+                html+='<tr><td>'+(i===0?p.element:'')+'</td><td>'+(i===0?p.pourDate:'')+'</td><td>'+(i===0?p.psi:'')+'</td><td>'+(i===0?p.sets:'')+'</td><td>'+(i===0?(p.lab||'—'):'')+'</td><td>'+pk.type+'</td><td>'+pk.date+'</td><td>'+status+'</td></tr>';
+            });
+        });
+        html+='</table>';
+        html+='<div style="font-size:8pt;color:#555;"><b>Reference:</b> ACI 301-16 §1.6.8 — minimum 1 set per 50 yd³ or per placement day. 7-day break at 65-75% of design. 28-day break = acceptance strength.</div>';
+        html+='<div class="sign"><div class="sign-box">QC Coordinator / Date</div><div class="sign-box">PM / Date</div><div class="sign-box">Testing Lab / Date</div></div></body></html>';
+        var w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🧊 Hide Cylinder Pickup Scheduler':'🧊 Cylinder Pickup Scheduler';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- CONCRETE FINISHER CERTIFICATION TRACKER -->
+<script>
+(function(){
+    var STORAGE_KEY='oncor_finisher_certs';
+    var BTN_ID='btn-finisher-certs';
+    var WRAP_ID='wrap-finisher-certs';
+
+    var CERT_TYPES=['ACI Flatwork Finisher','ACI Decorative Concrete','OSHA 10-Hour','OSHA 30-Hour','Forklift/Equipment Operator','First Aid/CPR','Silica Competent Person','Fall Protection Competent','Scaffold Competent','Confined Space Entry','HAZWOPER','State/Local License','Other'];
+
+    function load(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||{workers:[]};}catch(e){return{workers:[]};}}
+    function save(d){localStorage.setItem(STORAGE_KEY,JSON.stringify(d));}
+
+    function createButton(){
+        if(document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='🎓 Finisher Certification Tracker';
+        btn.style.cssText='width:100%;background:#374151;border:1px solid #4b5563;color:#f1f5f9;border-radius:6px;padding:6px;cursor:pointer;font-size:0.78rem;margin-top:4px;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:8px;margin-top:4px;';
+        var sidebar=document.querySelector('.sidebar');
+        if(sidebar){sidebar.appendChild(btn);sidebar.appendChild(wrap);}
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var d=load();
+        var today=new Date();today.setHours(0,0,0,0);
+        var expired=0;var expiringSoon=0;var valid=0;
+        d.workers.forEach(function(w){
+            if(w.certs){
+                w.certs.forEach(function(c){
+                    if(!c.expiry)return;
+                    var dt=new Date(c.expiry);dt.setHours(0,0,0,0);
+                    var diff=Math.round((dt-today)/(1000*60*60*24));
+                    if(diff<0)expired++;
+                    else if(diff<=30)expiringSoon++;
+                    else valid++;
+                });
+            }
+        });
+
+        var alert='';
+        if(expired)alert='<div style="background:#7f1d1d;border:1px solid #dc2626;padding:5px 8px;border-radius:4px;margin-bottom:6px;font-size:0.72rem;"><b>⚠ EXPIRED CERTIFICATIONS ('+expired+'):</b> Review and renew immediately.</div>';
+        else if(expiringSoon)alert='<div style="background:#78350f;border:1px solid #f59e0b;padding:5px 8px;border-radius:4px;margin-bottom:6px;font-size:0.72rem;"><b>⏰ Expiring Soon ('+expiringSoon+'):</b> Schedule renewals within 30 days.</div>';
+
+        var certOpts=CERT_TYPES.map(function(t){return'<option value="'+t+'">'+t+'</option>';}).join('');
+
+        wrap.innerHTML='<div style="font-weight:700;color:#e2e8f0;margin-bottom:6px;">🎓 Finisher Certification Tracker</div>'
+            +'<div style="font-size:0.68rem;color:#94a3b8;margin-bottom:6px;">Track ACI, OSHA, and competent person certifications for crew members. Required for pre-qualification and OCIP programs.</div>'
+            +alert
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px 8px;margin-bottom:6px;display:flex;justify-content:space-around;font-size:0.72rem;">'
+            +'<span>Workers: <b style="color:#93c5fd;">'+d.workers.length+'</b></span>'
+            +'<span>Valid: <b style="color:#4ade80;">'+valid+'</b></span>'
+            +'<span>Expiring: <b style="color:#fbbf24;">'+expiringSoon+'</b></span>'
+            +'<span>Expired: <b style="color:#ef4444;">'+expired+'</b></span>'
+            +'</div>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Add Worker</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<input id="fc-name" placeholder="Worker name" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="fc-role" placeholder="Role (Finisher, Foreman...)" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<button onclick="window._fcAddWorker()" style="width:100%;background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;margin-bottom:8px;">+ Add Worker</button>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Add Certification</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<select id="fc-worker-sel" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<option value="">Select worker...</option>'
+            +d.workers.map(function(w,i){return'<option value="'+i+'">'+w.name+'</option>';}).join('')
+            +'</select>'
+            +'<select id="fc-cert-type" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'+certOpts+'</select>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<input id="fc-cert-num" placeholder="Cert # (opt)" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="fc-issued" type="date" placeholder="Issued" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="fc-expiry" type="date" placeholder="Expiry (opt)" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<button onclick="window._fcAddCert()" style="width:100%;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:4px;padding:5px;cursor:pointer;font-size:0.75rem;font-weight:700;margin-bottom:8px;">+ Add Certification</button>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Workers & Certifications</div>'
+            +(d.workers.length===0?'<div style="color:#64748b;font-size:0.72rem;">No workers added.</div>'
+                :d.workers.map(function(w,widx){
+                    var html='<div style="background:#1e293b;border-radius:4px;padding:6px;margin-bottom:4px;">'
+                        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+                        +'<div><b style="color:#e2e8f0;font-size:0.75rem;">'+w.name+'</b> — <span style="color:#94a3b8;">'+w.role+'</span></div>'
+                        +'<button onclick="window._fcDelWorker('+widx+')" style="background:#7f1d1d;border:none;color:#fff;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.65rem;">✕</button>'
+                        +'</div>';
+                    if(w.certs&&w.certs.length){
+                        w.certs.forEach(function(c,cidx){
+                            var sc='#4ade80';var badge='VALID';
+                            if(c.expiry){
+                                var dt=new Date(c.expiry);dt.setHours(0,0,0,0);
+                                var diff=Math.round((dt-today)/(1000*60*60*24));
+                                if(diff<0){sc='#ef4444';badge='EXPIRED';}
+                                else if(diff<=30){sc='#fbbf24';badge='EXPIRES '+diff+'d';}
+                            }else{badge='NO EXPIRY';}
+                            html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid #334155;">'
+                                +'<span style="font-size:0.7rem;color:#cbd5e1;">'+c.type+(c.certNum?' #'+c.certNum:'')+(c.issued?' — issued '+c.issued:'')+' <span style="color:'+sc+';font-weight:700;">['+badge+']</span></span>'
+                                +'<button onclick="window._fcDelCert('+widx+','+cidx+')" style="background:#374151;border:none;color:#fff;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.62rem;">✕</button>'
+                                +'</div>';
+                        });
+                    }else{html+='<div style="font-size:0.68rem;color:#64748b;">No certifications logged.</div>';}
+                    html+='</div>';
+                    return html;
+                }).join(''))
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;">'
+            +'<button onclick="window._fcCopy()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">📋 Copy Cert Report</button>'
+            +'<button onclick="window._fcPrint()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">🖨 Print Cert Matrix</button></div>';
+    }
+
+    window._fcAddWorker=function(){
+        var d=load();
+        var name=document.getElementById('fc-name').value.trim();
+        if(!name){alert('Enter worker name.');return;}
+        var role=document.getElementById('fc-role').value.trim()||'Finisher';
+        d.workers.push({name:name,role:role,certs:[],ts:Date.now()});
+        save(d);
+        ['fc-name','fc-role'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+        render();
+    };
+    window._fcAddCert=function(){
+        var d=load();
+        var widx=parseInt(document.getElementById('fc-worker-sel').value);
+        if(isNaN(widx)||!d.workers[widx]){alert('Select a worker.');return;}
+        var type=document.getElementById('fc-cert-type').value;
+        var certNum=document.getElementById('fc-cert-num').value.trim();
+        var issued=document.getElementById('fc-issued').value;
+        var expiry=document.getElementById('fc-expiry').value;
+        d.workers[widx].certs.push({type:type,certNum:certNum,issued:issued,expiry:expiry,ts:Date.now()});
+        save(d);
+        ['fc-cert-num','fc-issued','fc-expiry'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+        render();
+    };
+    window._fcDelWorker=function(i){var d=load();d.workers.splice(i,1);save(d);render();};
+    window._fcDelCert=function(wi,ci){var d=load();if(d.workers[wi]&&d.workers[wi].certs){d.workers[wi].certs.splice(ci,1);}save(d);render();};
+    window._fcCopy=function(){
+        var d=load();if(!d.workers.length){alert('No data.');return;}
+        var lines=['FINISHER CERTIFICATION REPORT','Date: '+new Date().toLocaleDateString(),''];
+        d.workers.forEach(function(w){
+            lines.push(w.name+' — '+w.role);
+            if(w.certs&&w.certs.length){
+                w.certs.forEach(function(c){lines.push('  '+c.type+(c.certNum?' #'+c.certNum:'')+(c.expiry?' — expires '+c.expiry:''));});
+            }else{lines.push('  (no certifications)');}
+        });
+        try{navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');}catch(e){alert(lines.join('\n'));}
+    };
+    window._fcPrint=function(){
+        var d=load();if(!d.workers.length){alert('No data.');return;}
+        var today=new Date();today.setHours(0,0,0,0);
+        var html='<html><head><title>Certification Matrix</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:1in;}h2{font-size:13pt;}table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:9pt;}th{background:#1e40af;color:white;padding:4px;}td{padding:3px 4px;border:1px solid #ccc;}.valid{color:green;font-weight:700;}.expired{color:red;font-weight:700;}.expiring{color:orange;font-weight:700;}.sign{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;}.sign-box{border-bottom:1px solid #000;padding-top:30px;text-align:center;font-size:8.5pt;}</style></head><body>';
+        html+='<h2>CREW CERTIFICATION MATRIX</h2><div style="font-size:9pt;">ACI / OSHA / Competent Person Certifications | Date: '+new Date().toLocaleDateString()+'</div><hr>';
+        html+='<table><tr><th>Worker</th><th>Role</th><th>Certification</th><th>Cert #</th><th>Issued</th><th>Expiry</th><th>Status</th></tr>';
+        d.workers.forEach(function(w){
+            if(w.certs&&w.certs.length){
+                w.certs.forEach(function(c,i){
+                    var status='VALID';var cls='valid';
+                    if(c.expiry){
+                        var dt=new Date(c.expiry);dt.setHours(0,0,0,0);
+                        var diff=Math.round((dt-today)/(1000*60*60*24));
+                        if(diff<0){status='EXPIRED';cls='expired';}
+                        else if(diff<=30){status='EXPIRING';cls='expiring';}
+                    }else{status='NO EXPIRY';}
+                    html+='<tr><td>'+(i===0?w.name:'')+'</td><td>'+(i===0?w.role:'')+'</td><td>'+c.type+'</td><td>'+(c.certNum||'—')+'</td><td>'+(c.issued||'—')+'</td><td>'+(c.expiry||'—')+'</td><td class="'+cls+'">'+status+'</td></tr>';
+                });
+            }else{
+                html+='<tr><td>'+w.name+'</td><td>'+w.role+'</td><td colspan="5" style="color:#888;">(no certifications)</td></tr>';
+            }
+        });
+        html+='</table>';
+        html+='<div style="font-size:8pt;color:#555;"><b>Note:</b> GC pre-qualification and OCIP enrollment typically require OSHA 10/30, ACI certifications for flatwork, and competent person designations for fall protection, scaffold, and silica.</div>';
+        html+='<div class="sign"><div class="sign-box">Safety Coordinator / Date</div><div class="sign-box">PM / Date</div></div></body></html>';
+        var w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🎓 Hide Finisher Certification Tracker':'🎓 Finisher Certification Tracker';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- CONCRETE SHRINKAGE REINFORCEMENT CALCULATOR -->
+<script>
+(function(){
+    var STORAGE_KEY='oncor_shrinkage_rebar';
+    var BTN_ID='btn-shrinkage-rebar';
+    var WRAP_ID='wrap-shrinkage-rebar';
+
+    function createButton(){
+        if(document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='📏 Shrinkage Reinforcement Calculator';
+        btn.style.cssText='width:100%;background:#374151;border:1px solid #4b5563;color:#f1f5f9;border-radius:6px;padding:6px;cursor:pointer;font-size:0.78rem;margin-top:4px;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:8px;margin-top:4px;';
+        var sidebar=document.querySelector('.sidebar');
+        if(sidebar){sidebar.appendChild(btn);sidebar.appendChild(wrap);}
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var saved={};try{saved=JSON.parse(localStorage.getItem(STORAGE_KEY))||{};}catch(e){}
+
+        wrap.innerHTML='<div style="font-weight:700;color:#e2e8f0;margin-bottom:6px;">📏 Shrinkage Reinforcement Calculator</div>'
+            +'<div style="font-size:0.68rem;color:#94a3b8;margin-bottom:6px;">ACI 318-19 §24.4 / ACI 360R-10 minimum shrinkage & temperature steel for slabs-on-ground.</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Slab SF</label><input id="sr-sf" type="number" min="100" step="100" value="'+(saved.sf||10000)+'" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Thickness (in)</label><input id="sr-thick" type="number" min="3" max="24" step="0.5" value="'+(saved.thick||5)+'" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Concrete f\'c (PSI)</label><select id="sr-psi" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;"><option value="3000"'+(saved.psi==3000?' selected':'')+'>3000</option><option value="4000"'+(saved.psi==4000||!saved.psi?' selected':'')+'>4000</option><option value="5000"'+(saved.psi==5000?' selected':'')+'>5000</option></select></div>'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Steel Grade (fy)</label><select id="sr-fy" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;"><option value="40000"'+(saved.fy==40000?' selected':'')+'>Grade 40 (40 ksi)</option><option value="60000"'+(saved.fy==60000||!saved.fy?' selected':'')+'>Grade 60 (60 ksi)</option><option value="80000"'+(saved.fy==80000?' selected':'')+'>Grade 80 (80 ksi)</option></select></div>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px;">'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Reinforcement Type</label><select id="sr-type" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;"><option value="wwf"'+(saved.type=='wwf'||!saved.type?' selected':'')+'>Welded Wire Fabric</option><option value="bar"'+(saved.type=='bar'?' selected':'')+'>Rebar (both ways)</option></select></div>'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Bar Size (if rebar)</label><select id="sr-bar" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;"><option value="3"'+(saved.bar==3?' selected':'')+'>\'#3 (0.11 in²)</option><option value="4"'+(saved.bar==4||!saved.bar?' selected':'')+'>\'#4 (0.20 in²)</option><option value="5"'+(saved.bar==5?' selected':'')+'>\'#5 (0.31 in²)</option></select></div>'
+            +'</div>'
+            +'<button onclick="window._srCalc()" style="width:100%;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:4px;padding:6px;cursor:pointer;font-size:0.78rem;font-weight:700;margin-bottom:8px;">Calculate Shrinkage Steel</button>'
+            +'<div id="sr-results" style="background:#1e293b;border-radius:4px;padding:8px;margin-bottom:6px;font-size:0.72rem;color:#cbd5e1;display:none;"></div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">'
+            +'<button onclick="window._srCopy()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">📋 Copy Calc</button>'
+            +'<button onclick="window._srPrint()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">🖨 Print Calc Sheet</button></div>';
+    }
+
+    var lastCalc=null;
+
+    window._srCalc=function(){
+        var sf=parseFloat(document.getElementById('sr-sf').value)||10000;
+        var thick=parseFloat(document.getElementById('sr-thick').value)||5;
+        var psi=parseInt(document.getElementById('sr-psi').value)||4000;
+        var fy=parseInt(document.getElementById('sr-fy').value)||60000;
+        var type=document.getElementById('sr-type').value;
+        var barSize=parseInt(document.getElementById('sr-bar').value)||4;
+
+        // Save inputs
+        localStorage.setItem(STORAGE_KEY,JSON.stringify({sf:sf,thick:thick,psi:psi,fy:fy,type:type,bar:barSize}));
+
+        // ACI 318-19 §24.4.3.2 — minimum As = 0.0018 × Ag for Grade 60 (scales by fy)
+        // For fy < 60 ksi: As = 0.0020 × Ag
+        // For fy ≥ 60 ksi: As = max(0.0014, 0.0018 × 60000/fy) × Ag
+        var h=thick; // inches
+        var Ag=12*h; // in² per foot width of slab
+        var rhoMin;
+        if(fy<60000){rhoMin=0.0020;}
+        else{rhoMin=Math.max(0.0014,0.0018*60000/fy);}
+
+        var AsPerFt=rhoMin*Ag; // in² per foot width
+
+        // Total steel area needed (each direction, per foot width)
+        var totalSfFt=sf; // treating as linear feet for simplicity
+        var widthFt=Math.sqrt(sf); // assume square
+        var AsTotal=AsPerFt*widthFt*2; // both directions
+
+        var result='';
+        var warning='';
+
+        if(type==='wwf'){
+            // WWF sizing — common: 6x6-W1.4, 6x6-W2.0, 6x6-W2.9, 6x6-W4.0
+            // W-number = cross-sectional area in hundredths of sq in per wire
+            // As per ft = W × 12 / spacing
+            var wwfOptions=[
+                {name:'6×6-W1.4/W1.4',as:0.028,spacing:6},
+                {name:'6×6-W2.0/W2.0',as:0.04,spacing:6},
+                {name:'6×6-W2.9/W2.9',as:0.058,spacing:6},
+                {name:'6×6-W4.0/W4.0',as:0.08,spacing:6},
+                {name:'4×4-W1.4/W1.4',as:0.042,spacing:4},
+                {name:'4×4-W2.0/W2.0',as:0.06,spacing:4},
+                {name:'4×4-W2.9/W2.9',as:0.087,spacing:4},
+                {name:'4×4-W4.0/W4.0',as:0.12,spacing:4}
+            ];
+            var selected=null;
+            for(var i=0;i<wwfOptions.length;i++){
+                if(wwfOptions[i].as>=AsPerFt){selected=wwfOptions[i];break;}
+            }
+            if(!selected)selected=wwfOptions[wwfOptions.length-1];
+            var sheets=Math.ceil(sf/150); // typical 5'×30' sheet = 150 SF
+            var lbs=sf*0.30*selected.as/0.028; // rough lb/SF estimate scaled by wire area
+
+            result='<b>ACI 318-19 §24.4 Shrinkage Steel Requirements</b><br><br>'
+                +'Slab: <b>'+sf.toLocaleString()+' SF</b> @ <b>'+thick+'"</b> thick<br>'
+                +'Min ρ = <b>'+rhoMin.toFixed(4)+'</b> (Grade '+(fy/1000)+' steel)<br>'
+                +'Required As = <b>'+AsPerFt.toFixed(3)+' in²/ft</b> (each way)<br><br>'
+                +'<b style="color:#4ade80;">Recommended WWF:</b> '+selected.name+' (provides '+selected.as.toFixed(3)+' in²/ft)<br>'
+                +'Quantity: <b>~'+sheets+' sheets</b> (5\'×30\' typical) — <b>~'+Math.round(lbs)+' lbs</b>';
+
+            if(selected.as<AsPerFt*0.95)warning='⚠ Selected WWF is slightly under ACI minimum — consider next size up or adding supplemental bars.';
+
+        }else{
+            // Rebar calculation
+            var barAreas={3:0.11,4:0.20,5:0.31};
+            var barAs=barAreas[barSize]||0.20;
+            var spacing=barAs/AsPerFt*12; // spacing in inches to meet As
+            spacing=Math.floor(spacing/1)*1; // round down to nearest inch
+            if(spacing<6)spacing=6; // practical minimum
+            if(spacing>18)spacing=18; // typical max
+            var barsPerFtWidth=12/spacing;
+            var totalLfOneWay=widthFt*barsPerFtWidth*widthFt; // approximate
+            var totalLf=totalLfOneWay*2; // both directions
+            var lbsPerFt={3:0.376,4:0.668,5:1.043};
+            var totalLbs=totalLf*(lbsPerFt[barSize]||0.668);
+
+            var actualAs=(barAs*12)/spacing;
+
+            result='<b>ACI 318-19 §24.4 Shrinkage Steel Requirements</b><br><br>'
+                +'Slab: <b>'+sf.toLocaleString()+' SF</b> @ <b>'+thick+'"</b> thick<br>'
+                +'Min ρ = <b>'+rhoMin.toFixed(4)+'</b> (Grade '+(fy/1000)+' steel)<br>'
+                +'Required As = <b>'+AsPerFt.toFixed(3)+' in²/ft</b> (each way)<br><br>'
+                +'<b style="color:#4ade80;">Recommended Rebar:</b> #'+barSize+' @ <b>'+spacing+'" OC</b> each way<br>'
+                +'Provides: '+actualAs.toFixed(3)+' in²/ft ('+(actualAs>=AsPerFt?'✓ OK':'⚠ UNDER')+') <br>'
+                +'Est. Quantity: <b>~'+Math.round(totalLf).toLocaleString()+' LF</b> — <b>~'+Math.round(totalLbs).toLocaleString()+' lbs</b> ('+(totalLbs/2000).toFixed(2)+' tons)';
+
+            if(actualAs<AsPerFt)warning='⚠ Reduce spacing or use larger bar size to meet ACI minimum.';
+        }
+
+        if(thick<4)warning+=(warning?'<br>':'')+'⚠ Slab <4" — consider increasing thickness for crack control.';
+        if(thick>=8)warning+=(warning?'<br>':'')+'ℹ Slab ≥8" — consider top and bottom mats per ACI 360R-10 §7.4.';
+
+        var resDiv=document.getElementById('sr-results');
+        resDiv.innerHTML=result+(warning?'<div style="margin-top:6px;padding:4px;background:#78350f;border-radius:4px;color:#fcd34d;font-size:0.7rem;">'+warning+'</div>':'');
+        resDiv.style.display='block';
+
+        lastCalc={sf:sf,thick:thick,psi:psi,fy:fy,type:type,barSize:barSize,rhoMin:rhoMin,AsPerFt:AsPerFt,result:result.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ')};
+    };
+
+    window._srCopy=function(){
+        if(!lastCalc){alert('Run calculation first.');return;}
+        var txt='SHRINKAGE REINFORCEMENT CALCULATION\n'
+            +'Date: '+new Date().toLocaleDateString()+'\n\n'
+            +lastCalc.result+'\n\n'
+            +'Reference: ACI 318-19 §24.4, ACI 360R-10';
+        try{navigator.clipboard.writeText(txt);alert('Copied!');}catch(e){alert(txt);}
+    };
+
+    window._srPrint=function(){
+        if(!lastCalc){alert('Run calculation first.');return;}
+        var html='<html><head><title>Shrinkage Reinforcement Calc</title><style>body{font-family:Arial,sans-serif;font-size:11pt;margin:1in;}h2{font-size:14pt;}table{border-collapse:collapse;margin:12px 0;font-size:10pt;}th,td{padding:4px 8px;border:1px solid #ccc;text-align:left;}th{background:#1e40af;color:white;}.sign{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:30px;}.sign-box{border-bottom:1px solid #000;padding-top:30px;text-align:center;font-size:9pt;}</style></head><body>';
+        html+='<h2>SHRINKAGE & TEMPERATURE REINFORCEMENT CALCULATION</h2>';
+        html+='<div style="font-size:10pt;margin-bottom:12px;">ACI 318-19 §24.4 / ACI 360R-10 | Date: '+new Date().toLocaleDateString()+'</div><hr>';
+        html+='<table><tr><th>Parameter</th><th>Value</th></tr>';
+        html+='<tr><td>Slab Area</td><td>'+lastCalc.sf.toLocaleString()+' SF</td></tr>';
+        html+='<tr><td>Thickness</td><td>'+lastCalc.thick+'"</td></tr>';
+        html+='<tr><td>Concrete f\'c</td><td>'+lastCalc.psi+' PSI</td></tr>';
+        html+='<tr><td>Steel Grade (fy)</td><td>'+(lastCalc.fy/1000)+' ksi</td></tr>';
+        html+='<tr><td>Min ρ (ACI 318-19)</td><td>'+lastCalc.rhoMin.toFixed(4)+'</td></tr>';
+        html+='<tr><td>Required As (each way)</td><td>'+lastCalc.AsPerFt.toFixed(3)+' in²/ft</td></tr>';
+        html+='<tr><td>Reinforcement Type</td><td>'+(lastCalc.type==='wwf'?'Welded Wire Fabric':'Rebar #'+lastCalc.barSize)+'</td></tr>';
+        html+='</table>';
+        html+='<div style="background:#f0f9ff;border:1px solid #0ea5e9;padding:8px;margin:12px 0;border-radius:4px;font-size:10pt;">'+lastCalc.result.replace(/<br>/g,'<br>')+'</div>';
+        html+='<div style="font-size:9pt;color:#555;margin-top:12px;"><b>Reference:</b> ACI 318-19 §24.4.3.2 — Minimum shrinkage and temperature reinforcement for structural slabs. ACI 360R-10 §7 — Slab-on-ground reinforcement guidance. For slabs ≥8" thick, consider top and bottom mats.</div>';
+        html+='<div class="sign"><div class="sign-box">Engineer / Date</div><div class="sign-box">PM / Date</div><div class="sign-box">Estimator / Date</div></div></body></html>';
+        var w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'📏 Hide Shrinkage Reinforcement Calculator':'📏 Shrinkage Reinforcement Calculator';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
