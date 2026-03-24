@@ -29566,3 +29566,618 @@ Retain one (1) copy for your records. Return stamped copies as indicated above.
     })();
     </script>
 
+
+    <!-- TOOL: Subcontractor Lien Release Tracker -->
+    <script>
+    (function(){
+        const BTN_ID  = 'btn-lien-release';
+        const WRAP_ID = 'wrap-lien-release';
+        const STORE   = 'oncor_lienRelease_v1';
+
+        function load(){ try{ return JSON.parse(localStorage.getItem(STORE)||'{}'); }catch(e){ return {}; } }
+        function save(d){ localStorage.setItem(STORE, JSON.stringify(d)); }
+
+        const SCOPES = ['Concrete Materials','Rebar/PT','Forming','Pump/Equipment','Saw Cutting','Earthwork','Vapor Barrier','Sealants','Testing Lab','Electrical','Plumbing','Steel/Iron','General Labor','Other'];
+        const RELEASE_TYPES = ['Conditional Partial','Conditional Final','Unconditional Partial','Unconditional Final'];
+
+        function getProjectName(){
+            const n = document.getElementById('projectName');
+            return n ? (n.value.trim()||'General') : 'General';
+        }
+
+        function render(){
+            const wrap = document.getElementById(WRAP_ID);
+            if(!wrap || wrap.style.display==='none') return;
+            const d = load();
+            const proj = getProjectName();
+            if(!d.projects) d.projects = {};
+            if(!d.projects[proj]) d.projects[proj] = [];
+            const entries = d.projects[proj];
+            const cleared = entries.filter(e=>e.cleared).length;
+            const pending = entries.filter(e=>!e.cleared).length;
+            const totalAmt = entries.reduce((s,e)=>s+parseFloat(e.drawAmt||0),0);
+
+            let html = '<div style="font-size:11px;font-weight:700;color:#fbbf24;margin-bottom:8px;">📋 Lien Release Tracker — <span style="color:#e2e8f0;">' + proj + '</span></div>';
+            html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;">'
+                + '<div style="background:#1e3a2f;padding:6px;border-radius:4px;text-align:center;"><div style="font-size:16px;font-weight:700;color:#34d399;">' + cleared + '</div><div style="font-size:9px;color:#86efac;">Released</div></div>'
+                + '<div style="background:#3b1e1e;padding:6px;border-radius:4px;text-align:center;"><div style="font-size:16px;font-weight:700;color:#f87171;">' + pending + '</div><div style="font-size:9px;color:#fca5a5;">Pending</div></div>'
+                + '<div style="background:#1e293b;padding:6px;border-radius:4px;text-align:center;"><div style="font-size:13px;font-weight:700;color:#93c5fd;">$' + totalAmt.toLocaleString('en-US',{maximumFractionDigits:0}) + '</div><div style="font-size:9px;color:#bfdbfe;">Draw Total</div></div>'
+                + '</div>';
+
+            if(pending > 0){
+                html += '<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:4px;padding:6px;margin-bottom:8px;font-size:10px;color:#fca5a5;font-weight:600;">⚠️ ' + pending + ' release(s) NOT cleared — DO NOT RELEASE PAYMENT until lien releases received.</div>';
+            } else if(entries.length > 0){
+                html += '<div style="background:#14532d;border:1px solid #22c55e;border-radius:4px;padding:6px;margin-bottom:8px;font-size:10px;color:#86efac;font-weight:600;">✅ ALL LIEN RELEASES CLEARED — Safe to release payment.</div>';
+            }
+
+            const scopeOpts = SCOPES.map(s=>'<option value="'+s+'">'+s+'</option>').join('');
+            const typeOpts  = RELEASE_TYPES.map(t=>'<option value="'+t+'">'+t+'</option>').join('');
+            html += '<div style="font-size:10px;font-weight:600;color:#fbbf24;margin-bottom:6px;">Add Lien Release Entry</div>'
+                + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+                + '<input id="lr-sub" placeholder="Sub / Vendor Name" style="padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">'
+                + '<select id="lr-scope" style="padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">' + scopeOpts + '</select>'
+                + '<input id="lr-draw" placeholder="Draw # (e.g. Draw 2)" style="padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">'
+                + '<input id="lr-amt" type="number" placeholder="Draw Amount ($)" style="padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">'
+                + '<select id="lr-type" style="padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">' + typeOpts + '</select>'
+                + '<input id="lr-date-sub" type="date" title="Date release requested" style="padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">'
+                + '</div>'
+                + '<input id="lr-notes" placeholder="Notes (exceptions, conditions)" style="width:100%;padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;margin-bottom:4px;box-sizing:border-box;">'
+                + '<button onclick="window._lrAdd(\'' + proj + '\')" style="width:100%;padding:5px;background:#b45309;color:white;border:none;border-radius:3px;font-size:10px;cursor:pointer;margin-bottom:10px;font-weight:600;">+ Add Lien Release Entry</button>';
+
+            if(entries.length){
+                html += '<div style="font-size:10px;font-weight:600;color:#e2e8f0;margin-bottom:4px;">Release Log (newest first)</div>';
+                const sorted = [...entries].sort((a,b)=>(b.id||0)-(a.id||0));
+                sorted.forEach(function(e){
+                    const isCleared = !!e.cleared;
+                    const borderCol = isCleared ? '#22c55e' : '#ef4444';
+                    const statusLabel = isCleared ? '<span style="color:#22c55e;font-weight:700;">✓ CLEARED '+e.dateCleared+'</span>' : '<span style="color:#f87171;font-weight:700;">⏳ PENDING</span>';
+                    html += '<div style="border-left:3px solid '+borderCol+';background:#0f172a;padding:5px 7px;border-radius:3px;margin-bottom:5px;font-size:9px;">'
+                        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">'
+                        + '<span style="font-weight:700;color:#e2e8f0;">'+(e.sub||'Unknown Sub')+'</span>'+statusLabel+'</div>'
+                        + '<div style="color:#94a3b8;">'+(e.scope||'')+' | '+(e.draw||'')+' | $'+parseFloat(e.drawAmt||0).toLocaleString('en-US',{maximumFractionDigits:0})+' | '+(e.type||'')+'</div>'
+                        + (e.notes?'<div style="color:#64748b;font-style:italic;">'+e.notes+'</div>':'')
+                        + '<div style="margin-top:4px;display:flex;gap:4px;">'
+                        + (!isCleared?'<button onclick="window._lrClear(\''+proj+'\','+e.id+')" style="padding:2px 6px;background:#14532d;color:#86efac;border:1px solid #22c55e;border-radius:3px;font-size:9px;cursor:pointer;">✓ Mark Cleared</button>':'')
+                        + '<button onclick="window._lrDel(\''+proj+'\','+e.id+')" style="padding:2px 6px;background:#7f1d1d;color:#fca5a5;border:1px solid #ef4444;border-radius:3px;font-size:9px;cursor:pointer;">Delete</button>'
+                        + '</div></div>';
+                });
+            }
+
+            html += '<div style="display:flex;gap:4px;margin-top:6px;">'
+                + '<button onclick="window._lrCopy(\''+proj+'\')" style="flex:1;padding:4px;background:#1e3a5f;color:#93c5fd;border:1px solid #3b82f6;border-radius:3px;font-size:9px;cursor:pointer;">📋 Copy Report</button>'
+                + '<button onclick="window._lrPrint(\''+proj+'\')" style="flex:1;padding:4px;background:#1e3a5f;color:#93c5fd;border:1px solid #3b82f6;border-radius:3px;font-size:9px;cursor:pointer;">🖨️ Print</button>'
+                + '</div>';
+
+            wrap.innerHTML = html;
+        }
+
+        window._lrAdd = function(proj){
+            var sub  = (document.getElementById('lr-sub')||{}).value;
+            if(sub) sub = sub.trim();
+            var scope = (document.getElementById('lr-scope')||{}).value;
+            var draw  = (document.getElementById('lr-draw')||{}).value;
+            if(draw) draw = draw.trim();
+            var amt   = (document.getElementById('lr-amt')||{}).value;
+            var type  = (document.getElementById('lr-type')||{}).value;
+            var dateS = (document.getElementById('lr-date-sub')||{}).value;
+            var notes = (document.getElementById('lr-notes')||{}).value;
+            if(notes) notes = notes.trim();
+            if(!sub){ alert('Enter sub/vendor name.'); return; }
+            var d = load();
+            if(!d.projects) d.projects = {};
+            if(!d.projects[proj]) d.projects[proj] = [];
+            var id = Date.now();
+            d.projects[proj].push({ id:id, sub:sub, scope:scope, draw:draw, drawAmt:amt||0, type:type, dateSubmitted:dateS, cleared:false, dateCleared:'', notes:notes });
+            save(d);
+            render();
+        };
+        window._lrClear = function(proj, id){
+            var d = load();
+            var today = new Date().toISOString().slice(0,10);
+            var entries = (d.projects && d.projects[proj]) ? d.projects[proj] : [];
+            for(var i=0;i<entries.length;i++){ if(entries[i].id===id){ entries[i].cleared=true; entries[i].dateCleared=today; break; } }
+            save(d); render();
+        };
+        window._lrDel = function(proj, id){
+            if(!confirm('Delete this entry?')) return;
+            var d = load();
+            if(d.projects && d.projects[proj]) d.projects[proj] = d.projects[proj].filter(function(e){ return e.id!==id; });
+            save(d); render();
+        };
+        window._lrCopy = function(proj){
+            var d = load();
+            var entries = (d.projects && d.projects[proj]) ? d.projects[proj] : [];
+            var cleared = entries.filter(function(e){ return e.cleared; }).length;
+            var totalAmt = entries.reduce(function(s,e){ return s+parseFloat(e.drawAmt||0); },0);
+            var txt = 'LIEN RELEASE TRACKER — '+proj+'\n'+'='.repeat(50)+'\nReleased: '+cleared+' | Pending: '+(entries.length-cleared)+' | Total Draw: $'+totalAmt.toLocaleString('en-US',{maximumFractionDigits:0})+'\n\n';
+            entries.slice().sort(function(a,b){ return (b.id||0)-(a.id||0); }).forEach(function(e){
+                txt += '['+( e.cleared?'CLEARED':'PENDING')+'] '+e.sub+' | '+(e.scope||'')+' | '+(e.draw||'')+' | $'+parseFloat(e.drawAmt||0).toLocaleString('en-US',{maximumFractionDigits:0})+' | '+(e.type||'')+'\n';
+                if(e.notes) txt += '  Notes: '+e.notes+'\n';
+            });
+            navigator.clipboard && navigator.clipboard.writeText(txt).then(function(){ alert('Copied!'); }).catch(function(){ alert('Copy failed.'); });
+        };
+        window._lrPrint = function(proj){
+            var d = load();
+            var entries = (d.projects && d.projects[proj]) ? d.projects[proj] : [];
+            var cleared = entries.filter(function(e){ return e.cleared; }).length;
+            var totalAmt = entries.reduce(function(s,e){ return s+parseFloat(e.drawAmt||0); },0);
+            var sorted = entries.slice().sort(function(a,b){ return (b.id||0)-(a.id||0); });
+            var rows = sorted.map(function(e){
+                return '<tr style="background:'+(e.cleared?'#e8f5e9':'#fff3f3')+';">'
+                    +'<td>'+(e.sub||'')+'</td><td>'+(e.scope||'')+'</td><td>'+(e.draw||'')+'</td>'
+                    +'<td style="text-align:right;">$'+parseFloat(e.drawAmt||0).toLocaleString('en-US',{minimumFractionDigits:2})+'</td>'
+                    +'<td>'+(e.type||'')+'</td>'
+                    +'<td style="text-align:center;color:'+(e.cleared?'#155724':'#721c24')+';font-weight:700;">'+(e.cleared?'✓ CLEARED':'⏳ PENDING')+'</td>'
+                    +'<td>'+(e.dateCleared||'')+'</td><td>'+(e.notes||'')+'</td></tr>';
+            }).join('');
+            var w = window.open('','_blank','width=1000,height=700');
+            w.document.write('<!DOCTYPE html><html><head><title>Lien Release Tracker</title>'
+                +'<style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}h2{text-align:center;}'
+                +'table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:4px 6px;font-size:9px;}'
+                +'th{background:#78350f;color:white;} .sig{border-top:1px solid #000;margin-top:30px;padding-top:4px;}'
+                +'@media print{body{margin:10px;}}</style></head><body>'
+                +'<h2>LIEN RELEASE TRACKER</h2>'
+                +'<p style="text-align:center;font-size:9px;">Project: '+proj+' — Printed '+new Date().toLocaleDateString()+'</p>'
+                +'<table style="max-width:500px;margin-bottom:12px;"><tr><th>Released</th><th>Pending</th><th>Total Draw Value</th></tr>'
+                +'<tr><td style="text-align:center;color:#155724;font-weight:700;">'+cleared+'</td>'
+                +'<td style="text-align:center;color:'+(entries.length-cleared>0?'#721c24':'#155724')+';font-weight:700;">'+(entries.length-cleared)+'</td>'
+                +'<td style="text-align:right;">$'+totalAmt.toLocaleString('en-US',{minimumFractionDigits:2})+'</td></tr></table>'
+                +(entries.length-cleared>0
+                    ?'<div style="border:2px solid red;padding:8px;margin-bottom:12px;color:red;font-weight:700;">⚠️ PAYMENT HOLD: '+(entries.length-cleared)+' lien release(s) not yet received. Do not release payment until all lien releases are signed and received.</div>'
+                    :'<div style="border:2px solid green;padding:8px;margin-bottom:12px;color:green;font-weight:700;">✅ ALL LIEN RELEASES CLEARED — Payment may be released.</div>')
+                +'<table><tr><th>Sub/Vendor</th><th>Scope</th><th>Draw</th><th>Amount</th><th>Release Type</th><th>Status</th><th>Date Cleared</th><th>Notes</th></tr>'
+                +rows+'</table>'
+                +'<div style="margin-top:24px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px;">'
+                +'<div class="sig">Project Manager<br><br>___________________________<br><span style="font-size:8px;">Date: ___________</span></div>'
+                +'<div class="sig">Accounting / AP<br><br>___________________________<br><span style="font-size:8px;">Date: ___________</span></div>'
+                +'<div class="sig">Principal<br><br>___________________________<br><span style="font-size:8px;">Date: ___________</span></div>'
+                +'</div>'
+                +'<p style="font-size:8px;color:#666;margin-top:12px;">Texas Property Code §53 — Lien releases required from all subs/suppliers before owner payment releases. Conditional release valid only upon actual receipt of payment. Consult an attorney for specific legal guidance.</p>'
+                +'<script>window.onload=function(){window.print();};<\/script></body></html>');
+            w.document.close();
+        };
+
+        function createButton(){
+            var sidebar = document.getElementById('sidebar');
+            if(!sidebar || document.getElementById(BTN_ID)) return;
+            var btn = document.createElement('button');
+            btn.id = BTN_ID;
+            btn.textContent = '📋 Lien Release Tracker';
+            btn.title = 'Track subcontractor lien releases by draw — prevent paying until releases received';
+            btn.style.cssText = 'padding:4px 8px;background:#78350f;color:#fcd34d;border:1px solid #f59e0b;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+            btn.onclick = togglePanel;
+            var wrap = document.createElement('div');
+            wrap.id = WRAP_ID;
+            wrap.style.cssText = 'display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+            sidebar.appendChild(btn);
+            sidebar.appendChild(wrap);
+        }
+        function togglePanel(){
+            var wrap = document.getElementById(WRAP_ID);
+            var btn  = document.getElementById(BTN_ID);
+            if(!wrap||!btn) return;
+            var show = wrap.style.display==='none';
+            wrap.style.display = show ? 'block' : 'none';
+            btn.textContent = show ? '📋 Hide Lien Tracker' : '📋 Lien Release Tracker';
+            if(show) render();
+        }
+        if(document.readyState==='loading'){
+            document.addEventListener('DOMContentLoaded', createButton);
+        } else {
+            createButton();
+        }
+    })();
+    </script>
+
+    <!-- TOOL: Concrete Strength Maturity Calculator (ASTM C1074) -->
+    <script>
+    (function(){
+        var BTN_ID  = 'btn-maturity';
+        var WRAP_ID = 'wrap-maturity';
+        var STORE   = 'oncor_maturity_v1';
+
+        function load(){ try{ return JSON.parse(localStorage.getItem(STORE)||'{}'); }catch(e){ return {}; } }
+        function save(d){ localStorage.setItem(STORE, JSON.stringify(d)); }
+
+        // Nurse-Saul maturity ratios (°F-hours): [maturity, strength fraction of f'c]
+        var RATIOS = [[0,0],[100,0.10],[250,0.25],[500,0.50],[750,0.62],[1000,0.70],[1500,0.80],[2000,0.85],[3000,0.91],[4000,0.95],[5000,0.97],[6000,0.98]];
+
+        function matureStrength(maturityFtHr, targetPsi, cementType){
+            var M = cementType==='III' ? maturityFtHr * 1.25 : maturityFtHr;
+            for(var i=1;i<RATIOS.length;i++){
+                if(M <= RATIOS[i][0]){
+                    var t0=RATIOS[i-1][0], t1=RATIOS[i][0], r0=RATIOS[i-1][1], r1=RATIOS[i][1];
+                    var frac = (M-t0)/(t1-t0);
+                    return (r0 + frac*(r1-r0)) * targetPsi;
+                }
+            }
+            return 0.98 * targetPsi;
+        }
+
+        function computeMilestones(ambientF, targetPsi, cementType, thresholds){
+            var datum = 14;
+            var dtF = Math.max(ambientF - datum, 1);
+            var results = [];
+            thresholds.forEach(function(t){
+                if(t.pct<=0||t.pct>100) return;
+                var neededPsi = (t.pct/100)*targetPsi;
+                var lo=0, hi=10000, iters=0;
+                while(hi-lo>1 && iters<40){
+                    var mid=(lo+hi)/2;
+                    matureStrength(mid, targetPsi, cementType) >= neededPsi ? hi=mid : lo=mid;
+                    iters++;
+                }
+                var hours = Math.round(hi / dtF);
+                results.push({ label:t.label, pct:t.pct, psi:Math.round(neededPsi), hours:hours, days:(hours/24).toFixed(1) });
+            });
+            return results;
+        }
+
+        var THRESHOLDS = [
+            { label:'Form Strip — Walls (65%)', pct:65 },
+            { label:'Light Load (70%)', pct:70 },
+            { label:'PT Stressing / Shoring (75%)', pct:75 },
+            { label:'ACI 306R Cold Weather Min (85%)', pct:85 },
+            { label:'Reshoring / Full Live Load (90%)', pct:90 },
+            { label:'28-Day Design Strength (100%)', pct:100 }
+        ];
+
+        function render(){
+            var wrap = document.getElementById(WRAP_ID);
+            if(!wrap || wrap.style.display==='none') return;
+            var d = load();
+            var psi    = parseFloat(d.psi||4000);
+            var temp   = parseFloat(d.temp||75);
+            var cement = d.cement||'I';
+            var poured = d.poured||'';
+            var milestones = computeMilestones(temp, psi, cement, THRESHOLDS);
+            var pouredDt = poured ? new Date(poured) : null;
+
+            var html = '<div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;">🧪 Concrete Strength Maturity Calculator</div>'
+                +'<div style="font-size:9px;color:#64748b;margin-bottom:8px;">ASTM C1074 Nurse-Saul Method | Datum 14°F (-10°C) | Type I/II generalized curve</div>'
+                +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px;">'
+                +'<div><label style="font-size:9px;color:#94a3b8;">Design f\'c (PSI)</label>'
+                +'<input id="mc-psi" type="number" value="'+psi+'" style="width:100%;padding:3px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;box-sizing:border-box;"></div>'
+                +'<div><label style="font-size:9px;color:#94a3b8;">Avg Ambient Temp (°F)</label>'
+                +'<input id="mc-temp" type="number" value="'+temp+'" style="width:100%;padding:3px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;box-sizing:border-box;"></div>'
+                +'<div><label style="font-size:9px;color:#94a3b8;">Cement Type</label>'
+                +'<select id="mc-cement" style="width:100%;padding:3px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">'
+                +'<option value="I"'+(cement==='I'?' selected':'')+'>Type I/II (Standard)</option>'
+                +'<option value="III"'+(cement==='III'?' selected':'')+'>Type III (High-Early)</option>'
+                +'</select></div>'
+                +'<div><label style="font-size:9px;color:#94a3b8;">Pour Date/Time</label>'
+                +'<input id="mc-poured" type="datetime-local" value="'+poured+'" style="width:100%;padding:3px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;box-sizing:border-box;"></div>'
+                +'</div>';
+
+            if(temp > 90) html += '<div style="background:#7c2d12;border:1px solid #ea580c;border-radius:4px;padding:5px;margin-bottom:6px;font-size:9px;color:#fed7aa;font-weight:600;">🌡️ ACI 305R HOT WEATHER ('+temp+'°F): Accelerated early strength, possible reduced 28d strength. Curing plan required.</div>';
+            if(temp < 40) html += '<div style="background:#1e3a5f;border:1px solid #3b82f6;border-radius:4px;padding:5px;margin-bottom:6px;font-size:9px;color:#bfdbfe;font-weight:600;">❄️ ACI 306R COLD WEATHER ('+temp+'°F): Maturity model assumes concrete protected from freezing. Do not strip until concrete ≥35°F.</div>';
+
+            html += '<div style="font-size:10px;font-weight:600;color:#a78bfa;margin-bottom:4px;">Strength Milestones at '+temp+'°F Ambient</div>'
+                +'<table style="width:100%;border-collapse:collapse;font-size:9px;margin-bottom:8px;">'
+                +'<tr><th style="text-align:left;padding:3px 4px;background:#1e1b4b;color:#a5b4fc;border:1px solid #312e81;">Milestone</th>'
+                +'<th style="text-align:right;padding:3px 4px;background:#1e1b4b;color:#a5b4fc;border:1px solid #312e81;">PSI</th>'
+                +'<th style="text-align:right;padding:3px 4px;background:#1e1b4b;color:#a5b4fc;border:1px solid #312e81;">Hrs</th>'
+                +'<th style="text-align:right;padding:3px 4px;background:#1e1b4b;color:#a5b4fc;border:1px solid #312e81;">Days</th>'
+                +(pouredDt?'<th style="text-align:left;padding:3px 4px;background:#1e1b4b;color:#a5b4fc;border:1px solid #312e81;">Est. Date</th>':'')
+                +'</tr>';
+
+            milestones.forEach(function(m){
+                var estStr = '';
+                if(pouredDt && m.hours < 9000){
+                    var estDt = new Date(pouredDt.getTime() + m.hours*3600000);
+                    estStr = estDt.toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+                }
+                html += '<tr style="border:1px solid #312e81;">'
+                    +'<td style="padding:3px 4px;color:#e2e8f0;">'+m.label+'</td>'
+                    +'<td style="text-align:right;padding:3px 4px;color:#c4b5fd;">'+m.psi.toLocaleString()+'</td>'
+                    +'<td style="text-align:right;padding:3px 4px;color:'+(m.hours>72?'#fbbf24':'#86efac')+';">'+(m.hours>=9000?'N/A':m.hours+'h')+'</td>'
+                    +'<td style="text-align:right;padding:3px 4px;color:'+(parseFloat(m.days)>3?'#fbbf24':'#86efac')+';">'+(m.hours>=9000?'N/A':m.days+'d')+'</td>'
+                    +(pouredDt?'<td style="padding:3px 4px;color:#93c5fd;">'+estStr+'</td>':'')
+                    +'</tr>';
+            });
+            html += '</table>';
+
+            if(pouredDt){
+                var ageHours = (Date.now() - pouredDt.getTime()) / 3600000;
+                if(ageHours > 0){
+                    var dtF2 = Math.max(temp - 14, 1);
+                    var curPsi = Math.min(Math.round(matureStrength(dtF2*ageHours, psi, cement)), Math.round(psi*0.98));
+                    var pct = Math.min(100, Math.round(curPsi/psi*100));
+                    var barCol = pct>=100?'#22c55e':pct>=75?'#eab308':pct>=50?'#f97316':'#ef4444';
+                    html += '<div style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:7px;margin-bottom:8px;">'
+                        +'<div style="font-size:9px;color:#94a3b8;margin-bottom:4px;">CURRENT AGE: '+ageHours.toFixed(1)+'h ('+( ageHours/24).toFixed(1)+'d)</div>'
+                        +'<div style="font-size:13px;font-weight:700;color:'+barCol+';">Est. Strength: '+curPsi.toLocaleString()+' PSI ('+pct+'% of f\'c)</div>'
+                        +'<div style="background:#0f172a;border-radius:3px;height:8px;margin-top:5px;overflow:hidden;"><div style="height:100%;background:'+barCol+';width:'+pct+'%;"></div></div>'
+                        +'</div>';
+                }
+            }
+
+            html += '<div style="font-size:8px;color:#475569;margin-bottom:8px;">Verify with project-specific maturity curve per ASTM C1074 §6 for critical elements. Consult engineer of record before stripping or loading.</div>'
+                +'<div style="display:flex;gap:4px;">'
+                +'<button onclick="window._mcCalc()" style="flex:1;padding:4px;background:#4c1d95;color:#ddd6fe;border:1px solid #7c3aed;border-radius:3px;font-size:9px;cursor:pointer;font-weight:600;">▶ Calculate</button>'
+                +'<button onclick="window._mcPrint()" style="flex:1;padding:4px;background:#1e3a5f;color:#93c5fd;border:1px solid #3b82f6;border-radius:3px;font-size:9px;cursor:pointer;">🖨️ Print</button>'
+                +'</div>';
+
+            wrap.innerHTML = html;
+        }
+
+        window._mcCalc = function(){
+            var d = load();
+            d.psi    = parseFloat((document.getElementById('mc-psi')||{}).value)||4000;
+            d.temp   = parseFloat((document.getElementById('mc-temp')||{}).value)||75;
+            d.cement = (document.getElementById('mc-cement')||{}).value||'I';
+            d.poured = (document.getElementById('mc-poured')||{}).value||'';
+            save(d);
+            render();
+        };
+
+        window._mcPrint = function(){
+            var d = load();
+            var psi = parseFloat(d.psi||4000), temp = parseFloat(d.temp||75), cement = d.cement||'I', poured = d.poured||'';
+            var milestones = computeMilestones(temp, psi, cement, THRESHOLDS);
+            var pouredDt = poured ? new Date(poured) : null;
+            var rows = milestones.map(function(m){
+                var estStr = 'N/A';
+                if(pouredDt && m.hours < 9000){
+                    var estDt = new Date(pouredDt.getTime()+m.hours*3600000);
+                    estStr = estDt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+                }
+                return '<tr><td>'+m.label+'</td><td style="text-align:right;">'+psi.toLocaleString()+'×'+m.pct+'%='+m.psi.toLocaleString()+' PSI</td><td style="text-align:right;">'+(m.hours>=9000?'N/A':m.hours+'h')+'</td><td style="text-align:right;">'+(m.hours>=9000?'N/A':m.days+'d')+'</td><td>'+estStr+'</td></tr>';
+            }).join('');
+            var w = window.open('','_blank','width=900,height=700');
+            w.document.write('<!DOCTYPE html><html><head><title>Concrete Maturity Calculation</title>'
+                +'<style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}h2{text-align:center;}'
+                +'table{width:100%;border-collapse:collapse;margin-bottom:12px;}th,td{border:1px solid #ccc;padding:4px 8px;}'
+                +'th{background:#4c1d95;color:white;} .sig{border-top:1px solid #000;margin-top:30px;padding-top:4px;}'
+                +'@media print{body{margin:10px;}}</style></head><body>'
+                +'<h2>CONCRETE STRENGTH MATURITY CALCULATION</h2>'
+                +'<p style="text-align:center;font-size:9px;">ASTM C1074 Nurse-Saul Method — Printed '+new Date().toLocaleDateString()+'</p>'
+                +'<table style="max-width:500px;margin-bottom:12px;">'
+                +'<tr><td style="font-weight:700;">Design Strength f\'c</td><td>'+psi.toLocaleString()+' PSI</td></tr>'
+                +'<tr><td style="font-weight:700;">Avg Ambient Temp</td><td>'+temp+'°F</td></tr>'
+                +'<tr><td style="font-weight:700;">Cement Type</td><td>Type '+cement+'</td></tr>'
+                +'<tr><td style="font-weight:700;">Pour Date/Time</td><td>'+(poured||'Not specified')+'</td></tr>'
+                +'<tr><td style="font-weight:700;">Datum Temp (T₀)</td><td>14°F (-10°C) per ASTM C1074</td></tr>'
+                +'</table>'
+                +'<h3>Strength Milestones</h3>'
+                +'<table><tr><th>Milestone</th><th>Required Strength</th><th>Hours</th><th>Days</th><th>Estimated Date</th></tr>'+rows+'</table>'
+                +'<p style="font-size:8px;color:#555;">DISCLAIMER: Generalized Type I/II maturity-strength curve. For critical elements, develop project-specific curve per ASTM C1074 §6. Do not strip forms, apply PT, or apply loads without engineer-of-record approval. Actual strength may vary with w/c, admixtures, curing, and temperature variation.</p>'
+                +'<div style="margin-top:24px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px;">'
+                +'<div class="sig">Estimator / Engineer<br><br>___________________________<br><span style="font-size:8px;">Date: ___________</span></div>'
+                +'<div class="sig">PM / Superintendent<br><br>___________________________<br><span style="font-size:8px;">Date: ___________</span></div>'
+                +'<div class="sig">GC / Inspector<br><br>___________________________<br><span style="font-size:8px;">Date: ___________</span></div>'
+                +'</div>'
+                +'<script>window.onload=function(){window.print();};<\/script></body></html>');
+            w.document.close();
+        };
+
+        function createButton(){
+            var sidebar = document.getElementById('sidebar');
+            if(!sidebar || document.getElementById(BTN_ID)) return;
+            var btn = document.createElement('button');
+            btn.id = BTN_ID;
+            btn.textContent = '🧪 Maturity Calculator';
+            btn.title = 'ASTM C1074 strength maturity — predict form strip, PT stressing, load timing by temp+time';
+            btn.style.cssText = 'padding:4px 8px;background:#4c1d95;color:#ddd6fe;border:1px solid #7c3aed;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+            btn.onclick = togglePanel;
+            var wrap = document.createElement('div');
+            wrap.id = WRAP_ID;
+            wrap.style.cssText = 'display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+            sidebar.appendChild(btn);
+            sidebar.appendChild(wrap);
+        }
+        function togglePanel(){
+            var wrap = document.getElementById(WRAP_ID);
+            var btn  = document.getElementById(BTN_ID);
+            if(!wrap||!btn) return;
+            var show = wrap.style.display==='none';
+            wrap.style.display = show ? 'block' : 'none';
+            btn.textContent = show ? '🧪 Hide Maturity Calc' : '🧪 Maturity Calculator';
+            if(show) render();
+        }
+        if(document.readyState==='loading'){
+            document.addEventListener('DOMContentLoaded', createButton);
+        } else {
+            createButton();
+        }
+    })();
+    </script>
+
+    <!-- TOOL: OSHA 300 Incident Log -->
+    <script>
+    (function(){
+        var BTN_ID  = 'btn-osha300';
+        var WRAP_ID = 'wrap-osha300';
+        var STORE   = 'oncor_osha300_v1';
+
+        function load(){ try{ return JSON.parse(localStorage.getItem(STORE)||'{}'); }catch(e){ return {}; } }
+        function save(d){ localStorage.setItem(STORE, JSON.stringify(d)); }
+
+        var INJURY_TYPES = ['Sprain/Strain','Laceration','Fracture','Contusion','Burn','Eye Injury','Chemical Exposure','Heat Illness','Electrical Shock','Struck By Object','Fall (Same Level)','Fall (Different Level)','Caught In/Between','Overexertion','Other'];
+        var BODY_PARTS = ['Back/Spine','Hand/Fingers','Foot/Toes','Eye','Knee','Shoulder','Head/Face','Wrist','Ankle','Arm','Leg','Hip','Multiple','Other'];
+        var INCIDENT_TYPES = ['Near Miss','First Aid','OSHA Recordable — Medical Treatment','OSHA Recordable — Restricted Work','OSHA Recordable — Lost Time','OSHA Recordable — Fatality'];
+
+        function render(){
+            var wrap = document.getElementById(WRAP_ID);
+            if(!wrap || wrap.style.display==='none') return;
+            var d = load();
+            if(!d.incidents) d.incidents = [];
+            var incidents = d.incidents;
+            var recordable = incidents.filter(function(e){ return e.type&&e.type.indexOf('OSHA Recordable')>=0; }).length;
+            var nearMiss   = incidents.filter(function(e){ return e.type==='Near Miss'; }).length;
+            var firstAid   = incidents.filter(function(e){ return e.type==='First Aid'; }).length;
+            var lostDays   = incidents.reduce(function(s,e){ return s+parseInt(e.lostDays||0); },0);
+
+            var injOpts  = INJURY_TYPES.map(function(t){ return '<option value="'+t+'">'+t+'</option>'; }).join('');
+            var bodyOpts = BODY_PARTS.map(function(t){ return '<option value="'+t+'">'+t+'</option>'; }).join('');
+            var typeOpts = INCIDENT_TYPES.map(function(t){ return '<option value="'+t+'">'+t+'</option>'; }).join('');
+
+            var html = '<div style="font-size:11px;font-weight:700;color:#f87171;margin-bottom:8px;">🦺 OSHA 300 Incident Log</div>'
+                +'<div style="font-size:9px;color:#64748b;margin-bottom:8px;">29 CFR §1904 — Required recordkeeping. Retain 5 years. Post 300A annually Feb 1–Apr 30.</div>'
+                +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:8px;">'
+                +'<div style="background:#7f1d1d;padding:5px;border-radius:4px;text-align:center;"><div style="font-size:14px;font-weight:700;color:#fca5a5;">'+recordable+'</div><div style="font-size:8px;color:#fecaca;">Recordable</div></div>'
+                +'<div style="background:#1e293b;padding:5px;border-radius:4px;text-align:center;"><div style="font-size:14px;font-weight:700;color:#fbbf24;">'+nearMiss+'</div><div style="font-size:8px;color:#fde68a;">Near Miss</div></div>'
+                +'<div style="background:#1e293b;padding:5px;border-radius:4px;text-align:center;"><div style="font-size:14px;font-weight:700;color:#94a3b8;">'+firstAid+'</div><div style="font-size:8px;color:#cbd5e1;">First Aid</div></div>'
+                +'<div style="background:#1e293b;padding:5px;border-radius:4px;text-align:center;"><div style="font-size:14px;font-weight:700;color:#f97316;">'+lostDays+'</div><div style="font-size:8px;color:#fed7aa;">Days Away</div></div>'
+                +'</div>'
+                +'<div style="font-size:10px;font-weight:600;color:#f87171;margin-bottom:6px;">Log New Incident</div>'
+                +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+                +'<input id="o3-emp" placeholder="Employee Name" style="padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">'
+                +'<input id="o3-date" type="date" style="padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">'
+                +'<select id="o3-type" style="padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">'+typeOpts+'</select>'
+                +'<select id="o3-injury" style="padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">'+injOpts+'</select>'
+                +'<select id="o3-body" style="padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">'+bodyOpts+'</select>'
+                +'<input id="o3-project" placeholder="Project / Location" style="padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">'
+                +'<input id="o3-lost" type="number" placeholder="Days Away from Work" min="0" style="padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">'
+                +'<input id="o3-restricted" type="number" placeholder="Days Restricted / Transferred" min="0" style="padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">'
+                +'</div>'
+                +'<textarea id="o3-desc" placeholder="Describe how injury occurred — task, equipment, witnesses..." rows="2" style="width:100%;padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;box-sizing:border-box;margin-bottom:4px;resize:vertical;"></textarea>'
+                +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+                +'<input id="o3-physician" placeholder="Physician / Hospital (if applicable)" style="padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">'
+                +'<input id="o3-witness" placeholder="Witness Name(s)" style="padding:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">'
+                +'</div>'
+                +'<button onclick="window._o3Add()" style="width:100%;padding:5px;background:#991b1b;color:white;border:none;border-radius:3px;font-size:10px;cursor:pointer;margin-bottom:10px;font-weight:600;">+ Log Incident</button>';
+
+            if(incidents.length){
+                html += '<div style="font-size:10px;font-weight:600;color:#e2e8f0;margin-bottom:4px;">Incident Log ('+incidents.length+' total)</div>';
+                incidents.slice().sort(function(a,b){ return (b.id||0)-(a.id||0); }).forEach(function(e){
+                    var isRec = e.type && e.type.indexOf('OSHA Recordable')>=0;
+                    var isNM  = e.type==='Near Miss';
+                    var borderCol = isRec ? '#ef4444' : isNM ? '#f59e0b' : '#64748b';
+                    var badgeCol  = isRec ? '#fca5a5' : isNM ? '#fde68a' : '#94a3b8';
+                    html += '<div style="border-left:3px solid '+borderCol+';background:#0f172a;padding:5px 7px;border-radius:3px;margin-bottom:5px;font-size:9px;">'
+                        +'<div style="display:flex;justify-content:space-between;margin-bottom:2px;">'
+                        +'<span style="font-weight:700;color:#e2e8f0;">'+(e.emp||'Unknown')+' — '+(e.date||'')+'</span>'
+                        +'<span style="color:'+badgeCol+';font-weight:700;font-size:8px;">'+(e.type||'')+'</span></div>'
+                        +'<div style="color:#94a3b8;">'+(e.injury||'')+' | '+(e.body||'')+' | '+(e.project||'')+'</div>'
+                        +(parseInt(e.lostDays||0)>0?'<div style="color:#f87171;">Days Away: '+e.lostDays+'</div>':'')
+                        +(parseInt(e.restrictedDays||0)>0?'<div style="color:#fb923c;">Days Restricted: '+e.restrictedDays+'</div>':'')
+                        +(e.desc?'<div style="color:#64748b;margin-top:2px;">'+e.desc+'</div>':'')
+                        +'<div style="margin-top:4px;"><button onclick="window._o3Del('+e.id+')" style="padding:2px 6px;background:#7f1d1d;color:#fca5a5;border:1px solid #ef4444;border-radius:3px;font-size:9px;cursor:pointer;">Delete</button></div>'
+                        +'</div>';
+                });
+            } else {
+                html += '<div style="color:#64748b;font-size:10px;text-align:center;padding:10px;">No incidents logged. 🟢 Keep it that way.</div>';
+            }
+
+            html += '<div style="display:flex;gap:4px;margin-top:6px;">'
+                +'<button onclick="window._o3Copy()" style="flex:1;padding:4px;background:#1e3a5f;color:#93c5fd;border:1px solid #3b82f6;border-radius:3px;font-size:9px;cursor:pointer;">📋 Copy Log</button>'
+                +'<button onclick="window._o3Print()" style="flex:1;padding:4px;background:#1e3a5f;color:#93c5fd;border:1px solid #3b82f6;border-radius:3px;font-size:9px;cursor:pointer;">🖨️ OSHA 300 Print</button>'
+                +'</div>'
+                +'<div style="font-size:8px;color:#475569;margin-top:6px;">Fatalities: report to OSHA within 8 hrs. Inpatient hospitalization/amputation/eye loss: 24 hrs. 29 CFR §1904.39. Retain records 5 years.</div>';
+
+            wrap.innerHTML = html;
+        }
+
+        window._o3Add = function(){
+            var emp        = ((document.getElementById('o3-emp')||{}).value||'').trim();
+            var date       = (document.getElementById('o3-date')||{}).value||'';
+            var type       = (document.getElementById('o3-type')||{}).value||'';
+            var injury     = (document.getElementById('o3-injury')||{}).value||'';
+            var body       = (document.getElementById('o3-body')||{}).value||'';
+            var project    = ((document.getElementById('o3-project')||{}).value||'').trim();
+            var lostDays   = (document.getElementById('o3-lost')||{}).value||0;
+            var restrictedDays = (document.getElementById('o3-restricted')||{}).value||0;
+            var desc       = ((document.getElementById('o3-desc')||{}).value||'').trim();
+            var physician  = ((document.getElementById('o3-physician')||{}).value||'').trim();
+            var witness    = ((document.getElementById('o3-witness')||{}).value||'').trim();
+            if(!emp){ alert('Enter employee name.'); return; }
+            var d = load();
+            if(!d.incidents) d.incidents = [];
+            d.incidents.push({ id:Date.now(), emp:emp, date:date, type:type, injury:injury, body:body, project:project, lostDays:lostDays, restrictedDays:restrictedDays, desc:desc, physician:physician, witness:witness });
+            save(d);
+            render();
+        };
+        window._o3Del = function(id){
+            if(!confirm('Delete this incident record?')) return;
+            var d = load();
+            if(d.incidents) d.incidents = d.incidents.filter(function(e){ return e.id!==id; });
+            save(d); render();
+        };
+        window._o3Copy = function(){
+            var d = load();
+            var incidents = d.incidents||[];
+            var recordable = incidents.filter(function(e){ return e.type&&e.type.indexOf('OSHA Recordable')>=0; }).length;
+            var txt = 'OSHA 300 INCIDENT LOG\n'+'='.repeat(50)+'\nTotal: '+incidents.length+' | Recordable: '+recordable+' | Near Miss: '+incidents.filter(function(e){ return e.type==='Near Miss'; }).length+'\n\n';
+            incidents.slice().sort(function(a,b){ return (b.id||0)-(a.id||0); }).forEach(function(e){
+                txt += '['+e.type+'] '+(e.emp||'?')+' — '+(e.date||'')+' | '+(e.injury||'')+' | '+(e.body||'')+' | '+(e.project||'')+'\n';
+                if(e.desc) txt += '  '+e.desc+'\n';
+                if(parseInt(e.lostDays||0)>0) txt += '  Days Away: '+e.lostDays+'\n';
+            });
+            navigator.clipboard && navigator.clipboard.writeText(txt).then(function(){ alert('Copied!'); }).catch(function(){ alert('Copy failed.'); });
+        };
+        window._o3Print = function(){
+            var d = load();
+            var incidents = d.incidents||[];
+            var recordable = incidents.filter(function(e){ return e.type&&e.type.indexOf('OSHA Recordable')>=0; }).length;
+            var lostDays   = incidents.reduce(function(s,e){ return s+parseInt(e.lostDays||0); },0);
+            var restrictedDays = incidents.reduce(function(s,e){ return s+parseInt(e.restrictedDays||0); },0);
+            var rn = 0;
+            var rows = incidents.slice().sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); }).map(function(e){
+                rn++;
+                return '<tr style="background:'+(e.type&&e.type.indexOf('OSHA Recordable')>=0?'#fff0f0':'white')+';">'
+                    +'<td style="text-align:center;">'+rn+'</td>'
+                    +'<td>'+(e.date||'')+'</td><td>'+(e.emp||'')+'</td><td>'+(e.project||'')+'</td>'
+                    +'<td>'+(e.type||'')+'</td><td>'+(e.injury||'')+'</td><td>'+(e.body||'')+'</td>'
+                    +'<td style="text-align:center;">'+(e.lostDays||0)+'</td>'
+                    +'<td style="text-align:center;">'+(e.restrictedDays||0)+'</td>'
+                    +'<td style="font-size:8px;">'+(e.desc||'')+'</td>'
+                    +'<td>'+(e.physician||'')+'</td></tr>';
+            }).join('');
+            var w = window.open('','_blank','width=1100,height=700');
+            w.document.write('<!DOCTYPE html><html><head><title>OSHA 300 Log</title>'
+                +'<style>body{font-family:Arial,sans-serif;font-size:9px;margin:20px;}h2{text-align:center;margin-bottom:4px;}'
+                +'table{width:100%;border-collapse:collapse;font-size:8px;}th,td{border:1px solid #999;padding:3px 5px;}'
+                +'th{background:#c0392b;color:white;} .sig{border-top:1px solid #000;margin-top:28px;padding-top:4px;}'
+                +'@media print{body{margin:8px;}}</style></head><body>'
+                +'<h2>OSHA FORM 300 — LOG OF WORK-RELATED INJURIES AND ILLNESSES</h2>'
+                +'<p style="text-align:center;font-size:8px;">29 CFR Part 1904 — Year: '+new Date().getFullYear()+' — Printed '+new Date().toLocaleDateString()+'</p>'
+                +'<table style="width:auto;margin-bottom:12px;"><tr><th>Total Cases</th><th>OSHA Recordable</th><th>Days Away</th><th>Days Restricted</th><th>Near Miss</th><th>First Aid Only</th></tr>'
+                +'<tr><td>'+incidents.length+'</td><td style="color:'+(recordable>0?'red':'green')+';font-weight:700;">'+recordable+'</td><td>'+lostDays+'</td><td>'+restrictedDays+'</td>'
+                +'<td>'+incidents.filter(function(e){ return e.type==='Near Miss'; }).length+'</td>'
+                +'<td>'+incidents.filter(function(e){ return e.type==='First Aid'; }).length+'</td></tr></table>'
+                +'<table><tr><th>#</th><th>Date</th><th>Employee</th><th>Project/Location</th><th>Case Type</th><th>Injury Type</th><th>Body Part</th><th>Days Away</th><th>Days Restricted</th><th>Description</th><th>Physician/Facility</th></tr>'
+                +(rows||'<tr><td colspan="11" style="text-align:center;">No incidents recorded.</td></tr>')
+                +'</table>'
+                +'<p style="font-size:7.5px;color:#666;margin-top:10px;">OSHA Form 300 must be retained for 5 years following the end of the calendar year. OSHA 300A Annual Summary must be posted at each establishment Feb 1–Apr 30. Fatalities: report to OSHA within 8 hours. Inpatient hospitalization, amputation, or eye loss: report within 24 hours. 29 CFR §1904.39.</p>'
+                +'<div style="margin-top:24px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px;">'
+                +'<div class="sig">Safety Lead / Date<br><br>___________________________</div>'
+                +'<div class="sig">Project Manager / Date<br><br>___________________________</div>'
+                +'<div class="sig">Principal / Date<br><br>___________________________</div>'
+                +'</div>'
+                +'<script>window.onload=function(){window.print();};<\/script></body></html>');
+            w.document.close();
+        };
+
+        function createButton(){
+            var sidebar = document.getElementById('sidebar');
+            if(!sidebar || document.getElementById(BTN_ID)) return;
+            var btn = document.createElement('button');
+            btn.id = BTN_ID;
+            btn.textContent = '🦺 OSHA 300 Incident Log';
+            btn.title = 'OSHA 300 injury/illness recordkeeping — near miss, first aid, recordable cases, OSHA 300A print';
+            btn.style.cssText = 'padding:4px 8px;background:#7f1d1d;color:#fca5a5;border:1px solid #ef4444;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+            btn.onclick = togglePanel;
+            var wrap = document.createElement('div');
+            wrap.id = WRAP_ID;
+            wrap.style.cssText = 'display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+            sidebar.appendChild(btn);
+            sidebar.appendChild(wrap);
+        }
+        function togglePanel(){
+            var wrap = document.getElementById(WRAP_ID);
+            var btn  = document.getElementById(BTN_ID);
+            if(!wrap||!btn) return;
+            var show = wrap.style.display==='none';
+            wrap.style.display = show ? 'block' : 'none';
+            btn.textContent = show ? '🦺 Hide Incident Log' : '🦺 OSHA 300 Incident Log';
+            if(show) render();
+        }
+        if(document.readyState==='loading'){
+            document.addEventListener('DOMContentLoaded', createButton);
+        } else {
+            createButton();
+        }
+    })();
+    </script>
+
