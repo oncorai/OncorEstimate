@@ -38070,3 +38070,436 @@ Retain one (1) copy for your records. Return stamped copies as indicated above.
     if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
 })();
 </script>
+
+<!-- ==================== ACI 305R EVAPORATION RATE CALCULATOR ==================== -->
+<script>
+(function(){
+    'use strict';
+    var BTN_ID='evapcalcBtn', WRAP_ID='evapcalcWrap';
+    var KEY='oncorEvapCalc_v1';
+
+    function load(){try{return JSON.parse(localStorage.getItem(KEY))||{calcs:[]};}catch(e){return{calcs:[]};}}
+    function save(d){try{localStorage.setItem(KEY,JSON.stringify(d));}catch(e){}}
+
+    function createButton(){
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;btn.className='btn';
+        btn.textContent='Evap Rate Calc';
+        btn.title='ACI 305R-10 Plastic Shrinkage Evaporation Rate Calculator';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;wrap.style.display='none';
+        wrap.style.cssText='background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:8px 0;';
+        document.querySelector('.sidebar').appendChild(btn);
+        document.querySelector('.sidebar').appendChild(wrap);
+    }
+
+    function calcEvap(airTemp_F,concTemp_F,rh,windMph){
+        var Tc = (concTemp_F - 32) * 5/9;
+        var Ta = (airTemp_F - 32) * 5/9;
+        var esat_c = 0.6108 * Math.exp(17.27*Tc/(Tc+237.3));
+        var esat_a = 0.6108 * Math.exp(17.27*Ta/(Ta+237.3));
+        var ea = esat_a * (rh/100);
+        var K = 0.0160;
+        var E = K * (esat_c - ea) * (1 + 0.4*windMph);
+        return Math.max(0, E);
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var d=load();
+        var stored=d.lastCalc||{};
+        var E=stored.evap||0;
+        var riskColor='#16a34a', riskLabel='LOW RISK', riskBg='#f0fdf4', riskBorder='#86efac';
+        if(E>=0.20){riskColor='#991b1b';riskLabel='CRITICAL — PLASTIC SHRINKAGE LIKELY';riskBg='#fee2e2';riskBorder='#fca5a5';}
+        else if(E>=0.15){riskColor='#92400e';riskLabel='HIGH RISK — PRECAUTIONS REQUIRED';riskBg='#fef3c7';riskBorder='#fcd34d';}
+        else if(E>=0.10){riskColor='#1d4ed8';riskLabel='MODERATE RISK — MONITOR';riskBg='#eff6ff';riskBorder='#93c5fd';}
+
+        var histRows=(d.calcs||[]).slice(0,10).map(function(c,i){
+            var cl=c.evap>=0.20?'#fee2e2':c.evap>=0.15?'#fef3c7':c.evap>=0.10?'#eff6ff':'';
+            return '<tr style="background:'+cl+'"><td style="padding:3px 6px;">'+c.date+'</td><td style="padding:3px 6px;">'+c.airTemp+'/'+c.concTemp+'F</td><td style="padding:3px 6px;">'+c.rh+'%</td><td style="padding:3px 6px;">'+c.wind+' mph</td><td style="padding:3px 6px;font-weight:700;">'+c.evap.toFixed(3)+'</td><td style="padding:3px 6px;">'+c.notes+'</td><td><button onclick="window._evapDel('+i+')" style="background:none;border:none;color:#ef4444;cursor:pointer;">x</button></td></tr>';
+        }).join('');
+
+        wrap.innerHTML=
+            '<div style="font-weight:700;font-size:14px;margin-bottom:6px;">ACI 305R-10 Evaporation Rate Calculator</div>'
+            +'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:6px;padding:8px;margin-bottom:10px;font-size:11px;color:#1e40af;">'
+            +'ACI 305R-10 sec 4.3: when evaporation exceeds <b>0.20 lb/ft2/hr</b>, plastic shrinkage cracking is likely and hot weather precautions are mandatory. El Paso summer (110F, 15% RH, 20 mph) routinely hits 0.40+.'
+            +'</div>'
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:10px;">'
+            +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Air Temp (F)</label><br><input id="evap-air" type="number" value="'+(stored.airTemp||95)+'" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Concrete Temp (F)</label><br><input id="evap-conc" type="number" value="'+(stored.concTemp||90)+'" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Rel. Humidity (%)</label><br><input id="evap-rh" type="number" value="'+(stored.rh||30)+'" min="1" max="99" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Wind Speed (mph)</label><br><input id="evap-wind" type="number" value="'+(stored.wind||10)+'" min="0" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;"></div>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Notes</label><br><input id="evap-notes" value="'+(stored.notes||'')+'" placeholder="e.g. pre-pour check" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Date</label><br><input id="evap-date" type="date" value="'+(stored.date||new Date().toISOString().slice(0,10))+'" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;"></div>'
+            +'</div>'
+            +'<div style="display:flex;gap:8px;">'
+            +'<button onclick="window._evapCalc()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:7px 16px;cursor:pointer;font-weight:600;">Calculate</button>'
+            +'<button onclick="window._evapSave()" style="background:#059669;color:#fff;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">Save Reading</button>'
+            +'<button onclick="window._evapPrint()" style="background:#6b7280;color:#fff;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">Print Log</button>'
+            +'</div>'
+            +'</div>'
+            +(E>0?'<div style="background:'+riskBg+';border:2px solid '+riskBorder+';border-radius:8px;padding:12px;margin-bottom:10px;text-align:center;">'
+                +'<div style="font-size:24px;font-weight:800;color:'+riskColor+';">'+E.toFixed(3)+' lb/ft2/hr</div>'
+                +'<div style="font-size:13px;font-weight:700;color:'+riskColor+';">'+riskLabel+'</div>'
+                +(E>=0.20?'<div style="background:#991b1b;color:#fff;border-radius:6px;padding:6px;margin-top:8px;font-size:11px;font-weight:600;">MANDATORY: Wind breaks, evaporation retarder (ASTM C1567), fog misting, shading. Document on Pre-Pour Checklist.</div>':'')
+                +'</div>':'')
+            +(d.calcs&&d.calcs.length>0?'<div style="font-weight:600;font-size:12px;margin-bottom:4px;">Reading History</div>'
+                +'<table style="width:100%;border-collapse:collapse;font-size:11px;">'
+                +'<tr style="background:#f3f4f6;"><th style="padding:3px 6px;">Date</th><th>Air/Conc F</th><th>RH</th><th>Wind</th><th>Evap lb/ft2/hr</th><th>Notes</th><th></th></tr>'
+                +histRows+'</table>':'');
+    }
+
+    window._evapCalc=function(){
+        var air=parseFloat(document.getElementById('evap-air').value)||95;
+        var conc=parseFloat(document.getElementById('evap-conc').value)||90;
+        var rh=parseFloat(document.getElementById('evap-rh').value)||30;
+        var wind=parseFloat(document.getElementById('evap-wind').value)||10;
+        var notes=(document.getElementById('evap-notes')||{}).value||'';
+        var date=(document.getElementById('evap-date')||{}).value||new Date().toISOString().slice(0,10);
+        var E=calcEvap(air,conc,rh,wind);
+        var d=load();d.lastCalc={airTemp:air,concTemp:conc,rh:rh,wind:wind,notes:notes,date:date,evap:E};save(d);render();
+    };
+    window._evapSave=function(){
+        var air=parseFloat(document.getElementById('evap-air').value)||95;
+        var conc=parseFloat(document.getElementById('evap-conc').value)||90;
+        var rh=parseFloat(document.getElementById('evap-rh').value)||30;
+        var wind=parseFloat(document.getElementById('evap-wind').value)||10;
+        var notes=(document.getElementById('evap-notes')||{}).value||'';
+        var date=(document.getElementById('evap-date')||{}).value||new Date().toISOString().slice(0,10);
+        var E=calcEvap(air,conc,rh,wind);
+        var d=load();if(!d.calcs)d.calcs=[];
+        d.calcs.unshift({airTemp:air,concTemp:conc,rh:rh,wind:wind,notes:notes,date:date,evap:E});
+        if(d.calcs.length>50)d.calcs.length=50;
+        d.lastCalc={airTemp:air,concTemp:conc,rh:rh,wind:wind,notes:notes,date:date,evap:E};
+        save(d);render();
+    };
+    window._evapDel=function(i){var d=load();(d.calcs||[]).splice(i,1);save(d);render();};
+    window._evapPrint=function(){
+        var d=load();
+        var rows=(d.calcs||[]).map(function(c){
+            var lbl=c.evap>=0.20?'CRITICAL':c.evap>=0.15?'HIGH':c.evap>=0.10?'MODERATE':'LOW';
+            return '<tr style="background:'+(c.evap>=0.20?'#fee2e2':c.evap>=0.15?'#fef3c7':'')+'"><td>'+c.date+'</td><td>'+c.airTemp+'F/'+c.concTemp+'F</td><td>'+c.rh+'%</td><td>'+c.wind+' mph</td><td style="font-weight:700;">'+c.evap.toFixed(3)+'</td><td>'+lbl+'</td><td>'+c.notes+'</td></tr>';
+        }).join('');
+        var w=window.open('','_blank','width=1000,height=700');
+        w.document.write('<!DOCTYPE html><html><head><title>ACI 305R Evaporation Log</title><style>body{font-family:Arial,sans-serif;font-size:10px;padding:16px;}h1{font-size:13px;border-bottom:2px solid #000;}table{width:100%;border-collapse:collapse;margin:8px 0;}th,td{border:1px solid #999;padding:3px 5px;font-size:9px;}th{background:#f3f4f6;}.note{font-size:8px;color:#666;font-style:italic;}.sig td{height:40px;}@media print{button{display:none;}}</style></head><body>'
+            +'<h1>PLASTIC SHRINKAGE EVAPORATION RATE LOG — ACI 305R-10 Section 4.3</h1>'
+            +'<p>Total Readings: '+d.calcs.length+' | Critical Events (>=0.20): '+(d.calcs.filter(function(c){return c.evap>=0.20;}).length)+' | Generated: '+new Date().toLocaleDateString()+'</p>'
+            +'<table><tr><th>Date</th><th>Air/Conc Temp</th><th>RH%</th><th>Wind mph</th><th>Evap Rate lb/ft2/hr</th><th>Risk</th><th>Notes</th></tr>'+rows+'</table>'
+            +'<p class="note">ACI 305R-10 Section 4.3: Plastic shrinkage cracking is likely when evaporation rate exceeds 0.20 lb/ft2/hr. Hot weather precautions required: wind breaks, fog misting, evaporation retarders (ASTM C1567), continuous wet curing immediately after finishing. Calculation per Menzel (1954) approximation of ACI 305R nomograph.</p>'
+            +'<table class="sig"><tr><th>QC Inspector</th><th>Foreman / Superintendent</th><th>Project Manager</th></tr><tr style="height:40px;"><td></td><td></td><td></td></tr></table>'
+            +'<button onclick="window.print()" style="margin-top:12px;padding:8px 20px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;">Print</button>'
+            +'</body></html>');
+        w.document.close();w.print();
+    };
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        document.getElementById(BTN_ID).textContent=show?'Hide Evap Calc':'Evap Rate Calc';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ==================== PRECONSTRUCTION MEETING MINUTES ==================== -->
+<script>
+(function(){
+    'use strict';
+    var BTN_ID='preconMtgBtn', WRAP_ID='preconMtgWrap';
+    var KEY='oncorPreconMtg_v1';
+    var AGENDA_ITEMS=[
+        {cat:'Project Overview',item:'Scope, contract value, start date, milestone schedule'},
+        {cat:'Project Overview',item:'Contract documents — drawings, specs, addenda acknowledged'},
+        {cat:'Project Overview',item:'Owner/GC contacts and communication protocol'},
+        {cat:'Submittals',item:'Mix design submittals — due dates and review turnaround'},
+        {cat:'Submittals',item:'Rebar shop drawings / bar list approval timeline'},
+        {cat:'Submittals',item:'Material certifications (mill certs, ASTM) due dates'},
+        {cat:'Submittals',item:'COI and bond submission to GC/Owner'},
+        {cat:'Quality Control',item:'Special inspector — name, qualifications, ACI cert number'},
+        {cat:'Quality Control',item:'Cylinder testing frequency, lab name, pickup/break schedule'},
+        {cat:'Quality Control',item:'FF/FL survey requirements (if applicable)'},
+        {cat:'Quality Control',item:'Pre-pour inspection and approval process'},
+        {cat:'Schedule',item:'Pour sequence — zones, phasing, dependency schedule'},
+        {cat:'Schedule',item:'Concrete truck scheduling and ready-mix plant coordination'},
+        {cat:'Schedule',item:'Pump mobilization and setup requirements'},
+        {cat:'Schedule',item:'Cure time requirements and re-shoring plan (elevated decks)'},
+        {cat:'Safety',item:'Site safety plan submission and review'},
+        {cat:'Safety',item:'OSHA — impalement caps, GFCI, fall protection, silica plan'},
+        {cat:'Safety',item:'Emergency procedures — nearest hospital, emergency contacts'},
+        {cat:'Payment',item:'Schedule of values / pay app format and due dates'},
+        {cat:'Payment',item:'Lien waiver requirements — conditional release per draw'},
+        {cat:'Payment',item:'Change order authorization — written CO required before extra work'},
+        {cat:'Payment',item:'Retainage percent and release conditions'},
+        {cat:'Open Items',item:'Owner/GC questions and open items — assign and document'},
+    ];
+
+    function load(){try{var d=JSON.parse(localStorage.getItem(KEY));return d||{meetings:[]};}catch(e){return{meetings:[]};}}
+    function save(d){try{localStorage.setItem(KEY,JSON.stringify(d));}catch(e){}}
+    function getProj(){var el=document.getElementById('projectName');return(el&&el.value)||'';}
+    function getClient(){var el=document.getElementById('clientName');return(el&&el.value)||'';}
+    function freshActive(){return{project:getProj(),client:getClient(),date:new Date().toISOString().slice(0,10),location:'',gcRep:'',pmName:'',attendees:[],agenda:AGENDA_ITEMS.map(function(a){return{cat:a.cat,item:a.item,status:'Discuss',assignee:'',due:'',notes:''};})};}
+    function createButton(){
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;btn.className='btn';
+        btn.textContent='Preconstruction Mtg';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;wrap.style.display='none';
+        wrap.style.cssText='background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:8px 0;';
+        document.querySelector('.sidebar').appendChild(btn);
+        document.querySelector('.sidebar').appendChild(wrap);
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var d=load();
+        if(!d.active)d.active=freshActive();
+        var a=d.active;
+        var agRows=a.agenda.map(function(ag,i){
+            var sc=ag.status==='Resolved'?'color:#16a34a':ag.status==='Action Required'?'color:#991b1b;font-weight:bold':'';
+            return '<tr style="border-bottom:1px solid #f3f4f6;">'
+                +'<td style="padding:3px 5px;font-size:10px;color:#6b7280;">'+ag.cat+'</td>'
+                +'<td style="padding:3px 5px;font-size:11px;">'+ag.item+'</td>'
+                +'<td style="padding:3px 5px;"><select onchange="window._preconSt('+i+',this.value)" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px;"><option'+(ag.status==='Discuss'?' selected':'')+'>Discuss</option><option'+(ag.status==='Resolved'?' selected':'')+'>Resolved</option><option'+(ag.status==='Action Required'?' selected':'')+'>Action Required</option><option'+(ag.status==='Deferred'?' selected':'')+'>Deferred</option><option'+(ag.status==='N/A'?' selected':'')+'>N/A</option></select></td>'
+                +'<td style="padding:3px 5px;"><input value="'+(ag.assignee||'')+'" onchange="window._preconAF('+i+',\'assignee\',this.value)" style="width:80px;font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px;" placeholder="Who"></td>'
+                +'<td style="padding:3px 5px;"><input type="date" value="'+(ag.due||'')+'" onchange="window._preconAF('+i+',\'due\',this.value)" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px;"></td>'
+                +'<td style="padding:3px 5px;"><input value="'+(ag.notes||'')+'" onchange="window._preconAF('+i+',\'notes\',this.value)" style="width:110px;font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px;" placeholder="Resolution..."></td>'
+                +'</tr>';
+        }).join('');
+        var attRows=(a.attendees||[]).map(function(at,i){
+            return '<div style="display:flex;gap:6px;margin-bottom:4px;">'
+                +'<input value="'+(at.name||'')+'" onchange="window._preconAtF('+i+',\'name\',this.value)" style="width:120px;font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:3px;" placeholder="Name">'
+                +'<input value="'+(at.company||'')+'" onchange="window._preconAtF('+i+',\'company\',this.value)" style="width:110px;font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:3px;" placeholder="Company">'
+                +'<input value="'+(at.role||'')+'" onchange="window._preconAtF('+i+',\'role\',this.value)" style="width:90px;font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:3px;" placeholder="Role">'
+                +'<input value="'+(at.email||'')+'" onchange="window._preconAtF('+i+',\'email\',this.value)" style="width:130px;font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:3px;" placeholder="Email">'
+                +'<button onclick="window._preconAtDel('+i+')" style="background:none;border:none;color:#ef4444;cursor:pointer;">x</button></div>';
+        }).join('');
+        var actionItems=a.agenda.filter(function(ag){return ag.status==='Action Required';});
+        wrap.innerHTML=
+            '<div style="font-weight:700;font-size:14px;margin-bottom:6px;">Preconstruction Meeting Agenda and Minutes</div>'
+            +'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px;margin-bottom:10px;font-size:11px;color:#166534;">'
+            +'A formal preconstruction meeting documents mutual agreement on submittals, schedule, QC, payments, and safety. Minutes supplement the subcontract — GCs cannot later claim they did not know your requirements. 23 standard agenda items, 5 categories, action tracking, formal minutes generation.'
+            +'</div>'
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:10px;">'
+            +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Project</label><br><input id="precon-proj" value="'+(a.project||'')+'" onchange="window._preconFld(\'project\',this.value)" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:11px;"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">GC / Owner</label><br><input id="precon-client" value="'+(a.client||'')+'" onchange="window._preconFld(\'client\',this.value)" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:11px;"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Date</label><br><input type="date" value="'+(a.date||'')+'" onchange="window._preconFld(\'date\',this.value)" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:11px;"></div>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Location / Platform</label><br><input value="'+(a.location||'')+'" onchange="window._preconFld(\'location\',this.value)" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:11px;" placeholder="Jobsite trailer / Zoom"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">GC Representative</label><br><input value="'+(a.gcRep||'')+'" onchange="window._preconFld(\'gcRep\',this.value)" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:11px;" placeholder="GC PM name"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Minutes Prepared By</label><br><input value="'+(a.pmName||'')+'" onchange="window._preconFld(\'pmName\',this.value)" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:11px;" placeholder="Your name"></div>'
+            +'</div>'
+            +'</div>'
+            +(actionItems.length>0?'<div style="background:#fee2e2;border:2px solid #fca5a5;border-radius:6px;padding:8px;margin-bottom:10px;"><div style="font-weight:700;font-size:12px;color:#991b1b;margin-bottom:4px;">OPEN ACTION ITEMS ('+actionItems.length+')</div>'+actionItems.map(function(x){return '<div style="font-size:11px;">- '+x.item+(x.assignee?' -> '+x.assignee:'')+(x.due?' by '+x.due:'')+'</div>';}).join('')+'</div>':'')
+            +'<div style="font-weight:600;font-size:12px;margin-bottom:4px;">Agenda Items</div>'
+            +'<div style="overflow-x:auto;margin-bottom:10px;"><table style="width:100%;border-collapse:collapse;"><tr style="background:#f3f4f6;font-size:11px;"><th style="padding:4px 5px;text-align:left;">Category</th><th style="padding:4px 5px;text-align:left;">Item</th><th>Status</th><th>Assigned</th><th>Due</th><th>Notes</th></tr>'+agRows+'</table></div>'
+            +'<div style="font-weight:600;font-size:12px;margin-bottom:4px;">Attendees</div>'
+            +'<div style="margin-bottom:6px;">'+attRows+'</div>'
+            +'<button onclick="window._preconAtAdd()" style="background:#e5e7eb;color:#374151;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;margin-bottom:10px;">+ Add Attendee</button>'
+            +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+            +'<button onclick="window._preconPrint()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:7px 16px;cursor:pointer;font-weight:600;">Print Formal Minutes</button>'
+            +'<button onclick="window._preconCopy()" style="background:#e5e7eb;color:#374151;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">Copy Email Draft</button>'
+            +'<button onclick="window._preconArchive()" style="background:#059669;color:#fff;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">Archive and New</button>'
+            +'</div>';
+    }
+    window._preconFld=function(f,v){var d=load();if(!d.active)d.active=freshActive();d.active[f]=v;save(d);};
+    window._preconSt=function(i,v){var d=load();if(d.active&&d.active.agenda[i])d.active.agenda[i].status=v;save(d);render();};
+    window._preconAF=function(i,f,v){var d=load();if(d.active&&d.active.agenda[i])d.active.agenda[i][f]=v;save(d);};
+    window._preconAtF=function(i,f,v){var d=load();if(d.active&&d.active.attendees[i])d.active.attendees[i][f]=v;save(d);};
+    window._preconAtAdd=function(){var d=load();if(!d.active)d.active=freshActive();if(!d.active.attendees)d.active.attendees=[];d.active.attendees.push({name:'',company:'',role:'',email:''});save(d);render();};
+    window._preconAtDel=function(i){var d=load();if(d.active&&d.active.attendees)d.active.attendees.splice(i,1);save(d);render();};
+    window._preconArchive=function(){var d=load();if(!d.active)return;if(!d.meetings)d.meetings=[];d.meetings.unshift({project:d.active.project,date:d.active.date,saved:new Date().toISOString(),data:d.active});if(d.meetings.length>20)d.meetings.length=20;d.active=freshActive();save(d);render();alert('Meeting archived. Blank meeting loaded for next project.');};
+    window._preconCopy=function(){
+        var d=load();var a=d.active||{};
+        var lines=['PRECONSTRUCTION MEETING MINUTES','Project: '+(a.project||''),'Date: '+(a.date||''),'GC/Owner: '+(a.client||''),'Prepared by: '+(a.pmName||''),'','AGENDA ITEMS:'];
+        (a.agenda||[]).forEach(function(ag){lines.push('['+ag.status+'] '+ag.item+(ag.assignee?' | Action: '+ag.assignee+(ag.due?' by '+ag.due:''):'')+(ag.notes?' | '+ag.notes:''));});
+        var acts=(a.agenda||[]).filter(function(x){return x.status==='Action Required';});
+        if(acts.length){lines.push('','OPEN ACTION ITEMS:');acts.forEach(function(x){lines.push('- '+x.item+(x.assignee?' -> '+x.assignee:'')+(x.due?' by '+x.due:''));});}
+        try{navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Copied!');});}catch(e){alert(lines.join('\n'));}
+    };
+    window._preconPrint=function(){
+        var d=load();var a=d.active||{};
+        var acts=(a.agenda||[]).filter(function(x){return x.status==='Action Required';});
+        var agRows=(a.agenda||[]).map(function(ag){
+            var sc=ag.status==='Resolved'?'color:#16a34a':ag.status==='Action Required'?'color:#991b1b;font-weight:bold':'';
+            return '<tr><td>'+ag.cat+'</td><td>'+ag.item+'</td><td style="'+sc+'">'+ag.status+'</td><td>'+(ag.assignee||'')+'</td><td>'+(ag.due||'')+'</td><td>'+(ag.notes||'')+'</td></tr>';
+        }).join('');
+        var attRows=(a.attendees||[]).map(function(at){return '<tr><td>'+(at.name||'')+'</td><td>'+(at.company||'')+'</td><td>'+(at.role||'')+'</td><td>'+(at.email||'')+'</td></tr>';}).join('');
+        var actRows=acts.map(function(x){return '<tr><td>'+x.item+'</td><td>'+(x.assignee||'')+'</td><td>'+(x.due||'')+'</td><td>'+(x.notes||'')+'</td></tr>';}).join('');
+        var w=window.open('','_blank','width=1100,height=800');
+        w.document.write('<!DOCTYPE html><html><head><title>Preconstruction Meeting Minutes</title><style>body{font-family:Arial,sans-serif;font-size:10px;padding:16px;}h1{font-size:14px;border-bottom:2px solid #000;}h2{font-size:11px;margin-top:12px;}table{width:100%;border-collapse:collapse;margin:6px 0;}th,td{border:1px solid #999;padding:3px 5px;font-size:9px;}th{background:#f3f4f6;}.note{font-size:8px;color:#666;font-style:italic;}.sig td{height:45px;}@media print{button{display:none;}}</style></head><body>'
+            +'<h1>PRECONSTRUCTION MEETING MINUTES</h1>'
+            +'<table><tr><th>Project</th><th>GC / Owner</th><th>Date</th><th>Location</th><th>Minutes By</th></tr><tr><td>'+(a.project||'')+'</td><td>'+(a.client||'')+'</td><td>'+(a.date||'')+'</td><td>'+(a.location||'')+'</td><td>'+(a.pmName||'')+'</td></tr></table>'
+            +(a.attendees&&a.attendees.length?'<h2>ATTENDEES</h2><table><tr><th>Name</th><th>Company</th><th>Role</th><th>Email</th></tr>'+attRows+'</table>':'')
+            +'<h2>AGENDA AND DISCUSSION ITEMS</h2><table><tr><th>Category</th><th>Agenda Item</th><th>Status</th><th>Assigned To</th><th>Due Date</th><th>Notes / Resolution</th></tr>'+agRows+'</table>'
+            +(acts.length?'<h2 style="color:#991b1b;">OPEN ACTION ITEMS ('+acts.length+')</h2><table><tr><th>Item</th><th>Responsible Party</th><th>Due Date</th><th>Notes</th></tr>'+actRows+'</table>':'')
+            +'<p class="note">These minutes constitute a record of agreements reached at the preconstruction meeting. Any items marked Action Required must be resolved prior to the scheduled start date or as noted. Failure to respond within 7 days of distribution constitutes acceptance as written. These minutes supplement but do not replace the executed subcontract agreement.</p>'
+            +'<table class="sig"><tr><th>Contractor Representative / PM</th><th>GC Representative</th><th>Owner Representative</th></tr><tr style="height:45px;"><td></td><td></td><td></td></tr></table>'
+            +'<button onclick="window.print()" style="margin-top:12px;padding:8px 20px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;">Print</button>'
+            +'</body></html>');
+        w.document.close();w.print();
+    };
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        document.getElementById(BTN_ID).textContent=show?'Hide Preconstruction Mtg':'Preconstruction Mtg';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ==================== BONDING CAPACITY WORKSHEET ==================== -->
+<script>
+(function(){
+    'use strict';
+    var BTN_ID='bondingCapBtn', WRAP_ID='bondingCapWrap';
+    var KEY='oncorBondingCap_v1';
+
+    function load(){try{var d=JSON.parse(localStorage.getItem(KEY));return d||{inputs:{}};}catch(e){return{inputs:{}};}}
+    function save(d){try{localStorage.setItem(KEY,JSON.stringify(d));}catch(e){}}
+    function fmt$(n){return '$'+Number(n||0).toLocaleString();}
+
+    function createButton(){
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;btn.className='btn';
+        btn.textContent='Bonding Capacity';
+        btn.title='Surety Bond Capacity Worksheet';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;wrap.style.display='none';
+        wrap.style.cssText='background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:8px 0;';
+        document.querySelector('.sidebar').appendChild(btn);
+        document.querySelector('.sidebar').appendChild(wrap);
+    }
+
+    function calcBonding(c){
+        var equity=parseFloat(c.equity)||0;
+        var revenue=parseFloat(c.revenue)||0;
+        var currentAssets=parseFloat(c.currentAssets)||0;
+        var currentLiab=parseFloat(c.currentLiab)||0;
+        var longDebt=parseFloat(c.longDebt)||0;
+        var backlog=parseFloat(c.backlog)||0;
+        var wc=currentAssets-currentLiab;
+        var single=Math.min(equity*10, wc>0?wc/0.05:equity*10);
+        var agg=Math.min(equity*15, wc>0?wc/0.15:equity*15, revenue>0?revenue*3:equity*15);
+        var cr=currentLiab>0?(currentAssets/currentLiab):0;
+        var de=equity>0?((currentLiab+longDebt)/equity):0;
+        var br=equity>0?(backlog/equity):0;
+        return{wc:wc,single:single,agg:agg,cr:cr,de:de,br:br};
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var d=load();var c=d.inputs||{};
+        var res=calcBonding(c);
+        var crC=res.cr>=1.5?'#16a34a':res.cr>=1.0?'#92400e':'#991b1b';
+        var deC=res.de<=1.5?'#16a34a':res.de<=3.0?'#92400e':'#991b1b';
+        var brC=res.br<=10?'#16a34a':res.br<=15?'#92400e':'#991b1b';
+        var wcC=res.wc>=0?'#16a34a':'#991b1b';
+
+        wrap.innerHTML=
+            '<div style="font-weight:700;font-size:14px;margin-bottom:6px;">Surety Bonding Capacity Worksheet</div>'
+            +'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:6px;padding:8px;margin-bottom:10px;font-size:11px;color:#1e40af;">'
+            +'Surety underwriters analyze your financial ratios to set single-job and aggregate bonding limits. Most commercial GC contracts above $500k require performance and payment bonds. This worksheet models the surety analysis so you know your capacity before a GC asks. Key rules: 10x equity single job, 15x equity aggregate, current ratio at least 1.5, D/E at most 1.5, backlog-to-equity at most 10x.'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">'
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px;">'
+            +'<div style="font-weight:600;font-size:12px;margin-bottom:8px;">Financial Inputs (from balance sheet / P&L)</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Equity / Net Worth ($)</label><br><input id="bond-eq" type="number" value="'+(c.equity||'')+'" onchange="window._bondF(\'equity\',this.value)" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:12px;" placeholder="250000"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">TTM Revenue ($)</label><br><input id="bond-rev" type="number" value="'+(c.revenue||'')+'" onchange="window._bondF(\'revenue\',this.value)" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:12px;" placeholder="1000000"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Current Assets ($)</label><br><input id="bond-ca" type="number" value="'+(c.currentAssets||'')+'" onchange="window._bondF(\'currentAssets\',this.value)" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:12px;" placeholder="180000"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Current Liabilities ($)</label><br><input id="bond-cl" type="number" value="'+(c.currentLiab||'')+'" onchange="window._bondF(\'currentLiab\',this.value)" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:12px;" placeholder="80000"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Long-Term Debt ($)</label><br><input id="bond-ld" type="number" value="'+(c.longDebt||'')+'" onchange="window._bondF(\'longDebt\',this.value)" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:12px;" placeholder="50000"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Open Backlog ($)</label><br><input id="bond-bl" type="number" value="'+(c.backlog||'')+'" onchange="window._bondF(\'backlog\',this.value)" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:12px;" placeholder="300000"></div>'
+            +'</div>'
+            +'</div>'
+            +'<div>'
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px;">'
+            +'<div style="font-weight:600;font-size:12px;margin-bottom:8px;">Estimated Bonding Capacity</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
+            +'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:11px;color:#6b7280;">Single Job</div><div style="font-size:20px;font-weight:800;color:#1d4ed8;">'+fmt$(res.single)+'</div></div>'
+            +'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:11px;color:#6b7280;">Aggregate</div><div style="font-size:20px;font-weight:800;color:#15803d;">'+fmt$(res.agg)+'</div></div>'
+            +'</div>'
+            +'<p style="font-size:10px;color:#9ca3af;margin:6px 0 0;">Estimates based on industry rules of thumb. Actual capacity determined by surety agent from CPA-prepared financials.</p>'
+            +'</div>'
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px;">'
+            +'<div style="font-weight:600;font-size:12px;margin-bottom:6px;">Financial Ratios</div>'
+            +'<table style="width:100%;border-collapse:collapse;font-size:11px;">'
+            +'<tr><td style="padding:3px 5px;">Working Capital</td><td style="padding:3px 5px;font-weight:700;color:'+wcC+';">'+fmt$(res.wc)+'</td><td style="padding:3px 5px;font-size:10px;color:#6b7280;">Goal: positive</td></tr>'
+            +'<tr><td style="padding:3px 5px;">Current Ratio</td><td style="padding:3px 5px;font-weight:700;color:'+crC+';">'+res.cr.toFixed(2)+'</td><td style="padding:3px 5px;font-size:10px;color:#6b7280;">Goal: >= 1.5</td></tr>'
+            +'<tr><td style="padding:3px 5px;">Debt-to-Equity</td><td style="padding:3px 5px;font-weight:700;color:'+deC+';">'+res.de.toFixed(2)+'x</td><td style="padding:3px 5px;font-size:10px;color:#6b7280;">Goal: <= 1.5</td></tr>'
+            +'<tr><td style="padding:3px 5px;">Backlog-to-Equity</td><td style="padding:3px 5px;font-weight:700;color:'+brC+';">'+res.br.toFixed(1)+'x</td><td style="padding:3px 5px;font-size:10px;color:#6b7280;">Goal: <= 10x</td></tr>'
+            +'</table>'
+            +'</div>'
+            +'</div>'
+            +'</div>'
+            +'<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:10px;margin-bottom:10px;font-size:11px;">'
+            +'<b>How to grow bonding capacity:</b> Retain earnings in the company (every $10k retained adds ~$100-150k bonding capacity). Collect AR faster. Use CPA with construction accounting experience (WIP schedule, percentage-of-completion). Establish surety relationship before you need a bond. Start with single-project bonds to build track record. Aggregate limits follow.'
+            +'</div>'
+            +'<div style="display:flex;gap:8px;">'
+            +'<button onclick="window._bondPrint()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:7px 16px;cursor:pointer;font-weight:600;">Print Worksheet</button>'
+            +'<button onclick="window._bondCopy()" style="background:#e5e7eb;color:#374151;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">Copy Summary</button>'
+            +'</div>';
+    }
+    window._bondF=function(f,v){var d=load();if(!d.inputs)d.inputs={};d.inputs[f]=v;save(d);render();};
+    window._bondCopy=function(){
+        var d=load();var c=d.inputs||{};var res=calcBonding(c);
+        var lines=['BONDING CAPACITY WORKSHEET','Generated: '+new Date().toLocaleDateString(),'','ESTIMATED CAPACITY','Single Job: '+fmt$(res.single),'Aggregate: '+fmt$(res.agg),'','RATIOS','Working Capital: '+fmt$(res.wc),'Current Ratio: '+res.cr.toFixed(2),'Debt-to-Equity: '+res.de.toFixed(2)+'x','Backlog-to-Equity: '+res.br.toFixed(1)+'x'];
+        try{navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Copied!');});}catch(e){alert(lines.join('\n'));}
+    };
+    window._bondPrint=function(){
+        var d=load();var c=d.inputs||{};var res=calcBonding(c);
+        var crS=res.cr>=1.5?'STRONG':res.cr>=1.0?'MARGINAL':'WEAK';
+        var deS=res.de<=1.5?'STRONG':res.de<=3.0?'ACCEPTABLE':'HIGH';
+        var brS=res.br<=10?'OK':res.br<=15?'WATCH':'OVEREXTENDED';
+        var w=window.open('','_blank','width=1000,height=700');
+        w.document.write('<!DOCTYPE html><html><head><title>Bonding Capacity Worksheet</title><style>body{font-family:Arial,sans-serif;font-size:10px;padding:16px;}h1{font-size:13px;border-bottom:2px solid #000;}h2{font-size:11px;margin-top:10px;}table{width:100%;border-collapse:collapse;margin:6px 0;}th,td{border:1px solid #999;padding:3px 5px;font-size:9px;}th{background:#f3f4f6;}.note{font-size:8px;color:#666;font-style:italic;}.sig td{height:40px;}@media print{button{display:none;}}</style></head><body>'
+            +'<h1>SURETY BONDING CAPACITY WORKSHEET</h1>'
+            +'<p>Generated: '+new Date().toLocaleDateString()+' | Internal use — consult licensed surety agent for actual underwriting</p>'
+            +'<h2>FINANCIAL INPUTS</h2>'
+            +'<table><tr><th>Item</th><th>Value</th></tr>'
+            +'<tr><td>Equity / Net Worth</td><td>'+fmt$(c.equity)+'</td></tr>'
+            +'<tr><td>Trailing 12-Month Revenue</td><td>'+fmt$(c.revenue)+'</td></tr>'
+            +'<tr><td>Current Assets</td><td>'+fmt$(c.currentAssets)+'</td></tr>'
+            +'<tr><td>Current Liabilities</td><td>'+fmt$(c.currentLiab)+'</td></tr>'
+            +'<tr><td>Long-Term Debt</td><td>'+fmt$(c.longDebt)+'</td></tr>'
+            +'<tr><td>Open Backlog</td><td>'+fmt$(c.backlog)+'</td></tr>'
+            +'</table>'
+            +'<h2>ESTIMATED BONDING CAPACITY</h2>'
+            +'<table><tr><th>Limit Type</th><th>Estimated Amount</th><th>Basis</th></tr>'
+            +'<tr><td>Single Project Bond</td><td style="font-weight:bold;">'+fmt$(res.single)+'</td><td>10x equity, adjusted for working capital</td></tr>'
+            +'<tr><td>Aggregate Bond Limit</td><td style="font-weight:bold;">'+fmt$(res.agg)+'</td><td>15x equity; min(WC/15%, 3x revenue)</td></tr>'
+            +'</table>'
+            +'<h2>KEY FINANCIAL RATIOS</h2>'
+            +'<table><tr><th>Ratio</th><th>Value</th><th>Benchmark</th><th>Status</th></tr>'
+            +'<tr><td>Working Capital</td><td>'+fmt$(res.wc)+'</td><td>Positive required</td><td>'+(res.wc>=0?'OK':'DEFICIT')+'</td></tr>'
+            +'<tr><td>Current Ratio</td><td>'+res.cr.toFixed(2)+'</td><td>1.5 preferred, 1.0 minimum</td><td>'+crS+'</td></tr>'
+            +'<tr><td>Debt-to-Equity</td><td>'+res.de.toFixed(2)+'x</td><td>1.5 preferred, 3.0 max</td><td>'+deS+'</td></tr>'
+            +'<tr><td>Backlog-to-Equity</td><td>'+res.br.toFixed(1)+'x</td><td>10x preferred, 15x concern</td><td>'+brS+'</td></tr>'
+            +'</table>'
+            +'<p class="note">DISCLAIMER: Estimates based on industry rules of thumb. Actual surety underwriting requires CPA-prepared financial statements (audited or reviewed preferred, GAAP basis, percentage-of-completion per ASC 606). Engage a surety agent experienced in construction for bonds above $500k. TX commercial work may require contractor license depending on project scope and owner requirements.</p>'
+            +'<table class="sig"><tr><th>Contractor / Principal</th><th>CPA / Financial Advisor</th><th>Surety Agent</th></tr><tr style="height:40px;"><td></td><td></td><td></td></tr></table>'
+            +'<button onclick="window.print()" style="margin-top:12px;padding:8px 20px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;">Print</button>'
+            +'</body></html>');
+        w.document.close();w.print();
+    };
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        document.getElementById(BTN_ID).textContent=show?'Hide Bonding Worksheet':'Bonding Capacity';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
