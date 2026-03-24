@@ -32945,3 +32945,809 @@ Retain one (1) copy for your records. Return stamped copies as indicated above.
     }
 })();
 </script>
+
+
+<script>
+/* ============================================================
+   FEATURE: CONCRETE MIX WATER CALCULATOR (💧)
+   ACI 211.1 water demand + aggregate moisture correction +
+   hot-weather ice substitution. El Paso-critical.
+   ============================================================ */
+(function(){
+    'use strict';
+    var BTN_ID='mwc-btn', WRAP_ID='mwc-wrap';
+
+    function createButton(){
+        var sidebar=document.getElementById('sidebar');
+        if(!sidebar||document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='💧 Mix Water Calc';
+        btn.title='ACI 211.1 mix water demand, aggregate moisture correction, ice substitution for hot weather';
+        btn.style.cssText='padding:4px 8px;background:#0f0721;color:#38bdf8;border:1px solid #0369a1;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;margin-top:4px;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+        sidebar.appendChild(btn);
+        sidebar.appendChild(wrap);
+    }
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);
+        var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'💧 Hide Mix Water':'💧 Mix Water Calc';
+        if(show)render();
+    }
+
+    var ST='mwc-state';
+    function load(){try{return JSON.parse(localStorage.getItem(ST))||{};}catch(e){return {};}}
+    function save(d){localStorage.setItem(ST,JSON.stringify(d));}
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);
+        if(!wrap)return;
+        var d=load();
+        var html='<div style="font-size:11px;color:#38bdf8;font-weight:700;margin-bottom:8px;">💧 ACI 211.1 Mix Water Calculator</div>';
+        html+='<div style="font-size:10px;color:#94a3b8;margin-bottom:8px;">Calculates net mix water demand, aggregate moisture correction, and ice substitution per ACI 211.1 §6.3 / ACI 305R.</div>';
+
+        html+='<div style="font-size:10px;color:#64748b;margin-bottom:4px;">— MIX DESIGN PARAMETERS —</div>';
+        html+='<table style="width:100%;border-collapse:collapse;margin-bottom:8px;">';
+        html+=row2('Design PSI','<select id="mwc-psi" style="'+sel()+'"><option value="2500">2500 PSI</option><option value="3000" '+(d.psi==='3000'?'selected':'')+'>3000 PSI</option><option value="4000" '+(d.psi==='4000'||!d.psi?'selected':'')+'>4000 PSI</option><option value="5000" '+(d.psi==='5000'?'selected':'')+'>5000 PSI</option></select>');
+        html+=row2('Slump target (in)','<input id="mwc-slump" type="number" min="1" max="9" step="0.5" value="'+(d.slump||4)+'" style="'+inp()+'">');
+        html+=row2('Max agg size (in)','<select id="mwc-agg" style="'+sel()+'"><option value="0.375" '+(d.agg==='0.375'?'selected':'')+'">3/8"</option><option value="0.5" '+(d.agg==='0.5'||!d.agg?'selected':'')+'">1/2"</option><option value="0.75" '+(d.agg==='0.75'?'selected':'')+'">3/4"</option><option value="1" '+(d.agg==='1'?'selected':'')+'">1"</option><option value="1.5" '+(d.agg==='1.5'?'selected':'')+'">1-1/2"</option></select>');
+        html+=row2('Air-entrained?','<select id="mwc-air" style="'+sel()+'"><option value="no" '+(d.air==='no'||!d.air?'selected':'')+'>No (non-AE)</option><option value="yes" '+(d.air==='yes'?'selected':'')+'>Yes (AE)</option></select>');
+        html+=row2('Batch size (yd³)','<input id="mwc-yd3" type="number" min="1" step="1" value="'+(d.yd3||10)+'" style="'+inp()+'">');
+        html+='</table>';
+
+        html+='<div style="font-size:10px;color:#64748b;margin-bottom:4px;">— AGGREGATE MOISTURE CORRECTION —</div>';
+        html+='<table style="width:100%;border-collapse:collapse;margin-bottom:8px;">';
+        html+=row2('FA absorption (%)','<input id="mwc-fa-abs" type="number" min="0" max="5" step="0.1" value="'+(d.faAbs||0.8)+'" style="'+inp()+'">');
+        html+=row2('FA surface moisture (%)','<input id="mwc-fa-mc" type="number" min="-2" max="10" step="0.1" value="'+(d.faMc||2)+'" style="'+inp()+'"> <span style="color:#94a3b8;font-size:9px;">(-) if dry</span>');
+        html+=row2('FA batch weight (lbs)','<input id="mwc-fa-wt" type="number" min="0" step="10" value="'+(d.faWt||1200)+'" style="'+inp()+'">');
+        html+=row2('CA absorption (%)','<input id="mwc-ca-abs" type="number" min="0" max="5" step="0.1" value="'+(d.caAbs||0.5)+'" style="'+inp()+'">');
+        html+=row2('CA surface moisture (%)','<input id="mwc-ca-mc" type="number" min="-2" max="10" step="0.1" value="'+(d.caMc||0.5)+'" style="'+inp()+'"> <span style="color:#94a3b8;font-size:9px;">(-) if dry</span>');
+        html+=row2('CA batch weight (lbs)','<input id="mwc-ca-wt" type="number" min="0" step="10" value="'+(d.caWt||1800)+'" style="'+inp()+'">');
+        html+='</table>';
+
+        html+='<div style="font-size:10px;color:#64748b;margin-bottom:4px;">— HOT WEATHER ICE SUBSTITUTION (ACI 305R) —</div>';
+        html+='<table style="width:100%;border-collapse:collapse;margin-bottom:8px;">';
+        html+=row2('Target delivery temp (°F)','<input id="mwc-target" type="number" min="50" max="90" value="'+(d.target||80)+'" style="'+inp()+'">');
+        html+=row2('Mix water temp w/o ice (°F)','<input id="mwc-wtemp" type="number" min="40" max="120" value="'+(d.wtemp||95)+'" style="'+inp()+'">');
+        html+='</table>';
+
+        html+='<button onclick="MWC_calc()" style="'+calcBtn()+'">⚙️ Calculate</button>';
+        html+='<div id="mwc-result" style="margin-top:8px;"></div>';
+        html+='<button onclick="MWC_print()" style="padding:4px 8px;background:#0f0721;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;margin-top:6px;">🖨️ Print ACI 211.1 Sheet</button>';
+        wrap.innerHTML=html;
+
+        ['psi','slump','agg','air','yd3','faAbs','faMc','faWt','caAbs','caMc','caWt','target','wtemp'].forEach(function(k){
+            var el=document.getElementById('mwc-'+k.replace(/([A-Z])/g,'-$1').toLowerCase());
+            if(el)el.addEventListener('change',function(){
+                var nd=load();
+                nd[k]=el.value;
+                save(nd);
+            });
+        });
+    }
+
+    function row2(lbl,ctrl){
+        return '<tr><td style="padding:2px 4px;color:#94a3b8;font-size:10px;width:50%;">'+lbl+'</td><td style="padding:2px;">'+ctrl+'</td></tr>';
+    }
+    function inp(){return 'width:90%;padding:2px 4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;';}
+    function sel(){return 'width:100%;padding:2px 4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;';}
+    function calcBtn(){return 'width:100%;padding:5px;background:#0369a1;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600;font-size:11px;';}
+
+    window.MWC_calc=function(){
+        var psi=parseInt(document.getElementById('mwc-psi').value)||4000;
+        var slump=parseFloat(document.getElementById('mwc-slump').value)||4;
+        var agg=parseFloat(document.getElementById('mwc-agg').value)||0.5;
+        var air=document.getElementById('mwc-air').value==='yes';
+        var yd3=parseFloat(document.getElementById('mwc-yd3').value)||10;
+        var faAbs=parseFloat(document.getElementById('mwc-fa-abs').value)||0.8;
+        var faMc=parseFloat(document.getElementById('mwc-fa-mc').value)||2;
+        var faWt=parseFloat(document.getElementById('mwc-fa-wt').value)||1200;
+        var caAbs=parseFloat(document.getElementById('mwc-ca-abs').value)||0.5;
+        var caMc=parseFloat(document.getElementById('mwc-ca-mc').value)||0.5;
+        var caWt=parseFloat(document.getElementById('mwc-ca-wt').value)||1800;
+        var targetTemp=parseFloat(document.getElementById('mwc-target').value)||80;
+        var wTemp=parseFloat(document.getElementById('mwc-wtemp').value)||95;
+
+        // ACI 211.1 Table 6.3.3 — approximate mixing water demand (gal/yd³)
+        // Non-AE / AE × slump × max agg size
+        var aci211 = {
+            '0.375': {nae:[34,36,38,40],ae:[31,33,35,37]},
+            '0.5':   {nae:[30,32,34,36],ae:[27,29,31,33]},
+            '0.75':  {nae:[28,30,32,34],ae:[25,27,29,31]},
+            '1':     {nae:[26,28,30,32],ae:[23,25,27,29]},
+            '1.5':   {nae:[24,26,28,30],ae:[21,23,25,27]}
+        };
+        // slump index: 0=1-2", 1=3", 2=4", 3=6-7"
+        function slumpIdx(s){
+            if(s<=2) return 0;
+            if(s<=3) return 1;
+            if(s<=4) return 2;
+            return 3;
+        }
+        var aggKey=String(agg);
+        if(!aci211[aggKey]) aggKey='0.5';
+        var tbl=aci211[aggKey][air?'ae':'nae'];
+        var baseW=tbl[slumpIdx(slump)]; // gal/yd³ per ACI 211.1
+
+        // Aggregate moisture correction (per yd³)
+        // Net water = mixing water - (surface moisture × batch wt)
+        // FA contribution per yd³: (faMc-faAbs)/100 * faWt × yd3 / yd3 = per yd³
+        var faMoist = (faMc - faAbs) / 100 * faWt; // lbs of free water from FA per yd³ batch
+        var caMoist = (caMc - caAbs) / 100 * caWt; // lbs from CA
+        var faMoistGal = faMoist / 8.34;
+        var caMoistGal = caMoist / 8.34;
+        var netW = baseW - faMoistGal - caMoistGal; // net added water gal/yd³
+
+        // Total batch water
+        var totalGal = Math.max(netW * yd3, 0);
+        var totalLbs = totalGal * 8.34;
+
+        // Ice substitution (ACI 305R §5.3)
+        // 1 lb ice absorbs ~144 BTU melting + heats to target
+        // Simplified: lbs ice = (wTemp - targetTemp) / (targetTemp - 32 + 144/1) × total water lbs
+        // More practical: fraction of water to replace with ice
+        // BTU balance: totalLbs * 1 * targetTemp = lbs_water * 1 * wTemp + lbs_ice * (-144 + targetTemp * 1)
+        // lbs_water + lbs_ice = totalLbs
+        // Solve: lbs_ice * (wTemp - 32 - 144) + totalLbs * wTemp = totalLbs * targetTemp
+        // Actually: ice_lbs = totalLbs * (wTemp - targetTemp) / (wTemp + 144 - 32)
+        var iceLbs = 0;
+        var iceGal = 0;
+        if(wTemp > targetTemp){
+            iceLbs = totalLbs * (wTemp - targetTemp) / (wTemp - 32 + 144);
+            iceLbs = Math.max(0, Math.min(iceLbs, totalLbs));
+            iceGal = iceLbs / 8.34;
+        }
+        var liqLbs = totalLbs - iceLbs;
+        var liqGal = liqLbs / 8.34;
+
+        // Warnings
+        var warns=[];
+        if(slump>7) warns.push('⚠️ Slump >7" may indicate over-watering (ACI 304R). Verify w/c ratio.');
+        if(netW<baseW*0.7) warns.push('⚠️ Wet aggregates reducing mix water by >'+(Math.round((1-netW/baseW)*100))+'% — verify agg moisture test (ASTM C566).');
+        if(netW<0) warns.push('🚫 Aggregate free moisture EXCEEDS water demand — consider no added water; use high-range WRA to maintain slump.');
+        if(wTemp>90 && iceLbs===0) warns.push('⚠️ Water temp '+wTemp+'°F — ACI 305R recommends chilled water or ice when delivery temp risk exists.');
+        if(iceLbs>0 && iceLbs/totalLbs>0.5) warns.push('⚠️ >50% ice substitution — coordinate with batch plant for ice handling capacity.');
+
+        var ok=netW>=0;
+        var rd=document.getElementById('mwc-result');
+        if(!rd)return;
+
+        var html='<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:8px;">';
+        html+='<div style="font-size:10px;font-weight:700;color:#38bdf8;margin-bottom:6px;">📋 CALCULATION RESULTS ('+yd3+' yd³ batch)</div>';
+        html+='<table style="width:100%;border-collapse:collapse;">';
+        html+=resRow('ACI 211.1 base water demand',baseW.toFixed(1)+' gal/yd³','');
+        html+=resRow('FA free moisture correction',faMoistGal.toFixed(2)+' gal/yd³',faMoist>0?'#22c55e':'#f59e0b');
+        html+=resRow('CA free moisture correction',caMoistGal.toFixed(2)+' gal/yd³',caMoist>0?'#22c55e':'#f59e0b');
+        html+=resRow('NET added water / yd³',netW.toFixed(1)+' gal/yd³',ok?'#38bdf8':'#ef4444');
+        html+='<tr><td colspan="2" style="border-top:1px solid #1e293b;"></td></tr>';
+        html+=resRow('Total net water — full batch',totalGal.toFixed(1)+' gal  ('+totalLbs.toFixed(0)+' lbs)','#e2e8f0');
+        if(wTemp>targetTemp){
+            html+='<tr><td colspan="2" style="border-top:1px dashed #1e293b;padding:2px;"></td></tr>';
+            html+='<tr><td colspan="2" style="font-size:10px;color:#f59e0b;padding:2px;">🌡️ ACI 305R Ice Substitution (water temp '+wTemp+'°F → target '+targetTemp+'°F)</td></tr>';
+            html+=resRow('Ice to add',iceLbs.toFixed(0)+' lbs  ('+iceGal.toFixed(1)+' gal equivalent)','#fbbf24');
+            html+=resRow('Liquid water to add',liqLbs.toFixed(0)+' lbs  ('+liqGal.toFixed(1)+' gal)','#38bdf8');
+        }
+        html+='</table>';
+        if(warns.length){
+            html+='<div style="margin-top:6px;padding:5px;background:#1e293b;border-radius:3px;">';
+            warns.forEach(function(w){html+='<div style="font-size:9px;color:#f59e0b;margin-bottom:2px;">'+w+'</div>';});
+            html+='</div>';
+        }
+        html+='</div>';
+        rd.innerHTML=html;
+
+        // Save last result for print
+        var nd=load();
+        nd.lastResult={psi,slump,agg,air,yd3,baseW,faMoistGal,caMoistGal,netW,totalGal,totalLbs,iceLbs,iceGal,liqLbs,liqGal,wTemp,targetTemp,warns};
+        save(nd);
+    };
+
+    function resRow(lbl,val,color){
+        return '<tr><td style="padding:2px 4px;color:#94a3b8;font-size:10px;">'+lbl+'</td><td style="padding:2px 4px;color:'+(color||'#e2e8f0')+';font-size:10px;font-weight:600;">'+val+'</td></tr>';
+    }
+
+    window.MWC_print=function(){
+        var d=load();
+        var r=d.lastResult||{};
+        var w=window.open('','_blank');
+        w.document.write('<html><head><title>ACI 211.1 Mix Water Calculation</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{font-size:14px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:4px 8px;}th{background:#f0f0f0;}tr.hi{background:#fff3cd;}tr.red{background:#ffe0e0;}.sig{margin-top:20px;} .warn{background:#fff3cd;padding:8px;border:1px solid #f59e0b;border-radius:4px;margin:10px 0;}</style></head><body>');
+        w.document.write('<h2>💧 ACI 211.1 Mix Water Calculation Sheet</h2>');
+        w.document.write('<p>Date: '+new Date().toLocaleDateString()+' &nbsp;&nbsp; Batch: '+(r.yd3||'—')+' yd³ &nbsp;&nbsp; Design PSI: '+(r.psi||'—')+' &nbsp;&nbsp; Max Agg: '+(r.agg||'—')+'" &nbsp;&nbsp; Air-Entrained: '+(r.air?'Yes':'No')+'</p>');
+        w.document.write('<table><tr><th>Parameter</th><th>Value</th><th>Reference</th></tr>');
+        w.document.write('<tr><td>ACI 211.1 Base Water Demand</td><td>'+(r.baseW||0).toFixed(1)+' gal/yd³</td><td>ACI 211.1 Table 6.3.3</td></tr>');
+        w.document.write('<tr><td>FA Free Moisture Correction</td><td>−'+(r.faMoistGal||0).toFixed(2)+' gal/yd³</td><td>ASTM C566</td></tr>');
+        w.document.write('<tr><td>CA Free Moisture Correction</td><td>−'+(r.caMoistGal||0).toFixed(2)+' gal/yd³</td><td>ASTM C566</td></tr>');
+        w.document.write('<tr><th>Net Added Water (per yd³)</th><th>'+(r.netW||0).toFixed(1)+' gal/yd³</th><th></th></tr>');
+        w.document.write('<tr><td>Total Net Water — Full Batch</td><td>'+(r.totalGal||0).toFixed(1)+' gal &nbsp;('+(r.totalLbs||0).toFixed(0)+' lbs)</td><td></td></tr>');
+        if(r.iceLbs>0){
+            w.document.write('<tr class="hi"><td>Ice to Add (ACI 305R §5.3)</td><td>'+(r.iceLbs||0).toFixed(0)+' lbs</td><td>ACI 305R</td></tr>');
+            w.document.write('<tr><td>Liquid Water to Add</td><td>'+(r.liqLbs||0).toFixed(0)+' lbs &nbsp;('+(r.liqGal||0).toFixed(1)+' gal)</td><td></td></tr>');
+        }
+        w.document.write('</table>');
+        if(r.warns&&r.warns.length){
+            w.document.write('<div class="warn"><strong>Warnings:</strong><ul>');
+            r.warns.forEach(function(wn){w.document.write('<li>'+wn+'</li>');});
+            w.document.write('</ul></div>');
+        }
+        w.document.write('<p style="font-size:9px;color:#666;">Note: ACI 211.1 values are nominal estimates. Actual mix water must be adjusted per fresh concrete testing (ASTM C143 slump, ASTM C231 air). All aggregate moisture corrections require ASTM C566 field moisture tests.</p>');
+        w.document.write('<div class="sig"><table style="width:80%;"><tr><th>QC Technician</th><th>Batch Plant Operator</th><th>Field Foreman</th></tr><tr><td style="height:40px;">&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></table></div>');
+        w.document.write('</body></html>');
+        w.document.close();
+        w.print();
+    };
+
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',createButton);
+    }else{
+        createButton();
+    }
+})();
+</script>
+
+<script>
+/* ============================================================
+   FEATURE: SUBCONTRACTOR PAYMENT HISTORY LEDGER (💳)
+   Cross-project payment ledger per sub — full history,
+   running totals, 1099 reference, lien waiver tracking.
+   ============================================================ */
+(function(){
+    'use strict';
+    var BTN_ID='sphl-btn', WRAP_ID='sphl-wrap', ST='sphl-state';
+    function load(){try{return JSON.parse(localStorage.getItem(ST))||{subs:[],payments:[]};}catch(e){return {subs:[],payments:[]};}};
+    function save(d){localStorage.setItem(ST,JSON.stringify(d));}
+    function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+
+    function createButton(){
+        var sidebar=document.getElementById('sidebar');
+        if(!sidebar||document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='💳 Sub Payment Ledger';
+        btn.title='Cross-project payment history ledger per subcontractor — 1099 totals, lien waiver tracking';
+        btn.style.cssText='padding:4px 8px;background:#0f0721;color:#a78bfa;border:1px solid #7c3aed;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;margin-top:4px;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+        sidebar.appendChild(btn);
+        sidebar.appendChild(wrap);
+    }
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);
+        var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'💳 Hide Sub Ledger':'💳 Sub Payment Ledger';
+        if(show)render();
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);
+        if(!wrap)return;
+        var d=load();
+        var subs=d.subs||[];
+        var payments=d.payments||[];
+
+        // Build per-sub totals
+        var subMap={};
+        subs.forEach(function(s){subMap[s.id]={...s,total:0,waived:0,pending:0};});
+        payments.forEach(function(p){
+            if(subMap[p.subId]){
+                subMap[p.subId].total+=p.amount||0;
+                if(p.waiverStatus==='Received') subMap[p.subId].waived+=p.amount||0;
+                else subMap[p.subId].pending+=p.amount||0;
+            }
+        });
+
+        var grandTotal=payments.reduce(function(s,p){return s+(p.amount||0);},0);
+        var waivedTotal=payments.filter(function(p){return p.waiverStatus==='Received';}).reduce(function(s,p){return s+(p.amount||0);},0);
+        var pendingWaiver=grandTotal-waivedTotal;
+
+        var html='<div style="font-size:11px;color:#a78bfa;font-weight:700;margin-bottom:6px;">💳 Subcontractor Payment Ledger</div>';
+
+        // Dashboard
+        html+='<div style="display:flex;gap:6px;margin-bottom:8px;">';
+        html+=card('Total Paid','$'+fmt(grandTotal),'#22c55e');
+        html+=card('Waivers Rcvd','$'+fmt(waivedTotal),'#38bdf8');
+        html+=card('Waiver Pending','$'+fmt(pendingWaiver),pendingWaiver>0?'#ef4444':'#22c55e');
+        html+='</div>';
+        if(pendingWaiver>0) html+='<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:4px;padding:5px;font-size:10px;color:#fca5a5;margin-bottom:6px;">⚠️ $'+fmt(pendingWaiver)+' paid without lien waivers received</div>';
+
+        // Add sub
+        html+='<div style="background:#1e293b;border-radius:4px;padding:6px;margin-bottom:6px;">';
+        html+='<div style="font-size:10px;color:#94a3b8;margin-bottom:4px;">Add Subcontractor</div>';
+        html+='<div style="display:flex;gap:4px;">';
+        html+='<input id="sphl-sub-name" placeholder="Company name" style="flex:1;padding:3px 5px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">';
+        html+='<input id="sphl-sub-scope" placeholder="Scope" style="width:90px;padding:3px 5px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">';
+        html+='<button onclick="SPHL_addSub()" style="padding:3px 8px;background:#7c3aed;color:#fff;border:none;border-radius:3px;font-size:10px;cursor:pointer;">+ Add</button>';
+        html+='</div></div>';
+
+        // Add payment
+        if(subs.length){
+            html+='<div style="background:#1e293b;border-radius:4px;padding:6px;margin-bottom:6px;">';
+            html+='<div style="font-size:10px;color:#94a3b8;margin-bottom:4px;">Log Payment</div>';
+            html+='<select id="sphl-pay-sub" style="width:100%;padding:3px 5px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;margin-bottom:4px;">';
+            subs.forEach(function(s){html+='<option value="'+s.id+'">'+s.name+' — '+s.scope+'</option>';});
+            html+='</select>';
+            html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">';
+            html+='<input id="sphl-pay-project" placeholder="Project" style="padding:3px 5px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">';
+            html+='<input id="sphl-pay-check" placeholder="Check/ACH #" style="padding:3px 5px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">';
+            html+='<input id="sphl-pay-date" type="date" style="padding:3px 5px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;" value="'+new Date().toISOString().slice(0,10)+'">';
+            html+='<input id="sphl-pay-amount" type="number" min="0" step="0.01" placeholder="Amount ($)" style="padding:3px 5px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">';
+            html+='</div>';
+            html+='<div style="display:flex;gap:4px;align-items:center;margin-bottom:4px;">';
+            html+='<label style="font-size:10px;color:#94a3b8;">Lien Waiver:</label>';
+            html+='<select id="sphl-pay-waiver" style="flex:1;padding:3px 5px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;">';
+            html+='<option>Pending</option><option>Requested</option><option>Received</option><option>N/A</option>';
+            html+='</select>';
+            html+='<button onclick="SPHL_addPayment()" style="padding:3px 10px;background:#22c55e;color:#fff;border:none;border-radius:3px;font-size:10px;cursor:pointer;font-weight:600;">Log</button>';
+            html+='</div></div>';
+        }
+
+        // Sub summary cards
+        if(subs.length){
+            html+='<div style="font-size:10px;color:#64748b;margin-bottom:4px;">— PER-SUB SUMMARY —</div>';
+            subs.forEach(function(s){
+                var sm=subMap[s.id]||{total:0,pending:0};
+                var subPayments=payments.filter(function(p){return p.subId===s.id;}).sort(function(a,b){return b.date.localeCompare(a.date);});
+                var yr=new Date().getFullYear();
+                var ytd=subPayments.filter(function(p){return p.date&&p.date.startsWith(yr+'');}).reduce(function(t,p){return t+(p.amount||0);},0);
+                html+='<div style="background:#1e293b;border-radius:4px;padding:6px;margin-bottom:6px;">';
+                html+='<div style="display:flex;justify-content:space-between;align-items:center;">';
+                html+='<span style="font-size:11px;font-weight:600;color:#e2e8f0;">'+s.name+'</span>';
+                html+='<button onclick="SPHL_deleteSub(\''+s.id+'\')" style="padding:1px 5px;background:transparent;color:#ef4444;border:1px solid #ef4444;border-radius:3px;font-size:9px;cursor:pointer;">✕</button>';
+                html+='</div>';
+                html+='<div style="font-size:10px;color:#94a3b8;margin-bottom:4px;">'+s.scope+'</div>';
+                html+='<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+                html+=miniCard('All-Time','$'+fmt(sm.total));
+                html+=miniCard(yr+' YTD','$'+fmt(ytd));
+                html+=miniCard('Pending Waiver','$'+fmt(sm.pending),sm.pending>0?'#ef4444':'#22c55e');
+                html+='</div>';
+                if(subPayments.length){
+                    html+='<table style="width:100%;border-collapse:collapse;margin-top:4px;font-size:9px;">';
+                    html+='<tr style="color:#64748b;"><th style="text-align:left;padding:2px;">Date</th><th>Project</th><th>Check</th><th>Amount</th><th>Waiver</th><th></th></tr>';
+                    subPayments.slice(0,10).forEach(function(p){
+                        var wColor=p.waiverStatus==='Received'?'#22c55e':p.waiverStatus==='Pending'?'#f59e0b':'#94a3b8';
+                        html+='<tr style="border-top:1px solid #0f172a;">';
+                        html+='<td style="padding:2px;color:#94a3b8;">'+p.date+'</td>';
+                        html+='<td style="padding:2px;color:#e2e8f0;">'+p.project+'</td>';
+                        html+='<td style="padding:2px;color:#94a3b8;">'+p.check+'</td>';
+                        html+='<td style="padding:2px;color:#22c55e;font-weight:600;">$'+fmt(p.amount)+'</td>';
+                        html+='<td style="padding:2px;"><span style="color:'+wColor+';">'+p.waiverStatus+'</span>';
+                        if(p.waiverStatus==='Pending'||p.waiverStatus==='Requested') html+=' <button onclick="SPHL_markWaiver(\''+p.id+'\')" style="padding:1px 4px;background:transparent;color:#38bdf8;border:1px solid #38bdf8;border-radius:2px;font-size:8px;cursor:pointer;">✓ Mark Rcvd</button>';
+                        html+='</td>';
+                        html+='<td style="padding:2px;"><button onclick="SPHL_deletePayment(\''+p.id+'\')" style="padding:1px 4px;background:transparent;color:#ef4444;border:none;cursor:pointer;font-size:9px;">✕</button></td>';
+                        html+='</tr>';
+                    });
+                    html+='</table>';
+                }
+                html+='</div>';
+            });
+        }else{
+            html+='<div style="color:#64748b;font-size:10px;text-align:center;padding:12px;">No subs added yet. Add a subcontractor above to start tracking payments.</div>';
+        }
+
+        html+='<div style="display:flex;gap:4px;margin-top:6px;">';
+        html+='<button onclick="SPHL_copy()" style="flex:1;padding:4px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">📋 Copy Report</button>';
+        html+='<button onclick="SPHL_print()" style="flex:1;padding:4px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">🖨️ Print Ledger</button>';
+        html+='</div>';
+
+        wrap.innerHTML=html;
+    }
+
+    function card(lbl,val,color){
+        return '<div style="flex:1;background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="font-size:9px;color:#64748b;">'+lbl+'</div><div style="font-size:11px;font-weight:700;color:'+(color||'#e2e8f0')+';">'+val+'</div></div>';
+    }
+    function miniCard(lbl,val,color){
+        return '<div style="background:#0f172a;border-radius:3px;padding:3px 5px;"><span style="font-size:9px;color:#64748b;">'+lbl+': </span><span style="font-size:10px;font-weight:600;color:'+(color||'#e2e8f0')+';">'+val+'</span></div>';
+    }
+    function fmt(n){return (n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});}
+
+    window.SPHL_addSub=function(){
+        var name=document.getElementById('sphl-sub-name').value.trim();
+        var scope=document.getElementById('sphl-sub-scope').value.trim()||'General';
+        if(!name)return;
+        var d=load();
+        d.subs.push({id:uid(),name:name,scope:scope});
+        save(d);
+        render();
+    };
+    window.SPHL_addPayment=function(){
+        var subId=document.getElementById('sphl-pay-sub').value;
+        var project=(document.getElementById('sphl-pay-project').value||'').trim();
+        var check=(document.getElementById('sphl-pay-check').value||'').trim();
+        var date=document.getElementById('sphl-pay-date').value||new Date().toISOString().slice(0,10);
+        var amount=parseFloat(document.getElementById('sphl-pay-amount').value)||0;
+        var waiverStatus=document.getElementById('sphl-pay-waiver').value;
+        if(!subId||amount<=0)return;
+        var d=load();
+        d.payments.push({id:uid(),subId,project,check,date,amount,waiverStatus});
+        save(d);
+        render();
+    };
+    window.SPHL_markWaiver=function(id){
+        var d=load();
+        var p=d.payments.find(function(x){return x.id===id;});
+        if(p) p.waiverStatus='Received';
+        save(d);
+        render();
+    };
+    window.SPHL_deleteSub=function(id){
+        if(!confirm('Delete sub and ALL payment history?'))return;
+        var d=load();
+        d.subs=d.subs.filter(function(s){return s.id!==id;});
+        d.payments=d.payments.filter(function(p){return p.subId!==id;});
+        save(d);
+        render();
+    };
+    window.SPHL_deletePayment=function(id){
+        var d=load();
+        d.payments=d.payments.filter(function(p){return p.id!==id;});
+        save(d);
+        render();
+    };
+    window.SPHL_copy=function(){
+        var d=load();
+        var lines=['SUBCONTRACTOR PAYMENT LEDGER — '+new Date().toLocaleDateString(),''];
+        var yr=new Date().getFullYear();
+        (d.subs||[]).forEach(function(s){
+            var pays=(d.payments||[]).filter(function(p){return p.subId===s.id;});
+            var total=pays.reduce(function(t,p){return t+(p.amount||0);},0);
+            var ytd=pays.filter(function(p){return p.date&&p.date.startsWith(yr+'');}).reduce(function(t,p){return t+(p.amount||0);},0);
+            lines.push(s.name+' ('+s.scope+')');
+            lines.push('  All-Time Total: $'+fmt(total)+'  |  '+yr+' YTD: $'+fmt(ytd));
+            pays.forEach(function(p){
+                lines.push('  '+p.date+' | '+p.project+' | Chk '+p.check+' | $'+fmt(p.amount)+' | Waiver: '+p.waiverStatus);
+            });
+            lines.push('');
+        });
+        navigator.clipboard.writeText(lines.join('\n')).catch(function(){});
+    };
+    window.SPHL_print=function(){
+        var d=load();
+        var yr=new Date().getFullYear();
+        var w=window.open('','_blank');
+        w.document.write('<html><head><title>Sub Payment Ledger</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{font-size:14px;}table{width:100%;border-collapse:collapse;margin-bottom:10px;}th,td{border:1px solid #ccc;padding:4px 8px;}th{background:#f0f0f0;}tr.waiver-pending{background:#fff3cd;}.sig{margin-top:20px;}</style></head><body>');
+        w.document.write('<h2>💳 Subcontractor Payment Ledger — '+new Date().toLocaleDateString()+'</h2>');
+        w.document.write('<p><strong>Company:</strong> '+(window.getCompanyName?window.getCompanyName():'Oncor')+'</p>');
+
+        (d.subs||[]).forEach(function(s){
+            var pays=(d.payments||[]).filter(function(p){return p.subId===s.id;}).sort(function(a,b){return b.date.localeCompare(a.date);});
+            var total=pays.reduce(function(t,p){return t+(p.amount||0);},0);
+            var ytd=pays.filter(function(p){return p.date&&p.date.startsWith(yr+'');}).reduce(function(t,p){return t+(p.amount||0);},0);
+            var pending=pays.filter(function(p){return p.waiverStatus==='Pending'||p.waiverStatus==='Requested';}).reduce(function(t,p){return t+(p.amount||0);},0);
+            w.document.write('<h3>'+s.name+' &mdash; '+s.scope+'</h3>');
+            w.document.write('<p>All-Time Total: <strong>$'+fmt(total)+'</strong> &nbsp;|&nbsp; '+yr+' YTD: <strong>$'+fmt(ytd)+'</strong> &nbsp;|&nbsp; Pending Waivers: <strong>$'+fmt(pending)+'</strong></p>');
+            if(pays.length){
+                w.document.write('<table><tr><th>Date</th><th>Project</th><th>Check/ACH</th><th>Amount</th><th>Lien Waiver</th></tr>');
+                pays.forEach(function(p){
+                    var cls=p.waiverStatus==='Pending'?'waiver-pending':'';
+                    w.document.write('<tr class="'+cls+'"><td>'+p.date+'</td><td>'+p.project+'</td><td>'+p.check+'</td><td>$'+fmt(p.amount)+'</td><td>'+p.waiverStatus+'</td></tr>');
+                });
+                w.document.write('<tr><td colspan="3"><strong>Total</strong></td><td><strong>$'+fmt(total)+'</strong></td><td></td></tr>');
+                w.document.write('</table>');
+            }else{
+                w.document.write('<p><em>No payments recorded.</em></p>');
+            }
+        });
+
+        w.document.write('<p style="font-size:9px;color:#666;">1099 Note: Any sub/vendor paid ≥$600 in a calendar year for services (non-employee compensation) typically requires a Form 1099-NEC. Consult your CPA for reporting requirements. TX Property Code §53 — lien waivers should be obtained for each draw paid. Yellow rows = pending waiver.</p>');
+        w.document.write('<div class="sig"><table style="width:60%;"><tr><th>Accounts Payable</th><th>Principal</th></tr><tr><td style="height:40px;">&nbsp;</td><td>&nbsp;</td></tr></table></div>');
+        w.document.write('</body></html>');
+        w.document.close();
+        w.print();
+    };
+
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',createButton);
+    }else{
+        createButton();
+    }
+})();
+</script>
+
+<script>
+/* ============================================================
+   FEATURE: SCOPE CHANGE ORDER ESTIMATOR (🔄)
+   Quickly price change orders from scratch using current
+   pricing settings. Separate CO cost estimate with markup,
+   approval status, and CO log. Bridges Quick Bid and CO Log.
+   ============================================================ */
+(function(){
+    'use strict';
+    var BTN_ID='scoe-btn', WRAP_ID='scoe-wrap', ST='scoe-state';
+    function load(){try{return JSON.parse(localStorage.getItem(ST))||{cos:[]};}catch(e){return {cos:[];}}}
+    function save(d){localStorage.setItem(ST,JSON.stringify(d));}
+    function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+    function fmt(n){return (+(n||0)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+    function fmtN(n){return (+(n||0)).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});}
+
+    function createButton(){
+        var sidebar=document.getElementById('sidebar');
+        if(!sidebar||document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='🔄 CO Estimator';
+        btn.title='Price change orders using current pricing settings. CO log with approval status.';
+        btn.style.cssText='padding:4px 8px;background:#0f0721;color:#fb923c;border:1px solid #c2410c;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;margin-top:4px;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+        sidebar.appendChild(btn);
+        sidebar.appendChild(wrap);
+    }
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);
+        var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🔄 Hide CO Estimator':'🔄 CO Estimator';
+        if(show)render();
+    }
+
+    // Pull current pricing from main tool if available
+    function getPricing(){
+        try{
+            var c3=parseFloat(document.getElementById('price3000')?document.getElementById('price3000').value:0)||145;
+            var c4=parseFloat(document.getElementById('price4000')?document.getElementById('price4000').value:0)||155;
+            var c5=parseFloat(document.getElementById('price5000')?document.getElementById('price5000').value:0)||170;
+            var rebar4=parseFloat(document.getElementById('rebarPrice4')?document.getElementById('rebarPrice4').value:0)||0.85;
+            var rebar5=parseFloat(document.getElementById('rebarPrice5')?document.getElementById('rebarPrice5').value:0)||1.10;
+            var mesh=parseFloat(document.getElementById('meshPrice')?document.getElementById('meshPrice').value:0)||0.45;
+            var labor=parseFloat(document.getElementById('laborFinish')?document.getElementById('laborFinish').value:0)||3.50;
+            var pump=parseFloat(document.getElementById('pumpCost')?document.getElementById('pumpCost').value:0)||0;
+            var oh=parseFloat(document.getElementById('overhead')?document.getElementById('overhead').value:0)||10;
+            var profit=parseFloat(document.getElementById('profit')?document.getElementById('profit').value:0)||15;
+            return {c3,c4,c5,rebar4,rebar5,mesh,labor,pump,oh,profit};
+        }catch(e){return {c3:145,c4:155,c5:170,rebar4:0.85,rebar5:1.10,mesh:0.45,labor:3.50,pump:0,oh:10,profit:15};}
+    }
+
+    function calcCO(co){
+        var p=getPricing();
+        var concreteRate = co.psi==='3000'?p.c3 : co.psi==='5000'?p.c5 : p.c4;
+        var concreteCost = (co.yd3||0) * concreteRate;
+        var rebarCost = co.rebarType==='4' ? (co.rebarLF||0)*p.rebar4 : co.rebarType==='5' ? (co.rebarLF||0)*p.rebar5 : (co.meshSF||0)*p.mesh;
+        var laborCost = (co.sf||0) * p.labor;
+        var pumpCost = co.includePump ? (p.pump||0) : 0;
+        var formsCost = (co.formsLF||0) * (co.formsRate||12);
+        var subsCost = (co.subsCost||0);
+        var miscCost = (co.miscCost||0);
+        var subtotal = concreteCost + rebarCost + laborCost + pumpCost + formsCost + subsCost + miscCost;
+        var markup = subtotal * (p.oh + p.profit) / 100;
+        var total = subtotal + markup;
+        return {concreteCost, rebarCost, laborCost, pumpCost, formsCost, subsCost, miscCost, subtotal, markup, total, p};
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);
+        if(!wrap)return;
+        var d=load();
+        var cos=d.cos||[];
+        var p=getPricing();
+
+        var approved=cos.filter(function(c){return c.status==='Approved';}).reduce(function(s,c){return s+(c.total||0);},0);
+        var pending=cos.filter(function(c){return c.status==='Pending'||c.status==='Submitted';}).reduce(function(s,c){return s+(c.total||0);},0);
+        var rejected=cos.filter(function(c){return c.status==='Rejected';}).reduce(function(s,c){return s+(c.total||0);},0);
+
+        var html='<div style="font-size:11px;color:#fb923c;font-weight:700;margin-bottom:6px;">🔄 Change Order Estimator</div>';
+
+        // Summary
+        html+='<div style="display:flex;gap:4px;margin-bottom:8px;">';
+        html+=card3('Approved','$'+fmtN(approved),'#22c55e');
+        html+=card3('Pending','$'+fmtN(pending),pending>0?'#f59e0b':'#94a3b8');
+        html+=card3('Rejected','$'+fmtN(rejected),rejected>0?'#ef4444':'#94a3b8');
+        html+='</div>';
+
+        // New CO builder
+        html+='<div style="background:#1e293b;border-radius:4px;padding:6px;margin-bottom:8px;">';
+        html+='<div style="font-size:10px;color:#94a3b8;margin-bottom:4px;font-weight:600;">Build New CO</div>';
+        html+='<div style="font-size:9px;color:#64748b;margin-bottom:4px;">Using current pricing: 4000PSI $'+p.c4+'/yd³ · OH '+p.oh+'% · Profit '+p.profit+'%</div>';
+
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">';
+        html+='<input id="scoe-title" placeholder="CO Title / Description" style="'+inp()+';grid-column:1/-1;">';
+        html+='<input id="scoe-gcco" placeholder="GC CO #" style="'+inp()+'">';
+        html+='<input id="scoe-date" type="date" value="'+new Date().toISOString().slice(0,10)+'" style="'+inp()+'">';
+        html+='</div>';
+
+        html+='<div style="font-size:10px;color:#94a3b8;margin:4px 0 2px;">Concrete</div>';
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:4px;">';
+        html+='<input id="scoe-yd3" type="number" min="0" step="0.1" placeholder="yd³" style="'+inp()+'">';
+        html+='<select id="scoe-psi" style="'+sel()+'"><option value="3000">3000 PSI</option><option value="4000" selected>4000 PSI</option><option value="5000">5000 PSI</option></select>';
+        html+='<input id="scoe-sf" type="number" min="0" step="1" placeholder="SF (for labor)" style="'+inp()+'">';
+        html+='</div>';
+
+        html+='<div style="font-size:10px;color:#94a3b8;margin:4px 0 2px;">Reinforcement</div>';
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:4px;">';
+        html+='<select id="scoe-rebar-type" style="'+sel()+'"><option value="none">None</option><option value="mesh">WWF Mesh</option><option value="4">#4 Bar</option><option value="5">#5 Bar</option></select>';
+        html+='<input id="scoe-rebar-lf" type="number" min="0" placeholder="LF bar" style="'+inp()+'">';
+        html+='<input id="scoe-mesh-sf" type="number" min="0" placeholder="SF mesh" style="'+inp()+'">';
+        html+='</div>';
+
+        html+='<div style="font-size:10px;color:#94a3b8;margin:4px 0 2px;">Forms / Subs / Misc</div>';
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:4px;">';
+        html+='<input id="scoe-forms-lf" type="number" min="0" placeholder="Forms LF" style="'+inp()+'">';
+        html+='<input id="scoe-forms-rate" type="number" min="0" value="12" placeholder="$/LF forms" style="'+inp()+'">';
+        html+='<label style="font-size:10px;color:#94a3b8;display:flex;align-items:center;gap:2px;"><input id="scoe-pump" type="checkbox"> Pump</label>';
+        html+='<input id="scoe-subs" type="number" min="0" placeholder="Subs $" style="'+inp()+'">';
+        html+='<input id="scoe-misc" type="number" min="0" placeholder="Misc $" style="'+inp()+'">';
+        html+='</div>';
+
+        html+='<button onclick="SCOE_calc()" style="'+calcBtn()+'">⚙️ Calculate CO</button>';
+        html+='<div id="scoe-result" style="margin-top:6px;"></div>';
+        html+='</div>';
+
+        // Existing CO log
+        if(cos.length){
+            html+='<div style="font-size:10px;color:#64748b;margin-bottom:4px;">— CHANGE ORDER LOG —</div>';
+            cos.slice().reverse().forEach(function(co){
+                var sColor={Approved:'#22c55e',Pending:'#f59e0b',Submitted:'#38bdf8',Rejected:'#ef4444',Void:'#64748b'}[co.status]||'#94a3b8';
+                html+='<div style="background:#1e293b;border-radius:4px;padding:6px;margin-bottom:4px;border-left:3px solid '+sColor+';">';
+                html+='<div style="display:flex;justify-content:space-between;align-items:start;">';
+                html+='<div>';
+                html+='<div style="font-size:11px;font-weight:600;color:#e2e8f0;">CO #'+co.num+': '+co.title+'</div>';
+                html+='<div style="font-size:9px;color:#64748b;">'+co.date+' · GC CO: '+(co.gcco||'—')+'</div>';
+                html+='</div>';
+                html+='<div style="text-align:right;">';
+                html+='<div style="font-size:12px;font-weight:700;color:#fb923c;">$'+fmtN(co.total)+'</div>';
+                html+='<span style="font-size:9px;color:'+sColor+';">'+co.status+'</span>';
+                html+='</div></div>';
+                html+='<div style="display:flex;gap:3px;margin-top:4px;">';
+                ['Pending','Submitted','Approved','Rejected','Void'].forEach(function(st){
+                    if(st!==co.status) html+='<button onclick="SCOE_setStatus(\''+co.id+'\',\''+st+'\')" style="padding:1px 5px;background:transparent;color:#94a3b8;border:1px solid #334155;border-radius:3px;font-size:8px;cursor:pointer;">→ '+st+'</button>';
+                });
+                html+='<button onclick="SCOE_delete(\''+co.id+'\')" style="padding:1px 5px;background:transparent;color:#ef4444;border:1px solid #ef4444;border-radius:3px;font-size:8px;cursor:pointer;">✕</button>';
+                html+='</div></div>';
+            });
+        }
+
+        html+='<div style="display:flex;gap:4px;margin-top:6px;">';
+        html+='<button onclick="SCOE_copy()" style="flex:1;padding:4px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">📋 Copy Log</button>';
+        html+='<button onclick="SCOE_print()" style="flex:1;padding:4px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">🖨️ Print CO Log</button>';
+        html+='</div>';
+
+        wrap.innerHTML=html;
+    }
+
+    function inp(){return 'padding:3px 5px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;width:100%;box-sizing:border-box;';}
+    function sel(){return 'padding:3px 5px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:3px;font-size:10px;width:100%;';}
+    function calcBtn(){return 'width:100%;padding:5px;background:#c2410c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600;font-size:11px;margin-top:2px;';}
+    function card3(lbl,val,color){
+        return '<div style="flex:1;background:#1e293b;border-radius:4px;padding:4px;text-align:center;"><div style="font-size:9px;color:#64748b;">'+lbl+'</div><div style="font-size:11px;font-weight:700;color:'+(color||'#e2e8f0')+';">'+val+'</div></div>';
+    }
+
+    window.SCOE_calc=function(){
+        var title=(document.getElementById('scoe-title').value||'').trim()||'Change Order';
+        var gcco=(document.getElementById('scoe-gcco').value||'').trim();
+        var date=document.getElementById('scoe-date').value||new Date().toISOString().slice(0,10);
+        var yd3=parseFloat(document.getElementById('scoe-yd3').value)||0;
+        var psi=document.getElementById('scoe-psi').value||'4000';
+        var sf=parseFloat(document.getElementById('scoe-sf').value)||0;
+        var rebarType=document.getElementById('scoe-rebar-type').value||'none';
+        var rebarLF=parseFloat(document.getElementById('scoe-rebar-lf').value)||0;
+        var meshSF=parseFloat(document.getElementById('scoe-mesh-sf').value)||0;
+        var formsLF=parseFloat(document.getElementById('scoe-forms-lf').value)||0;
+        var formsRate=parseFloat(document.getElementById('scoe-forms-rate').value)||12;
+        var includePump=document.getElementById('scoe-pump').checked;
+        var subsCost=parseFloat(document.getElementById('scoe-subs').value)||0;
+        var miscCost=parseFloat(document.getElementById('scoe-misc').value)||0;
+
+        var co={title,gcco,date,psi,yd3,sf,rebarType,rebarLF,meshSF,formsLF,formsRate,includePump,subsCost,miscCost};
+        var r=calcCO(co);
+
+        var rd=document.getElementById('scoe-result');
+        if(!rd)return;
+
+        var html='<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:8px;">';
+        html+='<div style="font-size:10px;font-weight:700;color:#fb923c;margin-bottom:5px;">CO ESTIMATE: '+title+'</div>';
+        html+='<table style="width:100%;border-collapse:collapse;font-size:10px;">';
+        if(r.concreteCost>0) html+=cr('Concrete ('+yd3+' yd³ × $'+r.p[psi==='3000'?'c3':psi==='5000'?'c5':'c4']+'/yd³)','$'+fmt(r.concreteCost));
+        if(r.rebarCost>0) html+=cr('Reinforcement','$'+fmt(r.rebarCost));
+        if(r.laborCost>0) html+=cr('Labor ('+sf+' SF × $'+r.p.labor+'/SF)','$'+fmt(r.laborCost));
+        if(r.formsCost>0) html+=cr('Forms ('+formsLF+' LF × $'+formsRate+'/LF)','$'+fmt(r.formsCost));
+        if(r.pumpCost>0) html+=cr('Pump','$'+fmt(r.pumpCost));
+        if(r.subsCost>0) html+=cr('Subcontractors','$'+fmt(r.subsCost));
+        if(r.miscCost>0) html+=cr('Miscellaneous','$'+fmt(r.miscCost));
+        html+=cr('Subtotal','$'+fmt(r.subtotal));
+        html+=cr('Markup (OH '+r.p.oh+'% + Profit '+r.p.profit+'%)','$'+fmt(r.markup));
+        html+='<tr style="border-top:2px solid #334155;"><td style="padding:3px 4px;font-weight:700;color:#fb923c;">CO TOTAL</td><td style="padding:3px 4px;font-weight:700;color:#fb923c;text-align:right;">$'+fmt(r.total)+'</td></tr>';
+        html+='</table>';
+        html+='<button onclick="SCOE_saveCO()" style="width:100%;margin-top:6px;padding:5px;background:#f97316;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600;">💾 Save to CO Log (Pending)</button>';
+        html+='</div>';
+        rd.innerHTML=html;
+
+        // Store pending CO for save
+        window._scoe_pending={...co,...r,status:'Pending'};
+    };
+
+    function cr(lbl,val){
+        return '<tr><td style="padding:2px 4px;color:#94a3b8;">'+lbl+'</td><td style="padding:2px 4px;text-align:right;color:#e2e8f0;">'+val+'</td></tr>';
+    }
+
+    window.SCOE_saveCO=function(){
+        var c=window._scoe_pending;
+        if(!c)return;
+        var d=load();
+        c.id=uid();
+        c.num=d.cos.length+1;
+        c.status='Pending';
+        d.cos.push(c);
+        save(d);
+        var rd=document.getElementById('scoe-result');
+        if(rd) rd.innerHTML='<div style="color:#22c55e;font-size:11px;padding:5px;">✅ CO #'+c.num+' saved to log!</div>';
+        setTimeout(render,1200);
+    };
+
+    window.SCOE_setStatus=function(id,status){
+        var d=load();
+        var co=d.cos.find(function(c){return c.id===id;});
+        if(co) co.status=status;
+        save(d);
+        render();
+    };
+
+    window.SCOE_delete=function(id){
+        if(!confirm('Delete this change order?'))return;
+        var d=load();
+        d.cos=d.cos.filter(function(c){return c.id!==id;});
+        save(d);
+        render();
+    };
+
+    window.SCOE_copy=function(){
+        var d=load();
+        var lines=['CHANGE ORDER LOG — '+new Date().toLocaleDateString(),''];
+        var statuses=['Pending','Submitted','Approved','Rejected','Void'];
+        statuses.forEach(function(st){
+            var group=d.cos.filter(function(c){return c.status===st;});
+            if(!group.length)return;
+            lines.push('--- '+st.toUpperCase()+' ---');
+            group.forEach(function(co){
+                lines.push('CO #'+co.num+': '+co.title+' | '+co.date+' | GC CO: '+(co.gcco||'—')+' | $'+fmtN(co.total));
+            });
+            lines.push('');
+        });
+        navigator.clipboard.writeText(lines.join('\n')).catch(function(){});
+    };
+
+    window.SCOE_print=function(){
+        var d=load();
+        var approved=d.cos.filter(function(c){return c.status==='Approved';}).reduce(function(s,c){return s+(c.total||0);},0);
+        var pending=d.cos.filter(function(c){return c.status==='Pending'||c.status==='Submitted';}).reduce(function(s,c){return s+(c.total||0);},0);
+        var w=window.open('','_blank');
+        w.document.write('<html><head><title>Change Order Log</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{font-size:14px;}table{width:100%;border-collapse:collapse;margin-bottom:10px;}th,td{border:1px solid #ccc;padding:4px 8px;}th{background:#f0f0f0;}.approved{background:#e8f5e9;}.pending{background:#fff8e1;}.rejected{background:#ffebee;}.sig{margin-top:20px;}</style></head><body>');
+        w.document.write('<h2>🔄 Change Order Log — '+new Date().toLocaleDateString()+'</h2>');
+        w.document.write('<p><strong>Approved COs Total:</strong> $'+fmtN(approved)+' &nbsp;|&nbsp; <strong>Pending/Submitted:</strong> $'+fmtN(pending)+'</p>');
+        w.document.write('<table><tr><th>CO #</th><th>Title</th><th>Date</th><th>GC CO #</th><th>Amount</th><th>Status</th></tr>');
+        d.cos.forEach(function(co){
+            var cls=co.status==='Approved'?'approved':co.status==='Pending'||co.status==='Submitted'?'pending':co.status==='Rejected'?'rejected':'';
+            w.document.write('<tr class="'+cls+'"><td>'+co.num+'</td><td>'+co.title+'</td><td>'+co.date+'</td><td>'+(co.gcco||'—')+'</td><td>$'+fmt(co.total)+'</td><td>'+co.status+'</td></tr>');
+        });
+        w.document.write('<tr><td colspan="4"><strong>Approved Total</strong></td><td><strong>$'+fmt(approved)+'</strong></td><td></td></tr>');
+        w.document.write('<tr><td colspan="4"><strong>Pending Total</strong></td><td><strong>$'+fmt(pending)+'</strong></td><td></td></tr>');
+        w.document.write('</table>');
+        w.document.write('<div class="sig"><table style="width:80%;"><tr><th>Contractor (Submitted By)</th><th>GC/Owner (Approved By)</th><th>Date</th></tr><tr style="height:40px;"><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></table></div>');
+        w.document.write('</body></html>');
+        w.document.close();
+        w.print();
+    };
+
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',createButton);
+    }else{
+        createButton();
+    }
+})();
+</script>
