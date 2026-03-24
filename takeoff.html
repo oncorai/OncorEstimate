@@ -30790,3 +30790,744 @@ Retain one (1) copy for your records. Return stamped copies as indicated above.
         }
     })();
     </script>
+<script>
+/* ============================================================
+   BACKCHARGE NOTICE GENERATOR — ⚡
+   Document, track, and print formal backcharges to subs/vendors
+   for rework, cleanup, damage, schedule impacts
+   Per-project localStorage
+   ============================================================ */
+(function(){
+    'use strict';
+    var BTN_ID='bcng-btn', WRAP_ID='bcng-wrap', STORE_KEY='bcng_v1';
+    function projKey(){return 'bcng_'+((window.currentProjectName||'default').replace(/\s+/g,'_'));}
+    function load(){return JSON.parse(localStorage.getItem(projKey())||'[]');}
+    function save(d){localStorage.setItem(projKey(),JSON.stringify(d));}
+    function fmtd(s){return s?new Date(s).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—';}
+    var STATUS_COLORS={Open:'#ef4444',Disputed:'#f97316',Agreed:'#eab308',Credited:'#22c55e','Waived':'#6b7280'};
+    var STATUS_CYCLE={Open:'Disputed',Disputed:'Agreed',Agreed:'Credited',Credited:'Waived',Waived:'Open'};
+    var REASONS=[
+        'Rework — defective workmanship',
+        'Cleanup — failed to clean after scope',
+        'Property damage caused by sub',
+        'Failure to provide required submittals',
+        'Failure to maintain insurance/COI',
+        'Schedule delay — sub caused critical path delay',
+        'Excess material waste left on site',
+        'OSHA/safety violation correction',
+        'Third-party repair after sub warranty refusal',
+        'Overtime premium — GC required acceleration',
+        'Re-inspection fee due to failed work',
+        'Other'
+    ];
+    function companyName(){
+        try{return JSON.parse(localStorage.getItem('oncor_company_v1')||'{}').name||'Contractor';}
+        catch(e){return 'Contractor';}
+    }
+    function activeProject(){return window.currentProjectName||document.getElementById('project-name')&&document.getElementById('project-name').value||'Project';}
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);
+        if(!wrap)return;
+        var entries=load();
+        var open=entries.filter(function(e){return e.status==='Open'||e.status==='Disputed';});
+        var totalOpen=open.reduce(function(s,e){return s+(parseFloat(e.amount)||0);},0);
+        var totalCredited=entries.filter(function(e){return e.status==='Credited';}).reduce(function(s,e){return s+(parseFloat(e.amount)||0);},0);
+        var html='<div style="font-size:11px;color:#94a3b8;margin-bottom:8px;"><b style="color:#f8fafc;">⚡ Backcharge Notice Generator</b> — '+activeProject()+'</div>';
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;">';
+        html+='<div style="background:#1e293b;border-radius:4px;padding:6px;text-align:center;"><div style="font-size:17px;font-weight:700;color:'+(open.length>0?'#ef4444':'#22c55e')+';">'+open.length+'</div><div style="font-size:9px;color:#94a3b8;">OPEN/DISPUTED</div></div>';
+        html+='<div style="background:#1e293b;border-radius:4px;padding:6px;text-align:center;"><div style="font-size:11px;font-weight:700;color:#fbbf24;">$'+totalOpen.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})+'</div><div style="font-size:9px;color:#94a3b8;">OPEN EXPOSURE</div></div>';
+        html+='<div style="background:#1e293b;border-radius:4px;padding:6px;text-align:center;"><div style="font-size:11px;font-weight:700;color:#22c55e;">$'+totalCredited.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})+'</div><div style="font-size:9px;color:#94a3b8;">CREDITED</div></div>';
+        html+='</div>';
+        if(open.length>0){
+            html+='<div style="background:#450a0a;border:1px solid #dc2626;border-radius:4px;padding:6px;margin-bottom:8px;font-size:10px;color:#fca5a5;">⚠️ '+open.length+' open backcharge(s) — $'+totalOpen.toLocaleString()+'+ exposure. Notify sub in writing and track to resolution.</div>';
+        }
+        html+='<div style="background:#0c2340;border:1px solid #1e40af;border-radius:4px;padding:8px;margin-bottom:8px;">';
+        html+='<div style="font-size:10px;font-weight:700;color:#93c5fd;margin-bottom:6px;">+ New Backcharge</div>';
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">';
+        html+='<input id="bcng-sub" placeholder="Sub/Vendor name" style="padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;">';
+        html+='<input id="bcng-date" type="date" style="padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;">';
+        html+='</div>';
+        html+='<select id="bcng-reason" style="width:100%;padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;margin-top:4px;">';
+        REASONS.forEach(function(r){html+='<option>'+r+'</option>';});
+        html+='</select>';
+        html+='<textarea id="bcng-desc" placeholder="Describe deficiency, work required, code/spec violated..." rows="2" style="width:100%;padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;margin-top:4px;box-sizing:border-box;resize:vertical;"></textarea>';
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-top:4px;">';
+        html+='<input id="bcng-amount" type="number" min="0" step="0.01" placeholder="Backcharge $" style="padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;">';
+        html+='<input id="bcng-by" placeholder="Authorized by" style="padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;">';
+        html+='<label style="font-size:9px;color:#94a3b8;display:flex;align-items:center;gap:3px;"><input id="bcng-notified" type="checkbox"> Sub Notified</label>';
+        html+='</div>';
+        html+='<button onclick="window._bcngAdd()" style="width:100%;margin-top:6px;padding:4px;background:#1e40af;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;">Log Backcharge</button>';
+        html+='</div>';
+        if(entries.length>0){
+            html+='<div style="margin-top:6px;">';
+            entries.slice().reverse().forEach(function(e,ri){
+                var i=entries.length-1-ri;
+                var scol=STATUS_COLORS[e.status]||'#6b7280';
+                html+='<div style="background:#1e293b;border-left:3px solid '+scol+';border-radius:4px;padding:6px;margin-bottom:4px;">';
+                html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;">';
+                html+='<div style="font-size:10px;font-weight:700;color:#f8fafc;">'+e.sub+'</div>';
+                html+='<div style="display:flex;gap:4px;align-items:center;">';
+                html+='<span onclick="window._bcngStatus('+i+')" style="font-size:9px;font-weight:700;color:'+scol+';cursor:pointer;background:'+scol+'22;border-radius:3px;padding:1px 5px;">'+e.status+'</span>';
+                html+='<span style="font-size:10px;font-weight:700;color:#fbbf24;">$'+(parseFloat(e.amount)||0).toLocaleString()+'</span>';
+                html+='<button onclick="window._bcngPrint('+i+')" style="font-size:9px;padding:1px 5px;background:#0c2521;color:#6ee7b7;border:1px solid #059669;border-radius:3px;cursor:pointer;">Print</button>';
+                html+='<button onclick="window._bcngDel('+i+')" style="font-size:9px;padding:1px 4px;background:#450a0a;color:#fca5a5;border:1px solid #dc2626;border-radius:3px;cursor:pointer;">✕</button>';
+                html+='</div></div>';
+                html+='<div style="font-size:9px;color:#94a3b8;margin-top:2px;">'+e.reason+' · '+fmtd(e.date)+(e.authorizedBy?' · Auth: '+e.authorizedBy:'')+(e.notified?' · Sub Notified ✓':'')+'</div>';
+                if(e.desc)html+='<div style="font-size:9px;color:#cbd5e1;margin-top:2px;">'+e.desc+'</div>';
+                html+='</div>';
+            });
+            html+='</div>';
+            html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;">';
+            html+='<button onclick="window._bcngCopy()" style="padding:4px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">📋 Copy Report</button>';
+            html+='<button onclick="window._bcngPrintAll()" style="padding:4px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">🖨 Print All</button>';
+            html+='</div>';
+        }
+        wrap.innerHTML=html;
+        var today=new Date();
+        var dd=String(today.getDate()).padStart(2,'0');
+        var mm=String(today.getMonth()+1).padStart(2,'0');
+        var yyyy=today.getFullYear();
+        var el=document.getElementById('bcng-date');
+        if(el) el.value=yyyy+'-'+mm+'-'+dd;
+    }
+    window._bcngAdd=function(){
+        var sub=(document.getElementById('bcng-sub')||{}).value||'';
+        if(!sub.trim()){alert('Enter sub/vendor name.');return;}
+        var entries=load();
+        entries.push({
+            sub:sub.trim(),
+            date:(document.getElementById('bcng-date')||{}).value||'',
+            reason:(document.getElementById('bcng-reason')||{}).value||'',
+            desc:(document.getElementById('bcng-desc')||{}).value||'',
+            amount:(document.getElementById('bcng-amount')||{}).value||'0',
+            authorizedBy:(document.getElementById('bcng-by')||{}).value||'',
+            notified:!!(document.getElementById('bcng-notified')||{}).checked,
+            status:'Open'
+        });
+        save(entries);
+        render();
+    };
+    window._bcngStatus=function(i){
+        var entries=load();
+        if(!entries[i])return;
+        entries[i].status=STATUS_CYCLE[entries[i].status]||'Open';
+        save(entries);render();
+    };
+    window._bcngDel=function(i){
+        if(!confirm('Delete this backcharge entry?'))return;
+        var entries=load();entries.splice(i,1);save(entries);render();
+    };
+    window._bcngCopy=function(){
+        var entries=load();
+        if(!entries.length){alert('No entries to copy.');return;}
+        var comp=companyName(),proj=activeProject();
+        var lines=['BACKCHARGE LOG — '+comp+' — '+proj,'Generated: '+new Date().toLocaleDateString(),''];
+        entries.forEach(function(e,i){
+            lines.push('#'+(i+1)+' | '+e.sub+' | '+e.reason+' | $'+(parseFloat(e.amount)||0).toLocaleString()+' | '+e.status);
+            if(e.desc)lines.push('  '+e.desc);
+            lines.push('  Date: '+fmtd(e.date)+(e.authorizedBy?' | Auth: '+e.authorizedBy:'')+(e.notified?' | Sub Notified':''));
+            lines.push('');
+        });
+        var open=entries.filter(function(e){return e.status==='Open'||e.status==='Disputed';});
+        lines.push('OPEN EXPOSURE: $'+open.reduce(function(s,e){return s+(parseFloat(e.amount)||0);},0).toLocaleString());
+        try{navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');}
+        catch(e){prompt('Copy:',lines.join('\n'));}
+    };
+    window._bcngPrint=function(idx){
+        var entries=load();
+        var e=entries[idx];
+        if(!e)return;
+        var comp=companyName(),proj=activeProject();
+        var w=window.open('','_blank');
+        w.document.write('<!DOCTYPE html><html><head><title>Backcharge Notice</title>'
+            +'<style>body{font-family:Arial,sans-serif;font-size:11px;padding:24px;max-width:700px;margin:0 auto;}h2{font-size:15px;text-align:center;text-transform:uppercase;letter-spacing:1px;}table{width:100%;border-collapse:collapse;margin:8px 0;}td,th{border:1px solid #888;padding:5px 7px;font-size:10px;}th{background:#eee;font-weight:700;}@media print{body{padding:12px;}}</style>'
+            +'</head><body>'
+            +'<h2>Backcharge Notice</h2>'
+            +'<p style="text-align:center;font-size:10px;margin-top:-6px;">'+comp+' — '+proj+' — Issued: '+fmtd(e.date)+'</p>'
+            +'<table><tr><th>Issued By (GC/Prime)</th><td>'+comp+'</td><th>Project</th><td>'+proj+'</td></tr>'
+            +'<tr><th>Backcharge To</th><td>'+e.sub+'</td><th>Date Issued</th><td>'+fmtd(e.date)+'</td></tr>'
+            +'<tr><th>Reason Category</th><td colspan="3">'+e.reason+'</td></tr>'
+            +'<tr><th>Backcharge Amount</th><td colspan="3" style="font-weight:700;font-size:13px;">$'+(parseFloat(e.amount)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td></tr>'
+            +'</table>'
+            +'<p><b>Description of Deficiency / Work Required:</b></p>'
+            +'<div style="border:1px solid #888;padding:8px;min-height:60px;font-size:10px;">'+( e.desc||'[See attached documentation]')+'</div>'
+            +'<p style="font-size:9px;margin-top:8px;"><b>Legal Basis:</b> This backcharge is issued pursuant to the terms of the subcontract/purchase order between the parties. The prime contractor reserves all rights under Texas law, including Texas Property Code §53, to withhold amounts from sub\'s payment equal to documented damages caused by sub\'s defective work, delays, or failure to perform. The amount shown above will be deducted from future payment applications unless disputed in writing within 10 days of receipt.</p>'
+            +'<p style="font-size:9px;"><b>Dispute Resolution:</b> Sub must provide written dispute notice within 10 calendar days of receipt. Uncontested backcharges will be deducted without further notice per subcontract dispute provisions.</p>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:20px;">'
+            +'<div><b>Issued By</b><br><br>___________________________<br><span style="font-size:9px;">PM / Authorized Signatory / Date</span></div>'
+            +'<div><b>Subcontractor Acknowledged</b><br><br>___________________________<br><span style="font-size:9px;">Sub Rep / Date / Print Name</span></div>'
+            +'<div><b>Controller Notified</b><br><br>___________________________<br><span style="font-size:9px;">Accounting / Date</span></div>'
+            +'</div>'
+            +'<p style="font-size:8px;color:#777;margin-top:10px;">Document retained per contract records requirements. Status: <b>'+e.status+'</b>'+(e.authorizedBy?' | Authorized By: '+e.authorizedBy:'')+(e.notified?' | Sub Notified: Yes':'')+'</p>'
+            +'<script>window.onload=function(){window.print();};<\/script></body></html>');
+        w.document.close();
+    };
+    window._bcngPrintAll=function(){
+        var entries=load();
+        if(!entries.length){alert('No backcharges to print.');return;}
+        var comp=companyName(),proj=activeProject();
+        var w=window.open('','_blank');
+        var rows='';
+        var totalAmt=0;
+        entries.forEach(function(e,i){
+            var scol={'Open':'#ef4444','Disputed':'#f97316','Agreed':'#eab308','Credited':'#22c55e','Waived':'#9ca3af'}[e.status]||'#888';
+            var amt=parseFloat(e.amount)||0;totalAmt+=amt;
+            rows+='<tr><td>'+(i+1)+'</td><td>'+fmtd(e.date)+'</td><td>'+e.sub+'</td><td>'+e.reason.substring(0,35)+'</td>'
+                +'<td style="text-align:right;">$'+amt.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'
+                +'<td><span style="color:'+scol+';font-weight:700;">'+e.status+'</span></td></tr>';
+        });
+        var open=entries.filter(function(e){return e.status==='Open'||e.status==='Disputed';});
+        var openAmt=open.reduce(function(s,e){return s+(parseFloat(e.amount)||0);},0);
+        w.document.write('<!DOCTYPE html><html><head><title>Backcharge Log</title>'
+            +'<style>body{font-family:Arial,sans-serif;font-size:10px;padding:20px;}h2{font-size:14px;text-align:center;text-transform:uppercase;}table{width:100%;border-collapse:collapse;}td,th{border:1px solid #ccc;padding:4px 6px;}th{background:#eee;font-weight:700;}@media print{body{padding:12px;}}</style>'
+            +'</head><body>'
+            +'<h2>Backcharge Log — '+comp+'</h2>'
+            +'<p style="text-align:center;font-size:10px;margin-top:-6px;">Project: '+proj+' · Generated: '+new Date().toLocaleDateString()+'</p>'
+            +'<p>Open/Disputed: <b>'+open.length+'</b> items · <b>$'+openAmt.toLocaleString()+'</b> exposure &nbsp;|&nbsp; Total Issued: <b>$'+totalAmt.toLocaleString()+'</b></p>'
+            +'<table><tr><th>#</th><th>Date</th><th>Sub/Vendor</th><th>Reason</th><th>Amount</th><th>Status</th></tr>'+rows+'</table>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:20px;">'
+            +'<div><b>PM / Authorized By</b><br><br>___________________________<br><span style="font-size:9px;">Signature / Date</span></div>'
+            +'<div><b>Controller / AP</b><br><br>___________________________<br><span style="font-size:9px;">Signature / Date</span></div>'
+            +'<div><b>Principal</b><br><br>___________________________<br><span style="font-size:9px;">Signature / Date</span></div>'
+            +'</div>'
+            +'<p style="font-size:8px;color:#777;margin-top:8px;">Backcharge log maintained per subcontract terms. Open items subject to deduction from subcontractor payment pending resolution. Texas Property Code §53 rights reserved.</p>'
+            +'<script>window.onload=function(){window.print();};<\/script></body></html>');
+        w.document.close();
+    };
+    function createButton(){
+        var sidebar=document.getElementById('sidebar');
+        if(!sidebar||document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='⚡ Backcharge Log';
+        btn.title='Log and print formal backcharge notices to subs/vendors';
+        btn.style.cssText='padding:4px 8px;background:#2d1414;color:#fca5a5;border:1px solid #dc2626;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+        sidebar.appendChild(btn);
+        sidebar.appendChild(wrap);
+    }
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);
+        var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'⚡ Hide Backcharge Log':'⚡ Backcharge Log';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',createButton);
+    }else{
+        createButton();
+    }
+})();
+</script>
+<script>
+/* ============================================================
+   REBAR MILL CERT & DELIVERY TRACKER — 🔩
+   ASTM A615/A706 mill certificate compliance per delivery
+   Required by most GC specs on commercial/public concrete work
+   Global localStorage
+   ============================================================ */
+(function(){
+    'use strict';
+    var BTN_ID='rmct-btn', WRAP_ID='rmct-wrap', STORE_KEY='rmct_v1';
+    function load(){return JSON.parse(localStorage.getItem(STORE_KEY)||'[]');}
+    function save(d){localStorage.setItem(STORE_KEY,JSON.stringify(d));}
+    function fmtd(s){return s?new Date(s).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—';}
+    var CERT_CYCLE={'Pending':'Received','Received':'Rejected','Rejected':'Pending'};
+    var CERT_COL={'Pending':'#f97316','Received':'#22c55e','Rejected':'#ef4444'};
+    var BAR_SIZES=['#3','#4','#5','#6','#7','#8','#9','#10','#11'];
+    var BAR_LB_FT={'#3':0.376,'#4':0.668,'#5':1.043,'#6':1.502,'#7':2.044,'#8':2.670,'#9':3.400,'#10':4.303,'#11':5.313};
+    function activeProject(){return window.currentProjectName||document.getElementById('project-name')&&document.getElementById('project-name').value||'Project';}
+    function companyName(){try{return JSON.parse(localStorage.getItem('oncor_company_v1')||'{}').name||'Contractor';}catch(e){return 'Contractor';}}
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var entries=load();
+        var pending=entries.filter(function(e){return e.cert==='Pending';});
+        var received=entries.filter(function(e){return e.cert==='Received';});
+        var totalTons=entries.reduce(function(s,e){
+            var lf=parseFloat(e.qty)||0;
+            var lbft=BAR_LB_FT[e.size]||1.043;
+            return s+(lf*lbft/2000);
+        },0);
+        var html='<div style="font-size:11px;color:#94a3b8;margin-bottom:8px;"><b style="color:#f8fafc;">🔩 Rebar Mill Cert Tracker</b> — ASTM A615 / A706</div>';
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;margin-bottom:8px;">';
+        html+='<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="font-size:15px;font-weight:700;color:#f8fafc;">'+entries.length+'</div><div style="font-size:8px;color:#94a3b8;">DELIVERIES</div></div>';
+        html+='<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="font-size:15px;font-weight:700;color:#22c55e;">'+received.length+'</div><div style="font-size:8px;color:#94a3b8;">CERTS OK</div></div>';
+        html+='<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="font-size:15px;font-weight:700;color:'+(pending.length>0?'#f97316':'#22c55e')+';">'+pending.length+'</div><div style="font-size:8px;color:#94a3b8;">PENDING</div></div>';
+        html+='<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="font-size:11px;font-weight:700;color:#f8fafc;">'+totalTons.toFixed(1)+'T</div><div style="font-size:8px;color:#94a3b8;">TOTAL TONS</div></div>';
+        html+='</div>';
+        if(pending.length>0){
+            html+='<div style="background:#431407;border:1px solid #f97316;border-radius:4px;padding:6px;margin-bottom:8px;font-size:10px;color:#fed7aa;">⚠️ '+pending.length+' delivery cert(s) PENDING — GC may reject rebar installation without current ASTM A615/A706 mill certs on file.</div>';
+        }
+        html+='<div style="background:#0c2521;border:1px solid #059669;border-radius:4px;padding:8px;margin-bottom:8px;">';
+        html+='<div style="font-size:10px;font-weight:700;color:#6ee7b7;margin-bottom:6px;">+ Log Delivery</div>';
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;">';
+        html+='<input id="rmct-date" type="date" style="padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;">';
+        html+='<input id="rmct-supplier" placeholder="Supplier" style="padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;">';
+        html+='<input id="rmct-ticket" placeholder="Delivery ticket #" style="padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;">';
+        html+='</div>';
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-top:4px;">';
+        html+='<select id="rmct-size" style="padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;">';
+        BAR_SIZES.forEach(function(s){html+='<option>'+s+'</option>';});
+        html+='</select>';
+        html+='<select id="rmct-grade" style="padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;">'
+            +'<option value="A615-Gr60">A615 Gr.60</option>'
+            +'<option value="A615-Gr40">A615 Gr.40</option>'
+            +'<option value="A615-Gr80">A615 Gr.80</option>'
+            +'<option value="A706-Gr60">A706 Gr.60 (Seismic)</option>'
+            +'<option value="A1035-Gr100">A1035 Gr.100</option>'
+            +'</select>';
+        html+='<input id="rmct-qty" type="number" min="0" placeholder="LF received" style="padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;">';
+        html+='<input id="rmct-heat" placeholder="Heat number" style="padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;">';
+        html+='</div>';
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:4px;">';
+        html+='<input id="rmct-certref" placeholder="Cert file ref / cert # (optional)" style="padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;">';
+        html+='<select id="rmct-certstatus" style="padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;">'
+            +'<option value="Pending">Cert: Pending</option>'
+            +'<option value="Received">Cert: Received</option>'
+            +'<option value="Rejected">Cert: Rejected</option>'
+            +'</select>';
+        html+='</div>';
+        html+='<input id="rmct-notes" placeholder="Notes (inspector, element, pour zone...)" style="width:100%;padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;margin-top:4px;box-sizing:border-box;">';
+        html+='<button onclick="window._rmctAdd()" style="width:100%;margin-top:6px;padding:4px;background:#059669;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;">Log Delivery</button>';
+        html+='</div>';
+        if(entries.length>0){
+            html+='<div style="margin-top:6px;">';
+            entries.slice().reverse().forEach(function(e,ri){
+                var i=entries.length-1-ri;
+                var ccol=CERT_COL[e.cert]||'#6b7280';
+                var lf=parseFloat(e.qty)||0;
+                var lbft=BAR_LB_FT[e.size]||1.043;
+                var tons=(lf*lbft/2000).toFixed(2);
+                html+='<div style="background:#1e293b;border-left:3px solid '+ccol+';border-radius:4px;padding:6px;margin-bottom:4px;">';
+                html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;">';
+                html+='<div style="font-size:10px;font-weight:700;color:#f8fafc;">'+e.size+' — '+e.grade+' · '+fmtd(e.date)+'</div>';
+                html+='<div style="display:flex;gap:4px;align-items:center;">';
+                html+='<span onclick="window._rmctCert('+i+')" style="font-size:9px;font-weight:700;color:'+ccol+';cursor:pointer;background:'+ccol+'22;border-radius:3px;padding:1px 5px;">'+e.cert+'</span>';
+                html+='<button onclick="window._rmctDel('+i+')" style="font-size:9px;padding:1px 4px;background:#450a0a;color:#fca5a5;border:1px solid #dc2626;border-radius:3px;cursor:pointer;">✕</button>';
+                html+='</div></div>';
+                html+='<div style="font-size:9px;color:#94a3b8;margin-top:2px;">'+e.supplier+' · Ticket: '+(e.ticket||'—')+' · Heat: '+(e.heat||'—')+' · '+lf.toLocaleString()+' LF ('+tons+' tons)'+(e.certRef?' · Cert: '+e.certRef:'')+'</div>';
+                if(e.notes)html+='<div style="font-size:9px;color:#cbd5e1;margin-top:2px;">'+e.notes+'</div>';
+                html+='</div>';
+            });
+            html+='</div>';
+            html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;">';
+            html+='<button onclick="window._rmctCopy()" style="padding:4px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">📋 Copy Log</button>';
+            html+='<button onclick="window._rmctPrint()" style="padding:4px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">🖨 Print Log</button>';
+            html+='</div>';
+        }
+        wrap.innerHTML=html;
+        var today=new Date();
+        var el=document.getElementById('rmct-date');
+        if(el) el.value=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+    }
+    window._rmctAdd=function(){
+        var supplier=(document.getElementById('rmct-supplier')||{}).value||'';
+        if(!supplier.trim()){alert('Enter supplier name.');return;}
+        var entries=load();
+        entries.push({
+            date:(document.getElementById('rmct-date')||{}).value||'',
+            supplier:supplier.trim(),
+            ticket:(document.getElementById('rmct-ticket')||{}).value||'',
+            size:(document.getElementById('rmct-size')||{}).value||'#4',
+            grade:(document.getElementById('rmct-grade')||{}).value||'A615-Gr60',
+            qty:(document.getElementById('rmct-qty')||{}).value||'0',
+            heat:(document.getElementById('rmct-heat')||{}).value||'',
+            certRef:(document.getElementById('rmct-certref')||{}).value||'',
+            cert:(document.getElementById('rmct-certstatus')||{}).value||'Pending',
+            notes:(document.getElementById('rmct-notes')||{}).value||''
+        });
+        save(entries);render();
+    };
+    window._rmctCert=function(i){
+        var entries=load();if(!entries[i])return;
+        entries[i].cert=CERT_CYCLE[entries[i].cert]||'Pending';
+        save(entries);render();
+    };
+    window._rmctDel=function(i){
+        if(!confirm('Delete this delivery entry?'))return;
+        var entries=load();entries.splice(i,1);save(entries);render();
+    };
+    window._rmctCopy=function(){
+        var entries=load();if(!entries.length){alert('No entries.');return;}
+        var lines=['REBAR MILL CERT TRACKER — '+companyName(),'Generated: '+new Date().toLocaleDateString(),''];
+        entries.forEach(function(e,i){
+            var lf=parseFloat(e.qty)||0;
+            var tons=(lf*(BAR_LB_FT[e.size]||1.043)/2000).toFixed(2);
+            lines.push('#'+(i+1)+' | '+fmtd(e.date)+' | '+e.supplier+' | '+e.size+' '+e.grade+' | '+lf.toLocaleString()+' LF ('+tons+' tons) | Heat: '+(e.heat||'—')+' | Cert: '+e.cert+(e.certRef?' ['+e.certRef+']':''));
+        });
+        var p=entries.filter(function(e){return e.cert==='Pending';});
+        if(p.length)lines.push('','PENDING CERTS ('+p.length+'): '+p.map(function(e){return e.supplier+' '+e.size;}).join(', '));
+        try{navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');}
+        catch(ex){prompt('Copy:',lines.join('\n'));}
+    };
+    window._rmctPrint=function(){
+        var entries=load();if(!entries.length){alert('No entries to print.');return;}
+        var comp=companyName();
+        var pending=entries.filter(function(e){return e.cert==='Pending';});
+        var rows='';
+        var totalTons=0;
+        entries.forEach(function(e,i){
+            var lf=parseFloat(e.qty)||0;
+            var tons=(lf*(BAR_LB_FT[e.size]||1.043)/2000).toFixed(2);
+            totalTons+=parseFloat(tons);
+            var ccol={'Pending':'#f97316','Received':'#22c55e','Rejected':'#dc2626'}[e.cert]||'#888';
+            rows+='<tr><td>'+(i+1)+'</td><td>'+fmtd(e.date)+'</td><td>'+e.supplier+'</td>'
+                +'<td>'+e.size+'</td><td>'+e.grade+'</td>'
+                +'<td style="text-align:right;">'+lf.toLocaleString()+'</td>'
+                +'<td style="text-align:right;">'+tons+'</td>'
+                +'<td>'+(e.heat||'—')+'</td>'
+                +'<td>'+(e.certRef||'—')+'</td>'
+                +'<td style="color:'+ccol+';font-weight:700;">'+e.cert+'</td>'
+                +'</tr>';
+        });
+        var w=window.open('','_blank');
+        w.document.write('<!DOCTYPE html><html><head><title>Mill Cert Log</title>'
+            +'<style>body{font-family:Arial,sans-serif;font-size:9.5px;padding:18px;}h2{font-size:14px;text-align:center;text-transform:uppercase;}table{width:100%;border-collapse:collapse;}td,th{border:1px solid #ccc;padding:3px 5px;}th{background:#eee;font-weight:700;}@media print{body{padding:10px;}}</style>'
+            +'</head><body>'
+            +'<h2>Rebar Mill Certificate Log — '+comp+'</h2>'
+            +'<p style="text-align:center;font-size:9px;margin-top:-6px;">ASTM A615 / A706 Compliance Log · Generated: '+new Date().toLocaleDateString()+'</p>'
+            +(pending.length>0?'<div style="background:#fff3cd;border:1px solid #f97316;padding:5px;margin-bottom:8px;font-size:9.5px;"><b>⚠️ CERT PENDING ('+pending.length+' deliveries):</b> '+pending.map(function(e){return e.size+' from '+e.supplier+' ('+fmtd(e.date)+')';}).join('; ')+'</div>':'')
+            +'<table><tr><th>#</th><th>Date</th><th>Supplier</th><th>Size</th><th>Grade/ASTM</th><th>LF</th><th>Tons</th><th>Heat #</th><th>Cert Ref</th><th>Cert Status</th></tr>'
+            +rows
+            +'<tr style="font-weight:700;background:#f8f8f8;"><td colspan="6" style="text-align:right;">TOTALS:</td><td style="text-align:right;">'+totalTons.toFixed(2)+'</td><td colspan="3"></td></tr>'
+            +'</table>'
+            +'<p style="font-size:8.5px;margin-top:8px;"><b>Requirements:</b> ASTM A615 Grade 60 or A706 Grade 60 reinforcing bar. Mill certs must trace to heat number and confirm yield/tensile/elongation per ASTM. Certs must be on file before bar installation is considered compliant per ACI 318-19 §26.3.2 and most commercial contract specs. GC/special inspector may reject work if certs not produced within 48h of request.</p>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:16px;">'
+            +'<div><b>QC Manager</b><br><br>___________________________<br><span style="font-size:8px;">Signature / Date</span></div>'
+            +'<div><b>Field Superintendent</b><br><br>___________________________<br><span style="font-size:8px;">Signature / Date</span></div>'
+            +'<div><b>GC Inspector</b><br><br>___________________________<br><span style="font-size:8px;">Signature / Date</span></div>'
+            +'</div>'
+            +'<script>window.onload=function(){window.print();};<\/script></body></html>');
+        w.document.close();
+    };
+    function createButton(){
+        var sidebar=document.getElementById('sidebar');
+        if(!sidebar||document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='🔩 Mill Cert Tracker';
+        btn.title='Track rebar deliveries with ASTM A615/A706 mill cert compliance';
+        btn.style.cssText='padding:4px 8px;background:#1c1917;color:#d4a57a;border:1px solid #92400e;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+        sidebar.appendChild(btn);
+        sidebar.appendChild(wrap);
+    }
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);
+        var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🔩 Hide Mill Cert Tracker':'🔩 Mill Cert Tracker';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',createButton);
+    }else{
+        createButton();
+    }
+})();
+</script>
+<script>
+/* ============================================================
+   SUBCONTRACTOR PERFORMANCE SCORECARD — ⭐
+   Rate subs on 5 criteria after each job. Aggregate scores
+   show who to rehire and who to avoid. Feeds pre-qual decisions.
+   Global localStorage
+   ============================================================ */
+(function(){
+    'use strict';
+    var BTN_ID='spsc-btn', WRAP_ID='spsc-wrap', STORE_KEY='spsc_v1';
+    function load(){return JSON.parse(localStorage.getItem(STORE_KEY)||'[]');}
+    function save(d){localStorage.setItem(STORE_KEY,JSON.stringify(d));}
+    function fmtd(s){return s?new Date(s).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—';}
+    var CRITERIA=['Schedule','Quality','Communication','Safety','Price Accuracy'];
+    var CRITERIA_DESC={
+        Schedule:'On time, met milestones, responsive to acceleration',
+        Quality:'Workmanship, first-time defect rate, rework incidents',
+        Communication:'Notice of issues, RFI/submittal response, availability',
+        Safety:'PPE compliance, toolbox participation, incident-free',
+        'Price Accuracy':'Bid aligned with actual, few extras, transparent T&M'
+    };
+    var SCOPES=['Concrete Pump','Rebar Fabrication & Install','Forming / Shoring','Saw Cutting','Post-Tension','Testing & Inspection','Earthwork / Grading','Vapor Barrier / Underslab','Epoxy / Anchoring','Coring','Waterproofing','Flatwork Finishing','Structural Steel','Other'];
+    function companyName(){try{return JSON.parse(localStorage.getItem('oncor_company_v1')||'{}').name||'Contractor';}catch(e){return 'Contractor';}}
+    function activeProject(){return window.currentProjectName||document.getElementById('project-name')&&document.getElementById('project-name').value||'Project';}
+
+    function avgScore(scores){
+        var vals=CRITERIA.map(function(c){return parseInt(scores[c])||0;}).filter(function(v){return v>0;});
+        if(!vals.length)return 0;
+        return vals.reduce(function(s,v){return s+v;},0)/vals.length;
+    }
+    function verdict(avg){
+        if(avg>=4.2)return {text:'Use Again ✓',col:'#22c55e'};
+        if(avg>=3.0)return {text:'Use with Caution ⚠️',col:'#eab308'};
+        if(avg>0)return {text:'Do Not Use ✗',col:'#ef4444'};
+        return {text:'Not Rated',col:'#6b7280'};
+    }
+    function stars(n){return '★'.repeat(Math.round(n))+'☆'.repeat(5-Math.round(n));}
+
+    function renderAggregates(){
+        var entries=load();
+        if(!entries.length)return '';
+        var byName={};
+        entries.forEach(function(e){
+            var k=e.subName.toLowerCase().trim();
+            if(!byName[k])byName[k]={name:e.subName,scores:[],lastDate:''};
+            byName[k].scores.push(avgScore(e.scores));
+            if(!byName[k].lastDate||e.date>byName[k].lastDate)byName[k].lastDate=e.date;
+        });
+        var rows='';
+        Object.keys(byName).sort(function(a,b){
+            var avgA=byName[a].scores.reduce(function(s,v){return s+v;},0)/byName[a].scores.length;
+            var avgB=byName[b].scores.reduce(function(s,v){return s+v;},0)/byName[b].scores.length;
+            return avgB-avgA;
+        }).forEach(function(k){
+            var s=byName[k];
+            var avg=s.scores.reduce(function(x,v){return x+v;},0)/s.scores.length;
+            var v=verdict(avg);
+            rows+='<div style="background:#1e293b;border-left:3px solid '+v.col+';border-radius:4px;padding:5px 8px;margin-bottom:3px;display:flex;justify-content:space-between;align-items:center;">'
+                +'<div><span style="font-size:10px;font-weight:700;color:#f8fafc;">'+s.name+'</span>'
+                +' <span style="font-size:9px;color:#94a3b8;">'+s.scores.length+' job'+(s.scores.length>1?'s':'')+' · Last: '+fmtd(s.lastDate)+'</span></div>'
+                +'<div style="display:flex;align-items:center;gap:6px;">'
+                +'<span style="color:#fbbf24;font-size:11px;">'+stars(avg)+'</span>'
+                +'<span style="font-size:9px;font-weight:700;color:#f8fafc;">'+avg.toFixed(1)+'</span>'
+                +'<span style="font-size:9px;font-weight:700;color:'+v.col+';background:'+v.col+'22;border-radius:3px;padding:1px 5px;">'+v.text+'</span>'
+                +'</div></div>';
+        });
+        return '<div style="margin-bottom:8px;"><div style="font-size:10px;font-weight:700;color:#f8fafc;margin-bottom:5px;">Sub Ratings Summary</div>'+rows+'</div>';
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var entries=load();
+        var html='<div style="font-size:11px;color:#94a3b8;margin-bottom:8px;"><b style="color:#f8fafc;">⭐ Sub Performance Scorecard</b></div>';
+        html+=renderAggregates();
+        html+='<div style="background:#0c2340;border:1px solid #1e40af;border-radius:4px;padding:8px;margin-bottom:8px;">';
+        html+='<div style="font-size:10px;font-weight:700;color:#93c5fd;margin-bottom:6px;">+ Rate a Sub</div>';
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">';
+        html+='<input id="spsc-sub" placeholder="Sub/vendor company name" style="padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;">';
+        html+='<input id="spsc-date" type="date" style="padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;">';
+        html+='</div>';
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:4px;">';
+        html+='<select id="spsc-scope" style="padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;">';
+        SCOPES.forEach(function(s){html+='<option>'+s+'</option>';});
+        html+='</select>';
+        html+='<input id="spsc-project" placeholder="Project name" style="padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;" value="'+activeProject()+'">';
+        html+='</div>';
+        html+='<div style="margin-top:6px;">';
+        CRITERIA.forEach(function(c){
+            html+='<div style="display:grid;grid-template-columns:130px 1fr;align-items:center;gap:6px;margin-bottom:4px;">';
+            html+='<div style="font-size:9px;color:#cbd5e1;" title="'+CRITERIA_DESC[c]+'">'+c+' <span style="color:#475569;font-size:8px;">ⓘ</span></div>';
+            html+='<div style="display:flex;gap:3px;">';
+            for(var s=1;s<=5;s++){
+                html+='<button onclick="window._spscRate(this,\''+c+'\','+s+')" data-crit="'+c+'" data-val="'+s+'" style="width:22px;height:22px;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#fbbf24;cursor:pointer;font-size:12px;">★</button>';
+            }
+            html+='<span id="spsc-lbl-'+c.replace(/\s/g,'_')+'" style="font-size:9px;color:#94a3b8;margin-left:4px;"></span>';
+            html+='</div></div>';
+        });
+        html+='</div>';
+        html+='<textarea id="spsc-notes" placeholder="Notes: key issues, wins, things to watch on next job..." rows="2" style="width:100%;padding:4px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:10px;margin-top:4px;box-sizing:border-box;resize:vertical;"></textarea>';
+        html+='<button onclick="window._spscSave()" style="width:100%;margin-top:6px;padding:4px;background:#1e40af;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;">Save Scorecard</button>';
+        html+='</div>';
+        if(entries.length>0){
+            html+='<div style="margin-top:6px;">';
+            entries.slice().reverse().forEach(function(e,ri){
+                var i=entries.length-1-ri;
+                var avg=avgScore(e.scores);
+                var v=verdict(avg);
+                html+='<div style="background:#1e293b;border-left:3px solid '+v.col+';border-radius:4px;padding:6px;margin-bottom:4px;">';
+                html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;">';
+                html+='<div><span style="font-size:10px;font-weight:700;color:#f8fafc;">'+e.subName+'</span>'
+                    +'<span style="font-size:9px;color:#94a3b8;margin-left:5px;">'+e.scope+' · '+e.projectName+' · '+fmtd(e.date)+'</span></div>';
+                html+='<div style="display:flex;gap:4px;align-items:center;">';
+                html+='<span style="color:#fbbf24;font-size:11px;">'+stars(avg)+'</span>';
+                html+='<span style="font-size:9px;font-weight:700;color:'+v.col+';background:'+v.col+'22;border-radius:3px;padding:1px 5px;">'+v.text+'</span>';
+                html+='<button onclick="window._spscDel('+i+')" style="font-size:9px;padding:1px 4px;background:#450a0a;color:#fca5a5;border:1px solid #dc2626;border-radius:3px;cursor:pointer;">✕</button>';
+                html+='</div></div>';
+                var scoreRow='';
+                CRITERIA.forEach(function(c){
+                    var s=parseInt(e.scores[c])||0;
+                    if(s)scoreRow+='<span style="font-size:8px;color:#94a3b8;margin-right:6px;">'+c+': <b style="color:#f8fafc;">'+s+'/5</b></span>';
+                });
+                html+='<div style="margin-top:2px;">'+scoreRow+'</div>';
+                if(e.notes)html+='<div style="font-size:9px;color:#cbd5e1;margin-top:2px;font-style:italic;">"'+e.notes+'"</div>';
+                html+='</div>';
+            });
+            html+='</div>';
+            html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;">';
+            html+='<button onclick="window._spscCopy()" style="padding:4px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">📋 Copy Report</button>';
+            html+='<button onclick="window._spscPrint()" style="padding:4px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">🖨 Print Scorecards</button>';
+            html+='</div>';
+        }
+        wrap.innerHTML=html;
+        var today=new Date();
+        var el=document.getElementById('spsc-date');
+        if(el) el.value=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+        // reset star buttons
+        window._spscCurrentScores={};
+        CRITERIA.forEach(function(c){window._spscCurrentScores[c]=0;});
+    }
+    window._spscCurrentScores={};
+    window._spscRate=function(btn,crit,val){
+        window._spscCurrentScores[crit]=val;
+        // update visual for this criterion row
+        var parent=btn.parentNode;
+        var btns=parent.querySelectorAll('button[data-crit]');
+        btns.forEach(function(b){
+            var bv=parseInt(b.getAttribute('data-val'));
+            b.style.background=bv<=val?'#92400e':'#1e293b';
+            b.style.color=bv<=val?'#fbbf24':'#4b5563';
+        });
+        var lbl=document.getElementById('spsc-lbl-'+crit.replace(/\s/g,'_'));
+        if(lbl) lbl.textContent=val+'/5';
+    };
+    window._spscSave=function(){
+        var sub=(document.getElementById('spsc-sub')||{}).value||'';
+        if(!sub.trim()){alert('Enter sub/vendor name.');return;}
+        var scores={};
+        var hasAny=false;
+        CRITERIA.forEach(function(c){
+            var v=window._spscCurrentScores[c]||0;
+            scores[c]=v;
+            if(v>0)hasAny=true;
+        });
+        if(!hasAny){alert('Rate at least one criterion.');return;}
+        var entries=load();
+        entries.push({
+            subName:sub.trim(),
+            date:(document.getElementById('spsc-date')||{}).value||'',
+            scope:(document.getElementById('spsc-scope')||{}).value||'',
+            projectName:(document.getElementById('spsc-project')||{}).value||activeProject(),
+            scores:scores,
+            notes:(document.getElementById('spsc-notes')||{}).value||''
+        });
+        save(entries);
+        window._spscCurrentScores={};
+        render();
+    };
+    window._spscDel=function(i){
+        if(!confirm('Delete this scorecard?'))return;
+        var entries=load();entries.splice(i,1);save(entries);render();
+    };
+    window._spscCopy=function(){
+        var entries=load();if(!entries.length){alert('No entries.');return;}
+        var lines=['SUB PERFORMANCE SCORECARD — '+companyName(),'Generated: '+new Date().toLocaleDateString(),''];
+        // aggregates
+        var byName={};
+        entries.forEach(function(e){
+            var k=e.subName.toLowerCase().trim();
+            if(!byName[k])byName[k]={name:e.subName,avgs:[]};
+            byName[k].avgs.push(avgScore(e.scores));
+        });
+        lines.push('SUMMARY:');
+        Object.keys(byName).sort().forEach(function(k){
+            var s=byName[k];
+            var avg=s.avgs.reduce(function(x,v){return x+v;},0)/s.avgs.length;
+            var v=verdict(avg);
+            lines.push('  '+s.name+' — Avg: '+avg.toFixed(1)+'/5 ('+s.avgs.length+' job(s)) → '+v.text);
+        });
+        lines.push('','DETAIL:');
+        entries.forEach(function(e,i){
+            var avg=avgScore(e.scores);
+            lines.push('#'+(i+1)+' | '+e.subName+' | '+e.scope+' | '+e.projectName+' | '+fmtd(e.date)+' | Avg: '+avg.toFixed(1)+'/5 → '+verdict(avg).text);
+            CRITERIA.forEach(function(c){if(e.scores[c])lines.push('  '+c+': '+e.scores[c]+'/5');});
+            if(e.notes)lines.push('  Notes: '+e.notes);
+            lines.push('');
+        });
+        try{navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');}
+        catch(ex){prompt('Copy:',lines.join('\n'));}
+    };
+    window._spscPrint=function(){
+        var entries=load();if(!entries.length){alert('No scorecards to print.');return;}
+        var comp=companyName();
+        var byName={};
+        entries.forEach(function(e){
+            var k=e.subName.toLowerCase().trim();
+            if(!byName[k])byName[k]={name:e.subName,avgs:[],entries:[]};
+            byName[k].avgs.push(avgScore(e.scores));
+            byName[k].entries.push(e);
+        });
+        var summaryRows='';
+        Object.keys(byName).sort(function(a,b){
+            var avgA=byName[a].avgs.reduce(function(s,v){return s+v;},0)/byName[a].avgs.length;
+            var avgB=byName[b].avgs.reduce(function(s,v){return s+v;},0)/byName[b].avgs.length;
+            return avgB-avgA;
+        }).forEach(function(k){
+            var s=byName[k];
+            var avg=s.avgs.reduce(function(x,v){return x+v;},0)/s.avgs.length;
+            var v=verdict(avg);
+            summaryRows+='<tr><td>'+s.name+'</td><td style="text-align:center;">'+s.entries.length+'</td>'
+                +'<td style="text-align:center;font-weight:700;">'+avg.toFixed(1)+'/5</td>'
+                +'<td style="color:'+v.col+';font-weight:700;">'+v.text+'</td>'
+                +'<td>'+fmtd(s.entries[s.entries.length-1].date)+'</td></tr>';
+        });
+        var detailRows='';
+        entries.forEach(function(e,i){
+            var avg=avgScore(e.scores);
+            var v=verdict(avg);
+            detailRows+='<tr><td>'+(i+1)+'</td><td>'+e.subName+'</td><td>'+e.scope+'</td><td>'+e.projectName+'</td><td>'+fmtd(e.date)+'</td>';
+            CRITERIA.forEach(function(c){detailRows+='<td style="text-align:center;">'+(e.scores[c]||'—')+'</td>';});
+            detailRows+='<td style="font-weight:700;color:'+v.col+';">'+avg.toFixed(1)+'</td></tr>';
+        });
+        var w=window.open('','_blank');
+        w.document.write('<!DOCTYPE html><html><head><title>Sub Scorecards</title>'
+            +'<style>body{font-family:Arial,sans-serif;font-size:9.5px;padding:18px;}h2{font-size:14px;text-align:center;text-transform:uppercase;}h3{font-size:11px;margin-top:14px;}table{width:100%;border-collapse:collapse;margin:6px 0;}td,th{border:1px solid #ccc;padding:3px 5px;}th{background:#eee;font-weight:700;}@media print{body{padding:10px;}}</style>'
+            +'</head><body>'
+            +'<h2>Subcontractor Performance Scorecards — '+comp+'</h2>'
+            +'<p style="text-align:center;font-size:9px;margin-top:-6px;">Generated: '+new Date().toLocaleDateString()+' · '+entries.length+' ratings logged</p>'
+            +'<h3>Summary — All-Time Averages</h3>'
+            +'<table><tr><th>Sub/Vendor</th><th>Jobs</th><th>Avg Score</th><th>Recommendation</th><th>Last Job</th></tr>'+summaryRows+'</table>'
+            +'<h3>Detail — Individual Ratings</h3>'
+            +'<table><tr><th>#</th><th>Sub</th><th>Scope</th><th>Project</th><th>Date</th>'
+            +CRITERIA.map(function(c){return '<th>'+c.split(' ')[0]+'</th>';}).join('')
+            +'<th>Avg</th></tr>'+detailRows+'</table>'
+            +'<p style="font-size:8.5px;margin-top:8px;"><b>Scoring Guide:</b> 5=Excellent, 4=Good, 3=Acceptable, 2=Below Expectations, 1=Unacceptable. Recommendation: ≥4.2 avg = Use Again; ≥3.0 = Use with Caution; &lt;3.0 = Do Not Use. Scores inform Pre-Qualification Registry and future bid invitations.</p>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:16px;">'
+            +'<div><b>Project Manager</b><br><br>___________________________<br><span style="font-size:8px;">Signature / Date</span></div>'
+            +'<div><b>Principal</b><br><br>___________________________<br><span style="font-size:8px;">Signature / Date</span></div>'
+            +'</div>'
+            +'<script>window.onload=function(){window.print();};<\/script></body></html>');
+        w.document.close();
+    };
+    function createButton(){
+        var sidebar=document.getElementById('sidebar');
+        if(!sidebar||document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='⭐ Sub Scorecards';
+        btn.title='Rate subcontractors after each job — builds institutional knowledge for future bids';
+        btn.style.cssText='padding:4px 8px;background:#1c1400;color:#fde68a;border:1px solid #d97706;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+        sidebar.appendChild(btn);
+        sidebar.appendChild(wrap);
+    }
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);
+        var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'⭐ Hide Sub Scorecards':'⭐ Sub Scorecards';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',createButton);
+    }else{
+        createButton();
+    }
+})();
+</script>
