@@ -33751,3 +33751,490 @@ Retain one (1) copy for your records. Return stamped copies as indicated above.
     }
 })();
 </script>
+
+<!-- TOOL: Business Overhead Rate Calculator -->
+<script>
+(function(){
+    'use strict';
+    var BTN_ID='_bohBtn', WRAP_ID='_bohWrap';
+    var LS_KEY='oncor_boh_v1';
+    function load(){try{return JSON.parse(localStorage.getItem(LS_KEY)||'null')||{items:[],rev:0};}catch(e){return{items:[],rev:0};}}
+    function save(d){try{localStorage.setItem(LS_KEY,JSON.stringify(d));}catch(e){}}
+    function fmt(n){return(+n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});}
+    function fmtD(n){return(+n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+    var DEFAULTS=[
+        {cat:'Facilities',desc:'Office/shop rent',mo:1500},
+        {cat:'Utilities',desc:'Phone/internet/electric',mo:350},
+        {cat:'Insurance',desc:'GL/WC annual ÷ 12',mo:1200},
+        {cat:'Vehicles',desc:'Truck payments + fuel',mo:900},
+        {cat:'Equipment',desc:'Tools, equipment payments',mo:600},
+        {cat:'Payroll',desc:'Admin/estimator (non-field)',mo:2500},
+        {cat:'Software',desc:'Estimating, accounting, plans',mo:200},
+        {cat:'Marketing',desc:'Advertising, website',mo:150},
+        {cat:'Professional',desc:'Accountant, legal, permits',mo:200},
+        {cat:'Other',desc:'Misc fixed overhead',mo:300}
+    ];
+
+    function render(){
+        var d=load();
+        var wrap=document.getElementById(WRAP_ID);
+        if(!wrap)return;
+        var totalMo=d.items.reduce(function(s,i){return s+(+i.mo||0);},0);
+        var totalAnn=totalMo*12;
+        var revAnn=+d.rev||0;
+        var ohPct=revAnn>0?(totalAnn/revAnn*100):0;
+        var ohColor=ohPct<=20?'#4ade80':ohPct<=30?'#fbbf24':'#f87171';
+        var html='<div style="font-size:10px;color:#94a3b8;margin-bottom:8px;">Enter your monthly fixed costs to compute the overhead % you ACTUALLY need to cover them. Most contractors guess — then underbid.</div>';
+        // Revenue input
+        html+='<div style="margin-bottom:8px;"><label style="color:#94a3b8;font-size:10px;">Annual Revenue Target ($)</label>';
+        html+='<input id="_boh_rev" type="number" min="0" step="10000" value="'+(d.rev||500000)+'" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:11px;margin-top:2px;" onchange="window._BOH_setRev(this.value)"></div>';
+        // Items table
+        html+='<table style="width:100%;border-collapse:collapse;font-size:10px;margin-bottom:8px;"><thead><tr style="color:#64748b;"><th style="text-align:left;padding:2px 4px;">Category</th><th style="text-align:left;padding:2px 4px;">Description</th><th style="text-align:right;padding:2px 4px;">$/Mo</th><th style="padding:2px 4px;"></th></tr></thead><tbody>';
+        d.items.forEach(function(item,i){
+            html+='<tr style="border-bottom:1px solid #1e293b;">';
+            html+='<td style="padding:2px 4px;"><input type="text" value="'+item.cat+'" style="width:70px;background:#0f172a;border:1px solid #334155;color:#f1f5f9;border-radius:3px;padding:2px;font-size:10px;" onchange="window._BOH_upd('+i+',\'cat\',this.value)"></td>';
+            html+='<td style="padding:2px 4px;"><input type="text" value="'+item.desc+'" style="width:120px;background:#0f172a;border:1px solid #334155;color:#f1f5f9;border-radius:3px;padding:2px;font-size:10px;" onchange="window._BOH_upd('+i+',\'desc\',this.value)"></td>';
+            html+='<td style="padding:2px 4px;text-align:right;"><input type="number" min="0" value="'+item.mo+'" style="width:70px;background:#0f172a;border:1px solid #334155;color:#f1f5f9;border-radius:3px;padding:2px;font-size:10px;text-align:right;" onchange="window._BOH_upd('+i+',\'mo\',this.value)"></td>';
+            html+='<td style="padding:2px 4px;"><button onclick="window._BOH_del('+i+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:10px;">✕</button></td>';
+            html+='</tr>';
+        });
+        html+='</tbody></table>';
+        // Add row
+        html+='<div style="display:flex;gap:4px;margin-bottom:10px;">';
+        html+='<input id="_boh_ncat" placeholder="Category" style="flex:1;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:11px;">';
+        html+='<input id="_boh_ndesc" placeholder="Description" style="flex:2;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:11px;">';
+        html+='<input id="_boh_nmo" type="number" placeholder="$/Mo" style="flex:1;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:11px;">';
+        html+='<button onclick="window._BOH_add()" style="background:#1e40af;color:#bfdbfe;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:11px;">+ Add</button>';
+        html+='</div>';
+        // Load defaults
+        html+='<button onclick="window._BOH_defaults()" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid #334155;color:#94a3b8;border-radius:4px;padding:4px;cursor:pointer;font-size:10px;margin-bottom:10px;">↺ Load Default Items</button>';
+        // Dashboard
+        html+='<div style="background:#1e293b;border-radius:6px;padding:10px;margin-bottom:8px;">';
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;">';
+        html+='<div><div style="color:#64748b;font-size:9px;">MONTHLY OVERHEAD</div><div style="color:#f1f5f9;font-weight:700;">$'+fmt(totalMo)+'</div></div>';
+        html+='<div><div style="color:#64748b;font-size:9px;">ANNUAL OVERHEAD</div><div style="color:#f1f5f9;font-weight:700;">$'+fmt(totalAnn)+'</div></div>';
+        html+='<div><div style="color:#64748b;font-size:9px;">REVENUE TARGET</div><div style="color:#f1f5f9;font-weight:700;">$'+fmt(revAnn)+'</div></div>';
+        html+='<div><div style="color:#64748b;font-size:9px;">REQUIRED OH%</div><div style="font-size:1.2rem;font-weight:700;color:'+ohColor+';">'+fmtD(ohPct)+'%</div></div>';
+        html+='</div>';
+        if(revAnn>0){
+            html+='<div style="margin-top:8px;font-size:10px;color:#94a3b8;">';
+            html+='At $'+fmt(revAnn)+'/yr revenue, you need <strong style="color:'+ohColor+';">'+fmtD(ohPct)+'% overhead markup</strong> just to break even on fixed costs. ';
+            if(ohPct<10) html+='<span style="color:#4ade80;">✓ Low overhead — competitive advantage.</span>';
+            else if(ohPct<20) html+='<span style="color:#4ade80;">✓ Healthy range for a small contractor.</span>';
+            else if(ohPct<30) html+='<span style="color:#fbbf24;">⚠ Moderate — watch volume to cover these costs.</span>';
+            else html+='<span style="color:#f87171;">⚠ High overhead — revenue needs to grow or costs need to cut.</span>';
+            html+='<br><span style="color:#64748b;">Your bid markup target: OH '+fmtD(ohPct)+'% + Profit (set separately) = total markup on cost.</span>';
+            html+='</div>';
+        }
+        html+='</div>';
+        // Per-yd breakdown
+        if(revAnn>0){
+            var getYd=function(){try{var m=document.getElementById('totalYd3');return m?parseFloat(m.textContent)||0:0;}catch(e){return 0;}};
+            html+='<div style="font-size:10px;color:#94a3b8;margin-bottom:8px;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:8px;">';
+            html+='<strong style="color:#e2e8f0;">What-if $/yd³:</strong> Enter annual yd³ volume:<br>';
+            html+='<input id="_boh_yds" type="number" min="1" placeholder="Annual yd³" value="'+(d.annYd||1000)+'" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:11px;margin-top:4px;" onchange="window._BOH_yd(this.value)">';
+            var annYd=+d.annYd||1000;
+            var ohPerYd=annYd>0?(totalAnn/annYd):0;
+            html+='<div style="margin-top:4px;">Overhead burden: <strong style="color:#7dd3fc;">$'+fmtD(ohPerYd)+'/yd³</strong> to recover fixed costs at '+fmt(annYd)+' yd³/yr</div>';
+            html+='</div>';
+        }
+        // Buttons
+        html+='<div style="display:flex;gap:4px;"><button onclick="window._BOH_copy()" style="flex:1;background:rgba(148,163,184,0.1);border:1px solid #334155;color:#94a3b8;border-radius:4px;padding:5px;cursor:pointer;font-size:10px;">📋 Copy</button>';
+        html+='<button onclick="window._BOH_print()" style="flex:1;background:rgba(148,163,184,0.1);border:1px solid #334155;color:#94a3b8;border-radius:4px;padding:5px;cursor:pointer;font-size:10px;">🖨 Print</button></div>';
+        wrap.innerHTML=html;
+    }
+
+    window._BOH_setRev=function(v){var d=load();d.rev=+v||0;save(d);render();};
+    window._BOH_yd=function(v){var d=load();d.annYd=+v||1000;save(d);render();};
+    window._BOH_upd=function(i,field,v){var d=load();if(d.items[i])d.items[i][field]=(field==='mo'?+v:v);save(d);render();};
+    window._BOH_del=function(i){if(!confirm('Remove this item?'))return;var d=load();d.items.splice(i,1);save(d);render();};
+    window._BOH_add=function(){
+        var cat=document.getElementById('_boh_ncat'),desc=document.getElementById('_boh_ndesc'),mo=document.getElementById('_boh_nmo');
+        if(!cat||!desc||!mo)return;
+        var d=load();d.items.push({cat:cat.value||'Other',desc:desc.value||'',mo:+mo.value||0});save(d);render();
+    };
+    window._BOH_defaults=function(){var d=load();d.items=JSON.parse(JSON.stringify(DEFAULTS));save(d);render();};
+    window._BOH_copy=function(){
+        var d=load();
+        var totalMo=d.items.reduce(function(s,i){return s+(+i.mo||0);},0);
+        var lines=['OVERHEAD RATE ANALYSIS — '+new Date().toLocaleDateString(),''];
+        d.items.forEach(function(i){lines.push(i.cat+' — '+i.desc+': $'+fmt(i.mo)+'/mo');});
+        lines.push('','Total Monthly: $'+fmt(totalMo),'Annual: $'+fmt(totalMo*12));
+        if(d.rev) lines.push('Revenue Target: $'+fmt(d.rev),'Required OH%: '+fmtD(totalMo*12/(d.rev)*100)+'%');
+        navigator.clipboard.writeText(lines.join('\n')).catch(function(){});
+    };
+    window._BOH_print=function(){
+        var d=load();
+        var totalMo=d.items.reduce(function(s,i){return s+(+i.mo||0);},0);
+        var totalAnn=totalMo*12;
+        var ohPct=d.rev?(totalAnn/d.rev*100):0;
+        var w=window.open('','_blank');
+        w.document.write('<html><head><title>Overhead Rate Analysis</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{font-size:14px;}table{width:100%;border-collapse:collapse;margin-bottom:10px;}th,td{border:1px solid #ccc;padding:4px 8px;}th{background:#f0f0f0;}.total{background:#e8f0fe;font-weight:bold;}.sig{margin-top:20px;}</style></head><body>');
+        w.document.write('<h2>🏢 Business Overhead Rate Calculator</h2>');
+        w.document.write('<p><strong>Date:</strong> '+new Date().toLocaleDateString()+' &nbsp;|&nbsp; <strong>Revenue Target:</strong> $'+fmt(d.rev||0)+'/yr</p>');
+        w.document.write('<table><tr><th>Category</th><th>Description</th><th style="text-align:right;">$/Month</th><th style="text-align:right;">$/Year</th></tr>');
+        d.items.forEach(function(i){w.document.write('<tr><td>'+i.cat+'</td><td>'+i.desc+'</td><td style="text-align:right;">$'+fmt(i.mo)+'</td><td style="text-align:right;">$'+fmt(i.mo*12)+'</td></tr>');});
+        w.document.write('<tr class="total"><td colspan="2">TOTAL FIXED OVERHEAD</td><td style="text-align:right;">$'+fmt(totalMo)+'</td><td style="text-align:right;">$'+fmt(totalAnn)+'</td></tr>');
+        w.document.write('</table>');
+        w.document.write('<h3>Required Overhead %: '+fmtD(ohPct)+'% of Revenue</h3>');
+        w.document.write('<p style="font-size:10px;color:#666;">Formula: Annual Fixed Overhead ÷ Annual Revenue Target × 100. This is the minimum overhead markup needed on direct costs before any profit. Add your profit % on top. Example: If direct costs = $100k, markup = '+fmtD(ohPct)+'% OH + 15% profit = '+fmtD(ohPct+15)+'% total markup required.</p>');
+        if(d.annYd){var ohYd=totalAnn/(d.annYd||1);w.document.write('<p><strong>OH per yd³ at '+fmt(d.annYd)+' yd³/yr:</strong> $'+fmtD(ohYd)+'/yd³</p>');}
+        w.document.write('<div class="sig"><table style="width:80%;"><tr><th>Prepared By</th><th>Reviewed By</th><th>Date</th></tr><tr style="height:40px;"><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></table></div>');
+        w.document.write('<p style="font-size:9px;color:#666;margin-top:15px;">Note: This analysis covers fixed overhead only. Variable costs (direct labor, materials, equipment) are bid separately. Review and update annually or when fixed costs change significantly.</p>');
+        w.document.write('</body></html>');
+        w.document.close();
+        w.print();
+    };
+
+    function createButton(){
+        var sidebar=document.getElementById('sidebar');
+        if(!sidebar||document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='🏢 Overhead Rate Calc';
+        btn.style.cssText='width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#a78bfa;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:4px;margin-bottom:4px;';
+        sidebar.appendChild(btn);
+        sidebar.appendChild(wrap);
+    }
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);
+        var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🏢 Hide Overhead Calc':'🏢 Overhead Rate Calc';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',createButton);
+    }else{
+        createButton();
+    }
+})();
+</script>
+
+<!-- TOOL: FF/FL Slab Flatness Acceptance Log -->
+<script>
+(function(){
+    'use strict';
+    var BTN_ID='_ffflBtn', WRAP_ID='_ffflWrap';
+    var LS_KEY='oncor_fffl_v1';
+    function load(){try{return JSON.parse(localStorage.getItem(LS_KEY)||'null')||{proj:'',spec_ff:25,spec_fl:20,readings:[]};}catch(e){return{proj:'',spec_ff:25,spec_fl:20,readings:[]};}}
+    function save(d){try{localStorage.setItem(LS_KEY,JSON.stringify(d));}catch(e){}}
+    function fmt1(n){return(+n||0).toFixed(1);}
+
+    function render(){
+        var d=load();
+        var wrap=document.getElementById(WRAP_ID);
+        if(!wrap)return;
+        var pass=d.readings.filter(function(r){return (+r.ff>=(+d.spec_ff||0))&&(+r.fl>=(+d.spec_fl||0));});
+        var fail=d.readings.filter(function(r){return (+r.ff<(+d.spec_ff||0))||( +r.fl<(+d.spec_fl||0));});
+        var avgFF=d.readings.length?d.readings.reduce(function(s,r){return s+(+r.ff||0);},0)/d.readings.length:0;
+        var avgFL=d.readings.length?d.readings.reduce(function(s,r){return s+(+r.fl||0);},0)/d.readings.length:0;
+
+        var html='<div style="font-size:10px;color:#94a3b8;margin-bottom:8px;">ASTM E1155 / ACI 117 — Log F-number survey results. Spec FF (flatness) and FL (levelness) from Division 03 spec or GC requirements. Typical warehouse: FF 35/FL 25. Tolerance spec: FF 25/FL 20.</div>';
+
+        // Project + spec header
+        html+='<div style="display:grid;grid-template-columns:1fr 80px 80px;gap:4px;margin-bottom:8px;">';
+        html+='<div><label style="color:#94a3b8;font-size:9px;">PROJECT / ELEMENT</label><input id="_fffl_proj" type="text" value="'+d.proj+'" placeholder="e.g. Warehouse Bay 1 SOG" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:10px;margin-top:2px;" onchange="window._FFFL_hdr(\'proj\',this.value)"></div>';
+        html+='<div><label style="color:#94a3b8;font-size:9px;">SPEC FF (min)</label><input id="_fffl_sff" type="number" min="0" value="'+d.spec_ff+'" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:10px;margin-top:2px;" onchange="window._FFFL_hdr(\'spec_ff\',this.value)"></div>';
+        html+='<div><label style="color:#94a3b8;font-size:9px;">SPEC FL (min)</label><input id="_fffl_sfl" type="number" min="0" value="'+d.spec_fl+'" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:10px;margin-top:2px;" onchange="window._FFFL_hdr(\'spec_fl\',this.value)"></div>';
+        html+='</div>';
+
+        // Add reading
+        html+='<div style="display:grid;grid-template-columns:1fr 60px 60px 1fr auto;gap:4px;margin-bottom:6px;">';
+        html+='<input id="_fffl_nzone" placeholder="Zone/Grid Ref" style="background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:10px;">';
+        html+='<input id="_fffl_nff" type="number" min="0" placeholder="FF" style="background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:10px;">';
+        html+='<input id="_fffl_nfl" type="number" min="0" placeholder="FL" style="background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:10px;">';
+        html+='<input id="_fffl_nby" placeholder="Tested by" style="background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:10px;">';
+        html+='<button onclick="window._FFFL_add()" style="background:#1e40af;color:#bfdbfe;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:10px;">+ Add</button>';
+        html+='</div>';
+
+        // Dashboard
+        if(d.readings.length){
+            var passColor=fail.length>0?'#f87171':'#4ade80';
+            html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:8px;">';
+            html+='<div style="background:#1e293b;border-radius:5px;padding:6px;text-align:center;"><div style="color:#64748b;font-size:9px;">READINGS</div><div style="color:#f1f5f9;font-weight:700;">'+d.readings.length+'</div></div>';
+            html+='<div style="background:#1e293b;border-radius:5px;padding:6px;text-align:center;"><div style="color:#64748b;font-size:9px;">PASS</div><div style="color:#4ade80;font-weight:700;">'+pass.length+'</div></div>';
+            html+='<div style="background:#1e293b;border-radius:5px;padding:6px;text-align:center;"><div style="color:#64748b;font-size:9px;">FAIL</div><div style="color:'+passColor+';font-weight:700;">'+fail.length+'</div></div>';
+            html+='<div style="background:#1e293b;border-radius:5px;padding:6px;text-align:center;"><div style="color:#64748b;font-size:9px;">AVG FF/FL</div><div style="color:#7dd3fc;font-weight:700;">'+fmt1(avgFF)+'/'+fmt1(avgFL)+'</div></div>';
+            html+='</div>';
+            if(fail.length>0){
+                html+='<div style="background:#7f1d1d;border:1px solid #dc2626;border-radius:5px;padding:6px;margin-bottom:6px;font-size:10px;color:#fca5a5;"><strong>⚠ '+fail.length+' ZONE(S) BELOW SPEC</strong> — Remediation or grinding required before GC sign-off. Document remediation method per ACI 117 §4.</div>';
+            } else {
+                html+='<div style="background:#14532d;border:1px solid #16a34a;border-radius:5px;padding:6px;margin-bottom:6px;font-size:10px;color:#86efac;">✅ ALL ZONES MEET SPEC — FF ≥'+d.spec_ff+' / FL ≥'+d.spec_fl+'</div>';
+            }
+        }
+
+        // Readings log
+        if(d.readings.length){
+            html+='<table style="width:100%;border-collapse:collapse;font-size:10px;margin-bottom:8px;"><thead><tr style="color:#64748b;border-bottom:1px solid #334155;"><th style="text-align:left;padding:2px 4px;">Zone</th><th style="text-align:center;padding:2px 4px;">FF</th><th style="text-align:center;padding:2px 4px;">FL</th><th style="text-align:center;padding:2px 4px;">Status</th><th style="text-align:left;padding:2px 4px;">By</th><th style="padding:2px 4px;"></th></tr></thead><tbody>';
+            d.readings.forEach(function(r,i){
+                var ffOk=(+r.ff>=(+d.spec_ff||0)),flOk=(+r.fl>=(+d.spec_fl||0));
+                var ok=ffOk&&flOk;
+                var rowColor=ok?'':'#7f1d1d';
+                var statusLabel=ok?'<span style="color:#4ade80;">✓ PASS</span>':'<span style="color:#f87171;">✗ FAIL</span>';
+                var ffColor=ffOk?'#f1f5f9':'#f87171', flColor=flOk?'#f1f5f9':'#f87171';
+                html+='<tr style="border-bottom:1px solid #1e293b;background:'+rowColor+';">';
+                html+='<td style="padding:2px 4px;color:#f1f5f9;">'+r.zone+'</td>';
+                html+='<td style="padding:2px 4px;text-align:center;color:'+ffColor+';font-weight:700;">'+r.ff+'</td>';
+                html+='<td style="padding:2px 4px;text-align:center;color:'+flColor+';font-weight:700;">'+r.fl+'</td>';
+                html+='<td style="padding:2px 4px;text-align:center;">'+statusLabel+'</td>';
+                html+='<td style="padding:2px 4px;color:#94a3b8;">'+r.by+'</td>';
+                html+='<td><button onclick="window._FFFL_del('+i+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:10px;">✕</button></td>';
+                html+='</tr>';
+            });
+            html+='</tbody></table>';
+        }
+
+        html+='<div style="display:flex;gap:4px;"><button onclick="window._FFFL_copy()" style="flex:1;background:rgba(148,163,184,0.1);border:1px solid #334155;color:#94a3b8;border-radius:4px;padding:5px;cursor:pointer;font-size:10px;">📋 Copy</button>';
+        html+='<button onclick="window._FFFL_print()" style="flex:1;background:rgba(148,163,184,0.1);border:1px solid #334155;color:#94a3b8;border-radius:4px;padding:5px;cursor:pointer;font-size:10px;">🖨 Print</button></div>';
+
+        wrap.innerHTML=html;
+    }
+
+    window._FFFL_hdr=function(f,v){var d=load();d[f]=(f==='spec_ff'||f==='spec_fl')?+v:v;save(d);render();};
+    window._FFFL_add=function(){
+        var z=document.getElementById('_fffl_nzone'),ff=document.getElementById('_fffl_nff'),fl=document.getElementById('_fffl_nfl'),by=document.getElementById('_fffl_nby');
+        if(!z||!ff||!fl)return;
+        if(!ff.value||!fl.value){alert('FF and FL values required');return;}
+        var d=load();
+        d.readings.push({zone:z.value||'—',ff:+ff.value,fl:+fl.value,by:by?by.value:'',date:new Date().toLocaleDateString()});
+        save(d);render();
+    };
+    window._FFFL_del=function(i){if(!confirm('Delete reading?'))return;var d=load();d.readings.splice(i,1);save(d);render();};
+    window._FFFL_copy=function(){
+        var d=load();
+        var lines=['FF/FL FLATNESS ACCEPTANCE LOG — '+new Date().toLocaleDateString(),'Project: '+d.proj,'Spec: FF'+d.spec_ff+'/FL'+d.spec_fl,''];
+        lines.push('Zone\tFF\tFL\tStatus\tBy\tDate');
+        d.readings.forEach(function(r){
+            var ok=(+r.ff>=(+d.spec_ff||0))&&(+r.fl>=(+d.spec_fl||0));
+            lines.push(r.zone+'\t'+r.ff+'\t'+r.fl+'\t'+(ok?'PASS':'FAIL')+'\t'+r.by+'\t'+r.date);
+        });
+        navigator.clipboard.writeText(lines.join('\n')).catch(function(){});
+    };
+    window._FFFL_print=function(){
+        var d=load();
+        var pass=d.readings.filter(function(r){return (+r.ff>=(+d.spec_ff||0))&&(+r.fl>=(+d.spec_fl||0));});
+        var fail=d.readings.filter(function(r){return (+r.ff<(+d.spec_ff||0))||( +r.fl<(+d.spec_fl||0));});
+        var avgFF=d.readings.length?d.readings.reduce(function(s,r){return s+(+r.ff||0);},0)/d.readings.length:0;
+        var avgFL=d.readings.length?d.readings.reduce(function(s,r){return s+(+r.fl||0);},0)/d.readings.length:0;
+        var w=window.open('','_blank');
+        w.document.write('<html><head><title>FF/FL Flatness Log</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{font-size:14px;}table{width:100%;border-collapse:collapse;margin-bottom:10px;}th,td{border:1px solid #ccc;padding:4px 8px;}th{background:#f0f0f0;}.pass{background:#e8f5e9;}.fail{background:#ffebee;}.sig{margin-top:20px;}</style></head><body>');
+        w.document.write('<h2>📐 FF/FL Slab Flatness Acceptance Log — ASTM E1155 / ACI 117</h2>');
+        w.document.write('<p><strong>Project:</strong> '+d.proj+' &nbsp;|&nbsp; <strong>Date:</strong> '+new Date().toLocaleDateString()+'</p>');
+        w.document.write('<p><strong>Specification:</strong> Minimum FF '+d.spec_ff+' / FL '+d.spec_fl+' (ACI 117 §4 tolerance spec per contract)</p>');
+        w.document.write('<p><strong>Summary:</strong> '+d.readings.length+' zones | '+pass.length+' pass | '+fail.length+' fail | Avg FF '+avgFF.toFixed(1)+' / FL '+avgFL.toFixed(1)+'</p>');
+        if(fail.length>0) w.document.write('<p style="color:red;font-weight:bold;">⚠ '+fail.length+' ZONE(S) BELOW SPEC — Remediation required.</p>');
+        w.document.write('<table><tr><th>Zone/Grid</th><th>FF (measured)</th><th>FL (measured)</th><th>Spec FF/FL</th><th>Status</th><th>Tested By</th><th>Date</th></tr>');
+        d.readings.forEach(function(r){
+            var ok=(+r.ff>=(+d.spec_ff||0))&&(+r.fl>=(+d.spec_fl||0));
+            w.document.write('<tr class="'+(ok?'pass':'fail')+'"><td>'+r.zone+'</td><td>'+r.ff+'</td><td>'+r.fl+'</td><td>FF'+d.spec_ff+'/FL'+d.spec_fl+'</td><td>'+(ok?'PASS':'FAIL')+'</td><td>'+r.by+'</td><td>'+r.date+'</td></tr>');
+        });
+        w.document.write('</table>');
+        w.document.write('<p style="font-size:9px;">ASTM E1155 Standard Test Method for Determining FF Floor Flatness and FL Floor Levelness Numbers. Failing zones require grinding (ACI 117 §4) or written waiver from GC/owner before occupancy. Contractor shall provide certified F-number survey report from accredited testing agency within 72 hours of slab placement.</p>');
+        w.document.write('<div class="sig"><table style="width:80%;"><tr><th>Finisher/Foreman</th><th>QC Inspector (3rd Party)</th><th>GC Acceptance</th><th>Date</th></tr><tr style="height:40px;"><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></table></div>');
+        w.document.write('</body></html>');
+        w.document.close();
+        w.print();
+    };
+
+    function createButton(){
+        var sidebar=document.getElementById('sidebar');
+        if(!sidebar||document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='📐 FF/FL Flatness Log';
+        btn.style.cssText='width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#7dd3fc;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:4px;margin-bottom:4px;';
+        sidebar.appendChild(btn);
+        sidebar.appendChild(wrap);
+    }
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);
+        var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'📐 Hide FF/FL Log':'📐 FF/FL Flatness Log';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',createButton);
+    }else{
+        createButton();
+    }
+})();
+</script>
+
+<!-- TOOL: Concrete Pump Output Log -->
+<script>
+(function(){
+    'use strict';
+    var BTN_ID='_pumpLogBtn', WRAP_ID='_pumpLogWrap';
+    var LS_KEY='oncor_pumplog_v1';
+    function load(){try{return JSON.parse(localStorage.getItem(LS_KEY)||'null')||{pour:'',pump:'',plan_rate:30,intervals:[]};}catch(e){return{pour:'',pump:'',plan_rate:30,intervals:[]};}}
+    function save(d){try{localStorage.setItem(LS_KEY,JSON.stringify(d));}catch(e){}}
+    function fmt1(n){return(+n||0).toFixed(1);}
+    function fmt(n){return(+n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});}
+
+    function render(){
+        var d=load();
+        var wrap=document.getElementById(WRAP_ID);
+        if(!wrap)return;
+
+        var totalYd=d.intervals.reduce(function(s,r){return s+(+r.yd||0);},0);
+        var totalMin=d.intervals.reduce(function(s,r){return s+(+r.min||0);},0);
+        var avgRate=totalMin>0?totalYd/(totalMin/60):0;
+        var planRate=+d.plan_rate||30;
+        var downIntervals=d.intervals.filter(function(r){return r.down;});
+        var downMin=downIntervals.reduce(function(s,r){return s+(+r.min||0);},0);
+        var lostYd=downMin/60*planRate;
+
+        var html='<div style="font-size:10px;color:#94a3b8;margin-bottom:8px;">Log actual pump output by interval during a pour. Track downtime, compute actual yd³/hr vs planned, and print a performance record for T&M billing disputes or delay claims.</div>';
+
+        // Header
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr 80px;gap:4px;margin-bottom:8px;">';
+        html+='<div><label style="color:#94a3b8;font-size:9px;">POUR / ELEMENT</label><input type="text" value="'+d.pour+'" placeholder="e.g. Bldg A SOG" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:10px;margin-top:2px;" onchange="window._PumpLog_hdr(\'pour\',this.value)"></div>';
+        html+='<div><label style="color:#94a3b8;font-size:9px;">PUMP CO / TRUCK</label><input type="text" value="'+d.pump+'" placeholder="e.g. Coastal Pump #4" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:10px;margin-top:2px;" onchange="window._PumpLog_hdr(\'pump\',this.value)"></div>';
+        html+='<div><label style="color:#94a3b8;font-size:9px;">PLAN yd³/hr</label><input type="number" min="1" value="'+d.plan_rate+'" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:10px;margin-top:2px;" onchange="window._PumpLog_hdr(\'plan_rate\',this.value)"></div>';
+        html+='</div>';
+
+        // Add interval
+        html+='<div style="display:grid;grid-template-columns:70px 60px 60px 1fr 70px auto;gap:4px;align-items:end;margin-bottom:6px;">';
+        html+='<div><label style="color:#94a3b8;font-size:9px;">TIME</label><input id="_pl_nt" placeholder="e.g. 07:30" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:10px;margin-top:2px;"></div>';
+        html+='<div><label style="color:#94a3b8;font-size:9px;">yd³</label><input id="_pl_nyd" type="number" min="0" placeholder="yd³" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:10px;margin-top:2px;"></div>';
+        html+='<div><label style="color:#94a3b8;font-size:9px;">min</label><input id="_pl_nmin" type="number" min="1" placeholder="min" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:10px;margin-top:2px;"></div>';
+        html+='<div><label style="color:#94a3b8;font-size:9px;">Notes/Cause</label><input id="_pl_nnotes" placeholder="notes" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:4px;padding:4px;font-size:10px;margin-top:2px;"></div>';
+        html+='<div style="display:flex;align-items:center;gap:4px;padding-top:14px;"><label style="color:#f87171;font-size:9px;white-space:nowrap;"><input type="checkbox" id="_pl_ndown" style="margin-right:2px;">Down</label></div>';
+        html+='<button onclick="window._PumpLog_add()" style="background:#1e40af;color:#bfdbfe;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:10px;margin-top:14px;">+ Log</button>';
+        html+='</div>';
+
+        // Dashboard
+        if(d.intervals.length){
+            var rateColor=avgRate>=(planRate*0.9)?'#4ade80':avgRate>=(planRate*0.7)?'#fbbf24':'#f87171';
+            html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:8px;">';
+            html+='<div style="background:#1e293b;border-radius:5px;padding:6px;text-align:center;"><div style="color:#64748b;font-size:9px;">TOTAL yd³</div><div style="color:#f1f5f9;font-weight:700;">'+fmt1(totalYd)+'</div></div>';
+            html+='<div style="background:#1e293b;border-radius:5px;padding:6px;text-align:center;"><div style="color:#64748b;font-size:9px;">PUMP TIME</div><div style="color:#f1f5f9;font-weight:700;">'+fmt(totalMin)+'min</div></div>';
+            html+='<div style="background:#1e293b;border-radius:5px;padding:6px;text-align:center;"><div style="color:#64748b;font-size:9px;">AVG yd³/hr</div><div style="color:'+rateColor+';font-weight:700;">'+fmt1(avgRate)+'</div></div>';
+            html+='<div style="background:#1e293b;border-radius:5px;padding:6px;text-align:center;"><div style="color:#64748b;font-size:9px;">PLAN yd³/hr</div><div style="color:#94a3b8;font-weight:700;">'+planRate+'</div></div>';
+            html+='</div>';
+            if(downMin>0){
+                html+='<div style="background:#7c2d12;border:1px solid #c2410c;border-radius:5px;padding:6px;margin-bottom:6px;font-size:10px;color:#fed7aa;">';
+                html+='⚠ <strong>'+downMin+' min downtime</strong> in '+downIntervals.length+' incident(s). ';
+                html+='Est. lost output: <strong>'+fmt1(lostYd)+' yd³</strong> at planned '+planRate+' yd³/hr. ';
+                html+='Document for T&M claim or pump rental credit.';
+                html+='</div>';
+            }
+
+            // Interval table
+            html+='<table style="width:100%;border-collapse:collapse;font-size:10px;margin-bottom:8px;"><thead><tr style="color:#64748b;border-bottom:1px solid #334155;"><th style="text-align:left;padding:2px 4px;">Time</th><th style="text-align:right;padding:2px 4px;">yd³</th><th style="text-align:right;padding:2px 4px;">min</th><th style="text-align:right;padding:2px 4px;">yd³/hr</th><th style="text-align:left;padding:2px 4px;">Notes</th><th style="padding:2px 4px;"></th></tr></thead><tbody>';
+            d.intervals.forEach(function(r,i){
+                var rate=r.min>0?(r.yd/(r.min/60)):0;
+                var rColor=r.down?'#f87171':rate>=(planRate*0.9)?'#4ade80':rate>=(planRate*0.7)?'#fbbf24':'#f87171';
+                var rowBg=r.down?'background:#7f1d1d;':'';
+                html+='<tr style="border-bottom:1px solid #1e293b;'+rowBg+'">';
+                html+='<td style="padding:2px 4px;color:#f1f5f9;">'+r.time+'</td>';
+                html+='<td style="padding:2px 4px;text-align:right;color:#f1f5f9;">'+(r.down?'—':fmt1(r.yd))+'</td>';
+                html+='<td style="padding:2px 4px;text-align:right;color:#f1f5f9;">'+r.min+'</td>';
+                html+='<td style="padding:2px 4px;text-align:right;color:'+rColor+';font-weight:700;">'+(r.down?'<span style="color:#f87171;">DOWN</span>':fmt1(rate))+'</td>';
+                html+='<td style="padding:2px 4px;color:#94a3b8;">'+r.notes+'</td>';
+                html+='<td><button onclick="window._PumpLog_del('+i+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:10px;">✕</button></td>';
+                html+='</tr>';
+            });
+            html+='</tbody></table>';
+        }
+
+        html+='<div style="display:flex;gap:4px;"><button onclick="window._PumpLog_copy()" style="flex:1;background:rgba(148,163,184,0.1);border:1px solid #334155;color:#94a3b8;border-radius:4px;padding:5px;cursor:pointer;font-size:10px;">📋 Copy</button>';
+        html+='<button onclick="window._PumpLog_print()" style="flex:1;background:rgba(148,163,184,0.1);border:1px solid #334155;color:#94a3b8;border-radius:4px;padding:5px;cursor:pointer;font-size:10px;">🖨 Print</button></div>';
+
+        wrap.innerHTML=html;
+    }
+
+    window._PumpLog_hdr=function(f,v){var d=load();d[f]=(f==='plan_rate')?+v:v;save(d);render();};
+    window._PumpLog_add=function(){
+        var t=document.getElementById('_pl_nt'),yd=document.getElementById('_pl_nyd'),min=document.getElementById('_pl_nmin'),notes=document.getElementById('_pl_nnotes'),down=document.getElementById('_pl_ndown');
+        if(!t||!min)return;
+        if(!min.value){alert('Duration (min) required');return;}
+        var d=load();
+        var isDown=down&&down.checked;
+        d.intervals.push({time:t.value||new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),yd:isDown?0:(+yd.value||0),min:+min.value,notes:notes?notes.value:'',down:isDown});
+        save(d);render();
+    };
+    window._PumpLog_del=function(i){if(!confirm('Delete this interval?'))return;var d=load();d.intervals.splice(i,1);save(d);render();};
+    window._PumpLog_copy=function(){
+        var d=load();
+        var lines=['PUMP OUTPUT LOG — '+new Date().toLocaleDateString(),'Pour: '+d.pour,'Pump: '+d.pump,'Planned rate: '+d.plan_rate+' yd³/hr',''];
+        lines.push('Time\tyd³\tmin\tyd³/hr\tStatus\tNotes');
+        d.intervals.forEach(function(r){
+            var rate=r.min>0?(r.yd/(r.min/60)):0;
+            lines.push(r.time+'\t'+(r.down?'DOWN':r.yd)+'\t'+r.min+'\t'+(r.down?'—':rate.toFixed(1))+'\t'+(r.down?'DOWNTIME':'OK')+'\t'+r.notes);
+        });
+        navigator.clipboard.writeText(lines.join('\n')).catch(function(){});
+    };
+    window._PumpLog_print=function(){
+        var d=load();
+        var totalYd=d.intervals.reduce(function(s,r){return s+(+r.yd||0);},0);
+        var totalMin=d.intervals.reduce(function(s,r){return s+(+r.min||0);},0);
+        var avgRate=totalMin>0?totalYd/(totalMin/60):0;
+        var downMin=d.intervals.filter(function(r){return r.down;}).reduce(function(s,r){return s+(+r.min||0);},0);
+        var lostYd=downMin/60*(+d.plan_rate||30);
+        var w=window.open('','_blank');
+        w.document.write('<html><head><title>Pump Output Log</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{font-size:14px;}table{width:100%;border-collapse:collapse;margin-bottom:10px;}th,td{border:1px solid #ccc;padding:4px 8px;}th{background:#f0f0f0;}.down{background:#ffebee;}.low{color:#e53e3e;font-weight:bold;}.sig{margin-top:20px;}</style></head><body>');
+        w.document.write('<h2>🚰 Concrete Pump Output Log — Pour Performance Record</h2>');
+        w.document.write('<p><strong>Pour/Element:</strong> '+d.pour+' &nbsp;|&nbsp; <strong>Pump:</strong> '+d.pump+' &nbsp;|&nbsp; <strong>Date:</strong> '+new Date().toLocaleDateString()+'</p>');
+        w.document.write('<p><strong>Planned Rate:</strong> '+d.plan_rate+' yd³/hr &nbsp;|&nbsp; <strong>Actual Avg:</strong> '+avgRate.toFixed(1)+' yd³/hr &nbsp;|&nbsp; <strong>Total Pumped:</strong> '+totalYd.toFixed(1)+' yd³ &nbsp;|&nbsp; <strong>Total Time:</strong> '+totalMin+' min</p>');
+        if(downMin>0) w.document.write('<p style="color:red;font-weight:bold;">⚠ DOWNTIME: '+downMin+' min — Est. lost production: '+lostYd.toFixed(1)+' yd³ at planned rate</p>');
+        w.document.write('<table><tr><th>Time</th><th>yd³ Pumped</th><th>Duration (min)</th><th>Rate (yd³/hr)</th><th>Status</th><th>Notes/Cause</th></tr>');
+        d.intervals.forEach(function(r){
+            var rate=r.min>0?(r.yd/(r.min/60)):0;
+            var slow=!r.down&&rate<(+d.plan_rate||30)*0.7;
+            w.document.write('<tr class="'+(r.down?'down':'')+'">'+'<td>'+r.time+'</td>'+'<td>'+(r.down?'—':r.yd.toFixed(1))+'</td>'+'<td>'+r.min+'</td>'+'<td class="'+(r.down||slow?'low':'')+'">'+(r.down?'DOWNTIME':rate.toFixed(1))+'</td>'+'<td>'+(r.down?'DOWNTIME':'Pumping')+'</td>'+'<td>'+r.notes+'</td></tr>');
+        });
+        w.document.write('<tr style="font-weight:bold;background:#e8f0fe;"><td colspan="2">TOTALS</td><td>'+totalMin+' min</td><td>'+avgRate.toFixed(1)+' avg</td><td colspan="2">'+totalYd.toFixed(1)+' yd³ total</td></tr>');
+        w.document.write('</table>');
+        w.document.write('<p style="font-size:9px;color:#666;">This log documents actual pump output and downtime per interval. Downtime events and below-plan output intervals constitute contemporaneous evidence for: (1) T&M claims when pump performance caused extended crew time; (2) pump rental credit claims for mechanical downtime; (3) GC dispute response when pump contractor bills portal-to-portal on a job where equipment was non-operational. Retain with project file.</p>');
+        w.document.write('<div class="sig"><table style="width:100%;"><tr><th>Pump Operator</th><th>Field Foreman</th><th>PM / Verified By</th><th>Date</th></tr><tr style="height:40px;"><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></table></div>');
+        w.document.write('</body></html>');
+        w.document.close();
+        w.print();
+    };
+
+    function createButton(){
+        var sidebar=document.getElementById('sidebar');
+        if(!sidebar||document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='🚰 Pump Output Log';
+        btn.style.cssText='width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#7dd3fc;border-radius:6px;padding:5px;cursor:pointer;font-size:0.78rem;margin-bottom:2px;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:4px;margin-bottom:4px;';
+        sidebar.appendChild(btn);
+        sidebar.appendChild(wrap);
+    }
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);
+        var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🚰 Hide Pump Log':'🚰 Pump Output Log';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',createButton);
+    }else{
+        createButton();
+    }
+})();
+</script>
