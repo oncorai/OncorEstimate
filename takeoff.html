@@ -35113,3 +35113,505 @@ Retain one (1) copy for your records. Return stamped copies as indicated above.
     if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
 })();
 </script>
+
+<!-- ==================== TOOL 1: CONCRETE BATCH TICKET AUDIT LOG ==================== -->
+<script>
+(function(){
+    'use strict';
+    var STORE_KEY='oncor_batch_ticket_audit';
+    var BTN_ID='btn-batch-ticket-audit';
+    var WRAP_ID='wrap-batch-ticket-audit';
+    function load(){try{return JSON.parse(localStorage.getItem(STORE_KEY))||{tickets:[]};}catch(e){return{tickets:[]};}}
+    function save(d){localStorage.setItem(STORE_KEY,JSON.stringify(d));}
+
+    var SPEC_FIELDS=[
+        {key:'psi',label:'Design PSI'},
+        {key:'wc',label:'Max w/c Ratio'},
+        {key:'slump',label:'Spec Slump (in)'},
+        {key:'airMin',label:'Air Min (%)'},
+        {key:'airMax',label:'Air Max (%)'}
+    ];
+    var ISSUES=[
+        'None','Slump > spec','Slump < spec','Temp > 95°F','Temp < 50°F',
+        'Wrong PSI mix','Wrong w/c','Wrong admix','Over 90 min/300 rev','Water added on-site',
+        'Air OOS','Wrong aggregate size','Improper ticket format','Rejected — returned','Other'
+    ];
+
+    function createButton(){
+        if(document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='🎫 Concrete Batch Ticket Audit Log';
+        btn.style.cssText='display:block;width:100%;margin:4px 0;padding:6px;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:6px;cursor:pointer;font-size:0.78rem;font-weight:600;text-align:left;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #3b82f6;border-radius:6px;padding:10px;margin-bottom:8px;font-size:0.76rem;color:#e2e8f0;';
+        var ref=document.getElementById('wrap-curing-compound-log');
+        if(ref&&ref.parentNode){ref.parentNode.insertBefore(wrap,ref.nextSibling);ref.parentNode.insertBefore(btn,wrap);}
+        else{document.body.appendChild(btn);document.body.appendChild(wrap);}
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);
+        if(!wrap)return;
+        var d=load();
+        var total=d.tickets.length;
+        var violations=d.tickets.filter(function(t){return t.issue&&t.issue!=='None';});
+        var rejected=d.tickets.filter(function(t){return t.issue==='Rejected — returned';});
+        var totalYds=d.tickets.reduce(function(s,t){return s+(parseFloat(t.yd3)||0);},0);
+        var alertHtml=violations.length?'<div style="background:#450a0a;border:1px solid #f87171;border-radius:4px;padding:6px;margin-bottom:6px;"><span style="color:#f87171;font-weight:700;">⚠ '+violations.length+' TICKET ISSUE'+(violations.length>1?'S':'')+' LOGGED — '+rejected.length+' REJECTED/RETURNED</span></div>':'<div style="background:#052e16;border:1px solid #4ade80;border-radius:4px;padding:6px;margin-bottom:6px;"><span style="color:#4ade80;font-weight:700;">✓ NO BATCH TICKET ISSUES LOGGED</span></div>';
+        wrap.innerHTML='<div style="font-weight:700;color:#93c5fd;font-size:0.85rem;margin-bottom:6px;">🎫 CONCRETE BATCH TICKET AUDIT LOG</div>'
+            +'<div style="font-size:0.7rem;color:#94a3b8;margin-bottom:8px;">ASTM C94/C94M §11 / ACI 301-16 §4.2.3 — Verify every delivery ticket before signing. Signed ticket = acceptance of load conditions.</div>'
+            +alertHtml
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:8px;">'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:#93c5fd;font-size:1.1rem;font-weight:700;">'+total+'</div><div style="color:#94a3b8;font-size:0.65rem;">Tickets Logged</div></div>'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:'+(violations.length?'#f87171':'#4ade80')+';font-size:1.1rem;font-weight:700;">'+violations.length+'</div><div style="color:#94a3b8;font-size:0.65rem;">With Issues</div></div>'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:#e2e8f0;font-size:1.1rem;font-weight:700;">'+totalYds.toFixed(1)+'</div><div style="color:#94a3b8;font-size:0.65rem;">Total yd³ Received</div></div>'
+            +'</div>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Log Ticket</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<input id="bta-ticket" placeholder="Ticket #" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="bta-truck" placeholder="Truck / Drum #" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="bta-yd3" type="number" min="0" step="0.25" placeholder="yd³ loaded" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<input id="bta-psi" type="number" placeholder="PSI" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="bta-wc" type="number" step="0.01" placeholder="w/c ratio" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="bta-slump" type="number" step="0.25" placeholder="Ticket slump (in)" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="bta-temp" type="number" placeholder="Concrete temp °F" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<input id="bta-load-time" placeholder="Load time (HH:MM)" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="bta-arrive-time" placeholder="Arrive time (HH:MM)" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<select id="bta-issue" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +ISSUES.map(function(iss,i){return'<option value="'+iss+'">'+iss+'</option>';}).join('')+'</select>'
+            +'<input id="bta-inspector" placeholder="Inspected by (initials)" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<textarea id="bta-notes" placeholder="Notes / corrective action" rows="2" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;margin-bottom:4px;resize:vertical;"></textarea>'
+            +'<button onclick="window._btaAdd()" style="width:100%;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:4px;padding:5px;cursor:pointer;font-size:0.75rem;font-weight:700;margin-bottom:8px;">+ Log This Ticket</button>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Ticket Log</div>'
+            +(d.tickets.length===0?'<div style="color:#64748b;font-size:0.72rem;margin-bottom:8px;">No tickets logged yet.</div>'
+                :d.tickets.slice().reverse().map(function(t,ri){
+                    var idx=d.tickets.length-1-ri;
+                    var hasIssue=t.issue&&t.issue!=='None';
+                    return'<div style="background:#1e293b;border-left:3px solid '+(hasIssue?'#f87171':'#4ade80')+';border-radius:4px;padding:5px 6px;margin-bottom:4px;">'
+                        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
+                        +'<div><span style="font-weight:700;color:#e2e8f0;">Ticket #'+t.ticket+'</span> | '+t.yd3+' yd³ | Truck: '+(t.truck||'—')+'</div>'
+                        +'<button onclick="window._btaDel('+idx+')" style="background:#7f1d1d;border:none;color:#fff;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.65rem;">✕</button>'
+                        +'</div>'
+                        +'<div style="font-size:0.7rem;color:#94a3b8;margin-top:2px;">PSI: '+(t.psi||'—')+' | w/c: '+(t.wc||'—')+' | Slump: '+(t.slump||'—')+'" | Temp: '+(t.temp||'—')+'°F | Load: '+(t.loadTime||'—')+' Arrive: '+(t.arriveTime||'—')+'</div>'
+                        +(hasIssue?'<div style="color:#f87171;font-size:0.7rem;font-weight:700;margin-top:2px;">⚠ ISSUE: '+t.issue+'</div>':'')
+                        +(t.notes?'<div style="font-size:0.68rem;color:#94a3b8;margin-top:1px;">'+t.notes+'</div>':'')
+                        +'<div style="font-size:0.65rem;color:#64748b;margin-top:1px;">Inspected by: '+(t.inspector||'—')+' | '+new Date(t.ts).toLocaleDateString()+'</div>'
+                        +'</div>';
+                }).join(''))
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;">'
+            +'<button onclick="window._btaCopy()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">📋 Copy Log</button>'
+            +'<button onclick="window._btaPrint()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">🖨 Print ASTM C94 Audit Log</button></div>';
+    }
+
+    window._btaAdd=function(){
+        var ticket=document.getElementById('bta-ticket').value.trim();
+        if(!ticket){alert('Ticket # required.');return;}
+        var d=load();
+        d.tickets.push({
+            ticket:ticket,
+            truck:document.getElementById('bta-truck').value.trim(),
+            yd3:parseFloat(document.getElementById('bta-yd3').value)||0,
+            psi:document.getElementById('bta-psi').value.trim(),
+            wc:document.getElementById('bta-wc').value.trim(),
+            slump:document.getElementById('bta-slump').value.trim(),
+            temp:document.getElementById('bta-temp').value.trim(),
+            loadTime:document.getElementById('bta-load-time').value.trim(),
+            arriveTime:document.getElementById('bta-arrive-time').value.trim(),
+            issue:document.getElementById('bta-issue').value,
+            inspector:document.getElementById('bta-inspector').value.trim(),
+            notes:document.getElementById('bta-notes').value.trim(),
+            ts:Date.now()
+        });
+        save(d);
+        ['bta-ticket','bta-truck','bta-yd3','bta-psi','bta-wc','bta-slump','bta-temp','bta-load-time','bta-arrive-time','bta-inspector','bta-notes'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+        document.getElementById('bta-issue').value='None';
+        render();
+    };
+    window._btaDel=function(i){var d=load();d.tickets.splice(i,1);save(d);render();};
+    window._btaCopy=function(){
+        var d=load();
+        if(!d.tickets.length){alert('No tickets logged.');return;}
+        var lines=['CONCRETE BATCH TICKET AUDIT LOG — ASTM C94 / ACI 301-16','Date: '+new Date().toLocaleDateString(),''];
+        d.tickets.forEach(function(t){
+            lines.push('Ticket #'+t.ticket+' | Truck: '+(t.truck||'—')+' | '+t.yd3+' yd³');
+            lines.push('  PSI: '+(t.psi||'—')+' | w/c: '+(t.wc||'—')+' | Slump: '+(t.slump||'—')+'\" | Temp: '+(t.temp||'—')+'°F');
+            lines.push('  Load: '+(t.loadTime||'—')+' | Arrive: '+(t.arriveTime||'—'));
+            if(t.issue&&t.issue!=='None')lines.push('  ⚠ ISSUE: '+t.issue);
+            if(t.notes)lines.push('  Notes: '+t.notes);
+            lines.push('  Inspector: '+(t.inspector||'—')+' | '+new Date(t.ts).toLocaleDateString());
+            lines.push('');
+        });
+        try{navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');}catch(e){alert(lines.join('\n'));}
+    };
+    window._btaPrint=function(){
+        var d=load();
+        if(!d.tickets.length){alert('No tickets to print.');return;}
+        var totalYds=d.tickets.reduce(function(s,t){return s+(parseFloat(t.yd3)||0);},0);
+        var violations=d.tickets.filter(function(t){return t.issue&&t.issue!=='None';});
+        var html='<html><head><title>Concrete Batch Ticket Audit Log</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:1in;}h2{font-size:13pt;margin-bottom:2px;}table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:8.5pt;}th{background:#1e40af;color:white;padding:4px;text-align:left;}td{padding:3px 4px;border:1px solid #ccc;}tr.violation{background:#fef2f2;}.section{margin-bottom:10px;}.alert{border:1px solid red;padding:6px;margin-bottom:8px;font-size:9pt;}.sign{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:20px;}.sign-box{border-bottom:1px solid #000;padding-top:30px;text-align:center;font-size:8.5pt;}</style></head><body>';
+        html+='<h2>CONCRETE BATCH TICKET AUDIT LOG</h2><div style="font-size:9pt;">ASTM C94/C94M §11 / ACI 301-16 §4.2.3 &nbsp;&nbsp; Date: '+new Date().toLocaleDateString()+'</div><hr>';
+        html+='<div class="section"><b>Summary:</b> Total tickets: '+d.tickets.length+' | Total yd³: '+totalYds.toFixed(1)+' | Issues/violations: '+violations.length+'</div>';
+        if(violations.length){
+            html+='<div class="alert"><b>⚠ BATCH TICKET VIOLATIONS ('+violations.length+')</b><br>';
+            violations.forEach(function(t){html+='Ticket #'+t.ticket+' — '+t.issue+(t.notes?' — '+t.notes:'')+'<br>';});
+            html+='<b>Note: Any ticket with a violation must be documented with inspector signature and disposition before payment is authorized.</b></div>';
+        }
+        html+='<table><tr><th>Ticket #</th><th>Truck</th><th>yd³</th><th>PSI</th><th>w/c</th><th>Slump"</th><th>Temp°F</th><th>Load</th><th>Arrive</th><th>Issue</th><th>Inspector</th><th>Notes</th></tr>';
+        d.tickets.forEach(function(t){
+            var hasIssue=t.issue&&t.issue!=='None';
+            html+='<tr'+(hasIssue?' class="violation"':'')+'><td>'+t.ticket+'</td><td>'+(t.truck||'—')+'</td><td>'+t.yd3+'</td><td>'+(t.psi||'—')+'</td><td>'+(t.wc||'—')+'</td><td>'+(t.slump||'—')+'</td><td>'+(t.temp||'—')+'</td><td>'+(t.loadTime||'—')+'</td><td>'+(t.arriveTime||'—')+'</td><td>'+(t.issue||'None')+'</td><td>'+(t.inspector||'—')+'</td><td>'+(t.notes||'')+'</td></tr>';
+        });
+        html+='<tr style="font-weight:bold;"><td colspan="2">TOTALS</td><td>'+totalYds.toFixed(1)+'</td><td colspan="9"></td></tr></table>';
+        html+='<div style="font-size:8pt;color:#555;margin-bottom:8px;"><b>ASTM C94 §11 Requirements:</b> Batch ticket must accompany every load and include: mix design ID, plant, batch time, water added at plant, total water/batching aggregate, admixtures, yd³. Driver must not exceed 90 min or 300 drum revolutions at mixing speed from water addition. Signed acceptance of ticket = acceptance of delivered load conditions. Retain tickets for project duration + 3 years.</div>';
+        html+='<div class="sign"><div class="sign-box">QC Inspector / Date</div><div class="sign-box">Foreman / Date</div><div class="sign-box">PM / Date</div></div>';
+        html+='</body></html>';
+        var w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🎫 Hide Batch Ticket Audit Log':'🎫 Concrete Batch Ticket Audit Log';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ==================== TOOL 2: SUBCONTRACTOR SAFETY COMPLIANCE TRACKER ==================== -->
+<script>
+(function(){
+    'use strict';
+    var STORE_KEY='oncor_sub_safety_compliance';
+    var BTN_ID='btn-sub-safety-compliance';
+    var WRAP_ID='wrap-sub-safety-compliance';
+    function load(){try{return JSON.parse(localStorage.getItem(STORE_KEY))||{subs:[],trainings:[]};}catch(e){return{subs:[],trainings:[]};};}
+    function save(d){localStorage.setItem(STORE_KEY,JSON.stringify(d));}
+
+    var SCOPE_OPTS=['Concrete / Flatwork','Rebar Fabrication / Installation','Formwork / Shoring','Pump Operator','Saw Cutting','Post-Tension Strand','Soil / Earthwork','Utility Rough-In','Grading / Compaction','Testing / Inspection','Other'];
+    var COMPLIANCE_ITEMS=[
+        {key:'coi',label:'COI on file (GL + WC)'},
+        {key:'safetyPlan',label:'Site-specific safety plan submitted'},
+        {key:'hazcom',label:'OSHA Hazcom / SDS binder on-site'},
+        {key:'ppe',label:'PPE compliance verified (hard hat, vest, boots)'},
+        {key:'toolbox',label:'Daily toolbox talk participation confirmed'},
+        {key:'fall',label:'Fall protection plan (if elevation >6ft) submitted'},
+        {key:'hotwork',label:'Hot work permit (if applicable) obtained'},
+        {key:'scaffold',label:'Scaffold inspection tag current (if applicable)'},
+        {key:'equipment',label:'Equipment operator certs on file (crane, forklift, etc.)'},
+        {key:'firstaid',label:'First-aid trained employee on-site'}
+    ];
+    var STATUSES=['Active on Site','Pending Mobilization','Demobilized','On Hold'];
+
+    function createButton(){
+        if(document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='🦺 Subcontractor Safety Compliance Tracker';
+        btn.style.cssText='display:block;width:100%;margin:4px 0;padding:6px;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:6px;cursor:pointer;font-size:0.78rem;font-weight:600;text-align:left;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #3b82f6;border-radius:6px;padding:10px;margin-bottom:8px;font-size:0.76rem;color:#e2e8f0;';
+        var ref=document.getElementById('wrap-batch-ticket-audit');
+        if(ref&&ref.parentNode){ref.parentNode.insertBefore(wrap,ref.nextSibling);ref.parentNode.insertBefore(btn,wrap);}
+        else{document.body.appendChild(btn);document.body.appendChild(wrap);}
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);
+        if(!wrap)return;
+        var d=load();
+        var total=d.subs.length;
+        var fullyCompliant=d.subs.filter(function(s){return COMPLIANCE_ITEMS.every(function(ci){return s.checks&&s.checks[ci.key];});});
+        var nonCompliant=d.subs.filter(function(s){
+            if(!s||s.status==='Demobilized')return false;
+            return COMPLIANCE_ITEMS.some(function(ci){return!s.checks||!s.checks[ci.key];});
+        });
+        var alertHtml=nonCompliant.length?'<div style="background:#450a0a;border:1px solid #f87171;border-radius:4px;padding:6px;margin-bottom:6px;"><span style="color:#f87171;font-weight:700;">⚠ '+nonCompliant.length+' ACTIVE SUB'+(nonCompliant.length>1?'S':'')+' WITH COMPLIANCE GAPS</span></div>':'';
+        var clearHtml=total&&!nonCompliant.length?'<div style="background:#052e16;border:1px solid #4ade80;border-radius:4px;padding:6px;margin-bottom:6px;"><span style="color:#4ade80;font-weight:700;">✓ ALL ACTIVE SUBS FULLY COMPLIANT</span></div>':'';
+
+        wrap.innerHTML='<div style="font-weight:700;color:#93c5fd;font-size:0.85rem;margin-bottom:6px;">🦺 SUBCONTRACTOR SAFETY COMPLIANCE TRACKER</div>'
+            +'<div style="font-size:0.7rem;color:#94a3b8;margin-bottom:8px;">OSHA 29 CFR §1926.16 — Prime contractor responsible for sub OSHA compliance on multi-employer worksites. Controlling employer must ensure all subs meet site safety standards.</div>'
+            +alertHtml+clearHtml
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:8px;">'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:#93c5fd;font-size:1.1rem;font-weight:700;">'+total+'</div><div style="color:#94a3b8;font-size:0.65rem;">Subs Tracked</div></div>'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:#4ade80;font-size:1.1rem;font-weight:700;">'+fullyCompliant.length+'</div><div style="color:#94a3b8;font-size:0.65rem;">Fully Compliant</div></div>'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:'+(nonCompliant.length?'#f87171':'#64748b')+';font-size:1.1rem;font-weight:700;">'+nonCompliant.length+'</div><div style="color:#94a3b8;font-size:0.65rem;">Gaps (Active)</div></div>'
+            +'</div>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Add Subcontractor</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<input id="ssc-company" placeholder="Company name" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<select id="ssc-scope" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +SCOPE_OPTS.map(function(s){return'<option>'+s+'</option>';}).join('')+'</select>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<input id="ssc-contact" placeholder="Contact name" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="ssc-phone" placeholder="Phone" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="ssc-mob-date" type="date" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<button onclick="window._sscAdd()" style="width:100%;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:4px;padding:5px;cursor:pointer;font-size:0.75rem;font-weight:700;margin-bottom:8px;">+ Add Sub</button>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Sub Compliance Checklist</div>'
+            +(d.subs.length===0?'<div style="color:#64748b;font-size:0.72rem;margin-bottom:8px;">No subs added yet.</div>'
+                :d.subs.map(function(s,si){
+                    var checked=COMPLIANCE_ITEMS.filter(function(ci){return s.checks&&s.checks[ci.key];}).length;
+                    var statusColor={'Active on Site':'#4ade80','Pending Mobilization':'#fbbf24','Demobilized':'#64748b','On Hold':'#f87171'}[s.status]||'#94a3b8';
+                    return'<div style="background:#1e293b;border-left:3px solid '+(checked===COMPLIANCE_ITEMS.length?'#4ade80':'#f87171')+';border-radius:4px;padding:6px 7px;margin-bottom:6px;">'
+                        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
+                        +'<div><span style="font-weight:700;color:#e2e8f0;">'+s.company+'</span> <span style="font-size:0.68rem;color:#94a3b8;">'+s.scope+'</span></div>'
+                        +'<div style="display:flex;gap:4px;">'
+                        +'<span onclick="window._sscCycleStatus('+si+')" style="background:#0f172a;border:1px solid #334155;color:'+statusColor+';border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.65rem;font-weight:700;">'+s.status+'</span>'
+                        +'<button onclick="window._sscDel('+si+')" style="background:#7f1d1d;border:none;color:#fff;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.65rem;">✕</button>'
+                        +'</div></div>'
+                        +'<div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;">'+(s.contact||'—')+' | '+(s.phone||'—')+' | Mob: '+(s.mobDate||'—')+'</div>'
+                        +'<div style="font-size:0.7rem;color:#4ade80;margin-top:2px;">'+checked+'/'+COMPLIANCE_ITEMS.length+' items checked</div>'
+                        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-top:4px;">'
+                        +COMPLIANCE_ITEMS.map(function(ci){
+                            var checked2=s.checks&&s.checks[ci.key];
+                            return'<div onclick="window._sscToggle('+si+',\''+ci.key+'\')" style="cursor:pointer;padding:2px 4px;border-radius:3px;background:'+(checked2?'#052e16':'#1a0a0a')+';border:1px solid '+(checked2?'#4ade80':'#7f1d1d')+';font-size:0.65rem;color:'+(checked2?'#4ade80':'#f87171')+'">'
+                                +(checked2?'✓ ':'✗ ')+ci.label+'</div>';
+                        }).join('')
+                        +'</div></div>';
+                }).join(''))
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;">'
+            +'<button onclick="window._sscCopy()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">📋 Copy Report</button>'
+            +'<button onclick="window._sscPrint()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">🖨 Print Safety Compliance Sheet</button></div>';
+    }
+
+    window._sscAdd=function(){
+        var company=document.getElementById('ssc-company').value.trim();
+        if(!company){alert('Company name required.');return;}
+        var d=load();
+        d.subs.push({company:company,scope:document.getElementById('ssc-scope').value,contact:document.getElementById('ssc-contact').value.trim(),phone:document.getElementById('ssc-phone').value.trim(),mobDate:document.getElementById('ssc-mob-date').value,status:'Pending Mobilization',checks:{}});
+        save(d);
+        ['ssc-company','ssc-contact','ssc-phone','ssc-mob-date'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+        render();
+    };
+    window._sscDel=function(i){var d=load();d.subs.splice(i,1);save(d);render();};
+    window._sscToggle=function(si,key){var d=load();if(!d.subs[si].checks)d.subs[si].checks={};d.subs[si].checks[key]=!d.subs[si].checks[key];save(d);render();};
+    window._sscCycleStatus=function(si){var d=load();var idx=STATUSES.indexOf(d.subs[si].status);d.subs[si].status=STATUSES[(idx+1)%STATUSES.length];save(d);render();};
+    window._sscCopy=function(){
+        var d=load();
+        if(!d.subs.length){alert('No subs tracked.');return;}
+        var lines=['SUBCONTRACTOR SAFETY COMPLIANCE TRACKER','Date: '+new Date().toLocaleDateString(),'OSHA 29 CFR §1926.16',''];
+        d.subs.forEach(function(s){
+            var checked=COMPLIANCE_ITEMS.filter(function(ci){return s.checks&&s.checks[ci.key];}).length;
+            lines.push(s.company+' | '+s.scope+' | '+s.status+' | '+checked+'/'+COMPLIANCE_ITEMS.length+' items');
+            COMPLIANCE_ITEMS.forEach(function(ci){lines.push('  '+(s.checks&&s.checks[ci.key]?'✓':'✗')+' '+ci.label);});
+            lines.push('');
+        });
+        try{navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');}catch(e){alert(lines.join('\n'));}
+    };
+    window._sscPrint=function(){
+        var d=load();
+        if(!d.subs.length){alert('No subs to print.');return;}
+        var nonCompliant=d.subs.filter(function(s){if(s.status==='Demobilized')return false;return COMPLIANCE_ITEMS.some(function(ci){return!s.checks||!s.checks[ci.key];});});
+        var html='<html><head><title>Sub Safety Compliance</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:1in;}h2{font-size:13pt;}table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:8.5pt;}th{background:#1e40af;color:white;padding:4px;}td{padding:3px 4px;border:1px solid #ccc;vertical-align:top;}.ok{color:green;font-weight:700;}.fail{color:red;font-weight:700;}.alert{border:1px solid red;padding:6px;margin-bottom:8px;}.sign{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:20px;}.sign-box{border-bottom:1px solid #000;padding-top:30px;text-align:center;font-size:8.5pt;}</style></head><body>';
+        html+='<h2>SUBCONTRACTOR SAFETY COMPLIANCE TRACKER</h2><div style="font-size:9pt;">OSHA 29 CFR §1926.16 — Controlling Employer Responsibility &nbsp;&nbsp; Date: '+new Date().toLocaleDateString()+'</div><hr>';
+        if(nonCompliant.length){
+            html+='<div class="alert"><b>⚠ ACTIVE SUBS WITH COMPLIANCE GAPS ('+nonCompliant.length+')</b><br>';
+            nonCompliant.forEach(function(s){
+                var missing=COMPLIANCE_ITEMS.filter(function(ci){return!s.checks||!s.checks[ci.key];});
+                html+=s.company+': Missing — '+missing.map(function(ci){return ci.label;}).join('; ')+'<br>';
+            });
+            html+='</div>';
+        }
+        html+='<table><tr><th>Company</th><th>Scope</th><th>Status</th><th>Mob Date</th><th>Contact</th>'+COMPLIANCE_ITEMS.map(function(ci){return'<th style="font-size:7pt;">'+ci.label+'</th>';}).join('')+'</tr>';
+        d.subs.forEach(function(s){
+            html+='<tr><td>'+s.company+'</td><td>'+s.scope+'</td><td>'+s.status+'</td><td>'+(s.mobDate||'—')+'</td><td>'+(s.contact||'—')+'<br>'+(s.phone||'')+'</td>';
+            COMPLIANCE_ITEMS.forEach(function(ci){html+='<td style="text-align:center;">'+(s.checks&&s.checks[ci.key]?'<span class="ok">✓</span>':'<span class="fail">✗</span>')+'</td>';});
+            html+='</tr>';
+        });
+        html+='</table>';
+        html+='<div style="font-size:8pt;color:#555;margin-bottom:8px;"><b>OSHA 29 CFR §1926.16:</b> Prime/general contractor retains overall safety responsibility on multi-employer worksites. Controlling employer must exercise reasonable care to prevent sub OSHA violations. Inadequate safety oversight = GC liability for sub incidents on-site. All subs must comply with OSHA 29 CFR Part 1926 Subpart C–Z as applicable to their work scope.</div>';
+        html+='<div class="sign"><div class="sign-box">Safety Lead / Date</div><div class="sign-box">PM / Date</div><div class="sign-box">GC Safety Officer / Date</div></div></body></html>';
+        var w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🦺 Hide Sub Safety Compliance Tracker':'🦺 Subcontractor Safety Compliance Tracker';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ==================== TOOL 3: CONCRETE COST PER SF/LF QUICK BENCHMARKS ==================== -->
+<script>
+(function(){
+    'use strict';
+    var STORE_KEY='oncor_job_cost_benchmarks';
+    var BTN_ID='btn-job-cost-benchmarks';
+    var WRAP_ID='wrap-job-cost-benchmarks';
+    function load(){try{return JSON.parse(localStorage.getItem(STORE_KEY))||{jobs:[]};}catch(e){return{jobs:[]};}}
+    function save(d){localStorage.setItem(STORE_KEY,JSON.stringify(d));}
+
+    var ELEMENT_TYPES=['SOG Residential (4")','SOG Light Commercial (4-5")','SOG Industrial/Warehouse (6")','SOG Heavy Industrial (8"+)','Tilt-Up Panel (6-8")','Elevated Deck (8")','Footing/Grade Beam','CIP Wall','Curb & Gutter','Pier/Drilled Shaft'];
+    var MARKETS=['El Paso / Las Cruces','Dallas / Fort Worth','Houston','San Antonio','Phoenix','Denver','National Average'];
+
+    function createButton(){
+        if(document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='📊 Job Cost Benchmark Logger';
+        btn.style.cssText='display:block;width:100%;margin:4px 0;padding:6px;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:6px;cursor:pointer;font-size:0.78rem;font-weight:600;text-align:left;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #3b82f6;border-radius:6px;padding:10px;margin-bottom:8px;font-size:0.76rem;color:#e2e8f0;';
+        var ref=document.getElementById('wrap-sub-safety-compliance');
+        if(ref&&ref.parentNode){ref.parentNode.insertBefore(wrap,ref.nextSibling);ref.parentNode.insertBefore(btn,wrap);}
+        else{document.body.appendChild(btn);document.body.appendChild(wrap);}
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);
+        if(!wrap)return;
+        var d=load();
+        // Compute averages by element type
+        var byType={};
+        d.jobs.forEach(function(j){
+            if(!byType[j.elementType])byType[j.elementType]={sfJobs:[],ydJobs:[]};
+            if(j.sfCost>0)byType[j.elementType].sfJobs.push(j.sfCost);
+            if(j.ydCost>0)byType[j.elementType].ydJobs.push(j.ydCost);
+        });
+
+        var benchmarkRows='';
+        Object.keys(byType).forEach(function(et){
+            var sfArr=byType[et].sfJobs;var ydArr=byType[et].ydJobs;
+            var avgSF=sfArr.length?sfArr.reduce(function(a,b){return a+b;},0)/sfArr.length:null;
+            var avgYD=ydArr.length?ydArr.reduce(function(a,b){return a+b;},0)/ydArr.length:null;
+            var minSF=sfArr.length?Math.min.apply(null,sfArr):null;var maxSF=sfArr.length?Math.max.apply(null,sfArr):null;
+            benchmarkRows+='<div style="background:#1e293b;border-radius:4px;padding:5px;margin-bottom:4px;">'
+                +'<div style="font-weight:700;color:#e2e8f0;font-size:0.75rem;">'+et+'</div>'
+                +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-top:3px;font-size:0.68rem;">'
+                +'<div style="color:#94a3b8;">Avg $/SF<br><span style="color:#4ade80;font-weight:700;">'+(avgSF?'$'+avgSF.toFixed(2):'—')+'</span></div>'
+                +'<div style="color:#94a3b8;">Range<br><span style="color:#e2e8f0;">'+(minSF&&maxSF?'$'+minSF.toFixed(2)+'–$'+maxSF.toFixed(2):'—')+'</span></div>'
+                +'<div style="color:#94a3b8;">Avg $/yd³<br><span style="color:#93c5fd;font-weight:700;">'+(avgYD?'$'+avgYD.toFixed(0):'—')+'</span></div>'
+                +'<div style="color:#94a3b8;">Jobs<br><span style="color:#e2e8f0;">'+Math.max(sfArr.length,ydArr.length)+'</span></div>'
+                +'</div></div>';
+        });
+
+        wrap.innerHTML='<div style="font-weight:700;color:#93c5fd;font-size:0.85rem;margin-bottom:6px;">📊 JOB COST BENCHMARK LOGGER</div>'
+            +'<div style="font-size:0.7rem;color:#94a3b8;margin-bottom:8px;">Log your actual awarded bid prices to build market benchmarks over time. Know if your $/SF or $/yd³ is competitive before you submit.</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:8px;">'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:#93c5fd;font-size:1.1rem;font-weight:700;">'+d.jobs.length+'</div><div style="color:#94a3b8;font-size:0.65rem;">Jobs Logged</div></div>'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:#4ade80;font-size:1.1rem;font-weight:700;">'+Object.keys(byType).length+'</div><div style="color:#94a3b8;font-size:0.65rem;">Element Types</div></div>'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:#e2e8f0;font-size:1.1rem;font-weight:700;">'+(d.jobs.length?'$'+(d.jobs.reduce(function(s,j){return s+(j.bidTotal||0);},0)/1000).toFixed(0)+'k':'—')+'</div><div style="color:#94a3b8;font-size:0.65rem;">Total Pipeline</div></div>'
+            +'</div>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Log a Job</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<input id="jcb-name" placeholder="Project / GC name" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<select id="jcb-type" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +ELEMENT_TYPES.map(function(t){return'<option>'+t+'</option>';}).join('')+'</select>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<input id="jcb-yd3" type="number" min="0" step="1" placeholder="yd³" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="jcb-sf" type="number" min="0" step="1" placeholder="SF (if applicable)" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="jcb-bid" type="number" min="0" step="100" placeholder="Bid total $" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<select id="jcb-market" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +MARKETS.map(function(m){return'<option>'+m+'</option>';}).join('')+'</select>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<select id="jcb-outcome" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;"><option>Awarded</option><option>Pending</option><option>Lost</option><option>No-bid</option></select>'
+            +'<input id="jcb-compete-price" type="number" min="0" step="100" placeholder="Competitor $  (if known)" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="jcb-date" type="date" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<textarea id="jcb-notes" placeholder="Notes (scope inclusions, market conditions, etc.)" rows="2" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;margin-bottom:4px;resize:vertical;"></textarea>'
+            +'<button onclick="window._jcbAdd()" style="width:100%;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:4px;padding:5px;cursor:pointer;font-size:0.75rem;font-weight:700;margin-bottom:8px;">+ Log This Job</button>'
+            +(Object.keys(byType).length?'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Market Benchmarks (from your jobs)</div>'+benchmarkRows:'')
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Job Log</div>'
+            +(d.jobs.length===0?'<div style="color:#64748b;font-size:0.72rem;">No jobs logged yet.</div>'
+                :d.jobs.slice().reverse().map(function(j,ri){
+                    var idx=d.jobs.length-1-ri;
+                    var sfCost=j.sfCost>0?'$'+j.sfCost.toFixed(2)+'/SF':'';
+                    var ydCost=j.ydCost>0?'$'+j.ydCost.toFixed(0)+'/yd³':'';
+                    var outcomeColor={'Awarded':'#4ade80','Pending':'#fbbf24','Lost':'#f87171','No-bid':'#64748b'}[j.outcome]||'#e2e8f0';
+                    return'<div style="background:#1e293b;border-left:3px solid '+outcomeColor+';border-radius:4px;padding:5px 6px;margin-bottom:4px;">'
+                        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
+                        +'<div><span style="font-weight:700;color:#e2e8f0;">'+j.name+'</span></div>'
+                        +'<div style="display:flex;gap:4px;align-items:center;">'
+                        +'<span style="color:'+outcomeColor+';font-size:0.65rem;font-weight:700;">'+j.outcome+'</span>'
+                        +'<button onclick="window._jcbDel('+idx+')" style="background:#7f1d1d;border:none;color:#fff;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.65rem;">✕</button>'
+                        +'</div></div>'
+                        +'<div style="font-size:0.7rem;color:#94a3b8;margin-top:2px;">'+j.elementType+' | '+j.market+'</div>'
+                        +'<div style="font-size:0.7rem;color:#e2e8f0;margin-top:2px;">Bid: $'+(j.bidTotal?j.bidTotal.toLocaleString():'—')+' | '+(j.yd3?j.yd3+' yd³':'')+' | '+(sfCost?sfCost+' ':'')+ydCost+'</div>'
+                        +(j.competePrice?'<div style="font-size:0.68rem;color:#fbbf24;margin-top:1px;">Competitor: $'+j.competePrice.toLocaleString()+' ('+(j.bidTotal&&j.competePrice?((j.bidTotal-j.competePrice)/j.competePrice*100).toFixed(1)+'% vs their price':'—')+')</div>':'')
+                        +(j.notes?'<div style="font-size:0.68rem;color:#94a3b8;margin-top:1px;">'+j.notes+'</div>':'')
+                        +'<div style="font-size:0.65rem;color:#64748b;margin-top:1px;">'+(j.date||new Date(j.ts).toLocaleDateString())+'</div>'
+                        +'</div>';
+                }).join(''))
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;">'
+            +'<button onclick="window._jcbCopy()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">📋 Copy Benchmark Report</button>'
+            +'<button onclick="window._jcbPrint()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">🖨 Print Benchmark Report</button></div>';
+    }
+
+    window._jcbAdd=function(){
+        var name=document.getElementById('jcb-name').value.trim();
+        if(!name){alert('Project name required.');return;}
+        var yd3=parseFloat(document.getElementById('jcb-yd3').value)||0;
+        var sf=parseFloat(document.getElementById('jcb-sf').value)||0;
+        var bid=parseFloat(document.getElementById('jcb-bid').value)||0;
+        var sfCost=sf&&bid?bid/sf:0;
+        var ydCost=yd3&&bid?bid/yd3:0;
+        var d=load();
+        d.jobs.push({name:name,elementType:document.getElementById('jcb-type').value,yd3:yd3,sf:sf,bidTotal:bid,sfCost:sfCost,ydCost:ydCost,market:document.getElementById('jcb-market').value,outcome:document.getElementById('jcb-outcome').value,competePrice:parseFloat(document.getElementById('jcb-compete-price').value)||0,date:document.getElementById('jcb-date').value,notes:document.getElementById('jcb-notes').value.trim(),ts:Date.now()});
+        save(d);
+        ['jcb-name','jcb-yd3','jcb-sf','jcb-bid','jcb-compete-price','jcb-date','jcb-notes'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+        render();
+    };
+    window._jcbDel=function(i){var d=load();d.jobs.splice(i,1);save(d);render();};
+    window._jcbCopy=function(){
+        var d=load();
+        if(!d.jobs.length){alert('No jobs logged.');return;}
+        var lines=['JOB COST BENCHMARK REPORT','Date: '+new Date().toLocaleDateString(),''];
+        d.jobs.forEach(function(j){
+            lines.push(j.name+' | '+j.elementType+' | '+j.outcome);
+            lines.push('  Bid: $'+(j.bidTotal?j.bidTotal.toLocaleString():'—')+' | '+(j.sfCost?'$'+j.sfCost.toFixed(2)+'/SF | ':'')+( j.ydCost?'$'+j.ydCost.toFixed(0)+'/yd³':''));
+            if(j.notes)lines.push('  Notes: '+j.notes);
+            lines.push('');
+        });
+        try{navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');}catch(e){alert(lines.join('\n'));}
+    };
+    window._jcbPrint=function(){
+        var d=load();
+        if(!d.jobs.length){alert('No jobs to print.');return;}
+        var html='<html><head><title>Job Cost Benchmarks</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:1in;}h2{font-size:13pt;}table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:8.5pt;}th{background:#1e40af;color:white;padding:4px;}td{padding:3px 4px;border:1px solid #ccc;}.awarded{color:green;font-weight:700;}.lost{color:red;}.sign{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;}.sign-box{border-bottom:1px solid #000;padding-top:30px;text-align:center;font-size:8.5pt;}</style></head><body>';
+        html+='<h2>JOB COST BENCHMARK REPORT</h2><div style="font-size:9pt;">Date: '+new Date().toLocaleDateString()+'</div><hr>';
+        html+='<table><tr><th>Project</th><th>Element Type</th><th>Market</th><th>yd³</th><th>SF</th><th>Bid Total</th><th>$/SF</th><th>$/yd³</th><th>Outcome</th><th>Competitor $</th><th>Date</th><th>Notes</th></tr>';
+        d.jobs.forEach(function(j){
+            html+='<tr><td>'+j.name+'</td><td>'+j.elementType+'</td><td>'+j.market+'</td><td>'+(j.yd3||'—')+'</td><td>'+(j.sf||'—')+'</td><td>'+(j.bidTotal?'$'+j.bidTotal.toLocaleString():'—')+'</td><td>'+(j.sfCost?'$'+j.sfCost.toFixed(2):'—')+'</td><td>'+(j.ydCost?'$'+j.ydCost.toFixed(0):'—')+'</td><td class="'+(j.outcome==='Awarded'?'awarded':j.outcome==='Lost'?'lost':'')+'">'+j.outcome+'</td><td>'+(j.competePrice?'$'+j.competePrice.toLocaleString():'—')+'</td><td>'+(j.date||'—')+'</td><td>'+(j.notes||'')+'</td></tr>';
+        });
+        html+='</table>';
+        html+='<div style="font-size:8pt;color:#555;margin-bottom:8px;"><b>Note:</b> Use these benchmarks to validate future bids against your own market experience. Compare $/SF and $/yd³ against logged averages by element type. A bid significantly above your own average warrants scope review; a bid significantly below may indicate missed scope.</div>';
+        html+='<div class="sign"><div class="sign-box">Estimator / Date</div><div class="sign-box">Principal / Date</div></div></body></html>';
+        var w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'📊 Hide Job Cost Benchmark Logger':'📊 Job Cost Benchmark Logger';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
