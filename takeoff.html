@@ -35615,3 +35615,411 @@ Retain one (1) copy for your records. Return stamped copies as indicated above.
     if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
 })();
 </script>
+
+<!-- ==================== TOOL 1: CONCRETE SHRINKAGE & CRACK RISK ESTIMATOR ==================== -->
+<script>
+(function(){
+    'use strict';
+    var STORE_KEY='oncor_shrinkage_estimator';
+    var BTN_ID='btn-shrinkage-estimator';
+    var WRAP_ID='wrap-shrinkage-estimator';
+    function load(){try{return JSON.parse(localStorage.getItem(STORE_KEY))||{results:[],settings:{}};}catch(e){return{results:[],settings:{}};}}
+    function save(d){localStorage.setItem(STORE_KEY,JSON.stringify(d));}
+
+    function createButton(){
+        if(document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='🔬 Shrinkage & Crack Risk Estimator';
+        btn.style.cssText='display:block;width:100%;margin:4px 0;padding:6px;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:6px;cursor:pointer;font-size:0.78rem;font-weight:600;text-align:left;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #3b82f6;border-radius:6px;padding:10px;margin-bottom:8px;font-size:0.76rem;color:#e2e8f0;';
+        var ref=document.getElementById('btn-job-cost-benchmarks');
+        if(ref&&ref.parentNode){ref.parentNode.insertBefore(wrap,ref.nextSibling);ref.parentNode.insertBefore(btn,wrap);}
+        else{document.body.appendChild(btn);document.body.appendChild(wrap);}
+    }
+
+    var AGG_MOD={'Quartzite':0.85,'Granite':0.90,'Limestone':0.95,'Basalt':1.00,'Gravel (rounded)':1.00,'Sandstone':1.25,'Shale/Marl':1.45};
+    var CURE_MOD={'Wet cure 7d':0.85,'Wet cure 3d':0.93,'Curing compound (C309)':1.00,'Covered/plastic':0.97,'No curing (hot/dry)':1.30};
+    function baseShrinkagemicrostrain(wc){if(wc<=0.35)return 280;if(wc<=0.40)return 340;if(wc<=0.45)return 400;if(wc<=0.50)return 470;if(wc<=0.55)return 550;if(wc<=0.60)return 640;return 750;}
+    function cementMod(lbs){if(lbs<=470)return 0.90;if(lbs<=550)return 1.00;if(lbs<=650)return 1.12;return 1.25;}
+    function flyAshMod(pct){return pct>=20?0.88:pct>=10?0.94:1.00;}
+    function calcJointSpacing(thk,micro){var base=thk*2.5;if(micro>600)base*=0.75;else if(micro>500)base*=0.85;return Math.max(8,Math.round(base));}
+
+    function renderResult(){
+        var wc=parseFloat(document.getElementById('sh-wc').value)||0.50;
+        var agg=document.getElementById('sh-agg').value;
+        var cement=parseFloat(document.getElementById('sh-cement').value)||520;
+        var cure=document.getElementById('sh-cure').value;
+        var flyAsh=parseFloat(document.getElementById('sh-flyash').value)||0;
+        var sra=document.getElementById('sh-sra').checked;
+        var thk=parseFloat(document.getElementById('sh-thickness').value)||5;
+        var sf=parseFloat(document.getElementById('sh-sf').value)||0;
+        var humid=parseFloat(document.getElementById('sh-humid').value)||30;
+        var temp=parseFloat(document.getElementById('sh-temp').value)||90;
+        var base=baseShrinkagemicrostrain(wc);
+        var aggF=AGG_MOD[agg]||1.00;var cemF=cementMod(cement);var cureF=CURE_MOD[cure]||1.00;
+        var faF=flyAshMod(flyAsh);var admF=sra?0.75:1.00;
+        var humF=humid<=20?1.25:humid<=30?1.15:humid<=40?1.07:humid<=60?1.00:0.90;
+        var tempF=temp>=105?1.20:temp>=95?1.10:temp>=85?1.05:1.00;
+        var totalMicro=Math.round(base*aggF*cemF*cureF*faF*admF*humF*tempF);
+        var cjSpacing=calcJointSpacing(thk,totalMicro);
+        var riskLabel='LOW';var riskColor='#4ade80';
+        if(totalMicro>700){riskLabel='CRITICAL';riskColor='#ef4444';}
+        else if(totalMicro>550){riskLabel='HIGH';riskColor='#f97316';}
+        else if(totalMicro>430){riskLabel='MODERATE';riskColor='#fbbf24';}
+        var recs=[];
+        if(wc>0.55)recs.push('Reduce w/c ratio to ≤0.50 (ACI 318 §19.3.3)');
+        if(cure==='No curing (hot/dry)')recs.push('Apply curing compound immediately after finish per ACI 308R §5.2');
+        if(temp>=95)recs.push('ACI 305R: Cool water/ice, schedule overnight pour — evaporation rate likely exceeds 0.20 lb/ft²/hr');
+        if(humid<=30)recs.push('El Paso arid climate: increase CJ frequency to '+Math.round(cjSpacing*0.8)+'ft — low humidity accelerates surface drying');
+        if(flyAsh<15&&totalMicro>500)recs.push('Consider 15–25% fly ash (Class F) replacement to reduce shrinkage ~12%');
+        if(!sra&&totalMicro>600)recs.push('Consider shrinkage-reducing admixture (SRA) — reduces shrinkage up to 25%');
+        if(totalMicro>600)recs.push('Increase slab thickness by 1" to reduce stress-to-strength ratio at joints');
+        var resEl=document.getElementById('sh-result');if(!resEl)return;
+        resEl.innerHTML='<div style="background:#1e293b;border-radius:6px;padding:8px;margin-top:6px;">'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:6px;">Results — ACI 224R Shrinkage Analysis</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">'
+            +'<div style="background:#0f172a;border-radius:4px;padding:6px;text-align:center;"><div style="color:'+riskColor+';font-size:1.1rem;font-weight:700;">'+totalMicro+'</div><div style="color:#94a3b8;font-size:0.67rem;">Estimated Shrinkage<br>(microstrain)</div></div>'
+            +'<div style="background:#0f172a;border-radius:4px;padding:6px;text-align:center;"><div style="color:'+riskColor+';font-size:1.1rem;font-weight:700;">'+riskLabel+'</div><div style="color:#94a3b8;font-size:0.67rem;">Crack Risk</div></div>'
+            +'<div style="background:#0f172a;border-radius:4px;padding:6px;text-align:center;"><div style="color:#93c5fd;font-size:1.1rem;font-weight:700;">'+cjSpacing+'ft max</div><div style="color:#94a3b8;font-size:0.67rem;">CJ Spacing (ACI 360R)</div></div>'
+            +'</div>'
+            +'<div style="font-size:0.69rem;color:#94a3b8;margin-bottom:4px;"><b>Modifiers:</b> base='+base+'μɛ × agg='+aggF.toFixed(2)+' × cem='+cemF.toFixed(2)+' × cure='+cureF.toFixed(2)+' × FA='+faF.toFixed(2)+' × SRA='+admF.toFixed(2)+' × RH='+humF.toFixed(2)+' × temp='+tempF.toFixed(2)+'</div>'
+            +(sf?'<div style="font-size:0.7rem;color:#e2e8f0;margin-bottom:4px;">@ '+sf.toLocaleString()+' SF at '+cjSpacing+'ft spacing → est. '+Math.round(sf/(cjSpacing*cjSpacing))+' panels, ~'+Math.round(sf/cjSpacing*2)+' LF of control joints</div>':'')
+            +(recs.length?'<div style="background:#431407;border:1px solid #f97316;border-radius:4px;padding:5px;font-size:0.71rem;"><b style="color:#f97316;">⚠ Recommendations:</b><ul style="margin:3px 0 0 14px;padding:0;color:#fed7aa;">'+recs.map(function(r){return'<li>'+r+'</li>';}).join('')+'</ul></div>':'<div style="background:#052e16;border:1px solid #4ade80;border-radius:4px;padding:5px;font-size:0.71rem;color:#86efac;">✓ No critical shrinkage risk factors identified.</div>')
+            +'</div>';
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var d=load();
+        wrap.innerHTML='<div style="font-weight:700;color:#93c5fd;font-size:0.85rem;margin-bottom:6px;">🔬 CONCRETE SHRINKAGE & CRACK RISK ESTIMATOR</div>'
+            +'<div style="font-size:0.7rem;color:#94a3b8;margin-bottom:8px;">ACI 224R-01 drying shrinkage analysis. Estimates shrinkage strain, crack risk level, and recommended control joint spacing from mix design and ambient conditions. El Paso: arid climate + summer heat dramatically increase crack risk on under-jointed slabs.</div>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Mix Design & Conditions</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">w/c Ratio</label><input id="sh-wc" type="number" min="0.30" max="0.75" step="0.01" value="0.50" oninput="window._shCalc()" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Cement Content (lbs/yd³)</label><input id="sh-cement" type="number" min="400" max="800" step="10" value="520" oninput="window._shCalc()" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Fly Ash Replacement %</label><input id="sh-flyash" type="number" min="0" max="40" step="1" value="0" oninput="window._shCalc()" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Aggregate Type</label><select id="sh-agg" onchange="window._shCalc()" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;">'
+            +Object.keys(AGG_MOD).map(function(k){return'<option'+(k==='Gravel (rounded)'?' selected':'')+'>'+k+'</option>';}).join('')+'</select></div>'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Curing Method</label><select id="sh-cure" onchange="window._shCalc()" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;">'
+            +Object.keys(CURE_MOD).map(function(k){return'<option'+(k==='Curing compound (C309)'?' selected':'')+'>'+k+'</option>';}).join('')+'</select></div>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Slab Thickness (in)</label><input id="sh-thickness" type="number" min="3" max="24" step="0.5" value="5" oninput="window._shCalc()" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Slab SF (optional)</label><input id="sh-sf" type="number" min="0" step="100" placeholder="SF" oninput="window._shCalc()" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Ambient RH % (pour day)</label><input id="sh-humid" type="number" min="5" max="100" step="1" value="30" oninput="window._shCalc()" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Ambient Temp °F</label><input id="sh-temp" type="number" min="20" max="120" step="1" value="90" oninput="window._shCalc()" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'</div>'
+            +'<div style="margin-bottom:6px;"><label style="font-size:0.72rem;color:#e2e8f0;cursor:pointer;"><input type="checkbox" id="sh-sra" onchange="window._shCalc()" style="margin-right:4px;">Shrinkage-Reducing Admixture (SRA) included</label></div>'
+            +'<button onclick="window._shCalc()" style="background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:4px;padding:5px;cursor:pointer;font-size:0.75rem;font-weight:700;width:100%;margin-bottom:4px;">Calculate Shrinkage Risk</button>'
+            +'<div id="sh-result"></div>'
+            +'<div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:4px;">'
+            +'<button onclick="window._shPrint()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">🖨 Print ACI 224R Calc Sheet</button>'
+            +'<button onclick="window._shSave()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">💾 Save to History</button></div>'
+            +(d.results.length?'<div style="margin-top:8px;font-weight:700;color:#e2e8f0;">Saved Analyses</div>'
+                +d.results.slice().reverse().map(function(r,ri){var idx=d.results.length-1-ri;
+                    var rc=r.risk==='CRITICAL'?'#ef4444':r.risk==='HIGH'?'#f97316':r.risk==='MODERATE'?'#fbbf24':'#4ade80';
+                    return'<div style="background:#1e293b;border-left:3px solid '+rc+';border-radius:4px;padding:4px 6px;margin-top:4px;display:flex;justify-content:space-between;align-items:center;">'
+                        +'<div><div style="font-weight:700;color:#e2e8f0;font-size:0.72rem;">'+r.label+'</div><div style="font-size:0.67rem;color:#94a3b8;">'+r.micro+'μɛ | '+r.risk+' risk | CJ ≤'+r.cj+'ft | '+(r.ts?new Date(r.ts).toLocaleDateString():'')+'</div></div>'
+                        +'<button onclick="window._shDel('+idx+')" style="background:#7f1d1d;border:none;color:#fff;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.65rem;">✕</button></div>';
+                }).join(''):'');
+        window._shCalc();
+    }
+
+    window._shCalc=function(){renderResult();};
+    window._shSave=function(){
+        var d=load();
+        var res=document.getElementById('sh-result');if(!res||!res.innerHTML){alert('Calculate first.');return;}
+        var wc=document.getElementById('sh-wc').value;var cure=document.getElementById('sh-cure').value;
+        var label=prompt('Label for this analysis:','w/c='+wc+', '+cure)||'Analysis';
+        var micro=parseInt((res.innerHTML.match(/font-weight:700;">(\d+)<\/div><div[^>]*>Estimated Shrinkage/)||[])[1])||0;
+        var risk=(res.innerHTML.match(/(LOW|MODERATE|HIGH|CRITICAL)<\/div><div[^>]*>Crack Risk/)||['',''])[1];
+        var cjM=parseInt((res.innerHTML.match(/(\d+)ft max<\/div>/)||[])[1])||0;
+        d.results.push({label:label,micro:micro,risk:risk,cj:cjM,ts:Date.now()});save(d);render();
+    };
+    window._shDel=function(i){var d=load();d.results.splice(i,1);save(d);render();};
+    window._shPrint=function(){
+        var wc=document.getElementById('sh-wc')?document.getElementById('sh-wc').value:'';
+        var res=document.getElementById('sh-result');if(!res||!res.innerHTML){alert('Calculate first.');return;}
+        var html='<html><head><title>ACI 224R Shrinkage Analysis</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:1in;}h2{font-size:13pt;}.sign{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:20px;}.sign-box{border-bottom:1px solid #000;padding-top:30px;text-align:center;font-size:8.5pt;}.warn{border:1px solid orange;padding:6px;margin:6px 0;font-size:9pt;}</style></head><body>';
+        html+='<h2>CONCRETE SHRINKAGE & CRACK RISK ANALYSIS — ACI 224R-01</h2><div style="font-size:9pt;">Date: '+new Date().toLocaleDateString()+'</div><hr>';
+        html+='<p style="font-size:9pt;">w/c: '+wc+' | Printed from Oncor Takeoff Tool</p>';
+        html+='<div class="warn"><b>⚠ Disclaimer:</b> This is an engineering estimate based on ACI 224R empirical modifiers. Verify with engineer of record on shrinkage-sensitive projects (polished floors, PT slabs, architectural concrete).</div>';
+        html+='<div class="sign"><div class="sign-box">Estimator / Date</div><div class="sign-box">Foreman / Date</div><div class="sign-box">Engineer of Record / Date</div></div></body></html>';
+        var w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🔬 Hide Shrinkage & Crack Risk Estimator':'🔬 Shrinkage & Crack Risk Estimator';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ==================== TOOL 2: MATERIAL LEAD TIME TRACKER ==================== -->
+<script>
+(function(){
+    'use strict';
+    var STORE_KEY='oncor_lead_time_tracker';
+    var BTN_ID='btn-lead-time-tracker';
+    var WRAP_ID='wrap-lead-time-tracker';
+    function load(){try{return JSON.parse(localStorage.getItem(STORE_KEY))||{items:[]};}catch(e){return{items:[]};}}
+    function save(d){localStorage.setItem(STORE_KEY,JSON.stringify(d));}
+    var MATERIAL_TYPES=['Ready-Mix Concrete','Rebar (#4)','Rebar (#5)','Rebar (other)','Post-Tension Strand','WWF Mesh','Steel Embeds/Plates','Anchor Bolts','Expansion Joint Material','Curing Compound (C309)','Vapor Barrier','Form Lumber/Plywood','Snap Ties / Hardware','Specialty Admixtures','Grinding Pads (Polished)','Epoxy Adhesive (ASTM C881)','Non-Shrink Grout','Concrete Sealer','Other'];
+    var STATUS_CYCLE=['Pending Order','Ordered','In Transit','Delivered','Issue / Delayed'];
+    var STATUS_COLORS={'Pending Order':'#94a3b8','Ordered':'#3b82f6','In Transit':'#f59e0b','Delivered':'#4ade80','Issue / Delayed':'#ef4444'};
+    function daysDiff(dateStr){if(!dateStr)return null;var d=new Date(dateStr);var now=new Date();d.setHours(0,0,0,0);now.setHours(0,0,0,0);return Math.round((d-now)/(1000*60*60*24));}
+
+    function createButton(){
+        if(document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='📦 Material Lead Time Tracker';
+        btn.style.cssText='display:block;width:100%;margin:4px 0;padding:6px;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:6px;cursor:pointer;font-size:0.78rem;font-weight:600;text-align:left;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #3b82f6;border-radius:6px;padding:10px;margin-bottom:8px;font-size:0.76rem;color:#e2e8f0;';
+        var ref=document.getElementById('btn-shrinkage-estimator');
+        if(ref&&ref.parentNode){ref.parentNode.insertBefore(wrap,ref.nextSibling);ref.parentNode.insertBefore(btn,wrap);}
+        else{document.body.appendChild(btn);document.body.appendChild(wrap);}
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var d=load();
+        var late=d.items.filter(function(it){if(it.status==='Delivered')return false;var diff=daysDiff(it.neededBy);return diff!==null&&diff<0;});
+        var urgent=d.items.filter(function(it){if(it.status==='Delivered')return false;var diff=daysDiff(it.neededBy);return diff!==null&&diff>=0&&diff<=3;});
+        var delivered=d.items.filter(function(it){return it.status==='Delivered';});
+        var alertBanner='';
+        if(late.length)alertBanner='<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:4px;padding:5px;margin-bottom:6px;font-size:0.71rem;"><b style="color:#ef4444;">⚠ LATE DELIVERIES ('+late.length+'):</b> '+late.map(function(it){return it.material+' ('+Math.abs(daysDiff(it.neededBy))+'d past needed date)';}).join('; ')+'</div>';
+        else if(urgent.length)alertBanner='<div style="background:#451a03;border:1px solid #f97316;border-radius:4px;padding:5px;margin-bottom:6px;font-size:0.71rem;"><b style="color:#f97316;">⏰ DUE WITHIN 3 DAYS ('+urgent.length+'):</b> '+urgent.map(function(it){var diff=daysDiff(it.neededBy);return it.material+(diff===0?' (TODAY)':' (+'+diff+'d)');}).join('; ')+'</div>';
+        wrap.innerHTML='<div style="font-weight:700;color:#93c5fd;font-size:0.85rem;margin-bottom:6px;">📦 MATERIAL LEAD TIME TRACKER</div>'
+            +'<div style="font-size:0.7rem;color:#94a3b8;margin-bottom:8px;">Track procurement status and delivery lead times for all materials needed on active projects. Flags late and urgent deliveries before they impact the pour schedule.</div>'
+            +alertBanner
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:8px;">'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:#e2e8f0;font-size:1.1rem;font-weight:700;">'+d.items.length+'</div><div style="color:#94a3b8;font-size:0.65rem;">Total Items</div></div>'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:#ef4444;font-size:1.1rem;font-weight:700;">'+late.length+'</div><div style="color:#94a3b8;font-size:0.65rem;">Late</div></div>'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:#f97316;font-size:1.1rem;font-weight:700;">'+urgent.length+'</div><div style="color:#94a3b8;font-size:0.65rem;">Due ≤3d</div></div>'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:#4ade80;font-size:1.1rem;font-weight:700;">'+delivered.length+'</div><div style="color:#94a3b8;font-size:0.65rem;">Delivered</div></div>'
+            +'</div>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Add Item</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<select id="lt-material" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'+MATERIAL_TYPES.map(function(t){return'<option>'+t+'</option>';}).join('')+'</select>'
+            +'<input id="lt-project" placeholder="Project name" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<div><label style="font-size:0.67rem;color:#94a3b8;">Order Date</label><input id="lt-ordered" type="date" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'<div><label style="font-size:0.67rem;color:#94a3b8;">Expected Delivery</label><input id="lt-expected" type="date" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'<div><label style="font-size:0.67rem;color:#94a3b8;">Needed By (pour date)</label><input id="lt-needed" type="date" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'<div><label style="font-size:0.67rem;color:#94a3b8;">Qty / Units</label><input id="lt-qty" placeholder="e.g. 200 yd³" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<input id="lt-supplier" placeholder="Supplier / vendor name" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="lt-contact" placeholder="Contact / phone" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<textarea id="lt-notes" placeholder="Notes / PO # / confirmation #" rows="2" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;margin-bottom:4px;resize:vertical;"></textarea>'
+            +'<button onclick="window._ltAdd()" style="width:100%;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:4px;padding:5px;cursor:pointer;font-size:0.75rem;font-weight:700;margin-bottom:8px;">+ Add Material Item</button>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Material Items</div>'
+            +(d.items.length===0?'<div style="color:#64748b;font-size:0.72rem;">No items logged yet.</div>'
+                :d.items.map(function(it,idx){
+                    var sc=STATUS_COLORS[it.status]||'#94a3b8';
+                    var diff=daysDiff(it.neededBy);var urgencyTag='';
+                    if(it.status!=='Delivered'){if(diff!==null&&diff<0)urgencyTag='<span style="background:#ef4444;color:#fff;font-size:0.63rem;border-radius:3px;padding:1px 4px;margin-left:4px;">'+Math.abs(diff)+'d LATE</span>';else if(diff!==null&&diff===0)urgencyTag='<span style="background:#f97316;color:#fff;font-size:0.63rem;border-radius:3px;padding:1px 4px;margin-left:4px;">DUE TODAY</span>';else if(diff!==null&&diff<=3)urgencyTag='<span style="background:#fbbf24;color:#000;font-size:0.63rem;border-radius:3px;padding:1px 4px;margin-left:4px;">'+diff+'d left</span>';}
+                    return'<div style="background:#1e293b;border-left:3px solid '+sc+';border-radius:4px;padding:5px 6px;margin-bottom:4px;">'
+                        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:2px;">'
+                        +'<div><b style="color:#e2e8f0;">'+it.material+'</b>'+urgencyTag+'</div>'
+                        +'<div style="display:flex;gap:4px;align-items:center;">'
+                        +'<button onclick="window._ltCycle('+idx+')" style="background:#1e293b;border:1px solid '+sc+';color:'+sc+';border-radius:3px;padding:2px 6px;cursor:pointer;font-size:0.65rem;font-weight:700;">'+it.status+'</button>'
+                        +'<button onclick="window._ltDel('+idx+')" style="background:#7f1d1d;border:none;color:#fff;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.65rem;">✕</button>'
+                        +'</div></div>'
+                        +'<div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;">'+(it.project?it.project+' | ':'')+' Supplier: '+(it.supplier||'—')+(it.qty?' | '+it.qty:'')+'</div>'
+                        +'<div style="font-size:0.68rem;color:#e2e8f0;margin-top:2px;">'+(it.ordered?'Ordered: '+it.ordered:'')+' '+(it.expected?'→ Exp: '+it.expected:'')+' '+(it.neededBy?'→ Needed by: '+it.neededBy:'')+'</div>'
+                        +(it.notes?'<div style="font-size:0.67rem;color:#94a3b8;margin-top:1px;">'+it.notes+'</div>':'')
+                        +'</div>';
+                }).join(''))
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;">'
+            +'<button onclick="window._ltCopy()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">📋 Copy Procurement Report</button>'
+            +'<button onclick="window._ltPrint()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">🖨 Print Procurement Log</button></div>';
+    }
+
+    window._ltAdd=function(){
+        var d=load();
+        d.items.push({material:document.getElementById('lt-material').value,project:document.getElementById('lt-project').value.trim(),ordered:document.getElementById('lt-ordered').value,expected:document.getElementById('lt-expected').value,neededBy:document.getElementById('lt-needed').value,qty:document.getElementById('lt-qty').value.trim(),supplier:document.getElementById('lt-supplier').value.trim(),contact:document.getElementById('lt-contact').value.trim(),notes:document.getElementById('lt-notes').value.trim(),status:'Pending Order',ts:Date.now()});
+        save(d);['lt-project','lt-ordered','lt-expected','lt-needed','lt-qty','lt-supplier','lt-contact','lt-notes'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});render();
+    };
+    window._ltCycle=function(i){var d=load();var idx=STATUS_CYCLE.indexOf(d.items[i].status);d.items[i].status=STATUS_CYCLE[(idx+1)%STATUS_CYCLE.length];save(d);render();};
+    window._ltDel=function(i){var d=load();d.items.splice(i,1);save(d);render();};
+    window._ltCopy=function(){
+        var d=load();if(!d.items.length){alert('No items.');return;}
+        var lines=['MATERIAL PROCUREMENT REPORT','Date: '+new Date().toLocaleDateString(),''];
+        d.items.forEach(function(it){
+            var diff=daysDiff(it.neededBy);var flag=it.status==='Delivered'?'':(diff!==null&&diff<0?' *** LATE ***':diff!==null&&diff<=3?' *** URGENT ***':'');
+            lines.push('['+it.status+flag+'] '+it.material+(it.project?' — '+it.project:''));
+            if(it.supplier)lines.push('  Supplier: '+it.supplier+(it.contact?' ('+it.contact+')':''));
+            if(it.qty)lines.push('  Qty: '+it.qty);
+            if(it.ordered||it.expected||it.neededBy)lines.push('  Ordered: '+(it.ordered||'—')+' | Exp: '+(it.expected||'—')+' | Needed by: '+(it.neededBy||'—'));
+            if(it.notes)lines.push('  '+it.notes);lines.push('');
+        });
+        try{navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');}catch(e){alert(lines.join('\n'));}
+    };
+    window._ltPrint=function(){
+        var d=load();if(!d.items.length){alert('No items to print.');return;}
+        var late=d.items.filter(function(it){return it.status!=='Delivered'&&daysDiff(it.neededBy)<0;});
+        var html='<html><head><title>Material Procurement Log</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:1in;}h2{font-size:13pt;}table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:8.5pt;}th{background:#1e40af;color:white;padding:4px;}td{padding:3px 4px;border:1px solid #ccc;}.late{color:red;font-weight:700;}.delivered{color:green;font-weight:700;}.sign{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:20px;}.sign-box{border-bottom:1px solid #000;padding-top:30px;text-align:center;font-size:8.5pt;}.alert-box{border:1px solid red;padding:6px;margin-bottom:8px;font-size:9pt;}</style></head><body>';
+        html+='<h2>MATERIAL PROCUREMENT LOG</h2><div style="font-size:9pt;">Date: '+new Date().toLocaleDateString()+'</div><hr>';
+        if(late.length){html+='<div class="alert-box"><b>⚠ LATE DELIVERIES ('+late.length+'):</b><br>';late.forEach(function(it){html+=it.material+(it.project?' — '+it.project:'')+': '+Math.abs(daysDiff(it.neededBy))+'d past needed date ('+it.neededBy+')<br>';});html+='</div>';}
+        html+='<table><tr><th>Material</th><th>Project</th><th>Status</th><th>Supplier</th><th>Qty</th><th>Ordered</th><th>Exp Delivery</th><th>Needed By</th><th>Notes</th></tr>';
+        d.items.forEach(function(it){var diff=daysDiff(it.neededBy);var cls=it.status==='Delivered'?'delivered':(diff!==null&&diff<0?'late':'');html+='<tr><td>'+it.material+'</td><td>'+(it.project||'—')+'</td><td class="'+cls+'">'+it.status+'</td><td>'+(it.supplier||'—')+'</td><td>'+(it.qty||'—')+'</td><td>'+(it.ordered||'—')+'</td><td>'+(it.expected||'—')+'</td><td>'+(it.neededBy||'—')+'</td><td>'+(it.notes||'')+'</td></tr>';});
+        html+='</table><div class="sign"><div class="sign-box">PM / Date</div><div class="sign-box">Procurement / Date</div><div class="sign-box">Superintendent / Date</div></div></body></html>';
+        var w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'📦 Hide Material Lead Time Tracker':'📦 Material Lead Time Tracker';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ==================== TOOL 3: APPRENTICE RATIO COMPLIANCE LOG ==================== -->
+<script>
+(function(){
+    'use strict';
+    var STORE_KEY='oncor_apprentice_ratio';
+    var BTN_ID='btn-apprentice-ratio';
+    var WRAP_ID='wrap-apprentice-ratio';
+    function load(){try{return JSON.parse(localStorage.getItem(STORE_KEY))||{records:[],settings:{program:'',allowedRatio:3}};}catch(e){return{records:[],settings:{program:'',allowedRatio:3}};}}
+    function save(d){localStorage.setItem(STORE_KEY,JSON.stringify(d));}
+    var CLASSIFICATIONS=['Journeyman Laborer','Journeyman Carpenter','Journeyman Ironworker','Journeyman Operator','Journeyman Finisher','Apprentice (Year 1 – 50%)','Apprentice (Year 2 – 60%)','Apprentice (Year 3 – 70%)','Apprentice (Year 4 – 80%)','Foreman (1.15× JW rate)','Superintendent'];
+
+    function createButton(){
+        if(document.getElementById(BTN_ID))return;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;
+        btn.textContent='🎓 Apprentice Ratio Compliance Log';
+        btn.style.cssText='display:block;width:100%;margin:4px 0;padding:6px;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:6px;cursor:pointer;font-size:0.78rem;font-weight:600;text-align:left;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;
+        wrap.style.cssText='display:none;background:#0f172a;border:1px solid #3b82f6;border-radius:6px;padding:10px;margin-bottom:8px;font-size:0.76rem;color:#e2e8f0;';
+        var ref=document.getElementById('btn-lead-time-tracker');
+        if(ref&&ref.parentNode){ref.parentNode.insertBefore(wrap,ref.nextSibling);ref.parentNode.insertBefore(btn,wrap);}
+        else{document.body.appendChild(btn);document.body.appendChild(wrap);}
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var d=load();var s=d.settings;
+        var recentRecs=d.records.slice(-30);
+        var jwCount=recentRecs.filter(function(r){return r.isJW;}).reduce(function(acc,r){return acc+r.workers;},0);
+        var appCount=recentRecs.filter(function(r){return!r.isJW;}).reduce(function(acc,r){return acc+r.workers;},0);
+        var maxAllowed=Math.floor(jwCount/(parseInt(s.allowedRatio)||3));
+        var compliant=appCount<=maxAllowed;
+        var complianceBanner=(jwCount===0&&appCount===0)?'':compliant
+            ?'<div style="background:#052e16;border:1px solid #4ade80;border-radius:4px;padding:5px;margin-bottom:6px;font-size:0.71rem;color:#86efac;">✓ COMPLIANT — '+appCount+' apprentices vs '+maxAllowed+' max allowed (1:'+s.allowedRatio+' ratio, '+jwCount+' journeymen)</div>'
+            :'<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:4px;padding:5px;margin-bottom:6px;font-size:0.71rem;color:#fca5a5;">⚠ RATIO VIOLATION — '+appCount+' apprentices but only '+maxAllowed+' allowed ('+jwCount+' JW × 1:'+s.allowedRatio+'). Reduce apprentice headcount or add journeymen.</div>';
+        var wageViolations=d.records.filter(function(r){return!r.isJW&&r.prevWage>0&&r.actualPay>0&&r.actualPay<r.prevWage;});
+
+        wrap.innerHTML='<div style="font-weight:700;color:#93c5fd;font-size:0.85rem;margin-bottom:6px;">🎓 APPRENTICE RATIO COMPLIANCE LOG</div>'
+            +'<div style="font-size:0.7rem;color:#94a3b8;margin-bottom:8px;">DOL 29 CFR §5.5(a)(4) — Davis-Bacon apprenticeship ratio compliance. Tracks journeyman vs. apprentice headcount against approved program ratio. Required on federal/TxDOT/school district prevailing wage work. Violations = back wages + potential debarment.</div>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Program Settings</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px;">'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Registered Program</label><input id="ar-program" value="'+(s.program||'')+'" placeholder="e.g. ABC Texas, NCCER" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Max Ratio (JW:App)</label><select id="ar-ratio" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<option'+(s.allowedRatio==2?' selected':'')+'>2</option><option'+((!s.allowedRatio||s.allowedRatio==3)?' selected':'')+'>3</option><option'+(s.allowedRatio==4?' selected':'')+'>4</option><option'+(s.allowedRatio==5?' selected':'')+'>5</option>'
+            +'</select></div>'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Project / GC</label><input id="ar-project" value="'+(s.project||'')+'" placeholder="Active project" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'</div>'
+            +'<button onclick="window._arSaveSettings()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:0.72rem;margin-bottom:8px;">Save Settings</button>'
+            +complianceBanner
+            +(wageViolations.length?'<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:4px;padding:5px;margin-bottom:6px;font-size:0.71rem;color:#fca5a5;">⚠ WAGE VIOLATIONS ('+wageViolations.length+'): '+wageViolations.map(function(r){return r.date+' '+r.classification+' — actual $'+r.actualPay+' < PW $'+r.prevWage;}).join('; ')+'</div>':'')
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:8px;">'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:#4ade80;font-size:1.1rem;font-weight:700;">'+jwCount+'</div><div style="color:#94a3b8;font-size:0.65rem;">Journeymen</div></div>'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:#93c5fd;font-size:1.1rem;font-weight:700;">'+appCount+'</div><div style="color:#94a3b8;font-size:0.65rem;">Apprentices</div></div>'
+            +'<div style="background:#1e293b;border-radius:4px;padding:5px;text-align:center;"><div style="color:'+(compliant?'#4ade80':'#ef4444')+';font-size:1.1rem;font-weight:700;">'+(compliant?'✓':'✗')+'</div><div style="color:#94a3b8;font-size:0.65rem;">Ratio OK</div></div>'
+            +'</div>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Log Work Period</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Date</label><input id="ar-date" type="date" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Classification</label><select id="ar-class" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;">'+CLASSIFICATIONS.map(function(c){return'<option>'+c+'</option>';}).join('')+'</select></div>'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Workers (#)</label><input id="ar-workers" type="number" min="1" step="1" value="1" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'<div><label style="font-size:0.68rem;color:#94a3b8;">Hours Each</label><input id="ar-hours" type="number" min="0" step="0.5" value="8" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px;color:#f1f5f9;font-size:0.72rem;"></div>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">'
+            +'<input id="ar-prevwage" type="number" min="0" step="0.01" placeholder="Prevailing wage rate ($/hr)" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'<input id="ar-actualpay" type="number" min="0" step="0.01" placeholder="Actual pay rate ($/hr)" style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;">'
+            +'</div>'
+            +'<textarea id="ar-notes" placeholder="Notes / apprentice names / registration #s" rows="2" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px;color:#f1f5f9;font-size:0.72rem;margin-bottom:4px;resize:vertical;"></textarea>'
+            +'<button onclick="window._arAdd()" style="width:100%;background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:4px;padding:5px;cursor:pointer;font-size:0.75rem;font-weight:700;margin-bottom:8px;">+ Log Work Period</button>'
+            +'<div style="font-weight:700;color:#e2e8f0;margin-bottom:4px;">Payroll Log</div>'
+            +(d.records.length===0?'<div style="color:#64748b;font-size:0.72rem;">No entries yet.</div>'
+                :d.records.slice().reverse().map(function(rec,ri){
+                    var idx=d.records.length-1-ri;var isApp=!rec.isJW;
+                    var wv=isApp&&rec.prevWage>0&&rec.actualPay>0&&rec.actualPay<rec.prevWage;
+                    return'<div style="background:#1e293b;border-left:3px solid '+(isApp?'#93c5fd':'#4ade80')+';border-radius:4px;padding:5px 6px;margin-bottom:3px;">'
+                        +'<div style="display:flex;justify-content:space-between;">'
+                        +'<div><b style="color:#e2e8f0;font-size:0.72rem;">'+rec.classification+'</b>'+(wv?'<span style="background:#ef4444;color:#fff;font-size:0.62rem;border-radius:3px;padding:1px 4px;margin-left:4px;">WAGE VIOLATION</span>':'')+'</div>'
+                        +'<button onclick="window._arDel('+idx+')" style="background:#7f1d1d;border:none;color:#fff;border-radius:3px;padding:1px 5px;cursor:pointer;font-size:0.65rem;">✕</button>'
+                        +'</div>'
+                        +'<div style="font-size:0.68rem;color:#94a3b8;margin-top:2px;">'+(rec.date||'—')+' | '+rec.workers+' worker(s) × '+rec.hours+'h'+(rec.prevWage?' | PW $'+rec.prevWage+'/hr':'')+''+(rec.actualPay?' | Actual $'+rec.actualPay+'/hr':'')+'</div>'
+                        +(rec.notes?'<div style="font-size:0.67rem;color:#94a3b8;">'+rec.notes+'</div>':'')
+                        +'</div>';
+                }).join(''))
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;">'
+            +'<button onclick="window._arCopy()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">📋 Copy Compliance Report</button>'
+            +'<button onclick="window._arPrint()" style="background:#374151;border:none;color:#f1f5f9;border-radius:4px;padding:4px;cursor:pointer;font-size:0.72rem;">🖨 Print WH-347 Supplement</button></div>';
+    }
+
+    window._arSaveSettings=function(){var d=load();d.settings.program=document.getElementById('ar-program').value.trim();d.settings.allowedRatio=parseInt(document.getElementById('ar-ratio').value)||3;d.settings.project=document.getElementById('ar-project').value.trim();save(d);render();};
+    window._arAdd=function(){
+        var d=load();var cls=document.getElementById('ar-class').value;var isJW=cls.indexOf('Apprentice')===-1;
+        d.records.push({date:document.getElementById('ar-date').value,classification:cls,workers:parseInt(document.getElementById('ar-workers').value)||1,hours:parseFloat(document.getElementById('ar-hours').value)||8,prevWage:parseFloat(document.getElementById('ar-prevwage').value)||0,actualPay:parseFloat(document.getElementById('ar-actualpay').value)||0,isJW:isJW,notes:document.getElementById('ar-notes').value.trim(),ts:Date.now()});
+        save(d);['ar-date','ar-prevwage','ar-actualpay','ar-notes'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});render();
+    };
+    window._arDel=function(i){var d=load();d.records.splice(i,1);save(d);render();};
+    window._arCopy=function(){
+        var d=load();if(!d.records.length){alert('No records.');return;}
+        var lines=['APPRENTICE RATIO COMPLIANCE REPORT','Program: '+(d.settings.program||'—')+' | Ratio: 1 per '+d.settings.allowedRatio+' JW | Date: '+new Date().toLocaleDateString(),''];
+        d.records.forEach(function(r){lines.push(r.date+' | '+r.classification+' | '+r.workers+' × '+r.hours+'h'+(r.prevWage?' | PW $'+r.prevWage:'')+''+(r.actualPay?' | Actual $'+r.actualPay:''));if(r.notes)lines.push('  '+r.notes);});
+        try{navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');}catch(e){alert(lines.join('\n'));}
+    };
+    window._arPrint=function(){
+        var d=load();if(!d.records.length){alert('No records.');return;}
+        var wv=d.records.filter(function(r){return!r.isJW&&r.prevWage>0&&r.actualPay>0&&r.actualPay<r.prevWage;});
+        var html='<html><head><title>Apprentice Ratio Compliance</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:1in;}h2{font-size:13pt;}table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:8.5pt;}th{background:#1e40af;color:white;padding:4px;}td{padding:3px 4px;border:1px solid #ccc;}.violation{color:red;font-weight:700;}.jw{color:green;font-weight:700;}.sign{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:20px;}.sign-box{border-bottom:1px solid #000;padding-top:30px;text-align:center;font-size:8.5pt;}.alert-box{border:1px solid red;padding:6px;margin-bottom:8px;font-size:9pt;}</style></head><body>';
+        html+='<h2>APPRENTICE RATIO COMPLIANCE LOG</h2><div style="font-size:9pt;">DOL 29 CFR §5.5(a)(4) | Program: '+(d.settings.program||'—')+' | Ratio: 1:'+d.settings.allowedRatio+' | Project: '+(d.settings.project||'—')+' | '+new Date().toLocaleDateString()+'</div><hr>';
+        if(wv.length){html+='<div class="alert-box"><b>⚠ WAGE RATE VIOLATIONS ('+wv.length+'):</b><br>';wv.forEach(function(r){html+=r.date+' — '+r.classification+': Actual $'+r.actualPay+' < PW $'+r.prevWage+' (back wages: $'+((r.prevWage-r.actualPay)*r.workers*r.hours).toFixed(2)+')<br>';});html+='</div>';}
+        html+='<table><tr><th>Date</th><th>Classification</th><th>Workers</th><th>Hours</th><th>Total Hours</th><th>PW Rate</th><th>Actual Rate</th><th>Status</th><th>Notes</th></tr>';
+        d.records.forEach(function(r){var violation=!r.isJW&&r.prevWage>0&&r.actualPay>0&&r.actualPay<r.prevWage;html+='<tr><td>'+r.date+'</td><td>'+r.classification+'</td><td>'+r.workers+'</td><td>'+r.hours+'</td><td>'+(r.workers*r.hours).toFixed(1)+'</td><td>'+(r.prevWage?'$'+r.prevWage:'—')+'</td><td class="'+(violation?'violation':r.isJW?'jw':'')+'">'+(r.actualPay?'$'+r.actualPay:'—')+'</td><td>'+(violation?'⚠ VIOLATION':r.isJW?'Journeyman':'Apprentice')+'</td><td>'+(r.notes||'')+'</td></tr>';});
+        html+='</table><div style="font-size:8pt;color:#555;"><b>29 CFR §5.5(a)(4):</b> Apprentices may be employed at less than prevailing wage ONLY under a registered program at DOL-approved ratios. Using apprentices without registration = full journeyman wage owed for all hours. Violations reportable to DOL Wage & Hour Division.</div>';
+        html+='<div class="sign"><div class="sign-box">Payroll Coordinator / Date</div><div class="sign-box">PM / Date</div><div class="sign-box">GC Labor Compliance Officer / Date</div></div></body></html>';
+        var w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);var btn=document.getElementById(BTN_ID);
+        if(!wrap||!btn)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        btn.textContent=show?'🎓 Hide Apprentice Ratio Compliance Log':'🎓 Apprentice Ratio Compliance Log';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
