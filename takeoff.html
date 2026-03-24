@@ -39201,3 +39201,519 @@ Retain one (1) copy for your records. Return stamped copies as indicated above.
     if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
 })();
 </script>
+
+<!-- INSPECTION HOLD POINT TRACKER -->
+<script>
+(function(){
+    'use strict';
+    var STORE='oncor_hold_points';
+    var BTN_ID='holdPtBtn', WRAP_ID='holdPtWrap';
+    var CATEGORIES=['Pre-Pour','Reinforcement','Forming','Embedded Items','QC Testing','Curing','Structural','Other'];
+    var HOLD_TYPES=[
+        {code:'HOLD',label:'HOLD POINT',desc:'Work MUST STOP — inspector signature required before proceeding',color:'#dc2626',bg:'#fee2e2'},
+        {code:'WITNESS',label:'WITNESS POINT',desc:'Inspector invited — work may proceed if no response within notice period',color:'#d97706',bg:'#fef3c7'},
+        {code:'REVIEW',label:'REVIEW POINT',desc:'Documentation reviewed — no inspector presence required',color:'#2563eb',bg:'#eff6ff'},
+        {code:'INFO',label:'INFORMATION POINT',desc:'Notification only — for GC/owner awareness',color:'#059669',bg:'#f0fdf4'}
+    ];
+    var STATUS_CYCLE={SCHEDULED:'NOTIFIED',NOTIFIED:'INSPECTING',INSPECTING:'CLEARED',CLEARED:'CLEARED',WAIVED:'WAIVED'};
+
+    function load(){try{return JSON.parse(localStorage.getItem(STORE))||[];}catch(e){return[];}}
+    function save(d){localStorage.setItem(STORE,JSON.stringify(d));}
+
+    function getProject(){
+        var el=document.getElementById('projectName');
+        return (el&&el.value.trim())||'(Current Project)';
+    }
+
+    function createButton(){
+        var container=document.getElementById('actionButtons')||document.querySelector('.action-buttons')||document.body;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;btn.className='btn';
+        btn.textContent='Inspection Hold Points';
+        btn.style.cssText='background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;font-size:11px;padding:7px 12px;border:none;border-radius:6px;cursor:pointer;margin:3px;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;wrap.style.display='none';
+        wrap.style.cssText='background:#fff;color:#1f2937;border-radius:8px;padding:16px;margin:8px 0;font-family:sans-serif;';
+        container.appendChild(btn);
+        container.appendChild(wrap);
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var data=load();
+        var proj=getProject();
+        var projData=data.filter(function(d){return d.project===proj;});
+        var openHolds=projData.filter(function(d){return d.type==='HOLD'&&d.status!=='CLEARED'&&d.status!=='WAIVED';});
+        var today=new Date().toISOString().split('T')[0];
+
+        var holdsHtml='<div style="font-weight:700;font-size:15px;margin-bottom:10px;color:#dc2626;">🔴 Inspection Hold Point Tracker</div>';
+        holdsHtml+='<div style="font-size:11px;color:#6b7280;margin-bottom:12px;">ACI 301-16 §1.6 / ITP Compliance — Project: <strong>'+proj+'</strong></div>';
+
+        if(openHolds.length>0){
+            holdsHtml+='<div style="background:#fee2e2;border:2px solid #dc2626;border-radius:6px;padding:10px;margin-bottom:12px;">';
+            holdsHtml+='<div style="font-weight:700;font-size:12px;color:#991b1b;">⛔ '+openHolds.length+' OPEN HOLD POINT'+(openHolds.length>1?'S':'')+' — DO NOT PROCEED</div>';
+            openHolds.forEach(function(h){holdsHtml+='<div style="font-size:11px;color:#991b1b;margin-top:3px;">• '+h.item+' ('+h.category+') — '+h.status+'</div>';});
+            holdsHtml+='</div>';
+        } else if(projData.length>0){
+            holdsHtml+='<div style="background:#f0fdf4;border:2px solid #86efac;border-radius:6px;padding:8px;margin-bottom:12px;text-align:center;color:#16a34a;font-weight:600;">✅ ALL HOLD POINTS CLEARED — PROCEED</div>';
+        }
+
+        holdsHtml+='<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px;margin-bottom:14px;">';
+        holdsHtml+='<div style="font-weight:600;font-size:12px;margin-bottom:8px;">Add Inspection Point</div>';
+        holdsHtml+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+        holdsHtml+='<div><label style="font-size:10px;color:#6b7280;">Item / Description</label><input id="hp-item" style="width:100%;padding:5px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;" placeholder="e.g. Footing rebar inspect"></div>';
+        holdsHtml+='<div><label style="font-size:10px;color:#6b7280;">Category</label><select id="hp-cat" style="width:100%;padding:5px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">'+CATEGORIES.map(function(c){return'<option>'+c+'</option>';}).join('')+'</select></div>';
+        holdsHtml+='<div><label style="font-size:10px;color:#6b7280;">Hold Type</label><select id="hp-type" style="width:100%;padding:5px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">'+HOLD_TYPES.map(function(t){return'<option value="'+t.code+'">'+t.label+'</option>';}).join('')+'</select></div>';
+        holdsHtml+='<div><label style="font-size:10px;color:#6b7280;">Inspector / Agency</label><input id="hp-insp" style="width:100%;padding:5px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;" placeholder="e.g. Special Inspector"></div>';
+        holdsHtml+='<div><label style="font-size:10px;color:#6b7280;">Required Date</label><input id="hp-date" type="date" style="width:100%;padding:5px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;" value="'+today+'"></div>';
+        holdsHtml+='<div><label style="font-size:10px;color:#6b7280;">Spec/Code Reference</label><input id="hp-ref" style="width:100%;padding:5px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;" placeholder="e.g. ACI 301 §1.6"></div>';
+        holdsHtml+='</div>';
+        holdsHtml+='<div style="margin-bottom:8px;"><label style="font-size:10px;color:#6b7280;">Notes</label><textarea id="hp-notes" style="width:100%;padding:5px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;height:50px;" placeholder="Specific requirements"></textarea></div>';
+        holdsHtml+='<button onclick="window._holdPtAdd()" style="background:#dc2626;color:#fff;border:none;border-radius:4px;padding:7px 14px;font-size:12px;cursor:pointer;font-weight:600;">+ Add Hold/Witness Point</button>';
+        holdsHtml+='</div>';
+
+        holdsHtml+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px;">';
+        HOLD_TYPES.forEach(function(t){
+            holdsHtml+='<div style="background:'+t.bg+';border:1px solid '+t.color+';border-radius:4px;padding:6px;">';
+            holdsHtml+='<div style="font-weight:700;font-size:10px;color:'+t.color+';">'+t.label+'</div>';
+            holdsHtml+='<div style="font-size:9px;color:#4b5563;">'+t.desc+'</div>';
+            holdsHtml+='</div>';
+        });
+        holdsHtml+='</div>';
+
+        if(projData.length>0){
+            holdsHtml+='<div style="font-weight:600;font-size:12px;margin-bottom:6px;">Hold Point Log ('+projData.length+'):</div>';
+            holdsHtml+='<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+            holdsHtml+='<tr style="background:#f3f4f6;"><th style="padding:5px;text-align:left;">Item</th><th style="padding:5px;">Type</th><th style="padding:5px;">Date</th><th style="padding:5px;">Status</th><th style="padding:5px;">Act</th></tr>';
+            projData.forEach(function(h){
+                var ht=HOLD_TYPES.find(function(t){return t.code===h.type;})||HOLD_TYPES[0];
+                var statusColor=h.status==='CLEARED'?'#16a34a':h.status==='WAIVED'?'#6b7280':h.type==='HOLD'?'#dc2626':'#d97706';
+                holdsHtml+='<tr style="border-bottom:1px solid #f3f4f6;background:'+ht.bg+'20;">';
+                holdsHtml+='<td style="padding:5px;font-weight:600;">'+h.item+'<br><span style="font-size:9px;color:#6b7280;">'+h.inspector+'</span></td>';
+                holdsHtml+='<td style="padding:5px;"><span style="background:'+ht.bg+';color:'+ht.color+';padding:2px 5px;border-radius:3px;font-size:9px;font-weight:700;">'+h.type+'</span></td>';
+                holdsHtml+='<td style="padding:5px;font-size:10px;">'+h.date+'</td>';
+                holdsHtml+='<td style="padding:5px;"><span style="color:'+statusColor+';font-weight:700;font-size:10px;cursor:pointer;" onclick="window._holdPtStatus(\''+h.id+'\')">'+h.status+' ▶</span></td>';
+                holdsHtml+='<td style="padding:5px;text-align:center;"><button onclick="window._holdPtDel(\''+h.id+'\')" style="background:#dc2626;color:#fff;border:none;border-radius:3px;padding:2px 5px;font-size:9px;cursor:pointer;">✕</button></td>';
+                holdsHtml+='</tr>';
+            });
+            holdsHtml+='</table>';
+
+            var cleared=projData.filter(function(d){return d.status==='CLEARED';}).length;
+            var waived=projData.filter(function(d){return d.status==='WAIVED';}).length;
+            var open=projData.length-cleared-waived;
+            holdsHtml+='<div style="background:#f3f4f6;border-radius:6px;padding:10px;margin-top:10px;display:flex;gap:16px;align-items:center;">';
+            holdsHtml+='<div style="text-align:center;"><div style="font-size:18px;font-weight:700;">'+projData.length+'</div><div style="font-size:10px;color:#6b7280;">Total</div></div>';
+            holdsHtml+='<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#dc2626;">'+open+'</div><div style="font-size:10px;color:#6b7280;">Open</div></div>';
+            holdsHtml+='<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#16a34a;">'+cleared+'</div><div style="font-size:10px;color:#6b7280;">Cleared</div></div>';
+            holdsHtml+='<div style="margin-left:auto;"><button onclick="window._holdPtPrint()" style="background:#1e3a5f;color:#fff;border:none;border-radius:4px;padding:6px 10px;font-size:11px;cursor:pointer;">🖨 Print ITP</button></div>';
+            holdsHtml+='</div>';
+        }
+
+        wrap.innerHTML=holdsHtml;
+    }
+
+    window._holdPtAdd=function(){
+        var item=document.getElementById('hp-item').value.trim();
+        if(!item){alert('Enter item description');return;}
+        var data=load();
+        data.push({
+            id:Date.now().toString(),project:getProject(),item:item,
+            category:document.getElementById('hp-cat').value,
+            type:document.getElementById('hp-type').value,
+            inspector:document.getElementById('hp-insp').value.trim()||'TBD',
+            date:document.getElementById('hp-date').value,
+            specRef:document.getElementById('hp-ref').value.trim(),
+            notes:document.getElementById('hp-notes').value.trim(),
+            status:'SCHEDULED',addedAt:new Date().toISOString()
+        });
+        save(data);render();
+    };
+
+    window._holdPtStatus=function(id){
+        var data=load();
+        var idx=data.findIndex(function(d){return d.id===id;});
+        if(idx<0)return;
+        var cur=data[idx].status;
+        data[idx].status=STATUS_CYCLE[cur]||'CLEARED';
+        if(data[idx].status==='CLEARED')data[idx].clearedAt=new Date().toISOString();
+        save(data);render();
+    };
+
+    window._holdPtDel=function(id){
+        if(!confirm('Delete this hold point?'))return;
+        var data=load();
+        save(data.filter(function(d){return d.id!==id;}));
+        render();
+    };
+
+    window._holdPtPrint=function(){
+        var data=load();var proj=getProject();
+        var projData=data.filter(function(d){return d.project===proj;});
+        var openHolds=projData.filter(function(d){return d.type==='HOLD'&&d.status!=='CLEARED'&&d.status!=='WAIVED';});
+        var company=(document.getElementById('companyName')&&document.getElementById('companyName').value)||'Oncor Concrete';
+        var html='<!DOCTYPE html><html><head><title>ITP Hold Point Log</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{color:#dc2626;}table{width:100%;border-collapse:collapse;margin-bottom:12px;}th,td{border:1px solid #d1d5db;padding:6px;text-align:left;}th{background:#f3f4f6;}.stop{background:#fee2e2;border:2px solid #dc2626;padding:10px;margin-bottom:12px;}.sig{border:1px solid #9ca3af;padding:8px;min-width:180px;display:inline-block;text-align:center;}</style></head><body>';
+        html+='<h2>INSPECTION & TEST PLAN (ITP) — HOLD POINT LOG</h2>';
+        html+='<p>ACI 301-16 §1.6 / Special Inspection Program</p>';
+        html+='<table style="margin-bottom:10px;"><tr><td><strong>Company:</strong> '+company+'</td><td><strong>Project:</strong> '+proj+'</td><td><strong>Date:</strong> '+new Date().toLocaleDateString()+'</td></tr></table>';
+        if(openHolds.length>0){
+            html+='<div class="stop"><strong>⛔ WORK STOP — '+openHolds.length+' OPEN HOLD POINT(S)</strong><br>';
+            openHolds.forEach(function(h){html+='• '+h.item+'<br>';});
+            html+='DO NOT PROCEED without inspector clearance.</div>';
+        }
+        html+='<table><tr><th>#</th><th>Item</th><th>Type</th><th>Category</th><th>Inspector</th><th>Date</th><th>Ref</th><th>Status</th></tr>';
+        projData.forEach(function(h,i){
+            html+='<tr><td>'+(i+1)+'</td><td><strong>'+h.item+'</strong></td><td>'+h.type+'</td><td>'+h.category+'</td><td>'+h.inspector+'</td><td>'+h.date+'</td><td>'+h.specRef+'</td><td>'+h.status+'</td></tr>';
+        });
+        html+='</table>';
+        html+='<div style="display:flex;gap:20px;margin-top:14px;">';
+        ['Contractor PM','Special Inspector','GC Superintendent'].forEach(function(r){html+='<div><div class="sig">'+r+'</div><div style="font-size:9px;text-align:center;">Signature / Date</div></div>';});
+        html+='</div></body></html>';
+        var w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        document.getElementById(BTN_ID).textContent=show?'Hide Hold Points':'Inspection Hold Points';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- PROJECT FINANCIAL SNAPSHOT DASHBOARD -->
+<script>
+(function(){
+    'use strict';
+    var BTN_ID='finSnapBtn', WRAP_ID='finSnapWrap';
+
+    function createButton(){
+        var container=document.getElementById('actionButtons')||document.querySelector('.action-buttons')||document.body;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;btn.className='btn';
+        btn.textContent='Financial Snapshot';
+        btn.style.cssText='background:linear-gradient(135deg,#059669,#047857);color:#fff;font-size:11px;padding:7px 12px;border:none;border-radius:6px;cursor:pointer;margin:3px;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;wrap.style.display='none';
+        wrap.style.cssText='background:#fff;color:#1f2937;border-radius:8px;padding:16px;margin:8px 0;font-family:sans-serif;';
+        container.appendChild(btn);
+        container.appendChild(wrap);
+    }
+
+    function safeNum(s){var n=parseFloat(String(s||'').replace(/[$,]/g,''));return isNaN(n)?0:n;}
+    function fmt(n){return n<0?'-$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}):'$'+n.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});}
+
+    function gatherData(){
+        var proj=(document.getElementById('projectName')&&document.getElementById('projectName').value.trim())||'(Current Project)';
+        var client=(document.getElementById('clientName')&&document.getElementById('clientName').value.trim())||'';
+        var contractVal=0;
+        var grandEl=document.getElementById('grandTotal')||document.querySelector('.grand-total-value');
+        if(grandEl)contractVal=safeNum(grandEl.textContent);
+        var coApproved=0,coPending=0;
+        try{
+            var coData=JSON.parse(localStorage.getItem('oncor_co_estimator_'+proj)||'{}');
+            (coData.cos||[]).forEach(function(c){
+                var amt=safeNum(c.total||c.amount||0);
+                if(c.status==='Approved')coApproved+=amt;
+                else if(c.status==='Pending'||c.status==='Submitted')coPending+=amt;
+            });
+        }catch(e){}
+        var revisedContract=contractVal+coApproved;
+        var totalBilled=0,retainageHeld=0,netPaid=0;
+        try{
+            var payApps=JSON.parse(localStorage.getItem('oncor_pay_apps_'+proj)||localStorage.getItem('oncor_pay_apps')||'{}');
+            (payApps.applications||[]).forEach(function(a){
+                totalBilled+=safeNum(a.netDue||a.amount||0);
+                retainageHeld+=safeNum(a.retainage||0);
+                if(a.paid)netPaid+=safeNum(a.netDue||a.amount||0);
+            });
+        }catch(e){}
+        var actualCosts=0;
+        try{
+            var costLedger=JSON.parse(localStorage.getItem('oncor_prod_cost_'+proj)||'[]');
+            costLedger.forEach(function(e){actualCosts+=safeNum(e.amount||0);});
+        }catch(e){}
+        try{
+            var dailyCosts=JSON.parse(localStorage.getItem('oncor_daily_cost_'+proj)||'[]');
+            dailyCosts.forEach(function(e){actualCosts+=safeNum(e.amount||0);});
+        }catch(e){}
+        return{proj:proj,client:client,contractVal:contractVal,coApproved:coApproved,coPending:coPending,revisedContract:revisedContract,totalBilled:totalBilled,retainageHeld:retainageHeld,netPaid:netPaid,actualCosts:actualCosts};
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var d=gatherData();
+        var unbilledBalance=d.revisedContract-d.totalBilled;
+        var grossProfit=d.revisedContract-d.actualCosts;
+        var grossMargin=d.revisedContract>0?grossProfit/d.revisedContract*100:0;
+        var billedPct=d.revisedContract>0?d.totalBilled/d.revisedContract*100:0;
+        var costPct=d.revisedContract>0?d.actualCosts/d.revisedContract*100:0;
+        var marginColor=grossMargin>=15?'#16a34a':grossMargin>=8?'#d97706':'#dc2626';
+
+        var html='<div style="font-weight:700;font-size:15px;margin-bottom:4px;color:#059669;">💰 Project Financial Snapshot</div>';
+        html+='<div style="font-size:11px;color:#6b7280;margin-bottom:14px;">'+d.proj+(d.client?' — '+d.client:'')+'</div>';
+
+        html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">';
+        function card(label,val,color,sub){
+            return '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:10px;text-align:center;">'
+                +'<div style="font-size:18px;font-weight:700;color:'+(color||'#1f2937')+';">'+fmt(val)+'</div>'
+                +'<div style="font-size:10px;color:#6b7280;">'+label+'</div>'
+                +(sub?'<div style="font-size:9px;color:#9ca3af;">'+sub+'</div>':'')+'</div>';
+        }
+        html+=card('Original Contract',d.contractVal,'#1e3a5f','Bid total');
+        html+=card('Approved COs',d.coApproved,'#059669',d.coPending>0?fmt(d.coPending)+' pending':'');
+        html+=card('Revised Contract',d.revisedContract,'#1f2937','Contract + COs');
+        html+=card('Unbilled Balance',unbilledBalance,unbilledBalance<0?'#dc2626':'#1f2937','');
+        html+='</div>';
+
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">';
+        html+='<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px;">';
+        html+='<div style="font-weight:600;font-size:12px;margin-bottom:8px;">Billing & Collections</div>';
+        html+='<table style="width:100%;font-size:11px;">';
+        html+='<tr><td>Total Billed</td><td style="text-align:right;font-weight:600;">'+fmt(d.totalBilled)+'</td></tr>';
+        html+='<tr><td>Retainage Held</td><td style="text-align:right;font-weight:600;color:#dc2626;">('+fmt(d.retainageHeld)+')</td></tr>';
+        html+='<tr><td>Net Collected</td><td style="text-align:right;font-weight:600;color:#16a34a;">'+fmt(d.netPaid)+'</td></tr>';
+        html+='</table>';
+        var billedBarW=Math.min(100,billedPct);
+        html+='<div style="background:#e5e7eb;border-radius:4px;height:8px;margin-top:6px;"><div style="background:#2563eb;border-radius:4px;height:8px;width:'+billedBarW+'%;"></div></div>';
+        html+='<div style="font-size:9px;color:#6b7280;margin-top:2px;">'+billedPct.toFixed(1)+'% billed</div>';
+        html+='</div>';
+
+        html+='<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px;">';
+        html+='<div style="font-weight:600;font-size:12px;margin-bottom:8px;">Cost & Margin</div>';
+        html+='<table style="width:100%;font-size:11px;">';
+        html+='<tr><td>Actual Costs</td><td style="text-align:right;font-weight:600;">'+fmt(d.actualCosts)+'</td></tr>';
+        html+='<tr style="border-top:1px solid #e5e7eb;"><td>Gross Profit</td><td style="text-align:right;font-weight:700;color:'+marginColor+';">'+fmt(grossProfit)+'</td></tr>';
+        html+='<tr><td>Gross Margin</td><td style="text-align:right;font-weight:700;color:'+marginColor+';">'+grossMargin.toFixed(1)+'%</td></tr>';
+        html+='</table>';
+        var costBarW=Math.min(100,costPct);
+        html+='<div style="background:#e5e7eb;border-radius:4px;height:8px;margin-top:6px;"><div style="background:'+marginColor+';border-radius:4px;height:8px;width:'+costBarW+'%;"></div></div>';
+        html+='<div style="font-size:9px;color:#6b7280;margin-top:2px;">'+costPct.toFixed(1)+'% cost incurred</div>';
+        html+='</div>';
+        html+='</div>';
+
+        if(d.contractVal===0&&d.actualCosts===0){
+            html+='<div style="background:#f3f4f6;border-radius:6px;padding:12px;margin-bottom:10px;font-size:11px;color:#6b7280;text-align:center;">';
+            html+='No financial data found yet. Recalculate your bid and log cost entries to see data here.';
+            html+='</div>';
+        }
+
+        html+='<div style="display:flex;gap:6px;">';
+        html+='<button onclick="window._finSnapPrint()" style="background:#1e3a5f;color:#fff;border:none;border-radius:4px;padding:7px 12px;font-size:11px;cursor:pointer;">🖨 Print Report</button>';
+        html+='<button onclick="window._finSnapCopy()" style="background:#374151;color:#fff;border:none;border-radius:4px;padding:7px 12px;font-size:11px;cursor:pointer;">📋 Copy</button>';
+        html+='</div>';
+
+        wrap.innerHTML=html;
+    }
+
+    window._finSnapCopy=function(){
+        var d=gatherData();
+        var grossProfit=d.revisedContract-d.actualCosts;
+        var grossMargin=d.revisedContract>0?(grossProfit/d.revisedContract*100).toFixed(1):0;
+        var lines=['PROJECT FINANCIAL SNAPSHOT','Project: '+d.proj,'Date: '+new Date().toLocaleDateString(),'','Original Contract: '+fmt(d.contractVal),'Approved COs: '+fmt(d.coApproved),'Revised Contract: '+fmt(d.revisedContract),'','Total Billed: '+fmt(d.totalBilled),'Retainage Held: ('+fmt(d.retainageHeld)+')','Net Collected: '+fmt(d.netPaid),'','Actual Costs: '+fmt(d.actualCosts),'Gross Profit: '+fmt(grossProfit),'Gross Margin: '+grossMargin+'%'];
+        navigator.clipboard.writeText(lines.join('\n')).catch(function(){});
+        var b=document.getElementById(BTN_ID);if(b){b.textContent='✅ Copied!';setTimeout(function(){b.textContent='Financial Snapshot';},2000);}
+    };
+
+    window._finSnapPrint=function(){
+        var d=gatherData();
+        var grossProfit=d.revisedContract-d.actualCosts;
+        var grossMargin=d.revisedContract>0?(grossProfit/d.revisedContract*100).toFixed(1):0;
+        var marginColor=grossMargin>=15?'#16a34a':grossMargin>=8?'#d97706':'#dc2626';
+        var company=(document.getElementById('companyName')&&document.getElementById('companyName').value)||'Oncor Concrete';
+        var html='<!DOCTYPE html><html><head><title>Financial Snapshot</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{color:#059669;}table{width:100%;border-collapse:collapse;margin-bottom:12px;}th,td{border:1px solid #d1d5db;padding:6px;text-align:left;}th{background:#f3f4f6;}.sig{border:1px solid #9ca3af;padding:8px;min-width:180px;display:inline-block;text-align:center;}</style></head><body>';
+        html+='<h2>💰 PROJECT FINANCIAL SNAPSHOT</h2>';
+        html+='<table><tr><td><strong>Company:</strong> '+company+'</td><td><strong>Project:</strong> '+d.proj+'</td><td><strong>Date:</strong> '+new Date().toLocaleDateString()+'</td></tr></table>';
+        html+='<h3>Contract Summary</h3><table><tr><th>Item</th><th>Amount</th></tr>';
+        html+='<tr><td>Original Contract</td><td>'+fmt(d.contractVal)+'</td></tr>';
+        html+='<tr><td>Approved Change Orders</td><td>'+fmt(d.coApproved)+'</td></tr>';
+        html+='<tr><td>Pending Change Orders</td><td>'+fmt(d.coPending)+'</td></tr>';
+        html+='<tr style="background:#eff6ff;"><td><strong>Revised Contract</strong></td><td><strong>'+fmt(d.revisedContract)+'</strong></td></tr></table>';
+        html+='<h3>Billing & Collections</h3><table><tr><th>Item</th><th>Amount</th></tr>';
+        html+='<tr><td>Total Billed</td><td>'+fmt(d.totalBilled)+'</td></tr>';
+        html+='<tr><td>Retainage Held</td><td>('+fmt(d.retainageHeld)+')</td></tr>';
+        html+='<tr><td>Net Paid</td><td>'+fmt(d.netPaid)+'</td></tr></table>';
+        html+='<h3>Cost & Profitability</h3><table><tr><th>Item</th><th>Amount</th></tr>';
+        html+='<tr><td>Actual Costs</td><td>'+fmt(d.actualCosts)+'</td></tr>';
+        html+='<tr style="background:#f0fdf4;"><td><strong>Gross Profit</strong></td><td style="color:'+marginColor+';font-weight:700;">'+fmt(grossProfit)+' ('+grossMargin+'%)</td></tr></table>';
+        html+='<div style="display:flex;gap:20px;margin-top:14px;">';
+        ['Project Manager','Principal','Controller'].forEach(function(r){html+='<div><div class="sig">'+r+'</div><div style="font-size:9px;text-align:center;">Signature / Date</div></div>';});
+        html+='</div></body></html>';
+        var w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        document.getElementById(BTN_ID).textContent=show?'Hide Financial':'Financial Snapshot';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- BAG MIX & SMALL BATCH CALCULATOR -->
+<script>
+(function(){
+    'use strict';
+    var BTN_ID='bagCalcBtn', WRAP_ID='bagCalcWrap';
+    var BAG_MIXES=[
+        {name:'Quikrete 5000 (50lb)',bpcy:60,psi:5000,waterQt:2.5,note:'5000 PSI structural'},
+        {name:'Quikrete Fast-Set (50lb)',bpcy:60,psi:4000,waterQt:2.25,note:'Sets 20-40 min'},
+        {name:'Sakrete 5000 Plus (80lb)',bpcy:45,psi:5000,waterQt:4.0,note:'High strength'},
+        {name:'Standard 3000 PSI (80lb)',bpcy:45,psi:3000,waterQt:4.0,note:'General purpose'},
+        {name:'Standard 3000 PSI (60lb)',bpcy:60,psi:3000,waterQt:3.0,note:'Smaller bags'},
+        {name:'Post Mix Dry (50lb)',bpcy:72,psi:4000,waterQt:0,note:'Fence posts, no pre-mix'}
+    ];
+
+    function createButton(){
+        var container=document.getElementById('actionButtons')||document.querySelector('.action-buttons')||document.body;
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;btn.className='btn';
+        btn.textContent='Bag Mix Calculator';
+        btn.style.cssText='background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;font-size:11px;padding:7px 12px;border:none;border-radius:6px;cursor:pointer;margin:3px;';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;wrap.style.display='none';
+        wrap.style.cssText='background:#fff;color:#1f2937;border-radius:8px;padding:16px;margin:8px 0;font-family:sans-serif;';
+        container.appendChild(btn);
+        container.appendChild(wrap);
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var html='<div style="font-weight:700;font-size:15px;margin-bottom:4px;color:#7c3aed;">🧱 Bag Mix & Small Batch Calculator</div>';
+        html+='<div style="font-size:11px;color:#6b7280;margin-bottom:14px;">Small pours, patch work, footings, post holes — no ready-mix truck needed.</div>';
+
+        html+='<div style="background:#f5f3ff;border:1px solid #c4b5fd;border-radius:6px;padding:12px;margin-bottom:14px;">';
+        html+='<div style="font-weight:600;font-size:12px;margin-bottom:8px;">Calculate Bag Quantity</div>';
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">';
+        html+='<div><label style="font-size:10px;color:#6b7280;">Volume (CF)</label><input id="bc-cf" type="number" step="0.1" style="width:100%;padding:5px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;" placeholder="e.g. 13.5" onchange="window._bagCalc()"></div>';
+        html+='<div><label style="font-size:10px;color:#6b7280;">Volume (yd³)</label><input id="bc-cy" type="number" step="0.01" style="width:100%;padding:5px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;" placeholder="e.g. 0.5" onchange="window._bagCalc()"></div>';
+        html+='<div><label style="font-size:10px;color:#6b7280;">Bag Mix Product</label><select id="bc-mix" style="width:100%;padding:5px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;" onchange="window._bagCalc()">';
+        BAG_MIXES.forEach(function(m,i){html+='<option value="'+i+'">'+m.name+'</option>';});
+        html+='</select></div>';
+        html+='</div>';
+        html+='<div id="bc-result" style="background:#ede9fe;border:1px solid #c4b5fd;border-radius:6px;padding:10px;font-size:12px;min-height:50px;">Enter volume above</div>';
+        html+='</div>';
+
+        html+='<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px;margin-bottom:14px;">';
+        html+='<div style="font-weight:600;font-size:12px;margin-bottom:8px;">Quick Volume Calculators</div>';
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
+
+        html+='<div style="border:1px solid #e5e7eb;border-radius:6px;padding:8px;">';
+        html+='<div style="font-size:11px;font-weight:600;margin-bottom:6px;">Slab / Pad</div>';
+        html+='<div style="display:flex;gap:4px;margin-bottom:4px;">';
+        html+='<div style="flex:1;"><label style="font-size:9px;">L (ft)</label><input id="sl-l" type="number" step="0.5" style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:3px;font-size:11px;" onchange="window._slabCalc()"></div>';
+        html+='<div style="flex:1;"><label style="font-size:9px;">W (ft)</label><input id="sl-w" type="number" step="0.5" style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:3px;font-size:11px;" onchange="window._slabCalc()"></div>';
+        html+='<div style="flex:1;"><label style="font-size:9px;">T (in)</label><input id="sl-t" type="number" step="0.5" value="4" style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:3px;font-size:11px;" onchange="window._slabCalc()"></div>';
+        html+='</div><div id="sl-res" style="font-size:11px;color:#7c3aed;font-weight:600;"></div></div>';
+
+        html+='<div style="border:1px solid #e5e7eb;border-radius:6px;padding:8px;">';
+        html+='<div style="font-size:11px;font-weight:600;margin-bottom:6px;">Post Holes (round)</div>';
+        html+='<div style="display:flex;gap:4px;margin-bottom:4px;">';
+        html+='<div style="flex:1;"><label style="font-size:9px;">Dia (in)</label><input id="ph-d" type="number" step="1" value="10" style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:3px;font-size:11px;" onchange="window._postCalc()"></div>';
+        html+='<div style="flex:1;"><label style="font-size:9px;">Depth (ft)</label><input id="ph-h" type="number" step="0.5" value="4" style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:3px;font-size:11px;" onchange="window._postCalc()"></div>';
+        html+='<div style="flex:1;"><label style="font-size:9px;">Count</label><input id="ph-n" type="number" step="1" value="1" style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:3px;font-size:11px;" onchange="window._postCalc()"></div>';
+        html+='</div><div id="ph-res" style="font-size:11px;color:#7c3aed;font-weight:600;"></div></div>';
+
+        html+='<div style="border:1px solid #e5e7eb;border-radius:6px;padding:8px;">';
+        html+='<div style="font-size:11px;font-weight:600;margin-bottom:6px;">Footing / Beam</div>';
+        html+='<div style="display:flex;gap:4px;margin-bottom:4px;">';
+        html+='<div style="flex:1;"><label style="font-size:9px;">L (ft)</label><input id="ft-l" type="number" step="0.5" style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:3px;font-size:11px;" onchange="window._ftgCalc()"></div>';
+        html+='<div style="flex:1;"><label style="font-size:9px;">W (in)</label><input id="ft-w" type="number" step="1" value="12" style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:3px;font-size:11px;" onchange="window._ftgCalc()"></div>';
+        html+='<div style="flex:1;"><label style="font-size:9px;">D (in)</label><input id="ft-d" type="number" step="1" value="12" style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:3px;font-size:11px;" onchange="window._ftgCalc()"></div>';
+        html+='</div><div id="ft-res" style="font-size:11px;color:#7c3aed;font-weight:600;"></div></div>';
+
+        html+='<div style="border:1px solid #e5e7eb;border-radius:6px;padding:8px;">';
+        html+='<div style="font-size:11px;font-weight:600;margin-bottom:6px;">Column / Pier (round)</div>';
+        html+='<div style="display:flex;gap:4px;margin-bottom:4px;">';
+        html+='<div style="flex:1;"><label style="font-size:9px;">Dia (in)</label><input id="co-d" type="number" step="1" value="12" style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:3px;font-size:11px;" onchange="window._colCalc()"></div>';
+        html+='<div style="flex:1;"><label style="font-size:9px;">H (ft)</label><input id="co-h" type="number" step="0.5" value="8" style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:3px;font-size:11px;" onchange="window._colCalc()"></div>';
+        html+='<div style="flex:1;"><label style="font-size:9px;">Count</label><input id="co-n" type="number" step="1" value="1" style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:3px;font-size:11px;" onchange="window._colCalc()"></div>';
+        html+='</div><div id="co-res" style="font-size:11px;color:#7c3aed;font-weight:600;"></div></div>';
+
+        html+='</div></div>';
+
+        html+='<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:8px;font-size:11px;">';
+        html+='<strong>💡 Ready-mix vs bag:</strong> Ready-mix is cheaper above ~1.5 yd³ (min 1 yd³ ≈$225 delivered). Bag mix ~$510/yd³ but no scheduling.';
+        html+='</div>';
+
+        wrap.innerHTML=html;
+    }
+
+    window._bagCalc=function(){
+        var cf=parseFloat(document.getElementById('bc-cf').value)||0;
+        var cy=parseFloat(document.getElementById('bc-cy').value)||0;
+        var mixIdx=parseInt(document.getElementById('bc-mix').value)||0;
+        var mix=BAG_MIXES[mixIdx];
+        var res=document.getElementById('bc-result');if(!res)return;
+        if(cf>0&&cy===0)cy=cf/27;
+        if(cy>0&&cf===0)cf=cy*27;
+        if(cy<=0){res.innerHTML='Enter volume above';return;}
+        var exactBags=cy*mix.bpcy;
+        var wasteBags=Math.ceil(exactBags*1.10);
+        var waterGal=mix.waterQt>0?(exactBags*mix.waterQt/4).toFixed(1):null;
+        res.innerHTML='<div style="display:flex;gap:12px;align-items:center;">';
+        res.innerHTML+='<div style="text-align:center;"><div style="font-size:22px;font-weight:700;color:#7c3aed;">'+wasteBags+'</div><div style="font-size:10px;color:#6b7280;">bags (+10% waste)</div></div>';
+        res.innerHTML+='<div style="text-align:center;"><div style="font-size:16px;font-weight:600;">'+cy.toFixed(2)+'</div><div style="font-size:10px;color:#6b7280;">yd³</div></div>';
+        res.innerHTML+='<div style="text-align:center;"><div style="font-size:16px;font-weight:600;">'+cf.toFixed(1)+'</div><div style="font-size:10px;color:#6b7280;">CF</div></div>';
+        if(waterGal)res.innerHTML+='<div style="font-size:11px;">💧 ~'+waterGal+' gal water</div>';
+        res.innerHTML+='<div style="font-size:10px;color:#6b7280;">'+mix.note+'</div>';
+        res.innerHTML+='</div>';
+    };
+
+    window._slabCalc=function(){
+        var l=parseFloat(document.getElementById('sl-l').value)||0;
+        var w=parseFloat(document.getElementById('sl-w').value)||0;
+        var t=parseFloat(document.getElementById('sl-t').value)||4;
+        var r=document.getElementById('sl-res');if(!r)return;
+        if(!l||!w){r.textContent='';return;}
+        var cf=l*w*(t/12);var cy=cf/27;
+        r.innerHTML=cf.toFixed(2)+' CF = '+cy.toFixed(3)+' yd³ <button onclick="window._bagFillFrom('+cy.toFixed(3)+')" style="font-size:9px;background:#7c3aed;color:#fff;border:none;border-radius:3px;padding:2px 5px;cursor:pointer;margin-left:4px;">Use</button>';
+    };
+    window._ftgCalc=function(){
+        var l=parseFloat(document.getElementById('ft-l').value)||0;
+        var w=parseFloat(document.getElementById('ft-w').value)||12;
+        var d=parseFloat(document.getElementById('ft-d').value)||12;
+        var r=document.getElementById('ft-res');if(!r)return;
+        if(!l){r.textContent='';return;}
+        var cf=l*(w/12)*(d/12);var cy=cf/27;
+        r.innerHTML=cf.toFixed(2)+' CF = '+cy.toFixed(3)+' yd³ <button onclick="window._bagFillFrom('+cy.toFixed(3)+')" style="font-size:9px;background:#7c3aed;color:#fff;border:none;border-radius:3px;padding:2px 5px;cursor:pointer;margin-left:4px;">Use</button>';
+    };
+    window._postCalc=function(){
+        var d=parseFloat(document.getElementById('ph-d').value)||10;
+        var h=parseFloat(document.getElementById('ph-h').value)||4;
+        var n=parseFloat(document.getElementById('ph-n').value)||1;
+        var r=document.getElementById('ph-res');if(!r)return;
+        var r_ft=d/24;var cf=Math.PI*r_ft*r_ft*h*n;var cy=cf/27;
+        r.innerHTML=cf.toFixed(2)+' CF = '+cy.toFixed(3)+' yd³ <button onclick="window._bagFillFrom('+cy.toFixed(3)+')" style="font-size:9px;background:#7c3aed;color:#fff;border:none;border-radius:3px;padding:2px 5px;cursor:pointer;margin-left:4px;">Use</button>';
+    };
+    window._colCalc=function(){
+        var d=parseFloat(document.getElementById('co-d').value)||12;
+        var h=parseFloat(document.getElementById('co-h').value)||8;
+        var n=parseFloat(document.getElementById('co-n').value)||1;
+        var r=document.getElementById('co-res');if(!r)return;
+        var r_ft=d/24;var cf=Math.PI*r_ft*r_ft*h*n;var cy=cf/27;
+        r.innerHTML=cf.toFixed(2)+' CF = '+cy.toFixed(3)+' yd³ <button onclick="window._bagFillFrom('+cy.toFixed(3)+')" style="font-size:9px;background:#7c3aed;color:#fff;border:none;border-radius:3px;padding:2px 5px;cursor:pointer;margin-left:4px;">Use</button>';
+    };
+    window._bagFillFrom=function(cy){
+        var el=document.getElementById('bc-cy');if(!el)return;
+        el.value=cy;document.getElementById('bc-cf').value='';
+        window._bagCalc();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        document.getElementById(BTN_ID).textContent=show?'Hide Bag Calc':'Bag Mix Calculator';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
