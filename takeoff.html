@@ -30181,3 +30181,612 @@ Retain one (1) copy for your records. Return stamped copies as indicated above.
     })();
     </script>
 
+
+    <!-- TOOL: Formwork Stripping Log -->
+    <script>
+    (function(){
+        var BTN_ID='fsl-btn', WRAP_ID='fsl-wrap', KEY='fsl_entries';
+        function load(){try{return JSON.parse(localStorage.getItem(KEY))||[];}catch(e){return[];}}
+        function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+
+        var ACI_MINS = {
+            'Slab / Form Soffit': {h:168,pct:75,note:'ACI 347R §3.3 — 7 days typical'},
+            'Beam / Girder Soffit (w/ reshoring)': {h:336,pct:85,note:'ACI 347R §3.3 — 14 days w/ reshoring'},
+            'Wall (CIP)': {h:24,pct:65,note:'ACI 347R §3.3 — 24h minimum'},
+            'Column': {h:24,pct:70,note:'ACI 347R §3.3 — 24h minimum'},
+            'Footing / Grade Beam': {h:12,pct:60,note:'ACI 347R §3.3 — 12h minimum'},
+            'Elevated Deck': {h:336,pct:85,note:'ACI 347R §3.3 — 14 days min per §3.4'},
+            'Custom': {h:0,pct:65,note:'Engineer-specified stripping criteria'}
+        };
+
+        function render(){
+            var wrap=document.getElementById(WRAP_ID); if(!wrap) return;
+            var entries=load();
+            var aci=ACI_MINS;
+            var html='<div style="font-size:11px;font-weight:700;color:#93c5fd;margin-bottom:8px;">🏗️ Formwork Stripping Log — ACI 347R</div>';
+            // dashboard
+            var now=Date.now();
+            var cleared=entries.filter(function(e){return e.stripped;}).length;
+            var pending=entries.filter(function(e){return !e.stripped;}).length;
+            var overdue=entries.filter(function(e){
+                if(e.stripped) return false;
+                var unlock=new Date(e.pourTime).getTime()+e.minHours*3600000;
+                return unlock<=now;
+            }).length;
+            html+='<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">'
+                +'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:6px 10px;font-size:10px;"><span style="color:#86efac;">'+cleared+'</span> Stripped</div>'
+                +'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:6px 10px;font-size:10px;"><span style="color:#fbbf24;">'+pending+'</span> Pending</div>'
+                +'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:6px 10px;font-size:10px;"><span style="color:#f87171;">'+overdue+'</span> Ready to Strip</div>'
+                +'</div>';
+            if(overdue>0){
+                html+='<div style="background:#450a0a;border:1px solid #ef4444;border-radius:4px;padding:8px;font-size:10px;color:#fca5a5;margin-bottom:8px;font-weight:600;">⚠️ '+overdue+' element(s) have met minimum cure time — stripping may proceed with PM/engineer approval.</div>';
+            }
+            // add form
+            var elTypes=Object.keys(aci);
+            html+='<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:8px;margin-bottom:10px;">'
+                +'<div style="font-size:10px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">Log New Form Element</div>'
+                +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
+                +'<input id="fsl-elem" placeholder="Element / Mark (e.g. W-3)" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +'<select id="fsl-type" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +elTypes.map(function(t){return '<option value="'+t+'">'+t+'</option>';}).join('')
+                +'</select>'
+                +'<input id="fsl-pour" type="datetime-local" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;" title="Pour date/time">'
+                +'<input id="fsl-minH" type="number" placeholder="Override min hours (0=ACI default)" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +'<input id="fsl-psi" type="number" placeholder="Design f\'c (PSI)" value="4000" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +'<input id="fsl-temp" type="number" placeholder="Avg cure temp °F" value="70" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +'</div>'
+                +'<input id="fsl-notes" placeholder="Notes / special conditions" style="width:100%;box-sizing:border-box;padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;margin-top:6px;">'
+                +'<button onclick="window._fslAdd()" style="margin-top:6px;padding:5px 12px;background:#0c4a6e;color:#7dd3fc;border:1px solid #0ea5e9;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;">+ Add Element</button>'
+                +'</div>';
+            // entries
+            if(entries.length){
+                html+='<div style="font-size:10px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">Elements ('+entries.length+')</div>';
+                entries.forEach(function(e,i){
+                    var pourMs=new Date(e.pourTime).getTime();
+                    var unlockMs=pourMs+e.minHours*3600000;
+                    var unlockDt=new Date(unlockMs);
+                    var msSince=now-pourMs;
+                    var hoursIn=Math.max(0,msSince/3600000);
+                    var ready=now>=unlockMs;
+                    var pct=e.minHours>0?Math.min(100,Math.round(hoursIn/e.minHours*100)):100;
+                    var borderColor=e.stripped?'#22c55e':ready?'#fbbf24':'#334155';
+                    var statusBadge=e.stripped?'<span style="background:#14532d;color:#86efac;padding:2px 6px;border-radius:10px;font-size:9px;font-weight:700;">✓ STRIPPED '+e.strippedDate+'</span>'
+                        :ready?'<span style="background:#451a03;color:#fbbf24;padding:2px 6px;border-radius:10px;font-size:9px;font-weight:700;">READY TO STRIP</span>'
+                        :'<span style="background:#0f172a;color:#94a3b8;padding:2px 6px;border-radius:10px;font-size:9px;">Curing – '+Math.round(hoursIn)+'h / '+e.minHours+'h</span>';
+                    html+='<div style="border-left:3px solid '+borderColor+';background:#0f172a;border-radius:4px;padding:8px;margin-bottom:6px;">'
+                        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:4px;">'
+                        +'<div><span style="font-size:10px;font-weight:700;color:#e2e8f0;">'+e.elem+'</span> <span style="font-size:9px;color:#94a3b8;">'+e.type+'</span></div>'
+                        +statusBadge
+                        +'</div>'
+                        +'<div style="font-size:9px;color:#94a3b8;margin-top:4px;">Pour: '+e.pourTime+' | Unlock: '+unlockDt.toLocaleString()+' | Min '+e.minHours+'h @ '+pct+'%</div>'
+                        +(e.notes?'<div style="font-size:9px;color:#64748b;margin-top:2px;">'+e.notes+'</div>':'')
+                        +'<div style="display:flex;gap:6px;margin-top:6px;">'
+                        +(!e.stripped?'<button onclick="window._fslStrip('+i+')" style="padding:3px 8px;background:#14532d;color:#86efac;border:1px solid #22c55e;border-radius:4px;cursor:pointer;font-size:9px;font-weight:600;">✓ Mark Stripped</button>':'')
+                        +'<button onclick="window._fslDel('+i+')" style="padding:3px 8px;background:#1e293b;color:#f87171;border:1px solid #ef4444;border-radius:4px;cursor:pointer;font-size:9px;">✕</button>'
+                        +'</div>'
+                        +'</div>';
+                });
+            } else {
+                html+='<div style="color:#475569;font-size:10px;text-align:center;padding:16px;">No elements logged yet.</div>';
+            }
+            // actions
+            html+='<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">'
+                +'<button onclick="window._fslPrint()" style="padding:4px 10px;background:#1e3a5f;color:#93c5fd;border:1px solid #3b82f6;border-radius:4px;cursor:pointer;font-size:10px;">🖨️ Print Stripping Log</button>'
+                +'<button onclick="window._fslCopy()" style="padding:4px 10px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">📋 Copy Report</button>'
+                +'</div>';
+            wrap.innerHTML=html;
+        }
+
+        window._fslAdd=function(){
+            var elem=document.getElementById('fsl-elem').value.trim();
+            var type=document.getElementById('fsl-type').value;
+            var pour=document.getElementById('fsl-pour').value;
+            var minHraw=parseFloat(document.getElementById('fsl-minH').value)||0;
+            var psi=parseInt(document.getElementById('fsl-psi').value)||4000;
+            var temp=parseFloat(document.getElementById('fsl-temp').value)||70;
+            var notes=document.getElementById('fsl-notes').value.trim();
+            if(!elem||!pour){alert('Element name and pour time required.');return;}
+            var minH=minHraw>0?minHraw:(ACI_MINS[type]||ACI_MINS['Custom']).h;
+            // ACI 306R cold weather adjustment: if avg temp <50°F double the time
+            if(temp<50) minH=Math.round(minH*2);
+            var entries=load();
+            entries.push({elem:elem,type:type,pourTime:pour,minHours:minH,psi:psi,temp:temp,notes:notes,stripped:false,strippedDate:''});
+            save(entries); render();
+        };
+        window._fslStrip=function(i){
+            var entries=load();
+            if(!entries[i]) return;
+            entries[i].stripped=true;
+            entries[i].strippedDate=new Date().toLocaleDateString();
+            save(entries); render();
+        };
+        window._fslDel=function(i){
+            var entries=load();
+            entries.splice(i,1);
+            save(entries); render();
+        };
+        window._fslCopy=function(){
+            var entries=load();
+            if(!entries.length){alert('No entries.');return;}
+            var txt='FORMWORK STRIPPING LOG\n'+new Date().toLocaleDateString()+'\n\n';
+            entries.forEach(function(e){
+                txt+='['+e.elem+'] '+e.type+'\n  Pour: '+e.pourTime+' | Min Hours: '+e.minHours+'h\n  Status: '+(e.stripped?'STRIPPED '+e.strippedDate:'Pending')+'\n'+(e.notes?'  Notes: '+e.notes+'\n':'')+'\n';
+            });
+            try{navigator.clipboard.writeText(txt);}catch(ex){alert(txt);}
+        };
+        window._fslPrint=function(){
+            var entries=load();
+            var proj=''; try{proj=document.getElementById('project-name').value||'';}catch(ex){}
+            var comp=''; try{var s=JSON.parse(localStorage.getItem('companySettings')||'{}');comp=s.companyName||'';}catch(ex){}
+            var rows=entries.map(function(e){
+                return '<tr style="border-bottom:1px solid #ccc;">'
+                    +'<td style="padding:5px;">'+e.elem+'</td>'
+                    +'<td style="padding:5px;">'+e.type+'</td>'
+                    +'<td style="padding:5px;">'+e.pourTime+'</td>'
+                    +'<td style="padding:5px;">'+e.minHours+'h</td>'
+                    +'<td style="padding:5px;">'+(e.stripped?'<b style="color:green;">STRIPPED '+e.strippedDate+'</b>':e.temp<50?'<b style="color:orange;">Curing (Cold Weather 2× adj.)</b>':'Curing')+'</td>'
+                    +'<td style="padding:5px;">'+e.notes+'</td>'
+                    +'</tr>';
+            }).join('');
+            var w=window.open('','_blank');
+            w.document.write('<!DOCTYPE html><html><head><title>Formwork Stripping Log</title>'
+                +'<style>body{font-family:Arial,sans-serif;font-size:11px;margin:32px;}table{width:100%;border-collapse:collapse;}th{background:#f1f5f9;padding:5px;text-align:left;border-bottom:2px solid #94a3b8;}</style>'
+                +'</head><body>'
+                +'<h1 style="font-size:16px;margin-bottom:4px;">Formwork Stripping Log</h1>'
+                +'<p style="margin:0;font-size:10px;"><b>Project:</b> '+proj+' &nbsp; <b>Company:</b> '+comp+' &nbsp; <b>Date:</b> '+new Date().toLocaleDateString()+'</p>'
+                +'<p style="font-size:9px;color:#666;margin-top:4px;">Reference: ACI 347R-14 — Guide to Formwork for Concrete | ACI 306R — Cold Weather Concrete (temp &lt;40°F doubles minimum time)</p>'
+                +'<table style="margin-top:12px;"><tr><th>Element</th><th>Type</th><th>Pour Date/Time</th><th>Min Cure Time</th><th>Status</th><th>Notes</th></tr>'
+                +rows
+                +'</table>'
+                +'<p style="font-size:8px;color:#666;margin-top:10px;">ACI 347R minimum times apply at ≥70°F ambient. Cold weather adjustment: &lt;50°F average = 2× minimum. All stripping requires PM and engineer approval. Do not strip without confirming in-place strength meets design f\'c requirements.</p>'
+                +'<div style="margin-top:24px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px;">'
+                +'<div>Foreman / Date<br><br>___________________________</div>'
+                +'<div>Project Manager / Date<br><br>___________________________</div>'
+                +'<div>GC Inspector / Date<br><br>___________________________</div>'
+                +'</div>'
+                +'<script>window.onload=function(){window.print();};<\/script></body></html>');
+            w.document.close();
+        };
+
+        function createButton(){
+            var sidebar=document.getElementById('sidebar');
+            if(!sidebar||document.getElementById(BTN_ID)) return;
+            var btn=document.createElement('button');
+            btn.id=BTN_ID;
+            btn.textContent='🏗️ Formwork Stripping Log';
+            btn.title='Track form stripping readiness per ACI 347R cure time minimums';
+            btn.style.cssText='padding:4px 8px;background:#1c1917;color:#d4a26a;border:1px solid #92400e;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+            btn.onclick=togglePanel;
+            var wrap=document.createElement('div');
+            wrap.id=WRAP_ID;
+            wrap.style.cssText='display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+            sidebar.appendChild(btn);
+            sidebar.appendChild(wrap);
+        }
+        function togglePanel(){
+            var wrap=document.getElementById(WRAP_ID);
+            var btn=document.getElementById(BTN_ID);
+            if(!wrap||!btn) return;
+            var show=wrap.style.display==='none';
+            wrap.style.display=show?'block':'none';
+            btn.textContent=show?'🏗️ Hide Stripping Log':'🏗️ Formwork Stripping Log';
+            if(show) render();
+        }
+        if(document.readyState==='loading'){
+            document.addEventListener('DOMContentLoaded',createButton);
+        } else {
+            createButton();
+        }
+    })();
+    </script>
+
+    <!-- TOOL: Concrete Repair Work Order -->
+    <script>
+    (function(){
+        var BTN_ID='crwo-btn', WRAP_ID='crwo-wrap', KEY='crwo_entries';
+        function load(){try{return JSON.parse(localStorage.getItem(KEY))||[];}catch(e){return[];}}
+        function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+
+        var DEFECT_TYPES=[
+            'Honeycombing','Spalling','Delamination','Plastic Shrinkage Crack',
+            'Settlement Crack','Structural Crack (>0.010\")','Crazing / Map Cracking',
+            'Cold Joint','Pop-out (alkali-silica)','Surface Scaling','Bug Holes',
+            'Form Blowout','Corner / Edge Damage','Other'
+        ];
+        var REPAIR_METHODS={
+            'Honeycombing':'Remove loose concrete to sound substrate (ACI 301 §5.3). Clean with water blast. Apply bonding agent. Fill with non-shrink grout or patching mortar per ACI 546R. Cure 7 days.',
+            'Spalling':'Saw cut perimeter ≥1/4" deep (ACI 546R §3.2). Remove to sound concrete. Sandblast. Apply epoxy bonding agent. Patch with cementitious repair mortar or polymer concrete. Wet cure.',
+            'Delamination':'Core/sound test to define extent. Remove delaminated layer. Re-key substrate. Apply latex-modified overlay per ACI 546R §4.6. Micro-fiber reinforce as needed.',
+            'Plastic Shrinkage Crack':'Evaluate width at surface. <0.010" width: seal with epoxy injection (ASTM C881). >0.010": see Structural Crack protocol.',
+            'Settlement Crack':'Determine if active (still moving) or dormant. Dormant: rout and seal with polyurethane caulk. Active: consult structural engineer — may require saw cut and install joint.',
+            'Structural Crack (>0.010\")':'Notify engineer immediately (ACI 318-19 §26.12.4). Do not repair without engineer direction. Epoxy injection (ASTM C881 Type I) when authorized. Monitor with tell-tales if active.',
+            'Crazing / Map Cracking':'Cosmetic — typically ACI 305R hot weather or curing deficiency. Seal with penetrating sealer. No structural intervention required unless delamination present.',
+            'Cold Joint':'Assess bondline — probe/core test. If debonded: remove, rekey substrate, patch per ACI 301 §5.3. If bond intact: seal surface crack with epoxy injection.',
+            'Pop-out (alkali-silica)':'If ASR confirmed (ASTM C856 petrographic): notify engineer. Surface patches are temporary — ASR is progressive. Consider lithium silicate sealer.',
+            'Surface Scaling':'Remove contamination. Light scaling (<1/8"): apply penetrating sealer. Moderate: thin-bond overlay. Severe: remove to sound concrete, ≥3/4" polymer concrete overlay.',
+            'Bug Holes':'Fill with grout or non-shrink patching mortar. Rub surface. Structural significance: none unless >1" depth.',
+            'Form Blowout':'Remove all loose concrete. Square up cavity. Re-form if required. Non-shrink grout or formed patch. Sign off with inspector before re-covering.',
+            'Corner / Edge Damage':'Saw cut 1" min perpendicular to surface. Remove damaged concrete. Apply epoxy bonding agent. Form-and-pour repair with minimum 5000 PSI material. Cure 7 days.',
+            'Other':'Document defect thoroughly. Notify PM and engineer before proceeding.'
+        };
+
+        function render(){
+            var wrap=document.getElementById(WRAP_ID); if(!wrap) return;
+            var entries=load();
+            var html='<div style="font-size:11px;font-weight:700;color:#93c5fd;margin-bottom:8px;">🔧 Concrete Repair Work Order — ACI 301/ACI 546R</div>';
+            // stats
+            var open=entries.filter(function(e){return e.status==='Open';}).length;
+            var inprog=entries.filter(function(e){return e.status==='In Progress';}).length;
+            var closed=entries.filter(function(e){return e.status==='Closed';}).length;
+            html+='<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">'
+                +'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:6px 10px;font-size:10px;"><span style="color:#f87171;">'+open+'</span> Open</div>'
+                +'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:6px 10px;font-size:10px;"><span style="color:#fbbf24;">'+inprog+'</span> In Progress</div>'
+                +'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:6px 10px;font-size:10px;"><span style="color:#86efac;">'+closed+'</span> Closed</div>'
+                +'</div>';
+            // add form
+            html+='<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:8px;margin-bottom:10px;">'
+                +'<div style="font-size:10px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">Log Defect / Create Work Order</div>'
+                +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
+                +'<input id="crwo-elem" placeholder="Element / Location" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +'<input id="crwo-date" type="date" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +'<select id="crwo-type" onchange="window._crwoAutoMethod()" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +DEFECT_TYPES.map(function(t){return '<option value="'+t+'">'+t+'</option>';}).join('')
+                +'</select>'
+                +'<select id="crwo-sev" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +'<option value="Minor">Minor (cosmetic)</option>'
+                +'<option value="Moderate">Moderate (repair required)</option>'
+                +'<option value="Severe">Severe (structural concern)</option>'
+                +'<option value="Critical">Critical (hold work)</option>'
+                +'</select>'
+                +'<input id="crwo-size" placeholder="Approx area/length (e.g. 2 SF, 18\")" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +'<input id="crwo-by" placeholder="Found by (initials)" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +'</div>'
+                +'<textarea id="crwo-method" rows="3" placeholder="Repair method (auto-populated by defect type — edit as needed)" style="width:100%;box-sizing:border-box;padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;margin-top:6px;resize:vertical;"></textarea>'
+                +'<input id="crwo-eng" placeholder="Engineer notified? (name or leave blank)" style="width:100%;box-sizing:border-box;padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;margin-top:6px;">'
+                +'<button onclick="window._crwoAdd()" style="margin-top:6px;padding:5px 12px;background:#0c4a6e;color:#7dd3fc;border:1px solid #0ea5e9;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;">+ Log Defect</button>'
+                +'</div>';
+            // entries
+            if(entries.length){
+                html+='<div style="font-size:10px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">Work Orders ('+entries.length+')</div>';
+                entries.forEach(function(e,i){
+                    var bc=e.status==='Closed'?'#22c55e':e.status==='In Progress'?'#fbbf24':e.severity==='Critical'?'#ef4444':'#334155';
+                    var sevColor={'Minor':'#64748b','Moderate':'#fbbf24','Severe':'#f97316','Critical':'#ef4444'}[e.severity]||'#64748b';
+                    html+='<div style="border-left:3px solid '+bc+';background:#0f172a;border-radius:4px;padding:8px;margin-bottom:6px;">'
+                        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:4px;">'
+                        +'<div><span style="font-size:10px;font-weight:700;color:#e2e8f0;">RWO-'+String(i+1).padStart(3,'0')+' '+e.elem+'</span> <span style="color:'+sevColor+';font-size:9px;font-weight:700;">'+e.severity+'</span></div>'
+                        +'<span style="font-size:9px;color:#94a3b8;">'+e.type+'</span>'
+                        +'</div>'
+                        +'<div style="font-size:9px;color:#94a3b8;margin-top:4px;">'+e.date+' | Size: '+e.size+' | By: '+e.foundBy+(e.eng?' | Eng: '+e.eng:'')+'</div>'
+                        +'<div style="font-size:9px;color:#94a3b8;margin-top:4px;line-height:1.4;">Method: '+e.method+'</div>'
+                        +'<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">'
+                        +(e.status==='Open'?'<button onclick="window._crwoStatus('+i+',\'In Progress\')" style="padding:3px 8px;background:#451a03;color:#fbbf24;border:1px solid #d97706;border-radius:4px;cursor:pointer;font-size:9px;font-weight:600;">→ In Progress</button>':'')
+                        +(e.status==='In Progress'?'<button onclick="window._crwoStatus('+i+',\'Closed\')" style="padding:3px 8px;background:#14532d;color:#86efac;border:1px solid #22c55e;border-radius:4px;cursor:pointer;font-size:9px;font-weight:600;">✓ Close</button>':'')
+                        +'<button onclick="window._crwoDel('+i+')" style="padding:3px 8px;background:#1e293b;color:#f87171;border:1px solid #ef4444;border-radius:4px;cursor:pointer;font-size:9px;">✕</button>'
+                        +'</div>'
+                        +'</div>';
+                });
+            } else {
+                html+='<div style="color:#475569;font-size:10px;text-align:center;padding:16px;">No repair work orders logged.</div>';
+            }
+            html+='<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">'
+                +'<button onclick="window._crwoPrint()" style="padding:4px 10px;background:#1e3a5f;color:#93c5fd;border:1px solid #3b82f6;border-radius:4px;cursor:pointer;font-size:10px;">🖨️ Print Repair Orders</button>'
+                +'<button onclick="window._crwoCopy()" style="padding:4px 10px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">📋 Copy Report</button>'
+                +'</div>';
+            wrap.innerHTML=html;
+        }
+
+        window._crwoAutoMethod=function(){
+            var t=document.getElementById('crwo-type');
+            var m=document.getElementById('crwo-method');
+            if(t&&m) m.value=REPAIR_METHODS[t.value]||'';
+        };
+        window._crwoAdd=function(){
+            var elem=document.getElementById('crwo-elem').value.trim();
+            var date=document.getElementById('crwo-date').value||new Date().toISOString().split('T')[0];
+            var type=document.getElementById('crwo-type').value;
+            var sev=document.getElementById('crwo-sev').value;
+            var size=document.getElementById('crwo-size').value.trim();
+            var foundBy=document.getElementById('crwo-by').value.trim();
+            var method=document.getElementById('crwo-method').value.trim()||REPAIR_METHODS[type]||'';
+            var eng=document.getElementById('crwo-eng').value.trim();
+            if(!elem){alert('Element/location required.');return;}
+            var entries=load();
+            entries.push({elem:elem,date:date,type:type,severity:sev,size:size,foundBy:foundBy,method:method,eng:eng,status:'Open',closedDate:''});
+            save(entries); render();
+        };
+        window._crwoStatus=function(i,s){
+            var entries=load();
+            if(!entries[i]) return;
+            entries[i].status=s;
+            if(s==='Closed') entries[i].closedDate=new Date().toLocaleDateString();
+            save(entries); render();
+        };
+        window._crwoDel=function(i){
+            var entries=load();
+            entries.splice(i,1);
+            save(entries); render();
+        };
+        window._crwoCopy=function(){
+            var entries=load();
+            if(!entries.length){alert('No work orders.');return;}
+            var txt='CONCRETE REPAIR WORK ORDERS\n'+new Date().toLocaleDateString()+'\n\n';
+            entries.forEach(function(e,i){
+                txt+='RWO-'+String(i+1).padStart(3,'0')+' | '+e.elem+' | '+e.type+' | '+e.severity+' | '+e.status+'\n  Date: '+e.date+' | Size: '+e.size+' | By: '+e.foundBy+'\n  Method: '+e.method+'\n'+(e.eng?'  Engineer: '+e.eng+'\n':'')+'\n';
+            });
+            try{navigator.clipboard.writeText(txt);}catch(ex){alert(txt);}
+        };
+        window._crwoPrint=function(){
+            var entries=load();
+            var proj=''; try{proj=document.getElementById('project-name').value||'';}catch(ex){}
+            var comp=''; try{var s=JSON.parse(localStorage.getItem('companySettings')||'{}');comp=s.companyName||'';}catch(ex){}
+            var rows=entries.map(function(e,i){
+                var sevColor={'Minor':'#555','Moderate':'#b45309','Severe':'#c2410c','Critical':'#dc2626'}[e.severity]||'#555';
+                var statColor={'Open':'#dc2626','In Progress':'#d97706','Closed':'#16a34a'}[e.status]||'#555';
+                return '<tr style="border-bottom:1px solid #ccc;">'
+                    +'<td style="padding:4px;">RWO-'+String(i+1).padStart(3,'0')+'</td>'
+                    +'<td style="padding:4px;">'+e.elem+'</td>'
+                    +'<td style="padding:4px;">'+e.type+'</td>'
+                    +'<td style="padding:4px;"><b style="color:'+sevColor+';">'+e.severity+'</b></td>'
+                    +'<td style="padding:4px;">'+e.size+'</td>'
+                    +'<td style="padding:4px;">'+e.date+'</td>'
+                    +'<td style="padding:4px;font-size:8px;max-width:200px;">'+e.method+'</td>'
+                    +'<td style="padding:4px;"><b style="color:'+statColor+';">'+e.status+'</b>'+(e.closedDate?' ('+e.closedDate+')':'')+'</td>'
+                    +'</tr>';
+            }).join('');
+            var w=window.open('','_blank');
+            w.document.write('<!DOCTYPE html><html><head><title>Concrete Repair Work Orders</title>'
+                +'<style>body{font-family:Arial,sans-serif;font-size:10px;margin:28px;}table{width:100%;border-collapse:collapse;}th{background:#f1f5f9;padding:4px;text-align:left;border-bottom:2px solid #94a3b8;font-size:10px;}</style>'
+                +'</head><body>'
+                +'<h1 style="font-size:15px;margin-bottom:4px;">Concrete Repair Work Orders</h1>'
+                +'<p style="margin:0;font-size:10px;"><b>Project:</b> '+proj+' &nbsp; <b>Company:</b> '+comp+' &nbsp; <b>Date:</b> '+new Date().toLocaleDateString()+'</p>'
+                +'<p style="font-size:8.5px;color:#666;margin-top:4px;">Reference: ACI 546R-14 (Guide for the Design and Construction of Concrete Parking Lots) | ACI 301-16 §5.3 (Repair of Surface Defects) | ACI 318-19 §26.12.4 (Inspection and Testing)</p>'
+                +'<table style="margin-top:10px;"><tr><th>#</th><th>Element</th><th>Defect Type</th><th>Severity</th><th>Size</th><th>Date Found</th><th>Repair Method</th><th>Status</th></tr>'
+                +rows
+                +'</table>'
+                +'<p style="font-size:8px;color:#666;margin-top:8px;">Critical defects must be reviewed by Structural Engineer before repair. All repairs shall conform to ACI 301-16 §5.3 surface defect repair requirements. Retain this log for project closeout documentation.</p>'
+                +'<div style="margin-top:20px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px;">'
+                +'<div>QC Inspector / Date<br><br>___________________________</div>'
+                +'<div>Project Manager / Date<br><br>___________________________</div>'
+                +'<div>GC / Owner Rep / Date<br><br>___________________________</div>'
+                +'</div>'
+                +'<script>window.onload=function(){window.print();};<\/script></body></html>');
+            w.document.close();
+        };
+
+        function createButton(){
+            var sidebar=document.getElementById('sidebar');
+            if(!sidebar||document.getElementById(BTN_ID)) return;
+            var btn=document.createElement('button');
+            btn.id=BTN_ID;
+            btn.textContent='🔧 Concrete Repair Orders';
+            btn.title='Log and manage concrete defect repair work orders (ACI 301/546R)';
+            btn.style.cssText='padding:4px 8px;background:#1c0a2e;color:#c4b5fd;border:1px solid #7c3aed;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+            btn.onclick=togglePanel;
+            var wrap=document.createElement('div');
+            wrap.id=WRAP_ID;
+            wrap.style.cssText='display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+            sidebar.appendChild(btn);
+            sidebar.appendChild(wrap);
+        }
+        function togglePanel(){
+            var wrap=document.getElementById(WRAP_ID);
+            var btn=document.getElementById(BTN_ID);
+            if(!wrap||!btn) return;
+            var show=wrap.style.display==='none';
+            wrap.style.display=show?'block':'none';
+            btn.textContent=show?'🔧 Hide Repair Orders':'🔧 Concrete Repair Orders';
+            if(show) render();
+        }
+        if(document.readyState==='loading'){
+            document.addEventListener('DOMContentLoaded',createButton);
+        } else {
+            createButton();
+        }
+    })();
+    </script>
+
+    <!-- TOOL: Subcontractor Purchase Order Generator -->
+    <script>
+    (function(){
+        var BTN_ID='spog-btn', WRAP_ID='spog-wrap', KEY='spog_pos';
+        function load(){try{return JSON.parse(localStorage.getItem(KEY))||[];}catch(e){return[];}}
+        function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+
+        var SCOPES=[
+            'Concrete Pump (Boom)','Concrete Pump (Line/Trailer)','Rebar Fabrication & Delivery',
+            'Rebar Installation','Formwork – Footings/Grade Beams','Formwork – Walls/Columns',
+            'Formwork – Elevated Deck','Saw Cutting – Control Joints','Concrete Testing & Inspection',
+            'Vapor Barrier / Underslab Prep','Post-Tension Strand & Hardware','Epoxy Dowels / Anchors',
+            'Surface Grinding / Polishing','Concrete Sealer Application','Earthwork / Subgrade Prep',
+            'Concrete Washout Service','Other'
+        ];
+
+        function nextPO(){
+            var entries=load();
+            return 'PO-'+String((entries.length+1)).padStart(4,'0');
+        }
+
+        function render(){
+            var wrap=document.getElementById(WRAP_ID); if(!wrap) return;
+            var entries=load();
+            var html='<div style="font-size:11px;font-weight:700;color:#93c5fd;margin-bottom:8px;">📋 Subcontractor Purchase Order Generator</div>';
+            // stats
+            var total=entries.reduce(function(s,e){return s+(parseFloat(e.amount)||0);},0);
+            html+='<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">'
+                +'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:6px 10px;font-size:10px;"><span style="color:#93c5fd;">'+entries.length+'</span> POs Issued</div>'
+                +'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:6px 10px;font-size:10px;">Total: <span style="color:#86efac;">$'+total.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</span></div>'
+                +'</div>';
+            // pull project/company defaults
+            var projName=''; try{projName=document.getElementById('project-name').value||'';}catch(ex){}
+            var compName='',compAddr='',compPhone='',compEmail=''; try{var cs=JSON.parse(localStorage.getItem('companySettings')||'{}');compName=cs.companyName||'';compAddr=cs.companyAddress||'';compPhone=cs.companyPhone||'';compEmail=cs.companyEmail||'';}catch(ex){}
+            // create form
+            html+='<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:8px;margin-bottom:10px;">'
+                +'<div style="font-size:10px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">New Purchase Order — Next: '+nextPO()+'</div>'
+                +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
+                +'<input id="spog-sub" placeholder="Sub / Vendor company name" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +'<input id="spog-contact" placeholder="Contact name" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +'<select id="spog-scope" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +SCOPES.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('')
+                +'</select>'
+                +'<input id="spog-proj" placeholder="Project" value="'+projName+'" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +'<input id="spog-amt" type="number" placeholder="PO Amount ($)" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +'<input id="spog-date" type="date" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +'<input id="spog-mob" type="date" placeholder="Mobilization date" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;" title="Mobilization date">'
+                +'<select id="spog-pay" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +'<option value="Pay-When-Paid (net 30 after GC pays)">Pay-When-Paid (net 30 after GC pays)</option>'
+                +'<option value="Net 30 days from invoice">Net 30 days from invoice</option>'
+                +'<option value="Net 15 days from invoice">Net 15 days from invoice</option>'
+                +'<option value="Progress billing per schedule">Progress billing per schedule</option>'
+                +'<option value="Lump sum on completion">Lump sum on completion</option>'
+                +'</select>'
+                +'<input id="spog-ret" type="number" placeholder="Retainage %" value="10" style="padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;">'
+                +'</div>'
+                +'<textarea id="spog-scope2" rows="3" placeholder="Scope description (inclusions) — be specific" style="width:100%;box-sizing:border-box;padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;margin-top:6px;resize:vertical;"></textarea>'
+                +'<textarea id="spog-excl" rows="2" placeholder="Exclusions (what is NOT included)" style="width:100%;box-sizing:border-box;padding:5px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:10px;margin-top:6px;resize:vertical;"></textarea>'
+                +'<button onclick="window._spogAdd()" style="margin-top:6px;padding:5px 12px;background:#0c4a6e;color:#7dd3fc;border:1px solid #0ea5e9;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;">+ Issue PO</button>'
+                +'</div>';
+            // PO list
+            if(entries.length){
+                html+='<div style="font-size:10px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">Issued POs</div>';
+                entries.forEach(function(e,i){
+                    html+='<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:8px;margin-bottom:6px;">'
+                        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:4px;">'
+                        +'<div><span style="font-size:10px;font-weight:700;color:#93c5fd;">'+e.po+'</span> <span style="font-size:10px;color:#e2e8f0;">'+e.sub+'</span></div>'
+                        +'<span style="font-size:10px;color:#86efac;font-weight:700;">$'+parseFloat(e.amount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</span>'
+                        +'</div>'
+                        +'<div style="font-size:9px;color:#94a3b8;margin-top:4px;">'+e.scope+' | Project: '+e.project+' | Date: '+e.date+(e.mob?' | Mob: '+e.mob:'')+'</div>'
+                        +'<div style="font-size:9px;color:#94a3b8;">Payment: '+e.payTerms+' | Retainage: '+e.retPct+'%</div>'
+                        +(e.scopeDesc?'<div style="font-size:9px;color:#64748b;margin-top:3px;">Scope: '+e.scopeDesc+'</div>':'')
+                        +(e.exclusions?'<div style="font-size:9px;color:#64748b;margin-top:2px;">Excl: '+e.exclusions+'</div>':'')
+                        +'<div style="display:flex;gap:6px;margin-top:6px;">'
+                        +'<button onclick="window._spogPrint('+i+')" style="padding:3px 8px;background:#1e3a5f;color:#93c5fd;border:1px solid #3b82f6;border-radius:4px;cursor:pointer;font-size:9px;">🖨️ Print PO</button>'
+                        +'<button onclick="window._spogDel('+i+')" style="padding:3px 8px;background:#1e293b;color:#f87171;border:1px solid #ef4444;border-radius:4px;cursor:pointer;font-size:9px;">✕</button>'
+                        +'</div>'
+                        +'</div>';
+                });
+            } else {
+                html+='<div style="color:#475569;font-size:10px;text-align:center;padding:16px;">No purchase orders issued yet.</div>';
+            }
+            html+='<div style="margin-top:8px;">'
+                +'<button onclick="window._spogPrintAll()" style="padding:4px 10px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">🖨️ Print All POs</button>'
+                +'</div>';
+            wrap.innerHTML=html;
+        }
+
+        window._spogAdd=function(){
+            var sub=document.getElementById('spog-sub').value.trim();
+            var contact=document.getElementById('spog-contact').value.trim();
+            var scope=document.getElementById('spog-scope').value;
+            var proj=document.getElementById('spog-proj').value.trim();
+            var amt=document.getElementById('spog-amt').value;
+            var date=document.getElementById('spog-date').value||new Date().toISOString().split('T')[0];
+            var mob=document.getElementById('spog-mob').value;
+            var pay=document.getElementById('spog-pay').value;
+            var ret=document.getElementById('spog-ret').value||'10';
+            var scopeDesc=document.getElementById('spog-scope2').value.trim();
+            var excl=document.getElementById('spog-excl').value.trim();
+            if(!sub||!amt){alert('Sub name and amount required.');return;}
+            var entries=load();
+            var compName=''; try{var cs=JSON.parse(localStorage.getItem('companySettings')||'{}');compName=cs.companyName||'';}catch(ex){}
+            entries.push({po:nextPO(),sub:sub,contact:contact,scope:scope,project:proj,amount:amt,date:date,mob:mob,payTerms:pay,retPct:ret,scopeDesc:scopeDesc,exclusions:excl,companyName:compName});
+            save(entries); render();
+        };
+        window._spogDel=function(i){
+            var entries=load();
+            entries.splice(i,1);
+            save(entries); render();
+        };
+        window._spogPrint=function(i){
+            var entries=load();
+            var e=entries[i]; if(!e) return;
+            var compName='',compAddr='',compPhone='',compEmail='',compLic='';
+            try{var cs=JSON.parse(localStorage.getItem('companySettings')||'{}');compName=cs.companyName||e.companyName||'';compAddr=cs.companyAddress||'';compPhone=cs.companyPhone||'';compEmail=cs.companyEmail||'';compLic=cs.companyLicense||'';}catch(ex){}
+            var retAmt=(parseFloat(e.amount)||0)*(parseFloat(e.retPct)||10)/100;
+            var netAmt=(parseFloat(e.amount)||0)-retAmt;
+            var w=window.open('','_blank');
+            w.document.write('<!DOCTYPE html><html><head><title>Purchase Order '+e.po+'</title>'
+                +'<style>body{font-family:Arial,sans-serif;font-size:11px;margin:36px;color:#1a202c;}table{border-collapse:collapse;width:100%;}th,td{padding:6px 8px;text-align:left;}th{background:#f7fafc;border-bottom:2px solid #e2e8f0;}.box{border:1px solid #e2e8f0;border-radius:4px;padding:12px;margin-bottom:14px;}.badge{background:#e2e8f0;padding:2px 8px;border-radius:10px;font-weight:700;font-size:10px;}</style>'
+                +'</head><body>'
+                +'<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #e2e8f0;padding-bottom:12px;margin-bottom:16px;">'
+                +'<div><h1 style="margin:0;font-size:18px;color:#1a202c;">PURCHASE ORDER</h1>'
+                +(compName?'<div style="font-size:11px;color:#555;">'+compName+'</div>':'')
+                +(compAddr?'<div style="font-size:10px;color:#777;">'+compAddr+'</div>':'')
+                +(compPhone?'<div style="font-size:10px;color:#777;">'+compPhone+(compEmail?' | '+compEmail:'')+'</div>':'')
+                +(compLic?'<div style="font-size:10px;color:#777;">Lic #: '+compLic+'</div>':'')
+                +'</div>'
+                +'<div style="text-align:right;">'
+                +'<div style="font-size:22px;font-weight:700;color:#2563eb;">'+e.po+'</div>'
+                +'<div style="font-size:10px;color:#555;">Date: '+e.date+'</div>'
+                +(e.mob?'<div style="font-size:10px;color:#555;">Mob: '+e.mob+'</div>':'')
+                +'</div>'
+                +'</div>'
+                +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+                +'<div class="box"><b>Vendor / Sub:</b><br>'+e.sub+(e.contact?'<br>'+e.contact:'')+'</div>'
+                +'<div class="box"><b>Project:</b><br>'+e.project+'<br><b>Scope:</b> '+e.scope+'</div>'
+                +'</div>'
+                +'<div class="box" style="margin-bottom:14px;">'
+                +'<b>Scope of Work:</b><br>'
+                +(e.scopeDesc?'<p style="margin:6px 0;">'+e.scopeDesc.replace(/\n/g,'<br>')+'</p>':'<p style="margin:6px 0;color:#777;">(See attached scope documents)</p>')
+                +(e.exclusions?'<p style="margin:6px 0;"><b>Exclusions:</b> '+e.exclusions+'</p>':'')
+                +'</div>'
+                +'<table style="margin-bottom:14px;"><tr><th>Description</th><th style="text-align:right;">Amount</th></tr>'
+                +'<tr style="border-bottom:1px solid #e2e8f0;"><td>Contract Sum — '+e.scope+'</td><td style="text-align:right;">$'+parseFloat(e.amount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td></tr>'
+                +'<tr style="border-bottom:1px solid #e2e8f0;"><td>Retainage Held ('+e.retPct+'%)</td><td style="text-align:right;color:#dc2626;">($'+retAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+')</td></tr>'
+                +'<tr><td><b>Net Payable</b></td><td style="text-align:right;"><b>$'+netAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</b></td></tr>'
+                +'</table>'
+                +'<div class="box" style="margin-bottom:14px;font-size:10px;line-height:1.6;">'
+                +'<b>Terms &amp; Conditions:</b><br>'
+                +'1. Payment Terms: '+e.payTerms+'.<br>'
+                +'2. All work shall conform to applicable codes, ACI standards, project specifications, and owner requirements.<br>'
+                +'3. Vendor shall provide current Certificate of Insurance: CGL $1,000,000/$2,000,000, Workers Compensation statutory limits, Auto $1,000,000 CSL. '+compName+' named as Additional Insured on CGL (ongoing and completed operations). Waiver of Subrogation applies.<br>'
+                +'4. Conditional lien waiver (Texas Property Code §53) required with each payment application as a condition of payment. Final unconditional lien waiver required before final payment release.<br>'
+                +'5. Vendor is responsible for all safety, OSHA compliance, and applicable federal, state, and local regulations on the job site.<br>'
+                +'6. Change orders must be authorized in writing by '+compName+' before work commences. Verbal authorizations will not be honored.<br>'
+                +'7. Warranty: one (1) year from date of substantial completion against defects in materials and workmanship.<br>'
+                +'8. This Purchase Order is governed by the laws of the State of Texas. Venue shall be in El Paso County, Texas.'
+                +'</div>'
+                +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px;">'
+                +'<div><b>Issued By — '+compName+'</b><br><br>___________________________<br><span style="font-size:9px;">Signature / Date</span></div>'
+                +'<div><b>Accepted By — '+e.sub+'</b><br><br>___________________________<br><span style="font-size:9px;">Signature / Date / Print Name</span></div>'
+                +'</div>'
+                +'<p style="font-size:8.5px;color:#777;margin-top:12px;">Vendor acceptance of this Purchase Order constitutes agreement to all terms and conditions stated herein. Return one signed copy within 3 business days or mobilization date, whichever comes first.</p>'
+                +'<script>window.onload=function(){window.print();};<\/script></body></html>');
+            w.document.close();
+        };
+        window._spogPrintAll=function(){
+            var entries=load();
+            if(!entries.length){alert('No POs to print.');return;}
+            entries.forEach(function(e,i){window._spogPrint(i);});
+        };
+
+        function createButton(){
+            var sidebar=document.getElementById('sidebar');
+            if(!sidebar||document.getElementById(BTN_ID)) return;
+            var btn=document.createElement('button');
+            btn.id=BTN_ID;
+            btn.textContent='📋 Sub Purchase Orders';
+            btn.title='Generate formal POs for pump, rebar, forming subs and vendors';
+            btn.style.cssText='padding:4px 8px;background:#0c2521;color:#6ee7b7;border:1px solid #059669;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+            btn.onclick=togglePanel;
+            var wrap=document.createElement('div');
+            wrap.id=WRAP_ID;
+            wrap.style.cssText='display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+            sidebar.appendChild(btn);
+            sidebar.appendChild(wrap);
+        }
+        function togglePanel(){
+            var wrap=document.getElementById(WRAP_ID);
+            var btn=document.getElementById(BTN_ID);
+            if(!wrap||!btn) return;
+            var show=wrap.style.display==='none';
+            wrap.style.display=show?'block':'none';
+            btn.textContent=show?'📋 Hide Purchase Orders':'📋 Sub Purchase Orders';
+            if(show) render();
+        }
+        if(document.readyState==='loading'){
+            document.addEventListener('DOMContentLoaded',createButton);
+        } else {
+            createButton();
+        }
+    })();
+    </script>
