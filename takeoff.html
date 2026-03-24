@@ -27731,5 +27731,897 @@ Maintain records per ACI 301-16 §1.6.8. This log constitutes contemporaneous do
     })();
     </script>
 
+    <!-- =========================================================
+         TOOL 1: CONCRETE POUR APPROVAL CHECKLIST (✅)
+         ACI 305R / ACI 306R pre-pour weather & readiness sign-off
+    ========================================================= -->
+    <script>
+    (function(){
+        'use strict';
+        const KEY      = 'oncor_pour_approval_v1';
+        const BTN_ID   = 'btn-pour-approval';
+        const WRAP_ID  = 'wrap-pour-approval';
+
+        function load(){ try{ return JSON.parse(localStorage.getItem(KEY))||{}; }catch(e){ return {}; } }
+        function save(d){ try{ localStorage.setItem(KEY, JSON.stringify(d)); }catch(e){} }
+
+        // 30-item checklist: category + item + ACI ref
+        const ITEMS = [
+          // Weather
+          { id:'w1', cat:'Weather', text:'Ambient temperature ≥ 40°F (4°C) and rising (ACI 306R)', risk:'cold' },
+          { id:'w2', cat:'Weather', text:'Ambient temperature ≤ 90°F (32°C) OR hot weather plan in place (ACI 305R §4)', risk:'hot' },
+          { id:'w3', cat:'Weather', text:'Wind speed checked — if >15 mph + high temp, evaporation rate > 0.20 lb/ft²/hr? (ACI 305R Fig. 2.1)', risk:'hot' },
+          { id:'w4', cat:'Weather', text:'No rain in forecast for pour window + 4 hrs after finish (ACI 308R)', risk:'normal' },
+          { id:'w5', cat:'Weather', text:'Overnight temps confirmed > 35°F if no cold-weather protection (ACI 306R)', risk:'cold' },
+          // Mix & Materials
+          { id:'m1', cat:'Mix & Materials', text:'Approved mix design on file — submittal accepted by EOR (ACI 301 §4.2)', risk:'normal' },
+          { id:'m2', cat:'Mix & Materials', text:'Concrete delivery temp will be 50°F–90°F at discharge (ACI 305R / 306R)', risk:'normal' },
+          { id:'m3', cat:'Mix & Materials', text:'Chilled water / ice ordered if ambient > 85°F (ACI 305R §3.2)', risk:'hot' },
+          { id:'m4', cat:'Mix & Materials', text:'Hot water / Type III cement / accelerator ordered if ambient < 45°F (ACI 306R §4.2)', risk:'cold' },
+          { id:'m5', cat:'Mix & Materials', text:'No water added beyond mix design w/c ratio (ASTM C94 §11.8)', risk:'normal' },
+          // Site Prep
+          { id:'s1', cat:'Site Prep', text:'Subgrade compacted and approved — no soft spots, debris, or standing water (ACI 302 §4.3)', risk:'normal' },
+          { id:'s2', cat:'Site Prep', text:'Vapor barrier intact, lapped ≥ 12", taped at seams (ACI 302 §4.1)', risk:'normal' },
+          { id:'s3', cat:'Site Prep', text:'Base course dampened (not saturated) if hot/dry conditions (ACI 305R)', risk:'hot' },
+          { id:'s4', cat:'Site Prep', text:'Formwork inspected — grade stakes, elevation shots complete (ACI 347R §2.2)', risk:'normal' },
+          { id:'s5', cat:'Site Prep', text:'Reinforcement placement verified: cover, spacing, splices, chairs set (ACI 318 §26.6)', risk:'normal' },
+          // Equipment
+          { id:'e1', cat:'Equipment', text:'Concrete pump tested, primed line, prime slurry disposed (ACI 304R §9.4)', risk:'normal' },
+          { id:'e2', cat:'Equipment', text:'Vibrators (min 2) operational — spares on site (ACI 309R §4.2)', risk:'normal' },
+          { id:'e3', cat:'Equipment', text:'Finishing equipment (screed, trowels) fueled and tested', risk:'normal' },
+          { id:'e4', cat:'Equipment', text:'Concrete truck access route confirmed — no overhead hazards (OSHA 1926.601)', risk:'normal' },
+          // QC & Inspection
+          { id:'q1', cat:'QC & Inspection', text:'Testing lab notified ≥ 24 hrs in advance (ACI 301 §1.6.8)', risk:'normal' },
+          { id:'q2', cat:'QC & Inspection', text:'Cylinders, slump cone, thermometer, air meter on site (ASTM C31/C143/C1064/C231)', risk:'normal' },
+          { id:'q3', cat:'QC & Inspection', text:'Inspector / Special Inspector confirmed on site for pour start', risk:'normal' },
+          { id:'q4', cat:'QC & Inspection', text:'RFI log reviewed — no open RFIs affecting pour (structural or spec)', risk:'normal' },
+          { id:'q5', cat:'QC & Inspection', text:'Pour sequence reviewed with crew and pump operator', risk:'normal' },
+          // Curing Plan
+          { id:'c1', cat:'Curing Plan', text:'Curing compound, wet burlap, or plastic sheeting ready on site (ACI 308R §3)', risk:'normal' },
+          { id:'c2', cat:'Curing Plan', text:'Curing method approved for element type (vapor barrier ≠ curing for exposed slab)', risk:'normal' },
+          { id:'c3', cat:'Curing Plan', text:'Insulating blankets on site if overnight temps < 40°F within 7 days (ACI 306R §8)', risk:'cold' },
+          { id:'c4', cat:'Curing Plan', text:'Control joint saw cut schedule planned — early-entry saw available within 4-12 hrs', risk:'normal' },
+          // Safety
+          { id:'z1', cat:'Safety', text:'Pre-pour tailgate completed — PPE, concrete burns protocol reviewed (OSHA 1926.21)', risk:'normal' },
+          { id:'z2', cat:'Safety', text:'GFCI protection on all 120V equipment (OSHA 1926.404)', risk:'normal' },
+        ];
+
+        function getState(){
+            const d = load();
+            return d.checks || {};
+        }
+        function saveChecks(checks){
+            const d = load();
+            d.checks = checks;
+            save(d);
+        }
+        function getMeta(){
+            const d = load();
+            return { project: d.project||'', engineer: d.engineer||'', pourDate: d.pourDate||'', element: d.element||'', foreman: d.foreman||'' };
+        }
+        function saveMeta(m){
+            const d = load();
+            Object.assign(d, m);
+            save(d);
+        }
+
+        function render(){
+            const checks = getState();
+            const meta   = getMeta();
+            const cats   = [...new Set(ITEMS.map(i=>i.cat))];
+            let cleared = 0, total = 0, risks = [];
+
+            cats.forEach(cat=>{
+                const items = ITEMS.filter(i=>i.cat===cat);
+            });
+            ITEMS.forEach(i=>{
+                const st = checks[i.id]||'open';
+                if(st==='ok'||st==='na') cleared++;
+                if(st==='open') { /* still open */ }
+                if(st==='risk') risks.push(i.text);
+                total++;
+            });
+            const pct = Math.round(cleared/total*100);
+            const allClear = (cleared===total && risks.length===0);
+
+            let html = `
+<div style="padding:8px 0;font-size:11px;color:#94a3b8;">
+ACI 305R / ACI 306R / OSHA 1926 Pre-Pour Approval Checklist — 30 items across 6 categories.
+Click each item to cycle: <span style="color:#22c55e;">✓ OK</span> → <span style="color:#ef4444;">⚠ RISK</span> → <span style="color:#64748b;">— N/A</span> → Open
+</div>
+
+${allClear ? '<div style="background:#14532d;border:1px solid #16a34a;border-radius:4px;padding:8px;color:#86efac;font-weight:700;text-align:center;margin-bottom:8px;">✅ CLEARED FOR POUR — ALL ITEMS SIGNED OFF</div>' : ''}
+${risks.length>0 ? `<div style="background:#450a0a;border:1px solid #dc2626;border-radius:4px;padding:8px;color:#fca5a5;margin-bottom:8px;font-size:10px;"><strong>⚠️ RISK ITEMS (${risks.length}):</strong><ul style="margin:4px 0 0 14px;padding:0;">${risks.map(r=>`<li>${r}</li>`).join('')}</ul></div>` : ''}
+
+<div style="margin-bottom:8px;">
+  <div style="height:6px;background:#334155;border-radius:3px;overflow:hidden;">
+    <div style="height:100%;width:${pct}%;background:${allClear?'#16a34a':pct>70?'#d97706':'#dc2626'};transition:width 0.3s;"></div>
+  </div>
+  <div style="font-size:9px;color:#64748b;margin-top:2px;">${cleared}/${total} items cleared (${pct}%)</div>
+</div>
+
+<!-- Meta -->
+<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:8px;margin-bottom:8px;font-size:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+  <div><div style="color:#64748b;font-size:9px;">Project</div>
+    <input value="${meta.project}" placeholder="Project name" onchange="window._paSetMeta('project',this.value)"
+    style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+  <div><div style="color:#64748b;font-size:9px;">Element / Pour Area</div>
+    <input value="${meta.element}" placeholder="e.g. Level 2 Deck — Grid 5-8" onchange="window._paSetMeta('element',this.value)"
+    style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+  <div><div style="color:#64748b;font-size:9px;">Pour Date</div>
+    <input type="date" value="${meta.pourDate}" onchange="window._paSetMeta('pourDate',this.value)"
+    style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+  <div><div style="color:#64748b;font-size:9px;">Foreman</div>
+    <input value="${meta.foreman}" placeholder="Foreman name" onchange="window._paSetMeta('foreman',this.value)"
+    style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+</div>
+`;
+            // Render by category
+            cats.forEach(cat=>{
+                const items = ITEMS.filter(i=>i.cat===cat);
+                const catCleared = items.filter(i=>{ const st=checks[i.id]||'open'; return st==='ok'||st==='na'; }).length;
+                html += `<div style="margin-bottom:6px;">
+<div style="background:#1e293b;padding:4px 8px;border-radius:3px;font-size:10px;font-weight:700;color:#94a3b8;margin-bottom:3px;">${cat} <span style="color:#64748b;font-weight:400;">(${catCleared}/${items.length})</span></div>`;
+                items.forEach(item=>{
+                    const st = checks[item.id]||'open';
+                    let bg,color,label;
+                    if(st==='ok'){ bg='#14532d';color='#86efac';label='✓ OK'; }
+                    else if(st==='risk'){ bg='#450a0a';color='#fca5a5';label='⚠ RISK'; }
+                    else if(st==='na'){ bg='#1e293b';color='#64748b';label='— N/A'; }
+                    else { bg='#0f172a';color='#e2e8f0';label='○ Open'; }
+                    html += `<div onclick="window._paCycle('${item.id}')" style="display:flex;align-items:flex-start;gap:6px;padding:5px 6px;border-radius:3px;cursor:pointer;background:${bg};margin-bottom:2px;border-left:3px solid ${item.risk==='hot'?'#f97316':item.risk==='cold'?'#60a5fa':'#475569'};">
+<span style="min-width:52px;font-size:9px;font-weight:700;color:${color};padding-top:1px;">${label}</span>
+<span style="font-size:10px;color:${color};line-height:1.4;">${item.text}</span>
+</div>`;
+                });
+                html += `</div>`;
+            });
+
+            html += `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+  <button onclick="window._paPrint()" style="padding:5px 10px;background:#1e3a5f;color:#93c5fd;border:1px solid #2563eb;border-radius:4px;cursor:pointer;font-size:10px;">🖨️ Print Sign-Off Sheet</button>
+  <button onclick="window._paCopy()" style="padding:5px 10px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">📋 Copy Checklist</button>
+  <button onclick="window._paClearAll()" style="padding:5px 10px;background:#0f172a;color:#64748b;border:1px solid #1e293b;border-radius:4px;cursor:pointer;font-size:10px;">↺ Reset All</button>
+</div>`;
+
+            const wrap = document.getElementById(WRAP_ID);
+            if(wrap) wrap.innerHTML = html;
+        }
+
+        window._paCycle = function(id){
+            const checks = getState();
+            const cur = checks[id]||'open';
+            const next = cur==='open'?'ok': cur==='ok'?'risk': cur==='risk'?'na': 'open';
+            checks[id] = next;
+            saveChecks(checks);
+            render();
+        };
+        window._paSetMeta = function(field,val){
+            const d = load(); d[field]=val; save(d);
+        };
+        window._paClearAll = function(){
+            const d = load(); d.checks={}; save(d); render();
+        };
+        window._paPrint = function(){
+            const checks = getState();
+            const meta   = getMeta();
+            const now    = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+            const cats   = [...new Set(ITEMS.map(i=>i.cat))];
+            let rows = '';
+            cats.forEach(cat=>{
+                const items = ITEMS.filter(i=>i.cat===cat);
+                rows += `<tr><td colspan="3" style="background:#1e3a5f;color:#bfdbfe;padding:4px 6px;font-weight:700;font-size:9px;">${cat}</td></tr>`;
+                items.forEach(item=>{
+                    const st = checks[item.id]||'open';
+                    let stLabel, stColor;
+                    if(st==='ok'){ stLabel='✓ OK'; stColor='#166534'; }
+                    else if(st==='risk'){ stLabel='⚠ RISK'; stColor='#991b1b'; }
+                    else if(st==='na'){ stLabel='N/A'; stColor='#374151'; }
+                    else { stLabel='○ OPEN'; stColor='#92400e'; }
+                    const border = item.risk==='hot'?'border-left:3px solid #f97316;': item.risk==='cold'?'border-left:3px solid #3b82f6;':'border-left:3px solid #d1d5db;';
+                    rows += `<tr style="${border}"><td style="padding:4px 6px;font-size:9px;color:#111;line-height:1.4;">${item.text}</td>
+<td style="padding:4px 6px;font-size:9px;font-weight:700;color:${stColor};white-space:nowrap;">${stLabel}</td>
+<td style="padding:4px 6px;font-size:9px;border-left:1px solid #e5e7eb;">_________________________________</td></tr>`;
+                });
+            });
+            const cleared = ITEMS.filter(i=>{ const st=checks[i.id]||'open'; return st==='ok'||st==='na'; }).length;
+            const risks   = ITEMS.filter(i=>(checks[i.id]||'open')==='risk');
+            const allClear = (cleared===ITEMS.length && risks.length===0);
+            const w = window.open('','_blank','width=900,height=700');
+            w.document.write(`<!DOCTYPE html><html><head><title>Pour Approval Checklist</title>
+<style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;color:#111;}
+h2{font-size:14px;margin:0;} table{width:100%;border-collapse:collapse;margin:10px 0;}
+th{background:#1e3a8a;color:white;padding:4px 6px;text-align:left;font-size:9px;}
+tr:nth-child(even):not(.cat-row){background:#f8fafc;}
+.sig{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:20px;}
+.sig-line{border-top:1px solid #333;padding-top:4px;font-size:9px;}
+@media print{body{margin:10px;}}</style></head><body>
+<div style="text-align:center;border-bottom:2px solid #1e3a8a;padding-bottom:8px;margin-bottom:12px;">
+<h2>PRE-POUR APPROVAL CHECKLIST</h2>
+<div style="font-size:9px;color:#555;">ACI 305R-10 / ACI 306R-16 / ACI 309R / OSHA 29 CFR 1926</div>
+<div style="font-size:9px;">Prepared: ${now}</div>
+</div>
+<table style="margin-bottom:8px;border:1px solid #e5e7eb;font-size:9px;"><tr>
+<td style="padding:4px 8px;"><strong>Project:</strong> ${meta.project||'___________________'}</td>
+<td style="padding:4px 8px;"><strong>Element:</strong> ${meta.element||'___________________'}</td>
+<td style="padding:4px 8px;"><strong>Pour Date:</strong> ${meta.pourDate||'___________________'}</td>
+<td style="padding:4px 8px;"><strong>Foreman:</strong> ${meta.foreman||'___________________'}</td>
+</tr></table>
+${allClear ? '<div style="background:#dcfce7;border:1px solid #16a34a;padding:6px;text-align:center;font-weight:700;color:#166534;margin-bottom:8px;">✅ CLEARED FOR POUR — All Items Verified</div>' : ''}
+${risks.length>0 ? `<div style="background:#fef2f2;border:1px solid #dc2626;padding:6px;margin-bottom:8px;"><strong style="color:#dc2626;">⚠️ RISK ITEMS REQUIRE RESOLUTION BEFORE POUR:</strong><ul style="margin:4px 0 0 14px;font-size:9px;">${risks.map(r=>`<li>${r.text}</li>`).join('')}</ul></div>` : ''}
+<div style="font-size:8px;color:#777;margin-bottom:6px;">Color codes: <span style="border-left:3px solid #f97316;padding-left:4px;">Hot weather concern (ACI 305R)</span> &nbsp; <span style="border-left:3px solid #3b82f6;padding-left:4px;">Cold weather concern (ACI 306R)</span></div>
+<table>
+<thead><tr><th style="width:70%;">Checklist Item</th><th style="width:10%;">Status</th><th style="width:20%;">Inspector Initials</th></tr></thead>
+<tbody>${rows}</tbody>
+</table>
+<div class="sig">
+<div><div class="sig-line">Foreman / Date</div></div>
+<div><div class="sig-line">QC Inspector / Date</div></div>
+<div><div class="sig-line">GC Superintendent / Date</div></div>
+</div>
+<div style="font-size:8px;color:#888;margin-top:8px;">This form shall be completed and signed prior to concrete placement. Retain for project records. 
+Any RISK item must be resolved or formally accepted by Engineer of Record in writing before pour proceeds.
+ACI 305R hot weather threshold: ambient > 90°F or evaporation rate > 0.20 lb/ft²/hr. ACI 306R cold weather threshold: ambient < 40°F.</div>
+<script>window.onload=function(){window.print();};<\/script></body></html>`);
+            w.document.close();
+        };
+        window._paCopy = function(){
+            const checks = getState();
+            const meta   = getMeta();
+            let out = `PRE-POUR APPROVAL CHECKLIST\n`;
+            out += `Project: ${meta.project||'N/A'} | Element: ${meta.element||'N/A'} | Pour Date: ${meta.pourDate||'N/A'}\n`;
+            out += `ACI 305R / 306R / OSHA 1926\n${'─'.repeat(70)}\n`;
+            const cats = [...new Set(ITEMS.map(i=>i.cat))];
+            cats.forEach(cat=>{
+                out += `\n[${cat}]\n`;
+                ITEMS.filter(i=>i.cat===cat).forEach(item=>{
+                    const st = checks[item.id]||'open';
+                    const lbl = st==='ok'?'✓ OK': st==='risk'?'⚠ RISK': st==='na'?'N/A': '○ OPEN';
+                    out += `  ${lbl.padEnd(8)} ${item.text}\n`;
+                });
+            });
+            const cleared = ITEMS.filter(i=>{ const st=checks[i.id]||'open'; return st==='ok'||st==='na'; }).length;
+            out += `\nProgress: ${cleared}/${ITEMS.length} cleared\n`;
+            navigator.clipboard.writeText(out).catch(()=>{});
+            const btn = document.querySelector('[onclick="window._paCopy()"]');
+            if(btn){ btn.textContent='✅ Copied!'; setTimeout(()=>btn.textContent='📋 Copy Checklist',1500); }
+        };
+
+        function createButton(){
+            const sidebar = document.getElementById('sidebar');
+            if(!sidebar) return;
+
+            const btn = document.createElement('button');
+            btn.id = BTN_ID;
+            btn.textContent = '✅ Pour Approval';
+            btn.title = 'Pre-Pour Approval Checklist (ACI 305R/306R)';
+            btn.style.cssText = 'padding:4px 8px;background:#14532d;color:#86efac;border:1px solid #16a34a;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+            btn.onclick = togglePanel;
+
+            const wrap = document.createElement('div');
+            wrap.id = WRAP_ID;
+            wrap.style.cssText = 'display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+
+            // Find actions area and append
+            const actions = sidebar.querySelector('.actions, [data-section="actions"]') || sidebar.lastElementChild;
+            if(actions){ actions.parentNode.insertBefore(btn, actions.nextSibling); actions.parentNode.insertBefore(wrap, btn.nextSibling); }
+            else { sidebar.appendChild(btn); sidebar.appendChild(wrap); }
+        }
+
+        function togglePanel(){
+            const wrap = document.getElementById(WRAP_ID);
+            const btn  = document.getElementById(BTN_ID);
+            if(!wrap||!btn) return;
+            const show = wrap.style.display==='none';
+            wrap.style.display = show ? 'block' : 'none';
+            btn.textContent = show ? '✅ Hide Pour Approval' : '✅ Pour Approval';
+            if(show) render();
+        }
+
+        if(document.readyState==='loading'){
+            document.addEventListener('DOMContentLoaded', createButton);
+        } else {
+            createButton();
+        }
+    })();
+    </script>
+
+    <!-- =========================================================
+         TOOL 2: EQUIPMENT DOWNTIME LOG (🔧)
+         Track breakdowns, downtime hours, repair costs, delay impacts
+    ========================================================= -->
+    <script>
+    (function(){
+        'use strict';
+        const KEY    = 'oncor_equip_downtime_v1';
+        const BTN_ID = 'btn-equip-downtime';
+        const WRAP_ID= 'wrap-equip-downtime';
+
+        const EQUIP_TYPES = ['Concrete Pump - Boom','Concrete Pump - Line/Trailer','Laser Screed','Ride-On Power Trowel','Walk-Behind Trowel','Plate Compactor','Internal Vibrator','Generator','Concrete Saw (Flat)','Concrete Saw (Early Entry)','Telehandler / Forklift','Transit Mixer (Own)','Other'];
+        const CAUSE_TYPES = ['Mechanical Failure','Hydraulic Failure','Electrical/Electronic','Fuel/Fluid Issue','Operator Error','Third Party Damage','Weather','Rental Unit Non-Delivery','Other'];
+
+        function load(){ try{ return JSON.parse(localStorage.getItem(KEY))||{ entries:[] }; }catch(e){ return { entries:[] }; } }
+        function save(d){ try{ localStorage.setItem(KEY, JSON.stringify(d)); }catch(e){} }
+
+        function getDraft(){
+            const d = load();
+            return d.draft || { equipment:'Concrete Pump - Boom', project:'', date:'', cause:'Mechanical Failure',
+              downHrs:'', repairCost:'', lostYds:'', ydRate:'', notes:'', rentalClaim:false, resolution:'' };
+        }
+        function saveDraft(draft){ const d=load(); d.draft=draft; save(d); }
+
+        function calcLostRev(entry){
+            const lostYds = parseFloat(entry.lostYds)||0;
+            const ydRate  = parseFloat(entry.ydRate)||0;
+            return lostYds * ydRate;
+        }
+
+        function render(){
+            const d = load();
+            const entries = d.entries||[];
+            const draft   = getDraft();
+
+            const totalDown  = entries.reduce((s,e)=>s+(parseFloat(e.downHrs)||0),0);
+            const totalRepair= entries.reduce((s,e)=>s+(parseFloat(e.repairCost)||0),0);
+            const totalLostRev=entries.reduce((s,e)=>s+calcLostRev(e),0);
+            const totalImpact= totalRepair + totalLostRev;
+
+            const fmtDollar = v => v>=1000?`$${(v/1000).toFixed(1)}k`:`$${v.toFixed(0)}`;
+
+            let html = `
+<div style="padding:8px 0;font-size:11px;color:#94a3b8;">
+Track equipment breakdowns, downtime hours, repair costs, and lost production impact. Creates contemporaneous records for delay claims and equipment cost recovery.
+</div>
+
+<!-- Dashboard -->
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:8px;">
+  <div style="background:#1e293b;border-radius:4px;padding:6px;text-align:center;">
+    <div style="font-size:16px;font-weight:700;color:#f97316;">${entries.length}</div>
+    <div style="font-size:9px;color:#64748b;">Events</div>
+  </div>
+  <div style="background:#1e293b;border-radius:4px;padding:6px;text-align:center;">
+    <div style="font-size:16px;font-weight:700;color:#ef4444;">${totalDown.toFixed(1)}</div>
+    <div style="font-size:9px;color:#64748b;">Down Hours</div>
+  </div>
+  <div style="background:#1e293b;border-radius:4px;padding:6px;text-align:center;">
+    <div style="font-size:16px;font-weight:700;color:#ef4444;">${fmtDollar(totalRepair)}</div>
+    <div style="font-size:9px;color:#64748b;">Repair Cost</div>
+  </div>
+  <div style="background:#1e293b;border-radius:4px;padding:6px;text-align:center;">
+    <div style="font-size:16px;font-weight:700;color:#dc2626;">${fmtDollar(totalImpact)}</div>
+    <div style="font-size:9px;color:#64748b;">Total Impact</div>
+  </div>
+</div>
+
+<!-- Entry Form -->
+<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:8px;margin-bottom:8px;font-size:10px;">
+<div style="color:#64748b;font-size:9px;font-weight:700;margin-bottom:6px;">LOG NEW DOWNTIME EVENT</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:4px;">
+  <div><div style="color:#64748b;font-size:9px;">Equipment</div>
+    <select onchange="window._edField('equipment',this.value)" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;">
+    ${EQUIP_TYPES.map(t=>`<option value="${t}"${draft.equipment===t?' selected':''}>${t}</option>`).join('')}
+    </select></div>
+  <div><div style="color:#64748b;font-size:9px;">Project</div>
+    <input value="${draft.project}" placeholder="Project / job site" onchange="window._edField('project',this.value)"
+    style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+  <div><div style="color:#64748b;font-size:9px;">Date</div>
+    <input type="date" value="${draft.date}" onchange="window._edField('date',this.value)"
+    style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+  <div><div style="color:#64748b;font-size:9px;">Cause</div>
+    <select onchange="window._edField('cause',this.value)" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;">
+    ${CAUSE_TYPES.map(t=>`<option value="${t}"${draft.cause===t?' selected':''}>${t}</option>`).join('')}
+    </select></div>
+  <div><div style="color:#64748b;font-size:9px;">Downtime (hrs)</div>
+    <input type="number" value="${draft.downHrs}" placeholder="0.0" onchange="window._edField('downHrs',this.value)"
+    style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+  <div><div style="color:#64748b;font-size:9px;">Repair Cost ($)</div>
+    <input type="number" value="${draft.repairCost}" placeholder="0" onchange="window._edField('repairCost',this.value)"
+    style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+  <div><div style="color:#64748b;font-size:9px;">Lost Production (yd³)</div>
+    <input type="number" value="${draft.lostYds}" placeholder="0" onchange="window._edField('lostYds',this.value)"
+    style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+  <div><div style="color:#64748b;font-size:9px;">Revenue Rate ($/yd³ installed)</div>
+    <input type="number" value="${draft.ydRate}" placeholder="0" onchange="window._edField('ydRate',this.value)"
+    style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+</div>
+<div style="margin-bottom:4px;"><div style="color:#64748b;font-size:9px;">Resolution / Repair Description</div>
+  <input value="${draft.resolution}" placeholder="What was done to fix it?" onchange="window._edField('resolution',this.value)"
+  style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+<div style="margin-bottom:6px;"><div style="color:#64748b;font-size:9px;">Notes</div>
+  <textarea rows="2" onchange="window._edField('notes',this.value)" placeholder="Observer, witnesses, ticket#, subcontractor notified..."
+  style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;resize:vertical;">${draft.notes}</textarea></div>
+<div style="margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+  <input type="checkbox" id="ed-rental-claim" ${draft.rentalClaim?'checked':''} onchange="window._edField('rentalClaim',this.checked)">
+  <label for="ed-rental-claim" style="font-size:10px;color:#e2e8f0;">Rental equipment — will file downtime credit claim with rental company</label>
+</div>
+${(parseFloat(draft.lostYds)||0)>0&&(parseFloat(draft.ydRate)||0)>0?`<div style="background:#450a0a;border:1px solid #ef4444;border-radius:3px;padding:5px;font-size:10px;color:#fca5a5;margin-bottom:6px;">
+⚠️ Est. lost revenue: <strong>$${((parseFloat(draft.lostYds)||0)*(parseFloat(draft.ydRate)||0)).toFixed(0)}</strong> (${draft.lostYds} yd³ × $${draft.ydRate}/yd³)
+</div>`:''}
+<button onclick="window._edLog()" style="width:100%;padding:5px;background:#7c2d12;color:#fed7aa;border:1px solid #c2410c;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;">⚡ Log Downtime Event</button>
+</div>
+
+<!-- Log -->
+<div style="font-size:10px;font-weight:700;color:#94a3b8;margin-bottom:4px;">EVENT LOG (${entries.length})</div>`;
+            if(entries.length===0){
+                html += `<div style="color:#64748b;font-size:10px;font-style:italic;padding:8px 0;">No events logged yet.</div>`;
+            } else {
+                [...entries].reverse().forEach((e,ri)=>{
+                    const i = entries.length-1-ri;
+                    const lostRev = calcLostRev(e);
+                    html += `<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:6px;margin-bottom:4px;font-size:10px;">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:3px;">
+  <div>
+    <span style="font-weight:700;color:#f97316;">${e.equipment}</span>
+    <span style="color:#64748b;"> — ${e.project||'N/A'} — ${e.date||'N/A'}</span>
+  </div>
+  <button onclick="window._edDelete(${i})" style="padding:1px 6px;background:#450a0a;color:#fca5a5;border:1px solid #7f1d1d;border-radius:3px;cursor:pointer;font-size:9px;">✕</button>
+</div>
+<div style="display:flex;gap:12px;flex-wrap:wrap;">
+  <span style="color:#ef4444;">⏱ ${e.downHrs||0} hrs down</span>
+  ${parseFloat(e.repairCost)?`<span style="color:#ef4444;">🔧 $${parseFloat(e.repairCost).toFixed(0)} repair</span>`:''}
+  ${lostRev>0?`<span style="color:#dc2626;">📉 $${lostRev.toFixed(0)} lost revenue</span>`:''}
+  <span style="color:#64748b;">Cause: ${e.cause}</span>
+  ${e.rentalClaim?'<span style="color:#fbbf24;">📄 Rental claim</span>':''}
+</div>
+${e.resolution?`<div style="color:#94a3b8;font-size:9px;margin-top:2px;">Fix: ${e.resolution}</div>`:''}
+${e.notes?`<div style="color:#64748b;font-size:9px;">${e.notes}</div>`:''}
+</div>`;
+                });
+            }
+
+            html += `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+  <button onclick="window._edPrint()" style="padding:5px 10px;background:#1e3a5f;color:#93c5fd;border:1px solid #2563eb;border-radius:4px;cursor:pointer;font-size:10px;">🖨️ Print Downtime Report</button>
+  <button onclick="window._edCopy()" style="padding:5px 10px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">📋 Copy Report</button>
+</div>`;
+
+            const wrap = document.getElementById(WRAP_ID);
+            if(wrap) wrap.innerHTML = html;
+        }
+
+        window._edField = function(f,v){ const draft=getDraft(); draft[f]=v; saveDraft(draft); };
+        window._edDelete = function(i){ const d=load(); d.entries.splice(i,1); save(d); render(); };
+        window._edLog = function(){
+            const draft = getDraft();
+            if(!draft.equipment || !draft.date){ alert('Equipment and date are required.'); return; }
+            const d = load();
+            d.entries = d.entries||[];
+            d.entries.push({...draft, loggedAt: new Date().toISOString()});
+            d.draft = { equipment:'Concrete Pump - Boom', project:'', date:'', cause:'Mechanical Failure',
+              downHrs:'', repairCost:'', lostYds:'', ydRate:'', notes:'', rentalClaim:false, resolution:'' };
+            save(d);
+            render();
+        };
+        window._edPrint = function(){
+            const d = load();
+            const entries = d.entries||[];
+            const totalDown  = entries.reduce((s,e)=>s+(parseFloat(e.downHrs)||0),0);
+            const totalRepair= entries.reduce((s,e)=>s+(parseFloat(e.repairCost)||0),0);
+            const totalLostRev=entries.reduce((s,e)=>s+calcLostRev(e),0);
+            const rows = entries.map((e,i)=>{
+                const lostRev = calcLostRev(e);
+                return `<tr style="border-bottom:1px solid #ddd;">
+<td style="padding:4px 6px;font-size:9px;">${i+1}</td>
+<td style="padding:4px 6px;font-size:9px;">${e.date||''}</td>
+<td style="padding:4px 6px;font-size:9px;">${e.project||''}</td>
+<td style="padding:4px 6px;font-size:9px;">${e.equipment||''}</td>
+<td style="padding:4px 6px;font-size:9px;">${e.cause||''}</td>
+<td style="padding:4px 6px;text-align:center;font-size:9px;">${e.downHrs||0}</td>
+<td style="padding:4px 6px;text-align:right;font-size:9px;">$${parseFloat(e.repairCost||0).toFixed(0)}</td>
+<td style="padding:4px 6px;text-align:right;font-size:9px;">${lostRev>0?'$'+lostRev.toFixed(0):'-'}</td>
+<td style="padding:4px 6px;font-size:9px;">${e.resolution||''}</td>
+<td style="padding:4px 6px;font-size:9px;">${e.rentalClaim?'Yes':''}</td>
+</tr>`;
+            }).join('');
+            const now = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+            const w = window.open('','_blank','width=1100,height=700');
+            w.document.write(`<!DOCTYPE html><html><head><title>Equipment Downtime Log</title>
+<style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;color:#111;}
+h2{font-size:14px;} table{width:100%;border-collapse:collapse;margin:10px 0;}
+th{background:#7c2d12;color:white;padding:4px 6px;text-align:left;font-size:9px;}
+tr:nth-child(even){background:#fef3ec;}
+.sig{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:20px;}
+.sig-line{border-top:1px solid #333;padding-top:4px;font-size:9px;}
+@media print{body{margin:10px;}}</style></head><body>
+<div style="text-align:center;border-bottom:2px solid #7c2d12;padding-bottom:8px;margin-bottom:12px;">
+<h2>EQUIPMENT DOWNTIME LOG</h2>
+<div style="font-size:9px;color:#555;">Project Equipment Delay &amp; Cost Impact Record | Prepared: ${now}</div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px;text-align:center;">
+<div style="border:1px solid #ddd;padding:6px;border-radius:4px;"><strong>${entries.length}</strong><br><small>Events</small></div>
+<div style="border:1px solid #ddd;padding:6px;border-radius:4px;"><strong>${totalDown.toFixed(1)} hrs</strong><br><small>Total Downtime</small></div>
+<div style="border:1px solid #ddd;padding:6px;border-radius:4px;"><strong>$${totalRepair.toFixed(0)}</strong><br><small>Repair Costs</small></div>
+<div style="border:1px solid #ddd;padding:6px;border-radius:4px;"><strong>$${(totalRepair+totalLostRev).toFixed(0)}</strong><br><small>Total Impact</small></div>
+</div>
+<table>
+<thead><tr><th>#</th><th>Date</th><th>Project</th><th>Equipment</th><th>Cause</th><th>Down Hrs</th><th>Repair $</th><th>Lost Rev</th><th>Resolution</th><th>Rental Claim</th></tr></thead>
+<tbody>${rows||'<tr><td colspan="10" style="padding:8px;text-align:center;color:#666;">No events logged</td></tr>'}</tbody>
+<tfoot><tr style="background:#fef3ec;font-weight:700;border-top:2px solid #7c2d12;">
+<td colspan="5" style="padding:4px 6px;font-size:9px;">TOTALS</td>
+<td style="padding:4px 6px;text-align:center;font-size:9px;">${totalDown.toFixed(1)}</td>
+<td style="padding:4px 6px;text-align:right;font-size:9px;">$${totalRepair.toFixed(0)}</td>
+<td style="padding:4px 6px;text-align:right;font-size:9px;">$${totalLostRev.toFixed(0)}</td>
+<td colspan="2"></td>
+</tr></tfoot>
+</table>
+<div class="sig">
+<div><div class="sig-line">Equipment Manager / Date</div></div>
+<div><div class="sig-line">Project Manager / Date</div></div>
+<div><div class="sig-line">Controller / Date</div></div>
+</div>
+<div style="font-size:8px;color:#888;margin-top:8px;">This log documents contemporaneous equipment downtime events and associated cost impacts.
+Retain for delay claim substantiation, equipment cost recovery, and subcontractor back-charge proceedings.
+Rental company downtime claims should reference equipment agreement and include this log as exhibit.</div>
+<script>window.onload=function(){window.print();};<\/script></body></html>`);
+            w.document.close();
+        };
+        window._edCopy = function(){
+            const d = load();
+            const entries = d.entries||[];
+            let out = `EQUIPMENT DOWNTIME LOG\n${'─'.repeat(70)}\n`;
+            entries.forEach((e,i)=>{
+                const lostRev = calcLostRev(e);
+                out += `Event #${i+1} — ${e.date||'N/A'} | ${e.project||'N/A'}\n`;
+                out += `  Equipment: ${e.equipment}\n  Cause: ${e.cause}\n`;
+                out += `  Down: ${e.downHrs||0} hrs | Repair: $${parseFloat(e.repairCost||0).toFixed(0)}`;
+                if(lostRev>0) out += ` | Lost Revenue: $${lostRev.toFixed(0)}`;
+                out += '\n';
+                if(e.resolution) out += `  Resolution: ${e.resolution}\n`;
+                if(e.notes) out += `  Notes: ${e.notes}\n`;
+                out += '\n';
+            });
+            const totalRepair= entries.reduce((s,e)=>s+(parseFloat(e.repairCost)||0),0);
+            const totalLostRev=entries.reduce((s,e)=>s+calcLostRev(e),0);
+            out += `Total Repair: $${totalRepair.toFixed(0)} | Total Lost Revenue: $${totalLostRev.toFixed(0)} | Combined Impact: $${(totalRepair+totalLostRev).toFixed(0)}\n`;
+            navigator.clipboard.writeText(out).catch(()=>{});
+            const btn = document.querySelector('[onclick="window._edCopy()"]');
+            if(btn){ btn.textContent='✅ Copied!'; setTimeout(()=>btn.textContent='📋 Copy Report',1500); }
+        };
+
+        function createButton(){
+            const sidebar = document.getElementById('sidebar');
+            if(!sidebar) return;
+            const btn = document.createElement('button');
+            btn.id = BTN_ID;
+            btn.textContent = '🔧 Equipment Downtime';
+            btn.title = 'Equipment Downtime Log — track breakdowns and delay costs';
+            btn.style.cssText = 'padding:4px 8px;background:#7c2d12;color:#fed7aa;border:1px solid #c2410c;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+            btn.onclick = togglePanel;
+            const wrap = document.createElement('div');
+            wrap.id = WRAP_ID;
+            wrap.style.cssText = 'display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+            sidebar.appendChild(btn);
+            sidebar.appendChild(wrap);
+        }
+        function togglePanel(){
+            const wrap = document.getElementById(WRAP_ID);
+            const btn  = document.getElementById(BTN_ID);
+            if(!wrap||!btn) return;
+            const show = wrap.style.display==='none';
+            wrap.style.display = show ? 'block' : 'none';
+            btn.textContent = show ? '🔧 Hide Equipment Downtime' : '🔧 Equipment Downtime';
+            if(show) render();
+        }
+        if(document.readyState==='loading'){
+            document.addEventListener('DOMContentLoaded', createButton);
+        } else {
+            createButton();
+        }
+    })();
+    </script>
+
+    <!-- =========================================================
+         TOOL 3: SUBMITTAL TRANSMITTAL GENERATOR (📤)
+         Formal transmittal letter for mix designs, shop drawings,
+         material certs to engineer/GC — pre-fills from project settings
+    ========================================================= -->
+    <script>
+    (function(){
+        'use strict';
+        const KEY    = 'oncor_transmittal_v1';
+        const BTN_ID = 'btn-transmittal';
+        const WRAP_ID= 'wrap-transmittal';
+
+        const SUBMIT_TYPES = [
+            'Concrete Mix Design',
+            'Concrete Mix Design Revision',
+            'Rebar Shop Drawings',
+            'Post-Tension Shop Drawings',
+            'Forming / Shoring Drawings',
+            'Material Certificates — Rebar',
+            'Material Certificates — Welded Wire',
+            'Batch Plant Certification',
+            'Testing Lab Qualifications',
+            'ACI Certification — Finishers/Inspectors',
+            'Concrete Pump Submittal',
+            'SWPPP / BMP Plan',
+            'Other — See Description',
+        ];
+        const ACTIONS = ['For Approval','For Information Only','For Record','Revise and Resubmit','As Built','For Review and Comment'];
+        const NUM_COPIES = ['1','2','3','4','5','Electronic Only'];
+
+        function load(){ try{ return JSON.parse(localStorage.getItem(KEY))||{}; }catch(e){ return {}; } }
+        function save(d){ try{ localStorage.setItem(KEY, JSON.stringify(d)); }catch(e){} }
+
+        function getState(){
+            const d = load();
+            const settings = (() => { try{ return JSON.parse(localStorage.getItem('oncor_company_settings'))||{}; }catch(e){ return {}; } })();
+            const proj = (() => { try {
+                const sk = localStorage.getItem('oncor_active_project')||localStorage.getItem('oncor_current_project')||'';
+                if(!sk) return {};
+                const saved = JSON.parse(localStorage.getItem('oncor_projects')||'{}');
+                return saved[sk]||{};
+            }catch(e){ return {}; }})();
+            return {
+                transmittalNo:  d.transmittalNo  || '',
+                date:           d.date           || new Date().toISOString().slice(0,10),
+                toName:         d.toName         || '',
+                toCompany:      d.toCompany      || '',
+                toAddress:      d.toAddress      || '',
+                toEmail:        d.toEmail        || '',
+                projectName:    d.projectName    || proj.projectName || '',
+                projectAddress: d.projectAddress || '',
+                gcName:         d.gcName         || proj.client || '',
+                contract:       d.contract       || '',
+                specSection:    d.specSection    || '',
+                submittalType:  d.submittalType  || 'Concrete Mix Design',
+                submittalAction:d.submittalAction|| 'For Approval',
+                description:    d.description   || '',
+                numCopies:      d.numCopies      || '2',
+                resubmittal:    d.resubmittal    || false,
+                origTxNo:       d.origTxNo       || '',
+                remarks:        d.remarks        || '',
+                fromName:       d.fromName       || settings.contactName || '',
+                fromTitle:      d.fromTitle      || d.fromTitle || 'Estimator / Project Manager',
+                fromCompany:    d.fromCompany    || settings.companyName || '',
+                fromPhone:      d.fromPhone      || settings.phone || '',
+                fromEmail:      d.fromEmail      || settings.email || '',
+            };
+        }
+        function setState(field,val){ const d=load(); d[field]=val; save(d); }
+
+        function render(){
+            const s = getState();
+            let html = `
+<div style="padding:8px 0;font-size:11px;color:#94a3b8;">
+Generate a formal submittal transmittal letter for concrete mix designs, rebar shop drawings, material certifications, and other Division 03 submittals. Pre-fills from company settings and active project.
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:10px;margin-bottom:8px;">
+
+<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:8px;">
+<div style="color:#64748b;font-size:9px;font-weight:700;margin-bottom:5px;">TRANSMITTAL HEADER</div>
+<div style="margin-bottom:4px;"><div style="color:#64748b;font-size:9px;">Transmittal No.</div>
+  <input value="${s.transmittalNo}" placeholder="e.g. TX-001" onchange="window._txField('transmittalNo',this.value)"
+  style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+<div style="margin-bottom:4px;"><div style="color:#64748b;font-size:9px;">Date</div>
+  <input type="date" value="${s.date}" onchange="window._txField('date',this.value)"
+  style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+<div style="margin-bottom:4px;"><div style="color:#64748b;font-size:9px;">Project Name</div>
+  <input value="${s.projectName}" placeholder="Project name" onchange="window._txField('projectName',this.value)"
+  style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+<div style="margin-bottom:4px;"><div style="color:#64748b;font-size:9px;">Project Address / Location</div>
+  <input value="${s.projectAddress}" placeholder="Street address" onchange="window._txField('projectAddress',this.value)"
+  style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+<div style="margin-bottom:4px;"><div style="color:#64748b;font-size:9px;">GC / Owner</div>
+  <input value="${s.gcName}" placeholder="General Contractor" onchange="window._txField('gcName',this.value)"
+  style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+<div><div style="color:#64748b;font-size:9px;">Contract / PO No.</div>
+  <input value="${s.contract}" placeholder="Contract number" onchange="window._txField('contract',this.value)"
+  style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+</div>
+
+<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:8px;">
+<div style="color:#64748b;font-size:9px;font-weight:700;margin-bottom:5px;">TO (RECIPIENT)</div>
+<div style="margin-bottom:4px;"><div style="color:#64748b;font-size:9px;">Name</div>
+  <input value="${s.toName}" placeholder="Engineer / GC contact" onchange="window._txField('toName',this.value)"
+  style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+<div style="margin-bottom:4px;"><div style="color:#64748b;font-size:9px;">Company</div>
+  <input value="${s.toCompany}" placeholder="Engineering firm / GC company" onchange="window._txField('toCompany',this.value)"
+  style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+<div style="margin-bottom:4px;"><div style="color:#64748b;font-size:9px;">Address</div>
+  <input value="${s.toAddress}" placeholder="Mailing address" onchange="window._txField('toAddress',this.value)"
+  style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+<div><div style="color:#64748b;font-size:9px;">Email</div>
+  <input value="${s.toEmail}" placeholder="engineer@firm.com" onchange="window._txField('toEmail',this.value)"
+  style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+</div>
+
+</div>
+
+<!-- Submittal details -->
+<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:8px;margin-bottom:8px;font-size:10px;">
+<div style="color:#64748b;font-size:9px;font-weight:700;margin-bottom:5px;">SUBMITTAL DETAILS</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:4px;">
+  <div><div style="color:#64748b;font-size:9px;">Submittal Type</div>
+    <select onchange="window._txField('submittalType',this.value)" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;">
+    ${SUBMIT_TYPES.map(t=>`<option value="${t}"${s.submittalType===t?' selected':''}>${t}</option>`).join('')}
+    </select></div>
+  <div><div style="color:#64748b;font-size:9px;">Action Required</div>
+    <select onchange="window._txField('submittalAction',this.value)" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;">
+    ${ACTIONS.map(a=>`<option value="${a}"${s.submittalAction===a?' selected':''}>${a}</option>`).join('')}
+    </select></div>
+  <div><div style="color:#64748b;font-size:9px;">Spec Section</div>
+    <input value="${s.specSection}" placeholder="e.g. 03 30 00 — Cast-in-Place Concrete" onchange="window._txField('specSection',this.value)"
+    style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+  <div><div style="color:#64748b;font-size:9px;">Copies Transmitted</div>
+    <select onchange="window._txField('numCopies',this.value)" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;">
+    ${NUM_COPIES.map(n=>`<option value="${n}"${s.numCopies===n?' selected':''}>${n}</option>`).join('')}
+    </select></div>
+</div>
+<div style="margin-bottom:4px;"><div style="color:#64748b;font-size:9px;">Description / Document Title</div>
+  <input value="${s.description}" placeholder="e.g. El Paso Ready Mix — 4000 PSI Type I/II w/ Grade 60 Rebar" onchange="window._txField('description',this.value)"
+  style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+<div style="margin-bottom:4px;display:flex;align-items:center;gap:6px;">
+  <input type="checkbox" id="tx-resub" ${s.resubmittal?'checked':''} onchange="window._txField('resubmittal',this.checked)">
+  <label for="tx-resub" style="font-size:10px;color:#e2e8f0;">This is a resubmittal</label>
+  ${s.resubmittal?`<input value="${s.origTxNo}" placeholder="Original TX No." onchange="window._txField('origTxNo',this.value)" style="background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;width:120px;">`:''}
+</div>
+<div><div style="color:#64748b;font-size:9px;">Remarks</div>
+  <textarea rows="2" onchange="window._txField('remarks',this.value)" placeholder="Any additional notes, delivery instructions, response deadline..."
+  style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;resize:vertical;">${s.remarks}</textarea></div>
+</div>
+
+<!-- From -->
+<div style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:8px;margin-bottom:8px;font-size:10px;">
+<div style="color:#64748b;font-size:9px;font-weight:700;margin-bottom:5px;">FROM (SENDER)</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+  <div><div style="color:#64748b;font-size:9px;">Name</div>
+    <input value="${s.fromName}" placeholder="Your name" onchange="window._txField('fromName',this.value)"
+    style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+  <div><div style="color:#64748b;font-size:9px;">Title</div>
+    <input value="${s.fromTitle}" onchange="window._txField('fromTitle',this.value)"
+    style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+  <div><div style="color:#64748b;font-size:9px;">Company</div>
+    <input value="${s.fromCompany}" placeholder="Company name" onchange="window._txField('fromCompany',this.value)"
+    style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+  <div><div style="color:#64748b;font-size:9px;">Phone</div>
+    <input value="${s.fromPhone}" onchange="window._txField('fromPhone',this.value)"
+    style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+  <div style="grid-column:span 2;"><div style="color:#64748b;font-size:9px;">Email</div>
+    <input value="${s.fromEmail}" onchange="window._txField('fromEmail',this.value)"
+    style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:2px;font-size:10px;"></div>
+</div>
+</div>
+
+<div style="display:flex;gap:6px;flex-wrap:wrap;">
+  <button onclick="window._txGenerate()" style="padding:5px 10px;background:#1e3a5f;color:#93c5fd;border:1px solid #2563eb;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;">📄 Generate Transmittal Letter</button>
+  <button onclick="window._txCopyEmail()" style="padding:5px 10px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">📧 Copy Email Draft</button>
+</div>`;
+
+            const wrap = document.getElementById(WRAP_ID);
+            if(wrap) wrap.innerHTML = html;
+        }
+
+        window._txField = function(f,v){ setState(f,v); render(); };
+
+        window._txGenerate = function(){
+            const s = getState();
+            const dateStr = s.date ? new Date(s.date+'T12:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+            const actionColor = s.submittalAction==='For Approval'?'#1e3a8a': s.submittalAction==='Revise and Resubmit'?'#7f1d1d':'#14532d';
+            const w = window.open('','_blank','width=900,height=750');
+            w.document.write(`<!DOCTYPE html><html><head><title>Submittal Transmittal ${s.transmittalNo||''}</title>
+<style>body{font-family:Arial,sans-serif;font-size:11px;margin:30px;color:#111;max-width:750px;}
+h2{font-size:16px;margin:0;} h3{font-size:12px;margin:8px 0 4px;}
+table{width:100%;border-collapse:collapse;margin:8px 0;}
+td,th{padding:4px 8px;border:1px solid #ddd;font-size:10px;}
+th{background:#f1f5f9;font-weight:700;}
+.action-badge{display:inline-block;background:${actionColor};color:white;padding:3px 10px;border-radius:3px;font-weight:700;font-size:10px;}
+.sig-line{border-top:1px solid #333;padding-top:4px;margin-top:20px;font-size:10px;}
+@media print{body{margin:15px;}}</style></head><body>
+<div style="border-bottom:3px solid #1e3a8a;padding-bottom:12px;margin-bottom:16px;">
+<table style="border:none;margin:0;"><tr>
+<td style="border:none;padding:0;vertical-align:top;">
+<div style="font-size:18px;font-weight:700;color:#1e3a8a;">${s.fromCompany||'COMPANY NAME'}</div>
+<div style="font-size:10px;color:#555;">${s.fromPhone||''} ${s.fromPhone&&s.fromEmail?'|':''} ${s.fromEmail||''}</div>
+</td>
+<td style="border:none;padding:0;vertical-align:top;text-align:right;">
+<div style="font-size:16px;font-weight:700;">SUBMITTAL TRANSMITTAL</div>
+<div style="font-size:10px;color:#555;">No.: <strong>${s.transmittalNo||'___________'}</strong> &nbsp;|&nbsp; Date: <strong>${dateStr}</strong></div>
+${s.resubmittal?`<div style="font-size:10px;color:#dc2626;font-weight:700;">RESUBMITTAL — Orig. TX: ${s.origTxNo||'N/A'}</div>`:''}
+</td>
+</tr></table>
+</div>
+
+<table style="margin-bottom:12px;">
+<tr><th colspan="2" style="background:#1e3a8a;color:white;">PROJECT INFORMATION</th></tr>
+<tr><td style="width:30%;font-weight:700;">Project</td><td>${s.projectName||'___________________'}</td></tr>
+<tr><td style="font-weight:700;">Location</td><td>${s.projectAddress||'___________________'}</td></tr>
+<tr><td style="font-weight:700;">GC / Owner</td><td>${s.gcName||'___________________'}</td></tr>
+${s.contract?`<tr><td style="font-weight:700;">Contract No.</td><td>${s.contract}</td></tr>`:''}
+</table>
+
+<table style="margin-bottom:12px;">
+<tr><th colspan="2" style="background:#1e3a8a;color:white;">TRANSMITTAL PARTIES</th></tr>
+<tr><td style="width:30%;font-weight:700;">TO</td><td>${s.toName||'___________________'}${s.toCompany?` — ${s.toCompany}`:''}<br>${s.toAddress||''}${s.toEmail?`<br>${s.toEmail}`:''}</td></tr>
+<tr><td style="font-weight:700;">FROM</td><td>${s.fromName||'___________________'}, ${s.fromTitle||''}<br>${s.fromCompany||''}</td></tr>
+</table>
+
+<table style="margin-bottom:12px;">
+<tr><th colspan="2" style="background:#1e3a8a;color:white;">SUBMITTAL INFORMATION</th></tr>
+<tr><td style="width:30%;font-weight:700;">Submittal Type</td><td>${s.submittalType}</td></tr>
+<tr><td style="font-weight:700;">Description</td><td>${s.description||'See attached'}</td></tr>
+${s.specSection?`<tr><td style="font-weight:700;">Spec Section</td><td>${s.specSection}</td></tr>`:''}
+<tr><td style="font-weight:700;">Copies</td><td>${s.numCopies}</td></tr>
+<tr><td style="font-weight:700;">Action Required</td><td><span class="action-badge">${s.submittalAction}</span></td></tr>
+</table>
+
+${s.remarks?`<div style="border:1px solid #ddd;padding:8px;border-radius:4px;margin-bottom:12px;font-size:10px;"><strong>REMARKS:</strong> ${s.remarks}</div>`:''}
+
+<div style="background:#fffbeb;border:1px solid #d97706;padding:8px;border-radius:4px;margin-bottom:12px;font-size:9px;">
+<strong>RESPONSE REQUIRED:</strong> Please review and return stamped copies within 14 calendar days per spec section requirements.
+${s.submittalAction==='For Approval'?'Contractor shall not proceed with the work until written approval is received.':''}
+${s.submittalAction==='Revise and Resubmit'?'Contractor acknowledges prior rejection and has addressed all review comments. See attached response log.':''}
+</div>
+
+<div style="margin-top:24px;display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+<div><div class="sig-line">Submitted By / Date<br><br><strong>${s.fromName||'_______________________'}</strong><br>${s.fromTitle||''} — ${s.fromCompany||''}</div></div>
+<div><div class="sig-line">Received By / Date<br><br>_______________________<br>Engineer / GC Representative</div></div>
+</div>
+
+<div style="margin-top:16px;font-size:8px;color:#888;border-top:1px solid #e5e7eb;padding-top:8px;">
+This transmittal is for documentation purposes. The submitter represents that the information contained in this submittal has been reviewed and approved for compliance with contract documents.
+Retain one (1) copy for your records. Return stamped copies as indicated above.
+</div>
+<script>window.onload=function(){window.print();};<\/script></body></html>`);
+            w.document.close();
+        };
+        window._txCopyEmail = function(){
+            const s = getState();
+            const dateStr = s.date ? new Date(s.date+'T12:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+            const subj = `SUBMITTAL TRANSMITTAL ${s.transmittalNo||'TX-001'} — ${s.submittalType} — ${s.projectName||'Project'}`;
+            let body = `Subject: ${subj}\n\n`;
+            body += `${s.toName||'[Engineer/GC Contact]'},\n\n`;
+            body += `Please find attached the following submittal for your review:\n\n`;
+            body += `  Project:        ${s.projectName||'N/A'}\n`;
+            body += `  Submittal No.:  ${s.transmittalNo||'N/A'}\n`;
+            body += `  Date:           ${dateStr}\n`;
+            body += `  Type:           ${s.submittalType}\n`;
+            if(s.description) body += `  Description:    ${s.description}\n`;
+            if(s.specSection) body += `  Spec Section:   ${s.specSection}\n`;
+            body += `  Action:         ${s.submittalAction}\n`;
+            body += `  Copies:         ${s.numCopies}\n`;
+            if(s.resubmittal) body += `\n  *** This is a RESUBMITTAL (Original TX: ${s.origTxNo||'N/A'}) ***\n`;
+            if(s.remarks) body += `\nRemarks: ${s.remarks}\n`;
+            body += `\nPlease review and respond within 14 calendar days per specification requirements.\n`;
+            if(s.submittalAction==='For Approval') body += `Note: Work shall not proceed until written approval is received.\n`;
+            body += `\nRegards,\n${s.fromName||''}\n${s.fromTitle||''}\n${s.fromCompany||''}\n`;
+            if(s.fromPhone) body += `${s.fromPhone}\n`;
+            if(s.fromEmail) body += `${s.fromEmail}\n`;
+            navigator.clipboard.writeText(body).catch(()=>{});
+            const btn = document.querySelector('[onclick="window._txCopyEmail()"]');
+            if(btn){ btn.textContent='✅ Copied!'; setTimeout(()=>btn.textContent='📧 Copy Email Draft',1500); }
+        };
+
+        function createButton(){
+            const sidebar = document.getElementById('sidebar');
+            if(!sidebar) return;
+            const btn = document.createElement('button');
+            btn.id = BTN_ID;
+            btn.textContent = '📤 Submittal Transmittal';
+            btn.title = 'Submittal Transmittal Generator — formal letters for mix designs, shop drawings, certs';
+            btn.style.cssText = 'padding:4px 8px;background:#1e3a5f;color:#93c5fd;border:1px solid #2563eb;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+            btn.onclick = togglePanel;
+            const wrap = document.createElement('div');
+            wrap.id = WRAP_ID;
+            wrap.style.cssText = 'display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+            sidebar.appendChild(btn);
+            sidebar.appendChild(wrap);
+        }
+        function togglePanel(){
+            const wrap = document.getElementById(WRAP_ID);
+            const btn  = document.getElementById(BTN_ID);
+            if(!wrap||!btn) return;
+            const show = wrap.style.display==='none';
+            wrap.style.display = show ? 'block' : 'none';
+            btn.textContent = show ? '📤 Hide Transmittal' : '📤 Submittal Transmittal';
+            if(show) render();
+        }
+        if(document.readyState==='loading'){
+            document.addEventListener('DOMContentLoaded', createButton);
+        } else {
+            createButton();
+        }
+    })();
+    </script>
+
 </body>
 </html>
