@@ -28625,3 +28625,944 @@ Retain one (1) copy for your records. Return stamped copies as indicated above.
 
 </body>
 </html>
+
+    <!-- TOOL: Water Addition Log -->
+    <script>
+    (function(){
+        const TOOL_ID = 'water-add-log';
+        const BTN_ID  = 'btn-water-add';
+        const WRAP_ID = 'wrap-water-add';
+        const SK = 'oncor_waterAddLog_v1';
+
+        function load(){ try{ return JSON.parse(localStorage.getItem(SK))||{entries:[]}; }catch(e){ return {entries:[]}; } }
+        function save(d){ localStorage.setItem(SK, JSON.stringify(d)); }
+
+        function getProject(){
+            try{ const p=JSON.parse(localStorage.getItem('oncorTakeoff_autosave')||'{}'); return p.projectName||''; }catch(e){ return ''; }
+        }
+
+        function render(){
+            const wrap = document.getElementById(WRAP_ID);
+            if(!wrap || wrap.style.display==='none') return;
+            const d = load();
+            const entries = d.entries||[];
+
+            // Stats
+            const totalAdds = entries.filter(e=>parseFloat(e.galAdded||0)>0);
+            const violations = entries.filter(e=>{
+                const maxAdd = (parseFloat(e.yd3||0)*1).toFixed(1);
+                return parseFloat(e.galAdded||0) > parseFloat(maxAdd);
+            });
+            const totalGal = entries.reduce((s,e)=>s+parseFloat(e.galAdded||0),0);
+
+            let html = `<div style="font-size:11px;font-weight:700;color:#93c5fd;margin-bottom:8px;">💧 ASTM C94 Water Addition Log</div>`;
+            html += `<div style="font-size:9px;color:#94a3b8;margin-bottom:8px;background:#1e293b;padding:6px;border-radius:4px;border-left:3px solid #0ea5e9;">
+                <strong>ASTM C94 §11.8:</strong> Water may be added at jobsite ONLY if slump is below specified minimum AND batch ticket w/c is below maximum.
+                Maximum addition: <strong>1 gal per cubic yard</strong> of design batch, added all at once before discharge.
+                Mixer must rotate ≥30 rev at mixing speed after addition. Truck must be discharged within 90 min total or 300 rev, whichever comes first.
+            </div>`;
+
+            // Summary strip
+            html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;">
+                <div style="background:#1e293b;border-radius:4px;padding:6px;text-align:center;">
+                    <div style="font-size:16px;font-weight:700;color:#e2e8f0;">${entries.length}</div>
+                    <div style="font-size:9px;color:#94a3b8;">Total Loads Logged</div>
+                </div>
+                <div style="background:${violations.length>0?'#450a0a':'#1e293b'};border-radius:4px;padding:6px;text-align:center;border:${violations.length>0?'1px solid #ef4444':'none'};">
+                    <div style="font-size:16px;font-weight:700;color:${violations.length>0?'#ef4444':'#22c55e'};">${violations.length}</div>
+                    <div style="font-size:9px;color:#94a3b8;">ASTM C94 Violations</div>
+                </div>
+                <div style="background:#1e293b;border-radius:4px;padding:6px;text-align:center;">
+                    <div style="font-size:16px;font-weight:700;color:#e2e8f0;">${totalGal.toFixed(1)}</div>
+                    <div style="font-size:9px;color:#94a3b8;">Total Gal Added</div>
+                </div>
+            </div>`;
+
+            if(violations.length>0){
+                html += `<div style="background:#450a0a;border:1px solid #ef4444;border-radius:4px;padding:8px;margin-bottom:10px;font-size:10px;color:#ef4444;">
+                    ⚠️ <strong>${violations.length} VIOLATION(S):</strong> Water added exceeded 1 gal/yd³ limit. Engineer notification may be required. Document disposition of affected loads.
+                </div>`;
+            }
+
+            // Add entry form
+            html += `<div style="background:#1e293b;border-radius:4px;padding:8px;margin-bottom:10px;">
+                <div style="font-size:10px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">Log Water Addition Event</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Project</div>
+                        <input id="wa-project" placeholder="${getProject()||'Project name'}" value="${getProject()}" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Date & Time</div>
+                        <input id="wa-datetime" type="datetime-local" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Ticket #</div>
+                        <input id="wa-ticket" placeholder="e.g. 123456" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Truck ID</div>
+                        <input id="wa-truck" placeholder="e.g. TX-412" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Load (yd³)</div>
+                        <input id="wa-yd3" type="number" min="0.1" step="0.1" placeholder="e.g. 9.5" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;" oninput="window._waCalcMax()">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Gal Added</div>
+                        <input id="wa-gal" type="number" min="0" step="0.5" placeholder="e.g. 8" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;" oninput="window._waCalcMax()">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Ticket Slump (in)</div>
+                        <input id="wa-slump-ticket" type="number" min="0" step="0.5" placeholder="e.g. 3.5" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Spec Slump (in)</div>
+                        <input id="wa-slump-spec" type="number" min="0" step="0.5" placeholder="e.g. 4.0" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Authorized By</div>
+                        <input id="wa-auth" placeholder="Foreman / QC Inspector" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Engineer Notified?</div>
+                        <select id="wa-engr" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                            <option value="N/A">N/A — within limits</option>
+                            <option value="Yes">Yes — notified</option>
+                            <option value="No">No — not notified</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="wa-max-hint" style="font-size:10px;color:#94a3b8;margin-bottom:6px;"></div>
+                <div style="margin-bottom:6px;">
+                    <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Notes</div>
+                    <textarea id="wa-notes" rows="2" placeholder="Plant ticket w/c ratio, mix batch water info, disposition..." style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;resize:vertical;"></textarea>
+                </div>
+                <button onclick="window._waAdd()" style="padding:5px 12px;background:#0c4a6e;color:#7dd3fc;border:1px solid #0ea5e9;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;">+ Log Water Addition</button>
+            </div>`;
+
+            // Entry log
+            if(entries.length>0){
+                html += `<div style="font-size:10px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">Water Addition Log (${entries.length} loads)</div>`;
+                [...entries].reverse().forEach((e,ri)=>{
+                    const i = entries.length-1-ri;
+                    const yd3 = parseFloat(e.yd3||0);
+                    const galAdded = parseFloat(e.galAdded||0);
+                    const maxGal = yd3*1;
+                    const overLimit = galAdded > maxGal;
+                    const borderColor = overLimit ? '#ef4444' : '#22c55e';
+                    const badgeColor = overLimit ? '#ef4444' : '#22c55e';
+                    const badge = overLimit ? `⚠️ VIOLATION +${(galAdded-maxGal).toFixed(1)}gal` : '✓ ASTM C94 OK';
+                    html += `<div style="background:#1e293b;border-left:3px solid ${borderColor};border-radius:4px;padding:8px;margin-bottom:6px;font-size:10px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                            <strong style="color:#e2e8f0;">Ticket #${e.ticket||'N/A'} — Truck ${e.truck||'N/A'}</strong>
+                            <span style="color:${badgeColor};font-size:9px;font-weight:700;">${badge}</span>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;font-size:9px;color:#94a3b8;">
+                            <span>📦 ${yd3.toFixed(1)} yd³ | Max: ${maxGal.toFixed(1)} gal</span>
+                            <span>💧 Added: ${galAdded.toFixed(1)} gal</span>
+                            <span>📏 Slump: ${e.slumpTicket||'?'}" ticket / ${e.slumpSpec||'?'}" spec</span>
+                            <span>📅 ${e.datetime||e.date||'N/A'}</span>
+                            <span>👤 Auth: ${e.auth||'N/A'}</span>
+                            <span>📋 Engr: ${e.engr||'N/A'}</span>
+                        </div>
+                        ${e.notes?`<div style="margin-top:4px;font-size:9px;color:#64748b;border-top:1px solid #0f172a;padding-top:4px;">${e.notes}</div>`:''}
+                        <button onclick="window._waDel(${i})" style="margin-top:4px;padding:2px 6px;background:transparent;color:#6b7280;border:1px solid #374151;border-radius:3px;cursor:pointer;font-size:9px;">Delete</button>
+                    </div>`;
+                });
+            }
+
+            // Actions
+            html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+                <button onclick="window._waPrint()" style="padding:5px 10px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">🖨️ Print ASTM C94 Log</button>
+                <button onclick="window._waCopy()" style="padding:5px 10px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">📋 Copy Log</button>
+                <button onclick="window._waClear()" style="padding:5px 10px;background:#1e293b;color:#6b7280;border:1px solid #374151;border-radius:4px;cursor:pointer;font-size:10px;">🗑️ Clear All</button>
+            </div>`;
+
+            wrap.innerHTML = html;
+        }
+
+        window._waCalcMax = function(){
+            const yd3 = parseFloat(document.getElementById('wa-yd3')?.value||0);
+            const gal = parseFloat(document.getElementById('wa-gal')?.value||0);
+            const hint = document.getElementById('wa-max-hint');
+            if(!hint) return;
+            if(yd3>0){
+                const maxGal = yd3*1;
+                const ok = gal <= maxGal;
+                hint.innerHTML = `ASTM C94 max for this load: <strong style="color:${ok?'#22c55e':'#ef4444'}">${maxGal.toFixed(1)} gal</strong> — ${gal>0 ? (ok ? '✓ Within limit' : `⚠️ EXCEEDS by ${(gal-maxGal).toFixed(1)} gal`) : ''}`;
+            } else {
+                hint.innerHTML = '';
+            }
+        };
+
+        window._waAdd = function(){
+            const yd3 = document.getElementById('wa-yd3')?.value;
+            const gal = document.getElementById('wa-gal')?.value;
+            if(!yd3||!gal){ alert('Load yd³ and Gal Added are required.'); return; }
+            const d = load();
+            d.entries.push({
+                project: document.getElementById('wa-project')?.value||'',
+                datetime: document.getElementById('wa-datetime')?.value||new Date().toISOString().slice(0,16),
+                ticket: document.getElementById('wa-ticket')?.value||'',
+                truck: document.getElementById('wa-truck')?.value||'',
+                yd3: yd3,
+                galAdded: gal,
+                slumpTicket: document.getElementById('wa-slump-ticket')?.value||'',
+                slumpSpec: document.getElementById('wa-slump-spec')?.value||'',
+                auth: document.getElementById('wa-auth')?.value||'',
+                engr: document.getElementById('wa-engr')?.value||'N/A',
+                notes: document.getElementById('wa-notes')?.value||''
+            });
+            save(d);
+            render();
+        };
+
+        window._waDel = function(i){
+            if(!confirm('Delete this entry?')) return;
+            const d = load();
+            d.entries.splice(i,1);
+            save(d);
+            render();
+        };
+
+        window._waClear = function(){
+            if(!confirm('Clear all water addition log entries?')) return;
+            save({entries:[]});
+            render();
+        };
+
+        window._waCopy = function(){
+            const d = load();
+            if(!d.entries.length){ alert('No entries to copy.'); return; }
+            let txt = 'ASTM C94 WATER ADDITION LOG\n' + '='.repeat(50) + '\n';
+            d.entries.forEach(e=>{
+                const overLimit = parseFloat(e.galAdded||0) > parseFloat(e.yd3||0)*1;
+                txt += `\nTicket: ${e.ticket||'N/A'} | Truck: ${e.truck||'N/A'} | Date: ${e.datetime||'N/A'}\n`;
+                txt += `Load: ${e.yd3} yd³ | Gal Added: ${e.galAdded} gal | Max Allowed: ${(parseFloat(e.yd3||0)*1).toFixed(1)} gal\n`;
+                txt += `Status: ${overLimit?'⚠️ VIOLATION':'✓ ASTM C94 OK'}\n`;
+                txt += `Slump: ${e.slumpTicket||'?'}" ticket / ${e.slumpSpec||'?'}" spec | Auth: ${e.auth||'N/A'} | Engr Notified: ${e.engr||'N/A'}\n`;
+                if(e.notes) txt += `Notes: ${e.notes}\n`;
+            });
+            navigator.clipboard?.writeText(txt).then(()=>alert('Copied!')).catch(()=>alert('Copy failed.'));
+        };
+
+        window._waPrint = function(){
+            const d = load();
+            const entries = d.entries||[];
+            const violations = entries.filter(e=>parseFloat(e.galAdded||0) > parseFloat(e.yd3||0)*1);
+            const projName = entries[0]?.project || 'Project';
+            let rows = entries.map(e=>{
+                const maxGal = (parseFloat(e.yd3||0)*1).toFixed(1);
+                const overLimit = parseFloat(e.galAdded||0) > parseFloat(maxGal);
+                const rowBg = overLimit ? '#fff5f5' : '';
+                return `<tr style="background:${rowBg}">
+                    <td>${e.ticket||'N/A'}</td>
+                    <td>${e.truck||'N/A'}</td>
+                    <td style="white-space:nowrap;">${e.datetime||'N/A'}</td>
+                    <td style="text-align:right;">${parseFloat(e.yd3||0).toFixed(1)}</td>
+                    <td style="text-align:right;">${maxGal}</td>
+                    <td style="text-align:right;${overLimit?'color:red;font-weight:700;':''}">${parseFloat(e.galAdded||0).toFixed(1)}</td>
+                    <td>${e.slumpTicket||'?'}"</td>
+                    <td>${e.slumpSpec||'?'}"</td>
+                    <td style="color:${overLimit?'red':'green'};font-weight:600;">${overLimit?'⚠️ VIOLATION':'✓ OK'}</td>
+                    <td>${e.auth||''}</td>
+                    <td>${e.engr||'N/A'}</td>
+                </tr>`;
+            }).join('');
+            const w = window.open('','_blank','width=1100,height=700');
+            w.document.write(`<!DOCTYPE html><html><head><title>ASTM C94 Water Addition Log</title>
+            <style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}
+            table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:4px 6px;font-size:9px;}
+            th{background:#1e3a8a;color:white;} .sig-line{border-top:1px solid #000;margin-top:30px;padding-top:4px;}
+            @media print{.no-print{display:none;} body{margin:10px;}}</style></head><body>
+            <h2 style="text-align:center;margin-bottom:4px;">ASTM C94 WATER ADDITION LOG</h2>
+            <p style="text-align:center;font-size:9px;">Per ASTM C94/C94M §11.8 — Maximum 1 gallon per cubic yard of design batch</p>
+            <table style="margin-bottom:12px;max-width:500px;">
+                <tr><td style="font-weight:700;">Project</td><td>${projName}</td></tr>
+                <tr><td style="font-weight:700;">Date Printed</td><td>${new Date().toLocaleDateString()}</td></tr>
+                <tr><td style="font-weight:700;">Total Loads</td><td>${entries.length}</td></tr>
+                <tr><td style="font-weight:700;color:${violations.length>0?'red':'green'};">Violations</td><td style="color:${violations.length>0?'red':'green'};font-weight:700;">${violations.length}</td></tr>
+            </table>
+            ${violations.length>0?`<div style="background:#fff5f5;border:2px solid red;padding:8px;margin-bottom:12px;font-size:9px;">
+                <strong>⚠️ ASTM C94 VIOLATIONS PRESENT (${violations.length} loads)</strong><br>
+                Exceeding the 1 gal/yd³ limit invalidates w/c ratio compliance. Engineer notification required. Affected loads subject to rejection per ACI 318-19 §26.12.4.
+            </div>`:''}
+            <table>
+                <tr>
+                    <th>Ticket #</th><th>Truck</th><th>Date/Time</th><th>Load yd³</th><th>Max Gal</th><th>Added Gal</th>
+                    <th>Slump (ticket)</th><th>Slump (spec)</th><th>ASTM C94 Status</th><th>Authorized By</th><th>Engr Notified</th>
+                </tr>
+                ${rows}
+            </table>
+            <div style="margin-top:30px;font-size:9px;color:#555;border-top:1px solid #ccc;padding-top:8px;">
+                ASTM C94/C94M §11.8: Water may be added at the project site only if the slump of the concrete is below the specified maximum, the addition does not cause the water-cementitious ratio to exceed the maximum, and the mixer drum rotates a minimum of 30 revolutions at mixing speed after all water is added. All water must be incorporated before 70% of the allowed mixing time/revolutions.
+                Concrete must be discharged within 90 min or 300 drum revolutions after introduction of water, whichever occurs first.
+            </div>
+            <div style="margin-top:24px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px;">
+                <div class="sig-line">QC Inspector / Date<br><br>___________________________</div>
+                <div class="sig-line">Foreman / Date<br><br>___________________________</div>
+                <div class="sig-line">Project Manager / Date<br><br>___________________________</div>
+            </div>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`);
+            w.document.close();
+        };
+
+        function createButton(){
+            const sidebar = document.getElementById('sidebar');
+            if(!sidebar) return;
+            if(document.getElementById(BTN_ID)) return;
+            const btn = document.createElement('button');
+            btn.id = BTN_ID;
+            btn.textContent = '💧 Water Addition Log';
+            btn.title = 'ASTM C94 §11.8 Jobsite water addition compliance log — max 1 gal/yd³';
+            btn.style.cssText = 'padding:4px 8px;background:#0c4a6e;color:#7dd3fc;border:1px solid #0ea5e9;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+            btn.onclick = togglePanel;
+            const wrap = document.createElement('div');
+            wrap.id = WRAP_ID;
+            wrap.style.cssText = 'display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+            sidebar.appendChild(btn);
+            sidebar.appendChild(wrap);
+        }
+        function togglePanel(){
+            const wrap = document.getElementById(WRAP_ID);
+            const btn  = document.getElementById(BTN_ID);
+            if(!wrap||!btn) return;
+            const show = wrap.style.display==='none';
+            wrap.style.display = show ? 'block' : 'none';
+            btn.textContent = show ? '💧 Hide Water Log' : '💧 Water Addition Log';
+            if(show) render();
+        }
+        if(document.readyState==='loading'){
+            document.addEventListener('DOMContentLoaded', createButton);
+        } else {
+            createButton();
+        }
+    })();
+    </script>
+
+    <!-- TOOL: Sub Pre-Qualification Form -->
+    <script>
+    (function(){
+        const BTN_ID  = 'btn-sub-prequal';
+        const WRAP_ID = 'wrap-sub-prequal';
+        const SK = 'oncor_subPrequal_v1';
+
+        function load(){ try{ return JSON.parse(localStorage.getItem(SK))||{subs:[]}; }catch(e){ return {subs:[]}; } }
+        function save(d){ localStorage.setItem(SK, JSON.stringify(d)); }
+
+        const STATUS_CYCLE = ['Pending Review','Approved','Conditional','Rejected','On Hold'];
+        const STATUS_COLORS = {'Pending Review':'#d97706','Approved':'#22c55e','Conditional':'#3b82f6','Rejected':'#ef4444','On Hold':'#6b7280'};
+
+        function render(){
+            const wrap = document.getElementById(WRAP_ID);
+            if(!wrap || wrap.style.display==='none') return;
+            const d = load();
+            const subs = d.subs||[];
+            const approved = subs.filter(s=>s.status==='Approved').length;
+            const pending = subs.filter(s=>s.status==='Pending Review').length;
+
+            let html = `<div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;">⭐ Subcontractor Pre-Qualification</div>`;
+            html += `<div style="font-size:9px;color:#94a3b8;margin-bottom:8px;background:#1e293b;padding:6px;border-radius:4px;border-left:3px solid #8b5cf6;">
+                Formally evaluate and approve subs before awarding scope. Collect insurance, bonding capacity, references, and key experience. Required for GC pre-qualification programs and surety bonding reviews.
+            </div>`;
+
+            // Summary strip
+            html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;">
+                <div style="background:#1e293b;border-radius:4px;padding:6px;text-align:center;">
+                    <div style="font-size:16px;font-weight:700;color:#e2e8f0;">${subs.length}</div>
+                    <div style="font-size:9px;color:#94a3b8;">Total Subs</div>
+                </div>
+                <div style="background:#14532d;border-radius:4px;padding:6px;text-align:center;">
+                    <div style="font-size:16px;font-weight:700;color:#22c55e;">${approved}</div>
+                    <div style="font-size:9px;color:#94a3b8;">Approved</div>
+                </div>
+                <div style="background:#1e293b;border-radius:4px;padding:6px;text-align:center;">
+                    <div style="font-size:16px;font-weight:700;color:#d97706;">${pending}</div>
+                    <div style="font-size:9px;color:#94a3b8;">Pending Review</div>
+                </div>
+            </div>`;
+
+            // Add sub form
+            html += `<div style="background:#1e293b;border-radius:4px;padding:8px;margin-bottom:10px;">
+                <div style="font-size:10px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">Add Subcontractor for Pre-Qualification</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Company Name *</div>
+                        <input id="pq-company" placeholder="Sub company name" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Scope / Trade</div>
+                        <select id="pq-trade" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                            <option>Concrete Pump</option>
+                            <option>Rebar Fabrication</option>
+                            <option>Forming</option>
+                            <option>Post-Tension</option>
+                            <option>Saw Cutting</option>
+                            <option>Earthwork / Excavation</option>
+                            <option>Testing Lab</option>
+                            <option>Ready-Mix Supplier</option>
+                            <option>Rebar Supplier</option>
+                            <option>Waterproofing</option>
+                            <option>Vapor Barrier</option>
+                            <option>Finishing Crew</option>
+                            <option>Other</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Contact Name</div>
+                        <input id="pq-contact" placeholder="Primary contact" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Phone / Email</div>
+                        <input id="pq-phone" placeholder="Phone or email" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Years in Business</div>
+                        <input id="pq-years" type="number" min="0" placeholder="e.g. 8" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Bonding Capacity ($)</div>
+                        <input id="pq-bond" type="number" min="0" placeholder="e.g. 500000" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">CGL Coverage ($)</div>
+                        <input id="pq-cgl" placeholder="e.g. $1M/$2M" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Workers Comp?</div>
+                        <select id="pq-wc" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                            <option value="">Unknown</option>
+                            <option value="Yes">Yes — confirmed</option>
+                            <option value="No">No — self-employed/exempt</option>
+                            <option value="Pending COI">Pending COI</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">TX License / Reg #</div>
+                        <input id="pq-license" placeholder="License # or N/A" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Rating (1-5)</div>
+                        <select id="pq-rating" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                            <option value="">Unrated</option>
+                            <option>5 — Excellent</option>
+                            <option>4 — Good</option>
+                            <option>3 — Acceptable</option>
+                            <option>2 — Marginal</option>
+                            <option>1 — Do Not Use</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="margin-bottom:6px;">
+                    <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Past Projects / References</div>
+                    <textarea id="pq-refs" rows="2" placeholder="List 2-3 recent projects (GC, project, value, contact)" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;resize:vertical;"></textarea>
+                </div>
+                <div style="margin-bottom:6px;">
+                    <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Notes / Conditions</div>
+                    <textarea id="pq-notes" rows="2" placeholder="Any special conditions, approval conditions, concerns..." style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;resize:vertical;"></textarea>
+                </div>
+                <button onclick="window._pqAdd()" style="padding:5px 12px;background:#3b0764;color:#c4b5fd;border:1px solid #8b5cf6;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;">+ Add Sub to Registry</button>
+            </div>`;
+
+            // Sub list
+            if(subs.length>0){
+                html += `<div style="font-size:10px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">Pre-Qualified Sub Registry (${subs.length})</div>`;
+                subs.forEach((s,i)=>{
+                    const statusColor = STATUS_COLORS[s.status]||'#94a3b8';
+                    const ratingEmoji = s.rating ? s.rating.charAt(0)==='5'?'⭐⭐⭐⭐⭐':s.rating.charAt(0)==='4'?'⭐⭐⭐⭐':s.rating.charAt(0)==='3'?'⭐⭐⭐':s.rating.charAt(0)==='2'?'⭐⭐':'⭐' : '';
+                    html += `<div style="background:#1e293b;border-left:3px solid ${statusColor};border-radius:4px;padding:8px;margin-bottom:6px;font-size:10px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                            <strong style="color:#e2e8f0;">${s.company} <span style="font-size:9px;color:#94a3b8;">— ${s.trade}</span></strong>
+                            <div style="display:flex;gap:4px;align-items:center;">
+                                <button onclick="window._pqCycleStatus(${i})" style="padding:2px 6px;background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor};border-radius:3px;cursor:pointer;font-size:9px;font-weight:600;">${s.status||'Pending'}</button>
+                                <button onclick="window._pqDel(${i})" style="padding:2px 6px;background:transparent;color:#6b7280;border:1px solid #374151;border-radius:3px;cursor:pointer;font-size:9px;">Del</button>
+                            </div>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:3px;font-size:9px;color:#94a3b8;">
+                            ${s.contact?`<span>👤 ${s.contact}${s.phone?` — ${s.phone}`:''}</span>`:''}
+                            ${s.years?`<span>📅 ${s.years} yrs in business</span>`:''}
+                            ${s.bond?`<span>🔐 Bond capacity: $${parseInt(s.bond).toLocaleString()}</span>`:''}
+                            ${s.cgl?`<span>🛡️ CGL: ${s.cgl}</span>`:''}
+                            ${s.wc?`<span>🦺 WC: ${s.wc}</span>`:''}
+                            ${s.license?`<span>📋 License: ${s.license}</span>`:''}
+                            ${s.rating?`<span>${ratingEmoji} ${s.rating}</span>`:''}
+                        </div>
+                        ${s.refs?`<div style="margin-top:4px;font-size:9px;color:#64748b;border-top:1px solid #0f172a;padding-top:4px;">📞 <em>${s.refs}</em></div>`:''}
+                        ${s.notes?`<div style="margin-top:2px;font-size:9px;color:#64748b;"><em>📝 ${s.notes}</em></div>`:''}
+                    </div>`;
+                });
+            }
+
+            // Actions
+            html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+                <button onclick="window._pqPrint()" style="padding:5px 10px;background:#3b0764;color:#c4b5fd;border:1px solid #8b5cf6;border-radius:4px;cursor:pointer;font-size:10px;">🖨️ Print Registry</button>
+                <button onclick="window._pqCopy()" style="padding:5px 10px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">📋 Copy List</button>
+            </div>`;
+
+            wrap.innerHTML = html;
+        }
+
+        window._pqAdd = function(){
+            const company = document.getElementById('pq-company')?.value?.trim();
+            if(!company){ alert('Company name is required.'); return; }
+            const d = load();
+            d.subs.push({
+                company,
+                trade: document.getElementById('pq-trade')?.value||'Other',
+                contact: document.getElementById('pq-contact')?.value||'',
+                phone: document.getElementById('pq-phone')?.value||'',
+                years: document.getElementById('pq-years')?.value||'',
+                bond: document.getElementById('pq-bond')?.value||'',
+                cgl: document.getElementById('pq-cgl')?.value||'',
+                wc: document.getElementById('pq-wc')?.value||'',
+                license: document.getElementById('pq-license')?.value||'',
+                rating: document.getElementById('pq-rating')?.value||'',
+                refs: document.getElementById('pq-refs')?.value||'',
+                notes: document.getElementById('pq-notes')?.value||'',
+                status: 'Pending Review',
+                added: new Date().toISOString().slice(0,10)
+            });
+            save(d);
+            render();
+        };
+
+        window._pqCycleStatus = function(i){
+            const d = load();
+            const cur = d.subs[i].status||'Pending Review';
+            const idx = STATUS_CYCLE.indexOf(cur);
+            d.subs[i].status = STATUS_CYCLE[(idx+1)%STATUS_CYCLE.length];
+            save(d);
+            render();
+        };
+
+        window._pqDel = function(i){
+            if(!confirm('Remove this sub from registry?')) return;
+            const d = load();
+            d.subs.splice(i,1);
+            save(d);
+            render();
+        };
+
+        window._pqCopy = function(){
+            const d = load();
+            if(!d.subs.length){ alert('No subs in registry.'); return; }
+            let txt = 'SUBCONTRACTOR PRE-QUALIFICATION REGISTRY\n' + '='.repeat(50) + '\n';
+            d.subs.forEach(s=>{
+                txt += `\n${s.company} (${s.trade}) — ${s.status}\n`;
+                if(s.contact) txt += `  Contact: ${s.contact}${s.phone?' — '+s.phone:''}\n`;
+                if(s.years) txt += `  Years in business: ${s.years}\n`;
+                if(s.bond) txt += `  Bond capacity: $${parseInt(s.bond).toLocaleString()}\n`;
+                if(s.cgl) txt += `  CGL: ${s.cgl}\n`;
+                if(s.wc) txt += `  WC: ${s.wc}\n`;
+                if(s.rating) txt += `  Rating: ${s.rating}\n`;
+                if(s.refs) txt += `  References: ${s.refs}\n`;
+                if(s.notes) txt += `  Notes: ${s.notes}\n`;
+            });
+            navigator.clipboard?.writeText(txt).then(()=>alert('Copied!')).catch(()=>alert('Copy failed.'));
+        };
+
+        window._pqPrint = function(){
+            const d = load();
+            const subs = d.subs||[];
+            const rows = subs.map(s=>{
+                const statusColor = STATUS_COLORS[s.status]||'#888';
+                return `<tr>
+                    <td><strong>${s.company}</strong></td>
+                    <td>${s.trade}</td>
+                    <td>${s.contact||''}<br><small>${s.phone||''}</small></td>
+                    <td style="text-align:center;">${s.years||'?'}</td>
+                    <td style="text-align:right;">${s.bond?'$'+parseInt(s.bond).toLocaleString():'N/A'}</td>
+                    <td>${s.cgl||'N/A'}</td>
+                    <td style="text-align:center;">${s.wc||'?'}</td>
+                    <td>${s.license||'N/A'}</td>
+                    <td style="text-align:center;">${s.rating||'Unrated'}</td>
+                    <td style="color:${statusColor};font-weight:600;">${s.status}</td>
+                </tr>
+                ${s.refs||s.notes?`<tr style="background:#f9fafb;"><td colspan="10" style="font-size:8px;color:#555;padding:4px 6px;">
+                    ${s.refs?`<strong>References:</strong> ${s.refs}&nbsp;&nbsp;`:''}${s.notes?`<strong>Notes:</strong> ${s.notes}`:''}
+                </td></tr>`:''}`;
+            }).join('');
+            const w = window.open('','_blank','width=1100,height=700');
+            w.document.write(`<!DOCTYPE html><html><head><title>Sub Pre-Qualification Registry</title>
+            <style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}
+            table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:4px 6px;font-size:9px;}
+            th{background:#1e3a8a;color:white;} .sig-line{border-top:1px solid #000;margin-top:30px;padding-top:4px;}
+            @media print{body{margin:10px;}}</style></head><body>
+            <h2 style="text-align:center;margin-bottom:4px;">SUBCONTRACTOR PRE-QUALIFICATION REGISTRY</h2>
+            <p style="text-align:center;font-size:9px;">Oncor — Division 03 Concrete Subcontractors</p>
+            <table style="margin-bottom:12px;max-width:400px;">
+                <tr><td style="font-weight:700;">Date Printed</td><td>${new Date().toLocaleDateString()}</td></tr>
+                <tr><td style="font-weight:700;">Total Subs</td><td>${subs.length}</td></tr>
+                <tr><td style="font-weight:700;">Approved</td><td>${subs.filter(s=>s.status==='Approved').length}</td></tr>
+            </table>
+            <table>
+                <tr>
+                    <th>Company</th><th>Trade</th><th>Contact</th><th>Yrs</th><th>Bond Cap.</th>
+                    <th>CGL</th><th>WC</th><th>License</th><th>Rating</th><th>Status</th>
+                </tr>
+                ${rows}
+            </table>
+            <div style="margin-top:30px;display:grid;grid-template-columns:repeat(2,1fr);gap:20px;">
+                <div class="sig-line">Approved By (PM) / Date<br><br>___________________________</div>
+                <div class="sig-line">Reviewed By (Principal) / Date<br><br>___________________________</div>
+            </div>
+            <div style="margin-top:12px;font-size:8px;color:#888;border-top:1px solid #ccc;padding-top:6px;">
+                Pre-qualification is a condition of award. Insurance certificates, bond letters of surety, and references shall be verified before executing a subcontract.
+                This registry is for internal use only. Status = Approved indicates minimum qualification requirements have been met as of the date noted.
+            </div>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`);
+            w.document.close();
+        };
+
+        function createButton(){
+            const sidebar = document.getElementById('sidebar');
+            if(!sidebar) return;
+            if(document.getElementById(BTN_ID)) return;
+            const btn = document.createElement('button');
+            btn.id = BTN_ID;
+            btn.textContent = '⭐ Sub Pre-Qualification';
+            btn.title = 'Subcontractor pre-qualification registry — evaluate insurance, bonding, references';
+            btn.style.cssText = 'padding:4px 8px;background:#3b0764;color:#c4b5fd;border:1px solid #8b5cf6;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+            btn.onclick = togglePanel;
+            const wrap = document.createElement('div');
+            wrap.id = WRAP_ID;
+            wrap.style.cssText = 'display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+            sidebar.appendChild(btn);
+            sidebar.appendChild(wrap);
+        }
+        function togglePanel(){
+            const wrap = document.getElementById(WRAP_ID);
+            const btn  = document.getElementById(BTN_ID);
+            if(!wrap||!btn) return;
+            const show = wrap.style.display==='none';
+            wrap.style.display = show ? 'block' : 'none';
+            btn.textContent = show ? '⭐ Hide PreQual' : '⭐ Sub Pre-Qualification';
+            if(show) render();
+        }
+        if(document.readyState==='loading'){
+            document.addEventListener('DOMContentLoaded', createButton);
+        } else {
+            createButton();
+        }
+    })();
+    </script>
+
+    <!-- TOOL: Daily Cost Tracker -->
+    <script>
+    (function(){
+        const BTN_ID  = 'btn-daily-cost';
+        const WRAP_ID = 'wrap-daily-cost';
+        const SK = 'oncor_dailyCostTracker_v1';
+
+        function load(){ try{ return JSON.parse(localStorage.getItem(SK))||{days:[],budgetTotal:0,projectName:''}; }catch(e){ return {days:[],budgetTotal:0,projectName:''}; } }
+        function save(d){ localStorage.setItem(SK, JSON.stringify(d)); }
+
+        function getBidTotal(){
+            try{
+                const el = document.getElementById('bid-total-display') || document.querySelector('[data-bid-total]');
+                if(el) return parseFloat(el.textContent.replace(/[^0-9.]/g,''))||0;
+                // Try autosave
+                const p = JSON.parse(localStorage.getItem('oncorTakeoff_autosave')||'{}');
+                return p.bidTotal||0;
+            }catch(e){ return 0; }
+        }
+
+        function getProjectName(){
+            try{ const p=JSON.parse(localStorage.getItem('oncorTakeoff_autosave')||'{}'); return p.projectName||''; }catch(e){ return ''; }
+        }
+
+        const CATS = ['Concrete Materials','Rebar / Steel','Forms / Lumber','Labor','Pump Rental','Equipment','Subcontractors','Misc'];
+
+        function render(){
+            const wrap = document.getElementById(WRAP_ID);
+            if(!wrap || wrap.style.display==='none') return;
+            const d = load();
+            const days = d.days||[];
+            const budget = parseFloat(d.budgetTotal)||0;
+
+            // Compute totals
+            const totalSpent = days.reduce((s,dy)=>s+(dy.entries||[]).reduce((ss,e)=>ss+parseFloat(e.amount||0),0),0);
+            const remaining = budget - totalSpent;
+            const dayCount = days.length;
+            const burnRate = dayCount>0 ? totalSpent/dayCount : 0;
+            const daysLeft = burnRate>0 ? Math.round(remaining/burnRate) : null;
+
+            // Category breakdown
+            const catTotals = {};
+            CATS.forEach(c=>catTotals[c]=0);
+            days.forEach(dy=>(dy.entries||[]).forEach(e=>{
+                if(catTotals[e.cat]!==undefined) catTotals[e.cat]+=parseFloat(e.amount||0);
+                else catTotals['Misc']+=parseFloat(e.amount||0);
+            }));
+
+            let html = `<div style="font-size:11px;font-weight:700;color:#34d399;margin-bottom:8px;">📅 Daily Cost Tracker</div>`;
+
+            // Budget config
+            html += `<div style="background:#1e293b;border-radius:4px;padding:8px;margin-bottom:10px;">
+                <div style="font-size:10px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">Budget Setup</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Project Name</div>
+                        <input id="dc-projname" value="${d.projectName||getProjectName()}" placeholder="Project name" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;" onchange="window._dcSetBudget()">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Budget Total ($) <button onclick="window._dcPullBid()" style="margin-left:4px;padding:1px 4px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:2px;cursor:pointer;font-size:9px;">↙ From Bid</button></div>
+                        <input id="dc-budget" type="number" min="0" value="${budget||''}" placeholder="e.g. 85000" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;" onchange="window._dcSetBudget()">
+                    </div>
+                </div>
+            </div>`;
+
+            // Dashboard
+            if(budget>0){
+                const pct = Math.min(100,(totalSpent/budget)*100);
+                const barColor = pct>90?'#ef4444':pct>70?'#f59e0b':'#22c55e';
+                html += `<div style="background:#1e293b;border-radius:4px;padding:8px;margin-bottom:10px;">
+                    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:8px;">
+                        <div style="text-align:center;">
+                            <div style="font-size:16px;font-weight:700;color:#e2e8f0;">$${totalSpent.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
+                            <div style="font-size:9px;color:#94a3b8;">Total Spent</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:16px;font-weight:700;color:${remaining>=0?'#22c55e':'#ef4444'};">$${Math.abs(remaining).toLocaleString('en-US',{maximumFractionDigits:0})}</div>
+                            <div style="font-size:9px;color:#94a3b8;">${remaining>=0?'Remaining':'OVER BUDGET'}</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:16px;font-weight:700;color:#e2e8f0;">$${burnRate.toLocaleString('en-US',{maximumFractionDigits:0})}/day</div>
+                            <div style="font-size:9px;color:#94a3b8;">Avg Daily Burn</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:16px;font-weight:700;color:#e2e8f0;">${daysLeft!==null?daysLeft+'d':'—'}</div>
+                            <div style="font-size:9px;color:#94a3b8;">Est. Days Remaining at Burn Rate</div>
+                        </div>
+                    </div>
+                    <div style="background:#0f172a;border-radius:3px;overflow:hidden;height:10px;margin-bottom:4px;">
+                        <div style="background:${barColor};height:100%;width:${pct.toFixed(1)}%;transition:width 0.3s;"></div>
+                    </div>
+                    <div style="font-size:9px;color:#94a3b8;text-align:center;">${pct.toFixed(1)}% of budget spent (${dayCount} days tracked)</div>
+                </div>`;
+
+                // Category breakdown
+                const catEntries = Object.entries(catTotals).filter(([,v])=>v>0);
+                if(catEntries.length>0){
+                    html += `<div style="background:#1e293b;border-radius:4px;padding:8px;margin-bottom:10px;">
+                        <div style="font-size:10px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">Cost by Category</div>`;
+                    catEntries.sort((a,b)=>b[1]-a[1]).forEach(([cat,amt])=>{
+                        const catPct = totalSpent>0?(amt/totalSpent*100):0;
+                        html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                            <span style="font-size:9px;color:#94a3b8;min-width:120px;">${cat}</span>
+                            <div style="flex:1;background:#0f172a;border-radius:2px;overflow:hidden;height:6px;margin:0 8px;">
+                                <div style="background:#3b82f6;height:100%;width:${catPct.toFixed(1)}%;"></div>
+                            </div>
+                            <span style="font-size:9px;color:#e2e8f0;min-width:70px;text-align:right;">$${amt.toLocaleString('en-US',{maximumFractionDigits:0})} (${catPct.toFixed(0)}%)</span>
+                        </div>`;
+                    });
+                    html += `</div>`;
+                }
+            }
+
+            // Log daily cost entry
+            html += `<div style="background:#1e293b;border-radius:4px;padding:8px;margin-bottom:10px;">
+                <div style="font-size:10px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">Log Daily Cost Entry</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Date</div>
+                        <input id="dc-date" type="date" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Category</div>
+                        <select id="dc-cat" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                            ${CATS.map(c=>`<option>${c}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Description</div>
+                        <input id="dc-desc" placeholder="e.g. El Paso Ready Mix — 12 loads" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Amount ($)</div>
+                        <input id="dc-amount" type="number" min="0" step="0.01" placeholder="e.g. 4800" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                    </div>
+                </div>
+                <div style="margin-bottom:6px;">
+                    <div style="font-size:9px;color:#94a3b8;margin-bottom:2px;">Notes</div>
+                    <input id="dc-notes" placeholder="Invoice #, supplier, ref..." style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:3px;color:#e2e8f0;padding:3px;font-size:10px;">
+                </div>
+                <button onclick="window._dcAddEntry()" style="padding:5px 12px;background:#064e3b;color:#6ee7b7;border:1px solid #10b981;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;">+ Log Cost</button>
+            </div>`;
+
+            // Daily entries log (last 15, newest first)
+            const allEntries = [];
+            days.forEach(dy=>(dy.entries||[]).forEach(e=>allEntries.push({...e,date:dy.date})));
+            allEntries.sort((a,b)=>b.date.localeCompare(a.date));
+            const recent = allEntries.slice(0,15);
+
+            if(recent.length>0){
+                html += `<div style="font-size:10px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">Recent Entries (last ${recent.length})</div>`;
+                recent.forEach((e,i)=>{
+                    html += `<div style="background:#1e293b;border-left:3px solid #3b82f6;border-radius:4px;padding:6px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;">
+                        <div style="font-size:10px;">
+                            <span style="color:#e2e8f0;font-weight:600;">${e.date}</span>
+                            <span style="color:#94a3b8;margin-left:6px;font-size:9px;">${e.cat}</span>
+                            <span style="color:#94a3b8;margin-left:6px;font-size:9px;">${e.desc||''}</span>
+                            ${e.notes?`<span style="color:#64748b;margin-left:4px;font-size:9px;">(${e.notes})</span>`:''}
+                        </div>
+                        <div style="font-size:10px;font-weight:600;color:#22c55e;margin-left:8px;white-space:nowrap;">$${parseFloat(e.amount||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+                    </div>`;
+                });
+                if(allEntries.length>15){
+                    html += `<div style="font-size:9px;color:#64748b;text-align:center;margin-top:4px;">... and ${allEntries.length-15} more entries</div>`;
+                }
+            }
+
+            // Actions
+            html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+                <button onclick="window._dcPrint()" style="padding:5px 10px;background:#064e3b;color:#6ee7b7;border:1px solid #10b981;border-radius:4px;cursor:pointer;font-size:10px;">🖨️ Print Cost Report</button>
+                <button onclick="window._dcCopy()" style="padding:5px 10px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;font-size:10px;">📋 Copy Report</button>
+                <button onclick="window._dcClearProject()" style="padding:5px 10px;background:#1e293b;color:#6b7280;border:1px solid #374151;border-radius:4px;cursor:pointer;font-size:10px;">🗑️ Clear This Project</button>
+            </div>`;
+
+            wrap.innerHTML = html;
+        }
+
+        window._dcSetBudget = function(){
+            const d = load();
+            d.budgetTotal = parseFloat(document.getElementById('dc-budget')?.value||0);
+            d.projectName = document.getElementById('dc-projname')?.value||'';
+            save(d);
+            render();
+        };
+
+        window._dcPullBid = function(){
+            const bt = getBidTotal();
+            const el = document.getElementById('dc-budget');
+            if(el && bt>0){ el.value = bt; window._dcSetBudget(); }
+            else alert('No bid total found. Recalculate the bid first, then try again.');
+        };
+
+        window._dcAddEntry = function(){
+            const date = document.getElementById('dc-date')?.value;
+            const amount = document.getElementById('dc-amount')?.value;
+            if(!date||!amount){ alert('Date and Amount are required.'); return; }
+            const d = load();
+            let day = d.days.find(dy=>dy.date===date);
+            if(!day){ day={date,entries:[]}; d.days.push(day); }
+            day.entries.push({
+                cat: document.getElementById('dc-cat')?.value||'Misc',
+                desc: document.getElementById('dc-desc')?.value||'',
+                amount: amount,
+                notes: document.getElementById('dc-notes')?.value||''
+            });
+            d.days.sort((a,b)=>a.date.localeCompare(b.date));
+            save(d);
+            render();
+        };
+
+        window._dcClearProject = function(){
+            if(!confirm('Clear all cost entries for this project?')) return;
+            const d = load();
+            d.days = [];
+            save(d);
+            render();
+        };
+
+        window._dcCopy = function(){
+            const d = load();
+            const days = d.days||[];
+            const budget = parseFloat(d.budgetTotal)||0;
+            const allEntries = [];
+            days.forEach(dy=>(dy.entries||[]).forEach(e=>allEntries.push({...e,date:dy.date})));
+            if(!allEntries.length){ alert('No entries to copy.'); return; }
+            const totalSpent = allEntries.reduce((s,e)=>s+parseFloat(e.amount||0),0);
+            let txt = `DAILY COST TRACKER REPORT — ${d.projectName||'Project'}\n` + '='.repeat(50) + '\n';
+            txt += `Budget: $${budget.toLocaleString()}\nTotal Spent: $${totalSpent.toLocaleString('en-US',{maximumFractionDigits:2})}\nRemaining: $${(budget-totalSpent).toLocaleString('en-US',{maximumFractionDigits:2})}\n\n`;
+            allEntries.sort((a,b)=>b.date.localeCompare(a.date)).forEach(e=>{
+                txt += `${e.date} | ${e.cat} | ${e.desc||'N/A'} | $${parseFloat(e.amount||0).toLocaleString('en-US',{minimumFractionDigits:2})}\n`;
+            });
+            navigator.clipboard?.writeText(txt).then(()=>alert('Copied!')).catch(()=>alert('Copy failed.'));
+        };
+
+        window._dcPrint = function(){
+            const d = load();
+            const days = d.days||[];
+            const budget = parseFloat(d.budgetTotal)||0;
+            const allEntries = [];
+            days.forEach(dy=>(dy.entries||[]).forEach(e=>allEntries.push({...e,date:dy.date})));
+            allEntries.sort((a,b)=>b.date.localeCompare(a.date));
+            const totalSpent = allEntries.reduce((s,e)=>s+parseFloat(e.amount||0),0);
+            const pct = budget>0?(totalSpent/budget*100).toFixed(1):0;
+            const catTotals = {};
+            CATS.forEach(c=>catTotals[c]=0);
+            allEntries.forEach(e=>{ if(catTotals[e.cat]!==undefined) catTotals[e.cat]+=parseFloat(e.amount||0); else catTotals['Misc']+=parseFloat(e.amount||0); });
+            const catRows = Object.entries(catTotals).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1])
+                .map(([c,v])=>`<tr><td>${c}</td><td style="text-align:right;">$${v.toLocaleString('en-US',{minimumFractionDigits:2})}</td><td style="text-align:right;">${totalSpent>0?(v/totalSpent*100).toFixed(1):0}%</td></tr>`).join('');
+            const entryRows = allEntries.map(e=>`<tr>
+                <td>${e.date}</td><td>${e.cat}</td><td>${e.desc||''}</td>
+                <td>${e.notes||''}</td>
+                <td style="text-align:right;">$${parseFloat(e.amount||0).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+            </tr>`).join('');
+            const w = window.open('','_blank','width=900,height=700');
+            w.document.write(`<!DOCTYPE html><html><head><title>Daily Cost Tracker Report</title>
+            <style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}
+            table{width:100%;border-collapse:collapse;margin-bottom:12px;}th,td{border:1px solid #ccc;padding:4px 6px;font-size:9px;}
+            th{background:#1e3a8a;color:white;} .sig-line{border-top:1px solid #000;margin-top:30px;padding-top:4px;}
+            @media print{body{margin:10px;}}</style></head><body>
+            <h2 style="text-align:center;margin-bottom:4px;">DAILY COST TRACKER REPORT</h2>
+            <p style="text-align:center;font-size:9px;">${d.projectName||'Project'} — Printed ${new Date().toLocaleDateString()}</p>
+            <table style="max-width:500px;margin-bottom:12px;">
+                <tr><td style="font-weight:700;">Project Budget</td><td style="text-align:right;">$${budget.toLocaleString('en-US',{minimumFractionDigits:2})}</td></tr>
+                <tr><td style="font-weight:700;">Total Spent</td><td style="text-align:right;">$${totalSpent.toLocaleString('en-US',{minimumFractionDigits:2})}</td></tr>
+                <tr><td style="font-weight:700;color:${budget>0&&totalSpent>budget?'red':'green'};">Remaining</td><td style="text-align:right;color:${budget>0&&totalSpent>budget?'red':'green'};font-weight:700;">$${(budget-totalSpent).toLocaleString('en-US',{minimumFractionDigits:2})}</td></tr>
+                <tr><td style="font-weight:700;">% of Budget Used</td><td style="text-align:right;">${pct}%</td></tr>
+                <tr><td style="font-weight:700;">Total Entries</td><td style="text-align:right;">${allEntries.length}</td></tr>
+            </table>
+            <h3>Cost by Category</h3>
+            <table style="max-width:400px;"><tr><th>Category</th><th>Amount</th><th>% of Total</th></tr>${catRows}</table>
+            <h3>All Cost Entries</h3>
+            <table>
+                <tr><th>Date</th><th>Category</th><th>Description</th><th>Notes</th><th>Amount</th></tr>
+                ${entryRows}
+                <tr><td colspan="4" style="font-weight:700;background:#f0f0f0;">TOTAL</td><td style="text-align:right;font-weight:700;background:#f0f0f0;">$${totalSpent.toLocaleString('en-US',{minimumFractionDigits:2})}</td></tr>
+            </table>
+            <div style="margin-top:24px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px;">
+                <div class="sig-line">Project Manager / Date<br><br>___________________________</div>
+                <div class="sig-line">Accounting / Date<br><br>___________________________</div>
+                <div class="sig-line">Principal / Date<br><br>___________________________</div>
+            </div>
+            <script>window.onload=function(){window.print();};<\/script></body></html>`);
+            w.document.close();
+        };
+
+        function createButton(){
+            const sidebar = document.getElementById('sidebar');
+            if(!sidebar) return;
+            if(document.getElementById(BTN_ID)) return;
+            const btn = document.createElement('button');
+            btn.id = BTN_ID;
+            btn.textContent = '📅 Daily Cost Tracker';
+            btn.title = 'Log daily actual costs vs. project budget — burn rate, category breakdown, print report';
+            btn.style.cssText = 'padding:4px 8px;background:#064e3b;color:#6ee7b7;border:1px solid #10b981;border-radius:4px;cursor:pointer;font-size:10px;font-weight:600;';
+            btn.onclick = togglePanel;
+            const wrap = document.createElement('div');
+            wrap.id = WRAP_ID;
+            wrap.style.cssText = 'display:none;background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin-top:8px;';
+            sidebar.appendChild(btn);
+            sidebar.appendChild(wrap);
+        }
+        function togglePanel(){
+            const wrap = document.getElementById(WRAP_ID);
+            const btn  = document.getElementById(BTN_ID);
+            if(!wrap||!btn) return;
+            const show = wrap.style.display==='none';
+            wrap.style.display = show ? 'block' : 'none';
+            btn.textContent = show ? '📅 Hide Cost Tracker' : '📅 Daily Cost Tracker';
+            if(show) render();
+        }
+        if(document.readyState==='loading'){
+            document.addEventListener('DOMContentLoaded', createButton);
+        } else {
+            createButton();
+        }
+    })();
+    </script>
+
