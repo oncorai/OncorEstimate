@@ -38503,3 +38503,364 @@ Retain one (1) copy for your records. Return stamped copies as indicated above.
     if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
 })();
 </script>
+
+<!-- ==================== CONSTRUCTION LIEN DEADLINE TRACKER ==================== -->
+<script>
+(function(){
+    'use strict';
+    var BTN_ID='lienDeadBtn', WRAP_ID='lienDeadWrap';
+    var KEY='oncorLienDeadlines_v1';
+
+    // TX lien deadlines per Property Code Chapter 53
+    var TX_DEADLINES=[
+        {code:'preliminary',name:'Preliminary Notice (TX §53.056)',days:null,desc:'15th of 3rd month after start of month in which labor/materials furnished (commercial). Residential: none required for subs unless requested.',critical:true},
+        {code:'monthly',name:'Monthly Notice (TX §53.057)',days:null,desc:'If no preliminary filed, must file monthly notice by 15th of 2nd month after furnishing.',critical:false},
+        {code:'lien',name:'File Mechanics Lien (TX §53.052)',days:null,desc:'By the 15th of 4th month after original contractor completes/terminates, or 15th of 3rd month after you complete/terminate (whichever earlier). Must have sent notices first.',critical:true},
+        {code:'foreclose',name:'Foreclose Lien (TX §53.158)',days:null,desc:'1 year from last day to file lien for original contractor; 2 years for subcontractor/supplier.',critical:true},
+    ];
+
+    function load(){try{return JSON.parse(localStorage.getItem(KEY))||{projects:[]};}catch(e){return{projects:[]};}}
+    function save(d){try{localStorage.setItem(KEY,JSON.stringify(d));}catch(e){}}
+    function fmt(d){if(!d)return'—';var dt=new Date(d);return(dt.getMonth()+1)+'/'+dt.getDate()+'/'+dt.getFullYear();}
+    function daysUntil(d){if(!d)return null;var now=new Date();now.setHours(0,0,0,0);var t=new Date(d);t.setHours(0,0,0,0);return Math.ceil((t-now)/(1000*60*60*24));}
+
+    function createButton(){
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;btn.className='btn';
+        btn.textContent='Lien Deadlines';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;wrap.style.display='none';
+        wrap.style.cssText='background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:8px 0;';
+        document.querySelector('.sidebar').appendChild(btn);
+        document.querySelector('.sidebar').appendChild(wrap);
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var d=load();
+        var projRows=(d.projects||[]).map(function(p,i){
+            var deadlines=[];
+            // Calculate TX deadlines from project dates
+            if(p.firstWork){
+                var fw=new Date(p.firstWork);
+                // Preliminary notice: 15th of 3rd month after month of first work
+                var prelim=new Date(fw.getFullYear(), fw.getMonth()+3, 15);
+                deadlines.push({name:'Preliminary Notice',date:prelim.toISOString().slice(0,10),done:p.prelimDone});
+            }
+            if(p.lastWork){
+                var lw=new Date(p.lastWork);
+                // Lien filing: 15th of 4th month after last work (subcontractor)
+                var lienFile=new Date(lw.getFullYear(), lw.getMonth()+4, 15);
+                deadlines.push({name:'File Lien',date:lienFile.toISOString().slice(0,10),done:p.lienDone});
+            }
+            if(p.lienDate){
+                var ld=new Date(p.lienDate);
+                // Foreclose: 2 years for sub/supplier
+                var foreclose=new Date(ld.getFullYear()+2, ld.getMonth(), ld.getDate());
+                deadlines.push({name:'Foreclose Lien',date:foreclose.toISOString().slice(0,10),done:p.forecloseDone});
+            }
+            var dlRows=deadlines.map(function(dl){
+                var days=daysUntil(dl.date);
+                var color=dl.done?'#16a34a':days===null?'#6b7280':days<0?'#991b1b':days<=7?'#dc2626':days<=30?'#ea580c':'#16a34a';
+                var label=dl.done?'DONE':days===null?'—':days<0?'MISSED ('+(-days)+'d ago)':days===0?'TODAY':days+'d';
+                return '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid #f3f4f6;"><span style="font-size:11px;">'+dl.name+': '+fmt(dl.date)+'</span><span style="font-size:11px;font-weight:700;color:'+color+';">'+label+'</span></div>';
+            }).join('');
+            return '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:8px;margin-bottom:8px;">'
+                +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+                +'<div style="font-weight:600;font-size:12px;">'+p.project+' — '+p.owner+'</div>'
+                +'<button onclick="window._lienDel('+i+')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:11px;">Delete</button>'
+                +'</div>'
+                +'<div style="font-size:11px;color:#6b7280;margin-bottom:4px;">First Work: '+fmt(p.firstWork)+' | Last Work: '+fmt(p.lastWork)+' | Lien Filed: '+fmt(p.lienDate)+'</div>'
+                +dlRows
+                +'</div>';
+        }).join('');
+
+        wrap.innerHTML=
+            '<div style="font-weight:700;font-size:14px;margin-bottom:6px;">TX Construction Lien Deadline Tracker</div>'
+            +'<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:8px;margin-bottom:10px;font-size:11px;color:#92400e;">'
+            +'<b>Texas Property Code Chapter 53:</b> Subcontractors and suppliers have strict notice and filing deadlines to preserve lien rights. Missing a deadline = losing the right to file or foreclose. This tracker computes key dates from your first/last work. ALWAYS CONSULT A CONSTRUCTION ATTORNEY for actual lien enforcement.'
+            +'</div>'
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:10px;">'
+            +'<div style="font-weight:600;font-size:12px;margin-bottom:6px;">Add Project</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Project Name</label><br><input id="lien-proj" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:11px;"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Owner Name</label><br><input id="lien-owner" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:11px;"></div>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">First Day of Work</label><br><input id="lien-first" type="date" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:11px;"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Last Day of Work</label><br><input id="lien-last" type="date" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:11px;"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Lien Filed Date (if filed)</label><br><input id="lien-filed" type="date" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:11px;"></div>'
+            +'</div>'
+            +'<button onclick="window._lienAdd()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-weight:600;font-size:12px;">Add Project</button>'
+            +'</div>'
+            +(d.projects&&d.projects.length>0?'<div style="font-weight:600;font-size:12px;margin-bottom:6px;">Active Projects</div>'+projRows:'<p style="color:#9ca3af;text-align:center;font-size:12px;">No projects tracked yet</p>');
+    }
+
+    window._lienAdd=function(){
+        var proj=(document.getElementById('lien-proj')||{}).value||'';
+        var owner=(document.getElementById('lien-owner')||{}).value||'';
+        var first=(document.getElementById('lien-first')||{}).value||'';
+        var last=(document.getElementById('lien-last')||{}).value||'';
+        var filed=(document.getElementById('lien-filed')||{}).value||'';
+        if(!proj){alert('Enter project name');return;}
+        var d=load();if(!d.projects)d.projects=[];
+        d.projects.push({project:proj,owner:owner,firstWork:first,lastWork:last,lienDate:filed,prelimDone:false,lienDone:false,forecloseDone:false});
+        save(d);render();
+    };
+    window._lienDel=function(i){var d=load();(d.projects||[]).splice(i,1);save(d);render();};
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        document.getElementById(BTN_ID).textContent=show?'Hide Lien Deadlines':'Lien Deadlines';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ==================== INSURANCE COVERAGE GAP ANALYZER ==================== -->
+<script>
+(function(){
+    'use strict';
+    var BTN_ID='insGapBtn', WRAP_ID='insGapWrap';
+    var KEY='oncorInsGap_v1';
+
+    var COVERAGE_TYPES=[
+        {code:'cgl',name:'Commercial General Liability',typical:'$1M occ / $2M agg',minReq:'$1M occ / $2M agg',note:'Required on all commercial jobs. Covers third-party bodily injury and property damage.'},
+        {code:'auto',name:'Commercial Auto Liability',typical:'$1M CSL',minReq:'$1M CSL',note:'Required if using company vehicles on job site. Covers accidents.'},
+        {code:'wc',name:'Workers Compensation',typical:'Statutory / $1M E/L',minReq:'TX Statutory',note:'Required in TX if >5 employees. Covers employee work injuries.'},
+        {code:'umbrella',name:'Umbrella / Excess Liability',typical:'$2-5M',minReq:'$1-2M',note:'Extends underlying limits. Required on larger commercial jobs.'},
+        {code:'ie',name:'Inland Marine / Equipment',typical:'Replacement value',minReq:'Per equipment list',note:'Covers owned/rented equipment. May be required by rental companies.'},
+        {code:'br',name:'Builders Risk (if req.)',typical:'Project value',minReq:'Contract value',note:'Usually GC/owner provided. May be required on cost-plus.'},
+        {code:'bond',name:'Performance & Payment Bond',typical:'100% contract',minReq:'100% contract',note:'Required on public work and larger commercial. See Bonding Worksheet.'},
+        {code:'pl',name:'Professional Liability (E&O)',typical:'$1M occ',minReq:'If design services',note:'Only needed if providing design/engineering services.'},
+    ];
+
+    function load(){try{return JSON.parse(localStorage.getItem(KEY))||{policies:[]};}catch(e){return{policies:[]};}}
+    function save(d){try{localStorage.setItem(KEY,JSON.stringify(d));}catch(e){}}
+    function fmt(d){if(!d)return'—';var dt=new Date(d);return(dt.getMonth()+1)+'/'+dt.getDate()+'/'+dt.getFullYear();}
+    function daysUntil(d){if(!d)return null;var now=new Date();now.setHours(0,0,0,0);var t=new Date(d);t.setHours(0,0,0,0);return Math.ceil((t-now)/(1000*60*60*24));}
+
+    function createButton(){
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;btn.className='btn';
+        btn.textContent='Insurance Gap Check';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;wrap.style.display='none';
+        wrap.style.cssText='background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:8px 0;';
+        document.querySelector('.sidebar').appendChild(btn);
+        document.querySelector('.sidebar').appendChild(wrap);
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var d=load();
+
+        // Build coverage status
+        var polByType={};
+        (d.policies||[]).forEach(function(p){polByType[p.type]=p;});
+        var gaps=0,expiring=0,expired=0;
+        var coverageRows=COVERAGE_TYPES.map(function(ct){
+            var pol=polByType[ct.code];
+            var status='NONE',color='#991b1b',bg='#fee2e2';
+            if(pol){
+                var days=daysUntil(pol.expiry);
+                if(days!==null&&days<0){status='EXPIRED';color='#991b1b';bg='#fee2e2';expired++;}
+                else if(days!==null&&days<=30){status='EXPIRING ('+days+'d)';color='#ea580c';bg='#fef3c7';expiring++;}
+                else{status='ACTIVE';color='#16a34a';bg='#f0fdf4';}
+            }else{
+                if(ct.code==='cgl'||ct.code==='wc'||ct.code==='auto')gaps++;
+            }
+            return '<tr style="background:'+bg+'">'
+                +'<td style="padding:4px 6px;font-size:11px;font-weight:600;">'+ct.name+'</td>'
+                +'<td style="padding:4px 6px;font-size:11px;">'+ct.minReq+'</td>'
+                +'<td style="padding:4px 6px;font-size:11px;">'+(pol?pol.carrier:'—')+'</td>'
+                +'<td style="padding:4px 6px;font-size:11px;">'+(pol?pol.limits:'—')+'</td>'
+                +'<td style="padding:4px 6px;font-size:11px;">'+(pol?fmt(pol.expiry):'—')+'</td>'
+                +'<td style="padding:4px 6px;font-size:11px;font-weight:700;color:'+color+';">'+status+'</td>'
+                +'</tr>';
+        }).join('');
+
+        wrap.innerHTML=
+            '<div style="font-weight:700;font-size:14px;margin-bottom:6px;">Insurance Coverage Gap Analyzer</div>'
+            +'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:6px;padding:8px;margin-bottom:10px;font-size:11px;color:#1e40af;">'
+            +'Track your insurance policies and identify coverage gaps before bidding. GCs require COIs with specific limits, additional insured endorsements, and waiver of subrogation. Expired or inadequate coverage = bid disqualification or contract breach.'
+            +'</div>'
+            +(gaps>0||expired>0||expiring>0?'<div style="background:#fee2e2;border:2px solid #fca5a5;border-radius:6px;padding:10px;margin-bottom:10px;">'
+                +'<div style="font-weight:700;font-size:12px;color:#991b1b;margin-bottom:4px;">COVERAGE ALERTS</div>'
+                +(gaps>0?'<div style="font-size:11px;color:#991b1b;">• '+gaps+' required coverage type(s) missing</div>':'')
+                +(expired>0?'<div style="font-size:11px;color:#991b1b;">• '+expired+' policy/policies EXPIRED</div>':'')
+                +(expiring>0?'<div style="font-size:11px;color:#ea580c;">• '+expiring+' policy/policies expiring within 30 days</div>':'')
+                +'</div>':'<div style="background:#f0fdf4;border:2px solid #86efac;border-radius:6px;padding:10px;margin-bottom:10px;text-align:center;color:#16a34a;font-weight:600;">All required coverages active</div>')
+            +'<div style="overflow-x:auto;margin-bottom:10px;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
+            +'<tr style="background:#f3f4f6;"><th style="padding:4px 6px;text-align:left;">Coverage Type</th><th style="padding:4px 6px;">Min Required</th><th style="padding:4px 6px;">Carrier</th><th style="padding:4px 6px;">Your Limits</th><th style="padding:4px 6px;">Expiry</th><th style="padding:4px 6px;">Status</th></tr>'
+            +coverageRows+'</table></div>'
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:10px;">'
+            +'<div style="font-weight:600;font-size:12px;margin-bottom:6px;">Add / Update Policy</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:6px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Coverage Type</label><br><select id="ins-type" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:11px;">'+COVERAGE_TYPES.map(function(ct){return'<option value="'+ct.code+'">'+ct.name+'</option>';}).join('')+'</select></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Carrier</label><br><input id="ins-carrier" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:11px;" placeholder="Insurance Co."></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Limits</label><br><input id="ins-limits" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:11px;" placeholder="$1M / $2M"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Expiry Date</label><br><input id="ins-expiry" type="date" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:11px;"></div>'
+            +'</div>'
+            +'<button onclick="window._insAdd()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-weight:600;font-size:12px;">Save Policy</button>'
+            +'</div>';
+    }
+
+    window._insAdd=function(){
+        var type=(document.getElementById('ins-type')||{}).value||'';
+        var carrier=(document.getElementById('ins-carrier')||{}).value||'';
+        var limits=(document.getElementById('ins-limits')||{}).value||'';
+        var expiry=(document.getElementById('ins-expiry')||{}).value||'';
+        if(!type||!carrier){alert('Enter coverage type and carrier');return;}
+        var d=load();if(!d.policies)d.policies=[];
+        // Replace existing policy of same type
+        d.policies=d.policies.filter(function(p){return p.type!==type;});
+        d.policies.push({type:type,carrier:carrier,limits:limits,expiry:expiry});
+        save(d);render();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        document.getElementById(BTN_ID).textContent=show?'Hide Insurance Check':'Insurance Gap Check';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ==================== CONCRETE YIELD TEST CALCULATOR ==================== -->
+<script>
+(function(){
+    'use strict';
+    var BTN_ID='yieldTestBtn', WRAP_ID='yieldTestWrap';
+    var KEY='oncorYieldTest_v1';
+
+    function load(){try{return JSON.parse(localStorage.getItem(KEY))||{tests:[]};}catch(e){return{tests:[]};}}
+    function save(d){try{localStorage.setItem(KEY,JSON.stringify(d));}catch(e){}}
+
+    function createButton(){
+        var btn=document.createElement('button');
+        btn.id=BTN_ID;btn.className='btn';
+        btn.textContent='Yield Test Calc';
+        btn.onclick=togglePanel;
+        var wrap=document.createElement('div');
+        wrap.id=WRAP_ID;wrap.style.display='none';
+        wrap.style.cssText='background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:8px 0;';
+        document.querySelector('.sidebar').appendChild(btn);
+        document.querySelector('.sidebar').appendChild(wrap);
+    }
+
+    function render(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var d=load();
+        var last=d.lastCalc||{};
+        var result=d.lastResult||null;
+
+        var testRows=(d.tests||[]).slice(0,15).map(function(t,i){
+            var yieldPct=t.yieldPct;
+            var color=yieldPct>=99.5?'#16a34a':yieldPct>=97?'#ea580c':'#991b1b';
+            var verdict=yieldPct>=99.5?'OK':yieldPct>=97?'LOW':'UNDERYIELD';
+            return '<tr style="background:'+(yieldPct<97?'#fee2e2':yieldPct<99.5?'#fef3c7':'')+'"><td style="padding:3px 6px;font-size:11px;">'+t.date+'</td><td style="padding:3px 6px;font-size:11px;">'+t.project+'</td><td style="padding:3px 6px;font-size:11px;">'+t.ticketYd.toFixed(2)+'</td><td style="padding:3px 6px;font-size:11px;">'+t.actualYd.toFixed(2)+'</td><td style="padding:3px 6px;font-size:11px;font-weight:700;color:'+color+';">'+yieldPct.toFixed(1)+'% — '+verdict+'</td><td><button onclick="window._yieldDel('+i+')" style="background:none;border:none;color:#ef4444;cursor:pointer;">x</button></td></tr>';
+        }).join('');
+
+        wrap.innerHTML=
+            '<div style="font-weight:700;font-size:14px;margin-bottom:6px;">ASTM C138 Concrete Yield Test Calculator</div>'
+            +'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:6px;padding:8px;margin-bottom:10px;font-size:11px;color:#1e40af;">'
+            +'<b>Yield test:</b> Verifies that delivered concrete matches ticketed quantity per ASTM C138. Yield = (Total batch weight) / (Unit weight × 27). Under-yield (<97%) means you\'re paying for concrete you didn\'t receive — common with high-slump additions or batch plant errors. Request credit from ready-mix supplier when documented.'
+            +'</div>'
+            +'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:10px;">'
+            +'<div style="font-weight:600;font-size:12px;margin-bottom:6px;">Calculate Yield</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Unit Weight (pcf from C138)</label><br><input id="yield-uw" type="number" value="'+(last.unitWeight||145)+'" step="0.1" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:12px;"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Total Batch Weight (lbs)</label><br><input id="yield-bw" type="number" value="'+(last.batchWeight||'')+'" step="1" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:12px;" placeholder="e.g. 39150"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Ticket Qty (yd³)</label><br><input id="yield-ticket" type="number" value="'+(last.ticketYd||10)+'" step="0.1" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:12px;"></div>'
+            +'</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">'
+            +'<div><label style="font-size:11px;color:#6b7280;">Project</label><br><input id="yield-proj" value="'+(last.project||'')+'" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:11px;"></div>'
+            +'<div><label style="font-size:11px;color:#6b7280;">Date</label><br><input id="yield-date" type="date" value="'+(last.date||new Date().toISOString().slice(0,10))+'" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:5px;font-size:11px;"></div>'
+            +'</div>'
+            +'<div style="display:flex;gap:8px;">'
+            +'<button onclick="window._yieldCalc()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-weight:600;font-size:12px;">Calculate</button>'
+            +'<button onclick="window._yieldSave()" style="background:#059669;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;">Save Test</button>'
+            +'<button onclick="window._yieldPrint()" style="background:#6b7280;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;">Print Log</button>'
+            +'</div>'
+            +'</div>'
+            +(result?'<div style="background:'+(result.yieldPct>=99.5?'#f0fdf4':result.yieldPct>=97?'#fef3c7':'#fee2e2')+';border:2px solid '+(result.yieldPct>=99.5?'#86efac':result.yieldPct>=97?'#fcd34d':'#fca5a5')+';border-radius:8px;padding:12px;margin-bottom:10px;text-align:center;">'
+                +'<div style="font-size:11px;color:#6b7280;">Actual Yield</div>'
+                +'<div style="font-size:24px;font-weight:800;color:'+(result.yieldPct>=99.5?'#16a34a':result.yieldPct>=97?'#ea580c':'#991b1b')+';">'+result.actualYd.toFixed(2)+' yd³</div>'
+                +'<div style="font-size:14px;font-weight:700;color:'+(result.yieldPct>=99.5?'#16a34a':result.yieldPct>=97?'#ea580c':'#991b1b')+';">'+result.yieldPct.toFixed(1)+'% of ticket</div>'
+                +(result.yieldPct<97?'<div style="background:#991b1b;color:#fff;border-radius:6px;padding:6px;margin-top:8px;font-size:11px;font-weight:600;">UNDER-YIELD: Request credit from ready-mix supplier. Document ticket #, batch weight, unit weight, and calculated shortage ('+(result.ticketYd-result.actualYd).toFixed(2)+' yd³).</div>':'')
+                +(result.yieldPct>=97&&result.yieldPct<99.5?'<div style="background:#ea580c;color:#fff;border-radius:6px;padding:6px;margin-top:8px;font-size:11px;">MARGINAL: Within tolerance but review batch plant operations if trend continues.</div>':'')
+                +'</div>':'')
+            +(d.tests&&d.tests.length>0?'<div style="font-weight:600;font-size:12px;margin-bottom:4px;">Test History</div>'
+                +'<table style="width:100%;border-collapse:collapse;font-size:11px;"><tr style="background:#f3f4f6;"><th style="padding:3px 6px;">Date</th><th>Project</th><th>Ticket yd³</th><th>Actual yd³</th><th>Yield %</th><th></th></tr>'+testRows+'</table>':'');
+    }
+
+    window._yieldCalc=function(){
+        var uw=parseFloat(document.getElementById('yield-uw').value)||145;
+        var bw=parseFloat(document.getElementById('yield-bw').value)||0;
+        var ticket=parseFloat(document.getElementById('yield-ticket').value)||10;
+        var proj=(document.getElementById('yield-proj')||{}).value||'';
+        var date=(document.getElementById('yield-date')||{}).value||new Date().toISOString().slice(0,10);
+        if(bw<=0){alert('Enter total batch weight (lbs)');return;}
+        // Yield = batch weight / (unit weight × 27 cf/yd³)
+        var actualYd=bw/(uw*27);
+        var yieldPct=(actualYd/ticket)*100;
+        var d=load();
+        d.lastCalc={unitWeight:uw,batchWeight:bw,ticketYd:ticket,project:proj,date:date};
+        d.lastResult={actualYd:actualYd,yieldPct:yieldPct,ticketYd:ticket};
+        save(d);render();
+    };
+    window._yieldSave=function(){
+        var uw=parseFloat(document.getElementById('yield-uw').value)||145;
+        var bw=parseFloat(document.getElementById('yield-bw').value)||0;
+        var ticket=parseFloat(document.getElementById('yield-ticket').value)||10;
+        var proj=(document.getElementById('yield-proj')||{}).value||'';
+        var date=(document.getElementById('yield-date')||{}).value||new Date().toISOString().slice(0,10);
+        if(bw<=0){alert('Enter batch weight');return;}
+        var actualYd=bw/(uw*27);
+        var yieldPct=(actualYd/ticket)*100;
+        var d=load();if(!d.tests)d.tests=[];
+        d.tests.unshift({date:date,project:proj,ticketYd:ticket,actualYd:actualYd,yieldPct:yieldPct,unitWeight:uw,batchWeight:bw});
+        if(d.tests.length>50)d.tests.length=50;
+        d.lastCalc={unitWeight:uw,batchWeight:bw,ticketYd:ticket,project:proj,date:date};
+        d.lastResult={actualYd:actualYd,yieldPct:yieldPct,ticketYd:ticket};
+        save(d);render();
+    };
+    window._yieldDel=function(i){var d=load();(d.tests||[]).splice(i,1);save(d);render();};
+    window._yieldPrint=function(){
+        var d=load();
+        var rows=(d.tests||[]).map(function(t){
+            var verdict=t.yieldPct>=99.5?'OK':t.yieldPct>=97?'LOW':'UNDERYIELD';
+            return '<tr style="background:'+(t.yieldPct<97?'#fee2e2':t.yieldPct<99.5?'#fef3c7':'')+'"><td>'+t.date+'</td><td>'+t.project+'</td><td>'+t.ticketYd.toFixed(2)+'</td><td>'+t.unitWeight+'</td><td>'+t.batchWeight+'</td><td>'+t.actualYd.toFixed(2)+'</td><td style="font-weight:bold;">'+t.yieldPct.toFixed(1)+'%</td><td>'+verdict+'</td></tr>';
+        }).join('');
+        var underCount=(d.tests||[]).filter(function(t){return t.yieldPct<97;}).length;
+        var w=window.open('','_blank','width=1000,height=700');
+        w.document.write('<!DOCTYPE html><html><head><title>Yield Test Log</title><style>body{font-family:Arial,sans-serif;font-size:10px;padding:16px;}h1{font-size:13px;border-bottom:2px solid #000;}table{width:100%;border-collapse:collapse;margin:8px 0;}th,td{border:1px solid #999;padding:3px 5px;font-size:9px;}th{background:#f3f4f6;}.note{font-size:8px;color:#666;font-style:italic;}.sig td{height:40px;}@media print{button{display:none;}}</style></head><body>'
+            +'<h1>ASTM C138 CONCRETE YIELD TEST LOG</h1>'
+            +'<p>Total Tests: '+d.tests.length+' | Under-Yield Events (<97%): '+underCount+' | Generated: '+new Date().toLocaleDateString()+'</p>'
+            +'<table><tr><th>Date</th><th>Project</th><th>Ticket yd³</th><th>Unit Wt pcf</th><th>Batch Wt lbs</th><th>Actual yd³</th><th>Yield %</th><th>Status</th></tr>'+rows+'</table>'
+            +'<p class="note">ASTM C138/C138M: Standard test method for density (unit weight), yield, and air content of concrete. Yield = Total batch weight ÷ (Unit weight × 27). Under-yield (<97%) indicates short batching or water addition beyond mix design. Document under-yield events and request credit from ready-mix supplier. Typical tolerance is ±1.5% (98.5-101.5%). Texas Property Code allows contractor to withhold payment for defective materials.</p>'
+            +'<table class="sig"><tr><th>QC Inspector</th><th>Foreman</th><th>Project Manager</th></tr><tr style="height:40px;"><td></td><td></td><td></td></tr></table>'
+            +'<button onclick="window.print()" style="margin-top:12px;padding:8px 20px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;">Print</button>'
+            +'</body></html>');
+        w.document.close();w.print();
+    };
+
+    function togglePanel(){
+        var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+        var show=wrap.style.display==='none';
+        wrap.style.display=show?'block':'none';
+        document.getElementById(BTN_ID).textContent=show?'Hide Yield Test':'Yield Test Calc';
+        if(show)render();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
