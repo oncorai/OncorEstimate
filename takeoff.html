@@ -43467,3 +43467,522 @@ function createCSButton(){
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createCSButton);}else{createCSButton();}
 })();
 </script>
+
+<!-- SUBCONTRACTOR DEFAULT & CURE NOTICE GENERATOR -->
+<script>
+(function(){
+'use strict';
+var KEY='oncor_subdefault_v1';
+var BTN_ID='btn_subdefault_tool';var WRAP_ID='wrap_subdefault_tool';
+function load(){try{return JSON.parse(localStorage.getItem(KEY)||'{"notices":[]}')}catch(e){return{notices:[]};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+var fmt=function(n){return '$'+(+n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});};
+var DEFAULTS=[
+  'Failure to maintain schedule per contract milestones',
+  'Failure to provide adequate manpower',
+  'Defective workmanship not corrected within required time',
+  'Failure to comply with safety requirements (OSHA §1926)',
+  'Failure to provide required insurance certificates',
+  'Abandonment of work without written notice',
+  'Failure to pay suppliers/lower-tier subs (lien risk)',
+  'Unauthorized substitution of materials',
+  'Failure to submit required submittals',
+  'Work not in conformance with contract documents',
+  'Other (describe below)'
+];
+var STATUSES=['Notice Sent','Cured — Returned to Work','Terminated — Backup Hired','Resolved — Negotiated','Withdrawn'];
+var STC=['Amber','Red','Green','Green','Gray'];
+var CURE_PERIODS=['3 Days','7 Days','10 Days','14 Days','30 Days'];
+function statusColor(s){
+  if(s==='Notice Sent')return{bg:'#7c2d12',txt:'#fed7aa'};
+  if(s.indexOf('Cured')>=0)return{bg:'#14532d',txt:'#d1fae5'};
+  if(s.indexOf('Terminated')>=0)return{bg:'#4c1d95',txt:'#ede9fe'};
+  if(s.indexOf('Resolved')>=0)return{bg:'#1e3a5f',txt:'#bfdbfe'};
+  return{bg:'#1e293b',txt:'#94a3b8'};
+}
+function render(d){
+  var w=document.getElementById(WRAP_ID);if(!w)return;
+  var open=d.notices.filter(function(n){return n.status==='Notice Sent';});
+  var html='<div style="max-width:960px;margin:0 auto;padding:20px;font-family:sans-serif;color:#e2e8f0;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+  html+='<h2 style="margin:0;font-size:18px;">⚠️ Subcontractor Default & Cure Notice Generator</h2>';
+  html+='<button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'⚠️ Sub Default\';" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;">✕ Close</button></div>';
+  html+='<div style="background:#1e3a8a;border:1px solid #3b82f6;border-radius:8px;padding:10px;margin-bottom:14px;font-size:11px;color:#bfdbfe;">References: AIA A401-2017 §9 | ConsensusDocs 750 §25 | TX Business & Commerce Code §38.001 | TX Property Code §53 (lien risk from unpaid subs). Always consult a TX construction attorney before termination.</div>';
+  if(open.length>0){
+    html+='<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px;font-weight:700;color:#fca5a5;">⛔ '+open.length+' OPEN NOTICE'+(open.length>1?'S':'')+' PENDING CURE — Track response deadlines carefully. If sub fails to cure within the cure period, you may terminate and hire a replacement. Document all actions.</div>';
+  }
+  // Dashboard
+  html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">';
+  var total=d.notices.length,cured=d.notices.filter(function(n){return n.status.indexOf('Cured')>=0;}).length,term=d.notices.filter(function(n){return n.status.indexOf('Terminated')>=0;}).length;
+  html+='<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:10px;color:#94a3b8;">Total Notices</div><div style="font-size:22px;font-weight:700;color:#f1f5f9;">'+total+'</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:10px;color:#94a3b8;">Open</div><div style="font-size:22px;font-weight:700;color:#f87171;">'+open.length+'</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:10px;color:#94a3b8;">Cured</div><div style="font-size:22px;font-weight:700;color:#4ade80;">'+cured+'</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:10px;color:#94a3b8;">Terminated</div><div style="font-size:22px;font-weight:700;color:#c084fc;">'+term+'</div></div></div>';
+  // Form
+  html+='<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:16px;">';
+  html+='<div style="font-size:13px;font-weight:700;color:#94a3b8;margin-bottom:12px;">GENERATE NOTICE</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Subcontractor Company</label><input id="sdn_sub" placeholder="ABC Rebar LLC" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Sub Contact Name</label><input id="sdn_contact" placeholder="John Smith" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Scope of Work</label><input id="sdn_scope" placeholder="Concrete Pumping" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Project / Job Site</label><input id="sdn_proj" placeholder="123 Main St, El Paso" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Subcontract Amount</label><input id="sdn_amt" type="number" placeholder="45000" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Subcontract Date</label><input id="sdn_cdate" type="date" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Notice Date</label><input id="sdn_ndate" type="date" value="'+new Date().toISOString().slice(0,10)+'" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Cure Period</label><select id="sdn_cure" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;">';
+  CURE_PERIODS.forEach(function(c){html+='<option>'+c+'</option>';});
+  html+='</select></div></div>';
+  html+='<div style="margin-bottom:10px;"><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Default Type</label><select id="sdn_dtype" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;">';
+  DEFAULTS.forEach(function(d2){html+='<option>'+d2+'</option>';});
+  html+='</select></div>';
+  html+='<div style="margin-bottom:10px;"><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Specific Description of Default</label><textarea id="sdn_desc" rows="3" placeholder="Describe the specific default in detail — dates, what was required, what occurred..." style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;resize:vertical;"></textarea></div>';
+  html+='<div style="margin-bottom:10px;"><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Backup Sub / Replacement Contractor (if identified)</label><input id="sdn_backup" placeholder="XYZ Concrete Pumping (optional)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">';
+  html+='<button onclick="saveSDNotice()" style="background:#7c3aed;color:#ede9fe;border:none;border-radius:6px;padding:9px;cursor:pointer;font-size:13px;font-weight:600;">💾 Log Notice</button>';
+  html+='<button onclick="printSDNotice()" style="background:#1e3a5f;color:#bfdbfe;border:none;border-radius:6px;padding:9px;cursor:pointer;font-size:13px;font-weight:600;">🖨️ Print Notice Letter</button>';
+  html+='<button onclick="copySDEmail()" style="background:#14532d;color:#d1fae5;border:none;border-radius:6px;padding:9px;cursor:pointer;font-size:13px;font-weight:600;">📋 Copy Email Draft</button></div></div>';
+  // Notice log
+  if(d.notices.length>0){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;">';
+    html+='<div style="font-size:12px;font-weight:700;color:#94a3b8;margin-bottom:10px;">NOTICE LOG</div>';
+    d.notices.slice().reverse().forEach(function(n,ri){
+      var i=d.notices.length-1-ri;
+      var sc=statusColor(n.status);
+      html+='<div style="background:#0f172a;border-radius:8px;padding:12px;margin-bottom:8px;border-left:4px solid '+(n.status==='Notice Sent'?'#ef4444':'#6b7280')+';">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">';
+      html+='<div><div style="font-weight:700;font-size:14px;color:#f1f5f9;">'+n.sub+'</div>';
+      html+='<div style="font-size:11px;color:#94a3b8;">'+n.scope+' | '+n.proj+'</div></div>';
+      html+='<div style="display:flex;gap:6px;align-items:center;">';
+      html+='<span style="background:'+sc.bg+';color:'+sc.txt+';font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;cursor:pointer;" onclick="cycleSDStatus('+i+')" title="Click to advance status">'+n.status+'</span>';
+      html+='<button onclick="printSDNoticeById('+i+')" style="background:#1e3a5f;color:#93c5fd;border:none;border-radius:4px;padding:3px 7px;cursor:pointer;font-size:10px;">🖨️</button>';
+      html+='<button onclick="deleteSDNotice('+i+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:3px 7px;cursor:pointer;font-size:10px;">Del</button></div></div>';
+      html+='<div style="font-size:11px;color:#e2e8f0;margin-bottom:4px;"><b>Default:</b> '+n.dtype+'</div>';
+      html+='<div style="font-size:11px;color:#94a3b8;">Contract: '+fmt(n.amt||0)+' | Notice: '+n.ndate+' | Cure: '+n.cure+'</div>';
+      if(n.desc)html+='<div style="font-size:11px;color:#94a3b8;margin-top:4px;">'+n.desc+'</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+  html+='</div>';
+  w.innerHTML=html;
+}
+function getFields(){
+  var g=function(id){return(document.getElementById(id)||{}).value||'';};
+  return{sub:g('sdn_sub'),contact:g('sdn_contact'),scope:g('sdn_scope'),proj:g('sdn_proj'),amt:parseFloat(g('sdn_amt'))||0,cdate:g('sdn_cdate'),ndate:g('sdn_ndate'),cure:g('sdn_cure'),dtype:g('sdn_dtype'),desc:g('sdn_desc'),backup:g('sdn_backup'),status:'Notice Sent'};
+}
+window.saveSDNotice=function(){
+  var f=getFields();if(!f.sub||!f.proj){alert('Sub company and project are required.');return;}
+  var d=load();d.notices.push(f);save(d);render(d);
+};
+window.cycleSDStatus=function(i){
+  var d=load();var n=d.notices[i];if(!n)return;
+  var idx=STATUSES.indexOf(n.status);n.status=STATUSES[(idx+1)%STATUSES.length];save(d);render(d);
+};
+window.deleteSDNotice=function(i){if(!confirm('Delete notice?'))return;var d=load();d.notices.splice(i,1);save(d);render(d);};
+function buildNoticeLetter(n){
+  var co=(typeof getCompanySettings==='function')?getCompanySettings():{name:'[Your Company Name]',address:'[Your Address]',phone:'[Your Phone]',email:'[Your Email]'};
+  var cureDate='';
+  if(n.ndate){
+    var cDays=parseInt(n.cure)||7;
+    var nd=new Date(n.ndate);nd.setDate(nd.getDate()+cDays);
+    cureDate=nd.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  }
+  return{co:co,n:n,cureDate:cureDate};
+}
+window.printSDNotice=function(){
+  var f=getFields();if(!f.sub){alert('Fill in Sub Company at minimum.');return;}
+  f.status='Notice Sent';
+  _printSDLetter(f);
+};
+window.printSDNoticeById=function(i){
+  var d=load();var n=d.notices[i];if(!n)return;_printSDLetter(n);
+};
+window._printSDLetter=function(n){
+  var b=buildNoticeLetter(n);var co=b.co;var cureDate=b.cureDate;
+  var pw=window.open('','_blank','width=900,height=700');
+  if(!pw){alert('Allow popups to print.');return;}
+  pw.document.write('<html><head><title>Default & Cure Notice</title><style>body{font-family:Arial,sans-serif;font-size:12px;margin:40px;line-height:1.6;}h1{font-size:16px;}h2{font-size:13px;margin-top:20px;}.hdr{text-align:center;margin-bottom:30px;}.sent-via{font-size:11px;color:#666;border:1px solid #ccc;display:inline-block;padding:4px 10px;margin:6px 0;}.sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:40px;}.sig-line{border-top:1px solid #000;margin-top:35px;padding-top:4px;font-size:10px;}.warn{background:#fff3cd;border:1px solid #f59e0b;padding:10px;margin:12px 0;font-size:11px;}</style></head><body>');
+  pw.document.write('<div class="hdr"><b>'+co.name+'</b><br>'+co.address+'<br>'+co.phone+' | '+co.email+'</div>');
+  pw.document.write('<p><b>Date:</b> '+(n.ndate?new Date(n.ndate+'T12:00:00').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}):new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}))+'</p>');
+  pw.document.write('<div class="sent-via">SENT VIA CERTIFIED MAIL / RETURN RECEIPT REQUESTED AND EMAIL</div>');
+  pw.document.write('<p><b>To:</b> '+n.sub+'<br>Attn: '+n.contact+'<br>Re: '+n.scope+' — '+n.proj+'</p>');
+  pw.document.write('<h1 style="text-align:center;text-transform:uppercase;color:#991b1b;">NOTICE OF DEFAULT AND DEMAND TO CURE</h1>');
+  pw.document.write('<p>This letter constitutes formal written notice, pursuant to the Subcontract Agreement dated '+(n.cdate||'___________')+' (the "Subcontract"), of your default in the performance of your contractual obligations on the above-referenced project.</p>');
+  pw.document.write('<h2>NATURE OF DEFAULT</h2>');
+  pw.document.write('<p><b>Default Type:</b> '+n.dtype+'</p>');
+  if(n.desc)pw.document.write('<p><b>Specific Description:</b> '+n.desc+'</p>');
+  pw.document.write('<h2>DEMAND TO CURE</h2>');
+  pw.document.write('<p>Pursuant to AIA A401-2017 §9 and the terms of the Subcontract, you are hereby directed to cure the above-stated default(s) within <b>'+n.cure+'</b> of receipt of this notice — no later than <b>'+cureDate+'</b> — by taking the following corrective action:</p>');
+  pw.document.write('<ul><li>Immediately remedy the identified default(s) in full</li><li>Provide written confirmation of corrective action taken</li><li>Demonstrate capacity to complete the remaining scope of work per the Subcontract schedule</li></ul>');
+  pw.document.write('<h2>CONSEQUENCES OF FAILURE TO CURE</h2>');
+  pw.document.write('<p>If you fail to cure the identified default(s) within the prescribed cure period, '+co.name+' reserves all rights under the Subcontract and applicable law, including without limitation:</p>');
+  pw.document.write('<ul><li><b>Termination of the Subcontract</b> for cause pursuant to AIA A401-2017 §9.1</li><li><b>Completion by replacement contractor</b> with all additional costs charged against your subcontract balance</li><li><b>Withholding of all payments</b> until default is cured or costs to complete are quantified</li><li><b>Recovery of all increased costs, damages, and attorney fees</b> resulting from your default, including delay damages to the prime contract</li><li><b>Exercise of all lien rights</b> and remedies available under TX Property Code Chapter 53</li></ul>');
+  pw.document.write('<div class="warn">⚠️ LIEN RIGHTS NOTICE: Unpaid suppliers and lower-tier subcontractors may file mechanics liens against the project owner\'s property under TX Property Code §53. You are hereby placed on notice that any liens resulting from your default will be charged against your subcontract balance.</div>');
+  pw.document.write('<p>This notice does not waive any rights or remedies available to '+co.name+' under the Subcontract, at law, or in equity. All rights are expressly reserved.</p>');
+  pw.document.write('<p>Please govern yourself accordingly and respond in writing within 24 hours confirming receipt of this notice and your intended cure plan.</p>');
+  pw.document.write('<div class="sig-grid"><div><b>'+co.name+'</b><div class="sig-line">Authorized Representative / Date</div></div>');
+  if(n.backup)pw.document.write('<div><b>Backup Contractor Identified:</b> '+n.backup+'<div class="sig-line">Backup Contractor Availability Confirmed / Date</div></div>');
+  pw.document.write('</div>');
+  pw.document.write('<p style="font-size:9px;margin-top:20px;color:#666;">This notice is for contractual purposes only. Consult a licensed Texas construction attorney before taking termination action. TX venue: El Paso County, Texas.</p>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+window.copySDEmail=function(){
+  var f=getFields();
+  var b=buildNoticeLetter(f);
+  var lines=[
+    'Subject: NOTICE OF DEFAULT AND DEMAND TO CURE — '+f.scope+' — '+f.proj,
+    '',
+    f.contact+',',
+    '',
+    'Please see the attached formal Notice of Default and Demand to Cure regarding your subcontract for '+f.scope+' at '+f.proj+'.',
+    '',
+    'Default: '+f.dtype,
+    f.desc?'Details: '+f.desc:'',
+    '',
+    'You have '+f.cure+' from receipt of this notice to cure the identified default(s).'+(b.cureDate?' Cure deadline: '+b.cureDate+'.':''),
+    '',
+    'Failure to cure within the prescribed period will result in termination of your subcontract and retention of a replacement contractor, with all additional costs charged against your subcontract balance.',
+    '',
+    'This letter is being sent via certified mail/return receipt requested. Please acknowledge receipt in writing.',
+    '',
+    'Regards,',
+    '[Your Name]',
+    '['+[].concat(typeof getCompanySettings==='function'?getCompanySettings().name:'Your Company').join('')+']'
+  ].filter(function(l){return l!==undefined;});
+  navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Email draft copied to clipboard!');});
+};
+function createSDButton(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='⚠️ Sub Default';
+  btn.style.cssText='position:fixed;bottom:1210px;right:16px;background:#7c2d12;color:#fed7aa;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8900;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){
+    var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+    var show=wrap.style.display==='none';wrap.style.display=show?'block':'none';
+    btn.textContent=show?'✕ Sub Default':'⚠️ Sub Default';
+    if(show){render(load());}
+  };
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;
+  wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8901;';
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createSDButton);}else{createSDButton();}
+})();
+</script>
+
+<!-- PROFIT FADE TRACKER -->
+<script>
+(function(){
+'use strict';
+var KEY='oncor_profiitfade_v1';
+var BTN_ID='btn_profiitfade_tool';var WRAP_ID='wrap_profiitfade_tool';
+function load(){try{return JSON.parse(localStorage.getItem(KEY)||'{"jobs":[]}')}catch(e){return{jobs:[]};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+var fmt=function(n){return '$'+(+n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});};
+var pct=function(a,b){return b?((a/b)*100).toFixed(1)+'%':'—';};
+var FADE_REASONS=['Sub overrun vs. quoted price','Labor productivity loss','Material escalation','Scope creep (unpriced extra work)','Rework / defect correction','Equipment downtime','Weather delay / additional costs','Change order pricing shortfall','Overhead misallocation','Startup learning curve / inefficiency','Owner-directed changes, uncompensated','Other'];
+function marginColor(m){if(m>=15)return'#4ade80';if(m>=8)return'#fbbf24';if(m>=0)return'#f97316';return'#ef4444';}
+function render(d){
+  var w=document.getElementById(WRAP_ID);if(!w)return;
+  var html='<div style="max-width:960px;margin:0 auto;padding:20px;font-family:sans-serif;color:#e2e8f0;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+  html+='<h2 style="margin:0;font-size:18px;">📉 Profit Fade Tracker</h2>';
+  html+='<button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'📉 Profit Fade\';" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;">✕ Close</button></div>';
+  html+='<div style="background:#1e3a8a;border:1px solid #3b82f6;border-radius:8px;padding:10px;margin-bottom:14px;font-size:11px;color:#bfdbfe;">Track how job margin changes from original bid through closeout. Enter current committed costs + actual spend to see live fade amount and cause. Target: keep fade below 5% of original margin.</div>';
+  // New job form
+  html+='<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:14px;">';
+  html+='<div style="font-size:13px;font-weight:700;color:#94a3b8;margin-bottom:12px;">ADD / UPDATE JOB</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Project Name</label><input id="pf_proj" placeholder="ABC Warehouse SOG" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">GC / Client</label><input id="pf_gc" placeholder="Sunland Construction" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Original Contract Value ($)</label><input id="pf_contract" type="number" placeholder="185000" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Original Bid Cost Estimate ($)</label><input id="pf_bidcost" type="number" placeholder="152000" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Current Committed Costs ($)</label><input id="pf_committed" type="number" placeholder="168000" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Actual Costs Spent to Date ($)</label><input id="pf_actual" type="number" placeholder="134000" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Approved Change Orders (+/-$)</label><input id="pf_co" type="number" placeholder="12500" value="0" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">% Complete</label><input id="pf_pct" type="number" min="0" max="100" placeholder="65" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div></div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Primary Fade Reason (if any)</label><select id="pf_reason" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"><option value="">— None / On Track —</option>';
+  FADE_REASONS.forEach(function(r){html+='<option>'+r+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Fade Notes</label><input id="pf_notes" placeholder="e.g. pump sub came in $8k over quote" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div></div>';
+  html+='<div id="pf_live_result" style="background:#0f172a;border-radius:6px;padding:10px;margin-bottom:10px;min-height:36px;"></div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">';
+  html+='<button onclick="pfCalcLive()" style="background:#1e3a5f;color:#93c5fd;border:none;border-radius:6px;padding:8px;cursor:pointer;font-size:12px;">📊 Calculate</button>';
+  html+='<button onclick="pfSave()" style="background:#7c3aed;color:#ede9fe;border:none;border-radius:6px;padding:8px;cursor:pointer;font-size:12px;">💾 Save Job</button>';
+  html+='<button onclick="pfPullBid()" style="background:#14532d;color:#d1fae5;border:none;border-radius:6px;padding:8px;cursor:pointer;font-size:12px;">↙ Pull from Bid</button></div></div>';
+  // Jobs list
+  if(d.jobs.length>0){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+    html+='<div style="font-size:12px;font-weight:700;color:#94a3b8;">JOB PROFIT FADE LOG</div>';
+    html+='<button onclick="pfPrintAll()" style="background:#1e3a5f;color:#93c5fd;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px;">🖨️ Print Report</button></div>';
+    d.jobs.slice().reverse().forEach(function(j,ri){
+      var idx=d.jobs.length-1-ri;
+      var rev=j.contract+(j.co||0);
+      var origMargin=j.contract-j.bidcost;
+      var origPct=j.contract?((origMargin/j.contract)*100):0;
+      var projCost=j.committed||j.actual||j.bidcost;
+      var projMargin=rev-projCost;
+      var projPct=rev?(projMargin/rev)*100:0;
+      var fade=origMargin-projMargin;
+      var fadePct=origMargin?(fade/origMargin)*100:0;
+      var fadeColor=fadePct<5?'#4ade80':fadePct<10?'#fbbf24':'#ef4444';
+      html+='<div style="background:#0f172a;border-radius:8px;padding:12px;margin-bottom:8px;border-left:4px solid '+fadeColor+';">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">';
+      html+='<div><div style="font-weight:700;font-size:14px;">'+j.proj+'</div>';
+      html+='<div style="font-size:11px;color:#94a3b8;">'+j.gc+(j.pct?' | '+j.pct+'% complete':'')+'</div></div>';
+      html+='<button onclick="pfDelete('+idx+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:3px 7px;cursor:pointer;font-size:10px;">Del</button></div>';
+      html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px;">';
+      html+='<div style="background:#1e293b;border-radius:6px;padding:7px;text-align:center;"><div style="font-size:9px;color:#94a3b8;">Original Margin</div><div style="font-size:14px;font-weight:700;color:'+marginColor(origPct)+';">'+origPct.toFixed(1)+'%</div><div style="font-size:9px;color:#64748b;">'+fmt(origMargin)+'</div></div>';
+      html+='<div style="background:#1e293b;border-radius:6px;padding:7px;text-align:center;"><div style="font-size:9px;color:#94a3b8;">Projected Margin</div><div style="font-size:14px;font-weight:700;color:'+marginColor(projPct)+';">'+projPct.toFixed(1)+'%</div><div style="font-size:9px;color:#64748b;">'+fmt(projMargin)+'</div></div>';
+      html+='<div style="background:#1e293b;border-radius:6px;padding:7px;text-align:center;"><div style="font-size:9px;color:#94a3b8;">Fade $</div><div style="font-size:14px;font-weight:700;color:'+fadeColor+';">'+fmt(fade)+'</div><div style="font-size:9px;color:#64748b;">'+fadePct.toFixed(1)+'% of orig</div></div>';
+      html+='<div style="background:#1e293b;border-radius:6px;padding:7px;text-align:center;"><div style="font-size:9px;color:#94a3b8;">Revised Contract</div><div style="font-size:14px;font-weight:700;color:#60a5fa;">'+fmt(rev)+'</div><div style="font-size:9px;color:#64748b;">CO: '+fmt(j.co||0)+'</div></div></div>';
+      if(j.reason)html+='<div style="font-size:11px;color:#fbbf24;">Fade Reason: '+j.reason+(j.notes?' — '+j.notes:'')+'</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+  html+='</div>';
+  w.innerHTML=html;
+}
+window.pfCalcLive=function(){
+  var g=function(id){return parseFloat((document.getElementById(id)||{}).value)||0;};
+  var contract=g('pf_contract'),bidcost=g('pf_bidcost'),committed=g('pf_committed'),actual=g('pf_actual'),co=g('pf_co');
+  var div=document.getElementById('pf_live_result');if(!div)return;
+  if(!contract){div.innerHTML='<span style="color:#64748b;font-size:12px;">Enter contract value and costs to calculate.</span>';return;}
+  var rev=contract+co;
+  var origMargin=contract-bidcost;var origPct=contract?((origMargin/contract)*100):0;
+  var projCost=committed||actual||bidcost;
+  var projMargin=rev-projCost;var projPct=rev?(projMargin/rev)*100:0;
+  var fade=origMargin-projMargin;var fadePct=origMargin?(fade/origMargin)*100:0;
+  var fc=fadePct<5?'#4ade80':fadePct<10?'#fbbf24':'#ef4444';
+  div.innerHTML='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">'
+    +'<div style="text-align:center;"><div style="font-size:10px;color:#94a3b8;">Original Margin</div><div style="font-size:18px;font-weight:700;color:'+marginColor(origPct)+';">'+origPct.toFixed(1)+'%</div><div style="font-size:10px;color:#64748b;">'+fmt(origMargin)+'</div></div>'
+    +'<div style="text-align:center;"><div style="font-size:10px;color:#94a3b8;">Projected Margin</div><div style="font-size:18px;font-weight:700;color:'+marginColor(projPct)+';">'+projPct.toFixed(1)+'%</div><div style="font-size:10px;color:#64748b;">'+fmt(projMargin)+'</div></div>'
+    +'<div style="text-align:center;"><div style="font-size:10px;color:#94a3b8;">Fade $</div><div style="font-size:18px;font-weight:700;color:'+fc+';">'+fmt(fade)+'</div><div style="font-size:10px;color:#64748b;">'+fadePct.toFixed(1)+'% of bid margin</div></div>'
+    +'<div style="text-align:center;"><div style="font-size:10px;color:#94a3b8;">Verdict</div><div style="font-size:13px;font-weight:700;color:'+fc+';">'+(fadePct<0?'✅ IMPROVING':(fadePct<5?'✅ ON TRACK':(fadePct<10?'⚠️ CAUTION':'🚨 FADE ALERT')))+'</div></div></div>';
+};
+window.pfSave=function(){
+  var g=function(id){return(document.getElementById(id)||{}).value||'';};
+  var gn=function(id){return parseFloat((document.getElementById(id)||{}).value)||0;};
+  var j={proj:g('pf_proj'),gc:g('pf_gc'),contract:gn('pf_contract'),bidcost:gn('pf_bidcost'),committed:gn('pf_committed'),actual:gn('pf_actual'),co:gn('pf_co'),pct:gn('pf_pct')||null,reason:g('pf_reason'),notes:g('pf_notes'),date:new Date().toISOString()};
+  if(!j.proj||!j.contract){alert('Project name and contract value required.');return;}
+  var d=load();d.jobs.push(j);save(d);render(d);
+};
+window.pfDelete=function(i){if(!confirm('Delete?'))return;var d=load();d.jobs.splice(i,1);save(d);render(d);};
+window.pfPullBid=function(){
+  var qs=document.querySelector('#grandTotalDisplay,#totalDisplay,.grand-total');
+  if(qs){var v=parseFloat(qs.textContent.replace(/[^0-9.]/g,''));if(v){(document.getElementById('pf_contract')||{value:0}).value=v;alert('Pulled bid total: $'+v.toFixed(0));return;}}
+  alert('Could not auto-pull. Enter bid total manually.');
+};
+window.pfPrintAll=function(){
+  var d=load();if(!d.jobs.length){alert('No jobs logged.');return;}
+  var pw=window.open('','_blank','width=900,height=700');
+  if(!pw){alert('Allow popups to print.');return;}
+  pw.document.write('<html><head><title>Profit Fade Report</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:30px;}table{width:100%;border-collapse:collapse;margin-top:12px;}th,td{border:1px solid #ccc;padding:5px 7px;text-align:right;}th{background:#f3f4f6;text-align:center;}.fade-ok{color:green;}.fade-warn{color:#d97706;}.fade-bad{color:#dc2626;}.sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:30px;margin-top:40px;}.sig-line{border-top:1px solid #000;margin-top:30px;}</style></head><body>');
+  pw.document.write('<h2>📉 Profit Fade Report — '+new Date().toLocaleDateString()+'</h2>');
+  pw.document.write('<table><thead><tr><th>Project</th><th>GC</th><th>Contract</th><th>Orig Margin%</th><th>Proj Margin%</th><th>Fade $</th><th>Fade %</th><th>Primary Reason</th><th>%Cmplt</th></tr></thead><tbody>');
+  d.jobs.forEach(function(j){
+    var rev=j.contract+(j.co||0);
+    var origM=j.contract-j.bidcost,origP=j.contract?((origM/j.contract)*100):0;
+    var projC=j.committed||j.actual||j.bidcost;
+    var projM=rev-projC,projP=rev?(projM/rev)*100:0;
+    var fade=origM-projM,fadeP=origM?(fade/origM)*100:0;
+    var cls=fadeP<5?'fade-ok':fadeP<10?'fade-warn':'fade-bad';
+    pw.document.write('<tr><td style="text-align:left;">'+j.proj+'</td><td style="text-align:left;">'+j.gc+'</td><td>$'+j.contract.toLocaleString()+'</td><td class="fade-ok">'+origP.toFixed(1)+'%</td><td class="'+cls+'">'+projP.toFixed(1)+'%</td><td class="'+cls+'">$'+fade.toLocaleString()+'</td><td class="'+cls+'">'+fadeP.toFixed(1)+'%</td><td style="text-align:left;">'+(j.reason||'—')+'</td><td>'+(j.pct?j.pct+'%':'—')+'</td></tr>');
+  });
+  pw.document.write('</tbody></table>');
+  pw.document.write('<p style="margin-top:12px;font-size:10px;color:#666;">Target fade: &lt;5% of original margin. Caution: 5-10%. Alert: &gt;10%. Investigate and address all active jobs with Fade Alert status before closeout.</p>');
+  pw.document.write('<div class="sig-grid"><div><b>Project Manager</b><div class="sig-line">Signature / Date</div></div><div><b>Principal</b><div class="sig-line">Signature / Date</div></div><div><b>Controller</b><div class="sig-line">Signature / Date</div></div></div>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+function marginColor(m){if(m>=15)return'#4ade80';if(m>=8)return'#fbbf24';if(m>=0)return'#f97316';return'#ef4444';}
+function createPFButton(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='📉 Profit Fade';
+  btn.style.cssText='position:fixed;bottom:1250px;right:16px;background:#1c1917;color:#fbbf24;border:1px solid #78350f;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8900;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){
+    var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+    var show=wrap.style.display==='none';wrap.style.display=show?'block':'none';
+    btn.textContent=show?'✕ Profit Fade':'📉 Profit Fade';
+    if(show){render(load());}
+  };
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;
+  wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8901;';
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createPFButton);}else{createPFButton();}
+})();
+</script>
+
+<!-- MATERIAL SUBSTITUTION REQUEST GENERATOR -->
+<script>
+(function(){
+'use strict';
+var KEY='oncor_matsub_v1';
+var BTN_ID='btn_matsub_tool';var WRAP_ID='wrap_matsub_tool';
+function load(){try{return JSON.parse(localStorage.getItem(KEY)||'{"reqs":[]}')}catch(e){return{reqs:[]};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+var fmt=function(n){return n>=0?'+$'+(+n).toLocaleString():'−$'+(Math.abs(+n)).toLocaleString();};
+var CATS=['Concrete Mix Design / PSI','Concrete Admixture','Aggregate Type / Source','Reinforcement (Rebar / Mesh)','Curing Compound','Formwork / Forming System','Vapor Barrier','Joint Sealant','Post-Tension System','Grout / Non-Shrink Mortar','Fiber Reinforcement','Sealer / Coating','Other'];
+var STATUSES=['Draft','Submitted to GC','Under Architect/EOR Review','Approved','Approved with Conditions','Rejected','Withdrawn'];
+var BASES=['Project Specification','GC Written Direction','Field Condition Discovered','Material Unavailability / Lead Time','Cost Savings','Schedule Acceleration','Performance Equivalency','Local Availability'];
+function statusColor(s){
+  if(s==='Approved')return{bg:'#14532d',txt:'#d1fae5'};
+  if(s==='Approved with Conditions')return{bg:'#1e3a5f',txt:'#bfdbfe'};
+  if(s==='Rejected')return{bg:'#7f1d1d',txt:'#fca5a5'};
+  if(s==='Submitted to GC'||s.indexOf('Review')>=0)return{bg:'#713f12',txt:'#fde68a'};
+  if(s==='Withdrawn')return{bg:'#1e293b',txt:'#94a3b8'};
+  return{bg:'#374151',txt:'#e2e8f0'};
+}
+function render(d){
+  var w=document.getElementById(WRAP_ID);if(!w)return;
+  var html='<div style="max-width:960px;margin:0 auto;padding:20px;font-family:sans-serif;color:#e2e8f0;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+  html+='<h2 style="margin:0;font-size:18px;">🔄 Material Substitution Request Generator</h2>';
+  html+='<button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'🔄 Mat Sub\';" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;">✕ Close</button></div>';
+  html+='<div style="background:#1e3a8a;border:1px solid #3b82f6;border-radius:8px;padding:10px;margin-bottom:14px;font-size:11px;color:#bfdbfe;">ACI 301-16 §1.6.4 — Material substitutions require written approval from the architect/engineer of record before use. Verbal approval is not binding. Unapproved substitutions may require removal and replacement at contractor expense.</div>';
+  var pending=d.reqs.filter(function(r){return r.status==='Submitted to GC'||r.status.indexOf('Review')>=0;});
+  if(pending.length>0){
+    html+='<div style="background:#713f12;border:1px solid #f59e0b;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#fde68a;">⏳ '+pending.length+' substitution request'+(pending.length>1?'s':'')+' pending review. Do not install substituted material until written approval received.</div>';
+  }
+  // Dashboard
+  html+='<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px;">';
+  var total=d.reqs.length,approved=d.reqs.filter(function(r){return r.status.indexOf('Approved')>=0;}).length,rejected=d.reqs.filter(function(r){return r.status==='Rejected';}).length;
+  html+='<div style="background:#1e293b;border-radius:8px;padding:8px;text-align:center;"><div style="font-size:10px;color:#94a3b8;">Total Requests</div><div style="font-size:20px;font-weight:700;color:#f1f5f9;">'+total+'</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:8px;text-align:center;"><div style="font-size:10px;color:#94a3b8;">Draft</div><div style="font-size:20px;font-weight:700;color:#94a3b8;">'+d.reqs.filter(function(r){return r.status==='Draft';}).length+'</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:8px;text-align:center;"><div style="font-size:10px;color:#94a3b8;">Pending</div><div style="font-size:20px;font-weight:700;color:#fbbf24;">'+pending.length+'</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:8px;text-align:center;"><div style="font-size:10px;color:#94a3b8;">Approved</div><div style="font-size:20px;font-weight:700;color:#4ade80;">'+approved+'</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:8px;text-align:center;"><div style="font-size:10px;color:#94a3b8;">Rejected</div><div style="font-size:20px;font-weight:700;color:#f87171;">'+rejected+'</div></div></div>';
+  // Form
+  html+='<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:14px;">';
+  html+='<div style="font-size:13px;font-weight:700;color:#94a3b8;margin-bottom:12px;">NEW SUBSTITUTION REQUEST</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Project</label><input id="ms_proj" placeholder="ABC Warehouse" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Spec Section / Drawing Ref</label><input id="ms_spec" placeholder="03 30 00 / Sheet S-3" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Material Category</label><select id="ms_cat" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;">';
+  CATS.forEach(function(c){html+='<option>'+c+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Request Date</label><input id="ms_date" type="date" value="'+new Date().toISOString().slice(0,10)+'" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div></div>';
+  html+='<div style="margin-bottom:10px;"><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Originally Specified Material</label><input id="ms_orig" placeholder="e.g. ASTM A615 Grade 60 rebar, #5 @ 12\" OC" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div style="margin-bottom:10px;"><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Proposed Substitution</label><input id="ms_prop" placeholder="e.g. ASTM A1035 Grade 100 rebar, #4 @ 12\" OC (same As per ACI 318-19)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div style="margin-bottom:10px;"><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Technical Basis / Equivalency Argument</label><textarea id="ms_basis" rows="3" placeholder="Explain why the substituted material is equivalent or superior — cite standards, test data, or engineering calculations..." style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;resize:vertical;"></textarea></div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Reason for Request</label><select id="ms_reason" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;">';
+  BASES.forEach(function(b){html+='<option>'+b+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Cost Impact (+/-$)</label><input id="ms_cost" type="number" placeholder="-2500 (savings) or 3200 (add)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Schedule Impact (days)</label><input id="ms_sched" type="number" placeholder="-3 (faster) or 5 (delay)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div></div>';
+  html+='<div style="margin-bottom:10px;"><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Submitted to (Architect/EOR/GC)</label><input id="ms_to" placeholder="John Doe, PE — ABC Structural Engineers" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">';
+  html+='<button onclick="msSave()" style="background:#7c3aed;color:#ede9fe;border:none;border-radius:6px;padding:9px;cursor:pointer;font-size:13px;font-weight:600;">💾 Log Request</button>';
+  html+='<button onclick="msPrint()" style="background:#1e3a5f;color:#bfdbfe;border:none;border-radius:6px;padding:9px;cursor:pointer;font-size:13px;font-weight:600;">🖨️ Print Submittal</button>';
+  html+='<button onclick="msEmail()" style="background:#14532d;color:#d1fae5;border:none;border-radius:6px;padding:9px;cursor:pointer;font-size:13px;font-weight:600;">📋 Copy Email Draft</button></div></div>';
+  // Request log
+  if(d.reqs.length>0){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;">';
+    html+='<div style="font-size:12px;font-weight:700;color:#94a3b8;margin-bottom:10px;">REQUEST LOG</div>';
+    d.reqs.slice().reverse().forEach(function(r,ri){
+      var i=d.reqs.length-1-ri;
+      var sc=statusColor(r.status);
+      html+='<div style="background:#0f172a;border-radius:8px;padding:12px;margin-bottom:8px;border-left:4px solid '+(r.status==='Approved'?'#22c55e':r.status.indexOf('Review')>=0?'#fbbf24':r.status==='Rejected'?'#ef4444':'#6b7280')+';">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">';
+      html+='<div><div style="font-weight:700;font-size:14px;">'+r.cat+' — '+r.proj+'</div>';
+      html+='<div style="font-size:11px;color:#94a3b8;">'+r.orig+' → '+r.prop+'</div></div>';
+      html+='<div style="display:flex;gap:6px;align-items:center;">';
+      html+='<span style="background:'+sc.bg+';color:'+sc.txt+';font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;cursor:pointer;" onclick="msCycleStatus('+i+')" title="Click to advance status">'+r.status+'</span>';
+      html+='<button onclick="msPrintById('+i+')" style="background:#1e3a5f;color:#93c5fd;border:none;border-radius:4px;padding:3px 7px;cursor:pointer;font-size:10px;">🖨️</button>';
+      html+='<button onclick="msDelete('+i+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:3px 7px;cursor:pointer;font-size:10px;">Del</button></div></div>';
+      html+='<div style="font-size:11px;color:#94a3b8;">Reason: '+r.reason+(r.cost!==null&&r.cost!==undefined?' | Cost Impact: '+fmt(r.cost):'')+(r.sched?' | Schedule: '+(r.sched>0?'+':'')+r.sched+'d':'')+(r.date?' | '+r.date:'')+'</div>';
+      if(r.spec)html+='<div style="font-size:11px;color:#64748b;">Spec: '+r.spec+'</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+  html+='</div>';
+  w.innerHTML=html;
+}
+function getFields(){
+  var g=function(id){return(document.getElementById(id)||{}).value||'';};
+  var gn=function(id){return(document.getElementById(id)||{}).value!==''?parseFloat((document.getElementById(id)||{}).value):null;};
+  return{proj:g('ms_proj'),spec:g('ms_spec'),cat:g('ms_cat'),date:g('ms_date'),orig:g('ms_orig'),prop:g('ms_prop'),basis:g('ms_basis'),reason:g('ms_reason'),cost:gn('ms_cost'),sched:gn('ms_sched'),to:g('ms_to'),status:'Draft'};
+}
+window.msSave=function(){
+  var f=getFields();if(!f.proj||!f.orig){alert('Project and original material required.');return;}
+  var d=load();d.reqs.push(f);save(d);render(d);
+};
+window.msCycleStatus=function(i){
+  var d=load();var r=d.reqs[i];if(!r)return;
+  var idx=STATUSES.indexOf(r.status);r.status=STATUSES[(idx+1)%STATUSES.length];save(d);render(d);
+};
+window.msDelete=function(i){if(!confirm('Delete?'))return;var d=load();d.reqs.splice(i,1);save(d);render(d);};
+window.msPrint=function(){var f=getFields();f.status='Submitted to GC';_msPrintLetter(f);};
+window.msPrintById=function(i){var d=load();var r=d.reqs[i];if(!r)return;_msPrintLetter(r);};
+window._msPrintLetter=function(r){
+  var co=(typeof getCompanySettings==='function')?getCompanySettings():{name:'[Your Company]',address:'[Address]',phone:'',email:''};
+  var pw=window.open('','_blank','width=900,height=700');
+  if(!pw){alert('Allow popups to print.');return;}
+  pw.document.write('<html><head><title>Material Substitution Request</title><style>body{font-family:Arial,sans-serif;font-size:12px;margin:40px;line-height:1.6;}h1{font-size:15px;text-align:center;}table{width:100%;border-collapse:collapse;margin:10px 0;}th,td{border:1px solid #ccc;padding:5px 8px;}th{background:#f3f4f6;}.sec{margin-top:18px;border-left:3px solid #3b82f6;padding-left:10px;}.warn{background:#fffbeb;border:1px solid #f59e0b;padding:10px;margin:12px 0;font-size:11px;}.sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:30px;margin-top:40px;}.sig-line{border-top:1px solid #000;margin-top:30px;}</style></head><body>');
+  pw.document.write('<div style="text-align:center;"><b>'+co.name+'</b><br>'+co.address+'<br>'+co.phone+(co.email?' | '+co.email:'')+'</div>');
+  pw.document.write('<h1>MATERIAL SUBSTITUTION REQUEST</h1>');
+  pw.document.write('<table><tr><th>Project</th><td>'+r.proj+'</td><th>Date</th><td>'+r.date+'</td></tr>');
+  pw.document.write('<tr><th>Category</th><td>'+r.cat+'</td><th>Spec / Dwg Ref</th><td>'+(r.spec||'—')+'</td></tr>');
+  pw.document.write('<tr><th>Submitted To</th><td colspan="3">'+(r.to||'[Architect / EOR / GC]')+'</td></tr></table>');
+  pw.document.write('<div class="sec"><h2 style="font-size:13px;">SPECIFIED MATERIAL</h2><p>'+r.orig+'</p></div>');
+  pw.document.write('<div class="sec"><h2 style="font-size:13px;">PROPOSED SUBSTITUTION</h2><p>'+r.prop+'</p></div>');
+  pw.document.write('<div class="sec"><h2 style="font-size:13px;">TECHNICAL BASIS / EQUIVALENCY</h2><p>'+(r.basis||'[See attached technical documentation]')+'</p></div>');
+  pw.document.write('<div class="sec"><h2 style="font-size:13px;">REASON FOR REQUEST</h2><p>'+r.reason+'</p></div>');
+  pw.document.write('<table style="margin-top:10px;"><tr><th>Cost Impact</th><td>'+(r.cost!==null&&r.cost!==undefined?fmt(r.cost):'No change')+'</td><th>Schedule Impact</th><td>'+(r.sched!==null&&r.sched!==undefined?(r.sched>0?'+'+r.sched:r.sched)+' calendar days':'No change')+'</td></tr></table>');
+  pw.document.write('<div class="warn">⚠️ ACI 301-16 §1.6.4 NOTICE: Material substitutions require WRITTEN approval from the Architect / Engineer of Record prior to use. Do not install substituted material until written approval is received. Unauthorized substitutions may be rejected and require removal and replacement at contractor expense.</div>');
+  pw.document.write('<p>We hereby certify that the proposed substitution is equivalent to or better than the specified material in all relevant respects, and that we will accept all responsibility for proper performance of the substituted product.</p>');
+  pw.document.write('<p>Please respond within <b>7 calendar days</b> of receipt. If no written response is received within this period, please contact '+co.name+' immediately — do not infer approval from lack of response.</p>');
+  pw.document.write('<div class="sig-grid"><div><b>Submitted By ('+co.name+')</b><div class="sig-line">Signature / Date</div></div>');
+  pw.document.write('<div><b>GC PM Acknowledgment</b><div class="sig-line">Signature / Date</div></div>');
+  pw.document.write('<div><b>Architect / EOR Decision</b><div class="sig-line">□ Approved  □ Rejected  □ Approved w/ Conditions<br>Signature / Date</div></div></div>');
+  pw.document.write('<p style="font-size:9px;margin-top:15px;color:#888;">References: ACI 301-16 §1.6.4 — Division 03 Concrete. TX venue for disputes.</p>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+window.msEmail=function(){
+  var f=getFields();
+  var lines=[
+    'Subject: Material Substitution Request — '+f.cat+' — '+f.proj,
+    '',
+    f.to?('Dear '+f.to+','):'Dear [Architect / EOR / GC PM],',
+    '',
+    'Please see the attached Material Substitution Request for the above-referenced project.',
+    '',
+    'PROJECT: '+f.proj,
+    'CATEGORY: '+f.cat,
+    f.spec?'SPEC REF: '+f.spec:'',
+    '',
+    'SPECIFIED: '+f.orig,
+    'PROPOSED: '+f.prop,
+    '',
+    'REASON: '+f.reason,
+    f.basis?'BASIS: '+f.basis:'',
+    f.cost!==null&&f.cost!==undefined?'COST IMPACT: '+fmt(f.cost):'',
+    f.sched!==null&&f.sched!==undefined?'SCHEDULE IMPACT: '+(f.sched>0?'+':'')+f.sched+' calendar days':'',
+    '',
+    'Per ACI 301-16 §1.6.4, written approval is required before use of the substituted material. Please respond within 7 calendar days.',
+    '',
+    'Thank you,'
+  ].filter(function(l){return l!==undefined&&l!==false;});
+  navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Email draft copied!');});
+};
+function createMSButton(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='🔄 Mat Sub';
+  btn.style.cssText='position:fixed;bottom:1290px;right:16px;background:#134e4a;color:#99f6e4;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8900;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){
+    var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+    var show=wrap.style.display==='none';wrap.style.display=show?'block':'none';
+    btn.textContent=show?'✕ Mat Sub':'🔄 Mat Sub';
+    if(show){render(load());}
+  };
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;
+  wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8901;';
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createMSButton);}else{createMSButton();}
+})();
+</script>
