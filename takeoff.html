@@ -41389,3 +41389,392 @@ function createButton(){
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
 })();
 </script>
+
+<!-- ============================================================
+     SLOPED SLAB SCREED RAIL CALCULATOR
+     ACI 302.1R / IBC 2021 §1804.4 slope & drainage
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+var BTN_ID='_ssrc_btn',WRAP_ID='_ssrc_wrap';
+if(document.getElementById(BTN_ID))return;
+var KEY='_ssrc_state';
+var fmtN=function(n,d){return Number(n).toLocaleString('en-US',{minimumFractionDigits:d||0,maximumFractionDigits:d||2});};
+function fmt$(n){return '$'+fmtN(n,2);}
+function fmtIn(ft){var whole=Math.floor(ft);var inches=(ft-whole)*12;return whole+"'"+inches.toFixed(2)+'"';}
+function render(){
+    var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+    var s=loadState();
+    var html='<div style="max-width:960px;margin:0 auto;padding:24px;">';
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">';
+    html+='<h2 style="color:#f0abfc;margin:0;font-size:20px;">&#x1F4D0; Sloped Slab Screed Rail Calculator</h2>';
+    html+='<div style="font-size:10px;color:#64748b;">ACI 302.1R / IBC 2021 &sect;1804.4 &mdash; Slope &amp; Drainage</div>';
+    html+='<button onclick="document.getElementById(\'_ssrc_wrap\').style.display=\'none\';document.getElementById(\'_ssrc_btn\').textContent=\'Screed Rail\';" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:11px;">&#x2715; Close</button></div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;">';
+    html+=inp('Slab Length (ft)','ssrc_len',s.len||'','e.g. 100','number');
+    html+=inp('Slab Width (ft)','ssrc_wid',s.wid||'','e.g. 60','number');
+    html+=inp('Base Elevation Offset (in) — 0 = relative','ssrc_highElev',s.highElev||'0','0','number');
+    html+=inp('Slope % (1.0 = 1:100)','ssrc_slopePct',s.slopePct||'1.0','1.0','number');
+    html+='<div><div style="font-size:10px;color:#9ca3af;margin-bottom:4px;">Slope Direction</div><select id="ssrc_slopeDir" style="width:100%;background:#1e293b;color:#e2e8f0;border:1px solid #374151;border-radius:6px;padding:8px;font-size:12px;"><option value="length">Along Length (L&#x2192;R)</option><option value="width">Along Width (Front&#x2192;Back)</option><option value="corner">Diagonal to Corner Drain</option><option value="bi">Bi-directional to Center Drain</option></select></div>';
+    html+=inp('Grid Interval (ft) — screed rail spacing','ssrc_interval',s.interval||'10','10','number');
+    html+='</div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;">';
+    html+=inp('Extra Finishing Labor ($/SF for sloped work)','ssrc_laborRate',s.laborRate||'0.35','0.35','number');
+    html+=inp('Screed Rail Rental ($/day each)','ssrc_railRent',s.railRent||'45','45','number');
+    html+=inp('Slab SF (0 = auto from L x W)','ssrc_sf',s.sf||'0','0','number');
+    html+='</div>';
+    html+='<div style="display:flex;gap:10px;margin-bottom:20px;">';
+    html+='<button onclick="window._ssrcCalc()" style="background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:10px 24px;cursor:pointer;font-size:13px;font-weight:700;">&#x26A1; Calculate</button>';
+    html+='<button onclick="window._ssrcPrint()" style="background:#374151;color:#e2e8f0;border:none;border-radius:8px;padding:10px 18px;cursor:pointer;font-size:12px;">&#x1F5A8; Print</button>';
+    html+='<button onclick="window._ssrcCopy()" style="background:#374151;color:#e2e8f0;border:none;border-radius:8px;padding:10px 18px;cursor:pointer;font-size:12px;">&#x1F4CB; Copy Grid</button>';
+    html+='</div>';
+    html+='<div id="ssrc_result" style="font-size:13px;"></div></div>';
+    wrap.innerHTML=html;
+    var dirSel=document.getElementById('ssrc_slopeDir');if(dirSel&&s.slopeDir)dirSel.value=s.slopeDir;
+}
+function inp(label,id,val,placeholder,type){
+    return '<div><div style="font-size:10px;color:#9ca3af;margin-bottom:4px;">'+label+'</div><input id="'+id+'" type="'+(type||'text')+'" placeholder="'+placeholder+'" value="'+val+'" style="width:100%;background:#1e293b;color:#e2e8f0;border:1px solid #374151;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+}
+function loadState(){try{return JSON.parse(localStorage.getItem(KEY))||{};}catch(e){return{};}}
+function saveState(o){try{localStorage.setItem(KEY,JSON.stringify(o));}catch(e){}}
+function fmtIn2(inches){var ft=inches/12;var whole=Math.floor(ft);var rem=(ft-whole)*12;return whole+"'"+rem.toFixed(2)+'"';}
+window._ssrcCalc=function(){
+    var G=function(id){var el=document.getElementById(id);return el?el.value:'';};
+    var len=parseFloat(G('ssrc_len'))||0,wid=parseFloat(G('ssrc_wid'))||0;
+    var highElev=parseFloat(G('ssrc_highElev'))||0,slopePct=parseFloat(G('ssrc_slopePct'))||1.0;
+    var dir=G('ssrc_slopeDir')||'length',interval=parseFloat(G('ssrc_interval'))||10;
+    var laborRate=parseFloat(G('ssrc_laborRate'))||0.35,railRent=parseFloat(G('ssrc_railRent'))||45;
+    var sf=parseFloat(G('ssrc_sf'))||0;
+    saveState({len:len,wid:wid,highElev:highElev,slopePct:slopePct,slopeDir:dir,interval:interval,laborRate:laborRate,railRent:railRent,sf:sf});
+    if(!len||!wid||!interval){document.getElementById('ssrc_result').innerHTML='<div style="color:#f87171;padding:12px;">Enter length, width, and interval.</div>';return;}
+    var slabSF=sf>0?sf:len*wid,slopeD=slopePct/100;
+    var xSteps=Math.min(Math.ceil(len/interval)+1,20),ySteps=Math.min(Math.ceil(wid/interval)+1,20);
+    var grid=[];
+    for(var yi=0;yi<ySteps;yi++){
+        var row=[];
+        for(var xi=0;xi<xSteps;xi++){
+            var xFt=Math.min(xi*interval,len),yFt=Math.min(yi*interval,wid),elev=highElev;
+            if(dir==='length')elev=highElev-(xFt*slopeD)*12;
+            else if(dir==='width')elev=highElev-(yFt*slopeD)*12;
+            else if(dir==='corner')elev=highElev-((xFt+yFt)*slopeD/2)*12;
+            else if(dir==='bi'){var cx=len/2,cy=wid/2;elev=highElev-(Math.max(Math.abs(xFt-cx),Math.abs(yFt-cy))*slopeD)*12;}
+            row.push({x:xFt,y:yFt,elev:elev});
+        }
+        grid.push(row);
+    }
+    var allE=grid.reduce(function(a,r){return a.concat(r.map(function(c){return c.elev;}));},[]);
+    var loE=Math.min.apply(null,allE),hiE=Math.max.apply(null,allE),totalDrop=hiE-loE;
+    var ibiWarn=slopePct<1.0,laborCost=slabSF*laborRate,railDays=Math.ceil(len/interval)+1,railCost=railDays*railRent,totalExtra=laborCost+railCost;
+    var res=document.getElementById('ssrc_result'),html='';
+    if(ibiWarn)html+='<div style="background:#7c2d12;border:1px solid #f97316;border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px;color:#fed7aa;">&#x26A0; ACI 302.1R: Slope '+slopePct+'% is below recommended 1.0% minimum for drainage slabs. GC may reject as non-conforming.</div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">';
+    function card(l,v,c){return '<div style="background:#0f172a;border-radius:8px;padding:12px;border-left:3px solid '+c+'"><div style="font-size:10px;color:#9ca3af;margin-bottom:4px;">'+l+'</div><div style="font-size:16px;font-weight:700;color:#e2e8f0;">'+v+'</div></div>';}
+    html+=card('Slab Area',fmtN(slabSF)+' SF','#0ea5e9');
+    html+=card('Total Drop',totalDrop.toFixed(2)+'" ('+fmtIn2(totalDrop)+')','#10b981');
+    html+=card('Slope',slopePct+'% (1:'+(100/slopePct).toFixed(0)+')',slopePct>=1?'#10b981':'#f97316');
+    html+=card('Extra Cost',fmt$(totalExtra),'#a78bfa');
+    html+='</div>';
+    html+='<div style="margin-bottom:16px;overflow-x:auto;"><div style="font-size:12px;font-weight:700;color:#f0abfc;margin-bottom:8px;">Screed Rail Elevation Grid (inches — positive = above datum)</div>';
+    html+='<table style="border-collapse:collapse;font-size:11px;"><tr><th style="background:#1e293b;color:#9ca3af;padding:5px 8px;border:1px solid #374151;">Y\\ X</th>';
+    grid[0].forEach(function(c){html+='<th style="background:#1e293b;color:#9ca3af;padding:5px 8px;border:1px solid #374151;">'+fmtN(c.x,0)+"'</th>";});
+    html+='</tr>';
+    grid.forEach(function(row){
+        html+='<tr><th style="background:#1e293b;color:#9ca3af;padding:5px 8px;border:1px solid #374151;">'+fmtN(row[0].y,0)+"'</th>";
+        row.forEach(function(c){html+='<td style="background:#0f172a;color:#e2e8f0;padding:5px 8px;border:1px solid #374151;text-align:right;white-space:nowrap;">'+c.elev.toFixed(3)+'"<br><span style="font-size:9px;color:#6b7280;">'+fmtIn2(c.elev)+'</span></td>';});
+        html+='</tr>';
+    });
+    html+='</table></div>';
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:14px;"><div style="font-size:12px;font-weight:700;color:#f0abfc;margin-bottom:10px;">Extra Cost for Sloped Work</div>';
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">';
+    html+='<div style="color:#9ca3af;">Extra Finishing Labor</div><div style="color:#e2e8f0;">'+fmtN(slabSF)+' SF &times; '+fmt$(laborRate)+'/SF = '+fmt$(laborCost)+'</div>';
+    html+='<div style="color:#9ca3af;">Screed Rail Rental (est '+railDays+' rails)</div><div style="color:#e2e8f0;">'+railDays+' &times; '+fmt$(railRent)+'/day = '+fmt$(railCost)+'</div>';
+    html+='<div style="color:#f0abfc;font-weight:700;">TOTAL EXTRA</div><div style="color:#f0abfc;font-weight:700;">'+fmt$(totalExtra)+'</div>';
+    html+='</div></div>';
+    html+='<div style="background:#0f172a;border-radius:8px;padding:10px;font-size:10px;color:#6b7280;">ACI 302.1R: Min 1.0% for drainage. Loading docks/drive-thrus: 1.5&ndash;2.0%. Parking IBC &sect;406: 1.5% min. Always verify with licensed surveyor before pour.</div>';
+    window._ssrc_data={len:len,wid:wid,slopePct:slopePct,dir:dir,interval:interval,totalDrop:totalDrop,slabSF:slabSF,grid:grid,totalExtra:totalExtra};
+    res.innerHTML=html;
+};
+window._ssrcPrint=function(){
+    var d=window._ssrc_data;if(!d){alert('Run calculation first.');return;}
+    var dirLabel={length:'Along Length',width:'Along Width',corner:'Diagonal to Corner Drain',bi:'Bi-directional to Center'}[d.dir]||d.dir;
+    var w=window.open('','_blank');
+    w.document.write('<!DOCTYPE html><html><head><title>Screed Rail Plan</title><style>body{font-family:Arial;padding:20px;font-size:10px;}table{border-collapse:collapse;margin-bottom:10px;}th,td{border:1px solid #ccc;padding:4px 6px;}th{background:#f3f4f6;}.sig{margin-top:24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;}.sig-line{border-top:1px solid #000;padding-top:5px;}</style></head><body>');
+    w.document.write('<h2>SCREED RAIL ELEVATION PLAN</h2><p>Generated: '+new Date().toLocaleString()+'</p>');
+    w.document.write('<table style="width:auto"><tr><th>Slab</th><td>'+d.len+"'L x "+d.wid+"'W = "+fmtN(d.slabSF)+' SF</td><th>Slope</th><td>'+d.slopePct+'% (1:'+(100/d.slopePct).toFixed(0)+')</td></tr>');
+    w.document.write('<tr><th>Direction</th><td>'+dirLabel+'</td><th>Total Drop</th><td>'+d.totalDrop.toFixed(2)+'"</td></tr></table>');
+    w.document.write('<h3>Elevation Grid (inches above datum)</h3><table>');
+    w.document.write('<tr><th>Y / X</th>');
+    d.grid[0].forEach(function(c){w.document.write('<th>'+c.x+"'</th>");});
+    w.document.write('</tr>');
+    d.grid.forEach(function(row){
+        w.document.write('<tr><th>'+row[0].y+"'</th>");
+        row.forEach(function(c){w.document.write('<td>'+c.elev.toFixed(3)+'"</td>');});
+        w.document.write('</tr>');
+    });
+    w.document.write('</table><p style="font-size:8px;">ACI 302.1R: Min 1.0% slope for drainage. Verify with licensed surveyor before pour.</p>');
+    w.document.write('<div class="sig"><div class="sig-line">Estimator / Date</div><div class="sig-line">Foreman / Date</div><div class="sig-line">GC Inspector / Date</div></div></body></html>');
+    w.document.close();setTimeout(function(){w.print();},400);
+};
+window._ssrcCopy=function(){
+    var d=window._ssrc_data;if(!d){alert('Run calculation first.');return;}
+    var lines=['SCREED RAIL ELEVATION GRID','Slab: '+d.len+"' x "+d.wid+"' ("+fmtN(d.slabSF)+' SF)','Slope: '+d.slopePct+'%  Total Drop: '+d.totalDrop.toFixed(2)+'"','','Y\\X\t'+d.grid[0].map(function(c){return c.x+"'";}).join('\t')];
+    d.grid.forEach(function(row){lines.push(row[0].y+"'\t"+row.map(function(c){return c.elev.toFixed(3)+'"';}).join('\t'));});
+    navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Copied!');});
+};
+function createButton(){
+    var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='Screed Rail';
+    btn.style.cssText='position:fixed;bottom:850px;right:16px;background:#4a1942;color:#f0abfc;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8900;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+    btn.onclick=function(){var wrap=document.getElementById(WRAP_ID);if(!wrap)return;var show=wrap.style.display==='none';wrap.style.display=show?'block':'none';btn.textContent=show?'Hide Screed':'Screed Rail';if(show)render();};
+    document.body.appendChild(btn);
+    var wrap=document.createElement('div');wrap.id=WRAP_ID;
+    wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8901;';
+    document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ============================================================
+     GC PRE-QUALIFICATION PACKAGE GENERATOR
+     Auto-assemble standard preQual submittal for new GC relationships
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+var BTN_ID='_gcpq_btn',WRAP_ID='_gcpq_wrap';
+if(document.getElementById(BTN_ID))return;
+var KEY='_gcpq_state';
+function loadState(){try{return JSON.parse(localStorage.getItem(KEY))||{};}catch(e){return{};}}
+function saveState(o){try{localStorage.setItem(KEY,JSON.stringify(o));}catch(e){}}
+function inp(label,id,val,placeholder){
+    return '<div><div style="font-size:10px;color:#9ca3af;margin-bottom:4px;">'+label+'</div><input id="'+id+'" type="text" placeholder="'+(placeholder||'')+'" value="'+(val||'')+'" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #374151;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+}
+function render(){
+    var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+    var s=loadState();
+    var co=window._getCompanyInfo?window._getCompanyInfo():{};
+    var html='<div style="max-width:820px;margin:0 auto;padding:24px;">';
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">';
+    html+='<h2 style="color:#86efac;margin:0;font-size:20px;">&#x1F4CB; GC Pre-Qualification Package</h2>';
+    html+='<button onclick="document.getElementById(\'_gcpq_wrap\').style.display=\'none\';document.getElementById(\'_gcpq_btn\').textContent=\'GC PreQual\';" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:11px;">&#x2715; Close</button></div>';
+    html+='<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:14px;">';
+    html+='<div style="font-size:12px;font-weight:700;color:#86efac;margin-bottom:10px;">Company</div>';
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
+    html+=inp('Company Legal Name','gcpq_co',s.co||co.name||'');
+    html+=inp('DBA (if any)','gcpq_dba',s.dba||'');
+    html+=inp('Primary Contact','gcpq_contact',s.contact||'','Owner / Estimator');
+    html+=inp('Title','gcpq_title',s.title||'','Owner / PM');
+    html+=inp('Phone','gcpq_phone',s.phone||co.phone||'');
+    html+=inp('Email','gcpq_email',s.email||co.email||'');
+    html+=inp('Mailing Address','gcpq_addr',s.addr||co.address||'','Street, City, State ZIP');
+    html+=inp('TX Contractor License #','gcpq_lic',s.lic||co.license||'','If applicable');
+    html+='</div></div>';
+    html+='<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:14px;">';
+    html+='<div style="font-size:12px;font-weight:700;color:#86efac;margin-bottom:10px;">Business &amp; Experience</div>';
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
+    html+=inp('Year Established','gcpq_estab',s.estab||'','YYYY');
+    html+=inp('Entity Type','gcpq_entity',s.entity||'LLC','LLC / Corp / etc.');
+    html+=inp('EIN (Federal Tax ID)','gcpq_ein',s.ein||'','XX-XXXXXXX');
+    html+=inp('Annual Revenue ($)','gcpq_rev',s.rev||'');
+    html+=inp('Largest Single Contract Completed ($)','gcpq_maxJob',s.maxJob||'');
+    html+=inp('Current Backlog ($)','gcpq_backlog',s.backlog||'');
+    html+=inp('Field Employees','gcpq_empField',s.empField||'');
+    html+=inp('Office Employees','gcpq_empOffice',s.empOffice||'');
+    html+='</div></div>';
+    html+='<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:14px;">';
+    html+='<div style="font-size:12px;font-weight:700;color:#86efac;margin-bottom:10px;">Insurance &amp; Bonding</div>';
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">';
+    html+=inp('CGL Each Occurrence','gcpq_cgl_occ',s.cgl_occ||'$1,000,000');
+    html+=inp('CGL General Aggregate','gcpq_cgl_agg',s.cgl_agg||'$2,000,000');
+    html+=inp('Auto CSL','gcpq_auto',s.auto||'$1,000,000');
+    html+=inp('Umbrella/Excess','gcpq_umbrella',s.umbrella||'');
+    html+=inp('Workers Comp','gcpq_wc',s.wc||'TX Subscriber');
+    html+=inp('Insurance Agent &amp; Phone','gcpq_agent',s.agent||'');
+    html+=inp('Bond Capacity — Single Job','gcpq_bond_single',s.bond_single||'');
+    html+=inp('Bond Capacity — Aggregate','gcpq_bond_agg',s.bond_agg||'');
+    html+=inp('Surety Company','gcpq_surety',s.surety||'');
+    html+='</div></div>';
+    html+='<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:14px;">';
+    html+='<div style="font-size:12px;font-weight:700;color:#86efac;margin-bottom:10px;">Primary Work Types</div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">';
+    var scopes=['Flatwork / SOG','Foundations / Footings','Tilt-Up Concrete','CIP Walls / Grade Beams','Post-Tension Slabs','Elevated Decks','Curb &amp; Gutter','Concrete Paving','Concrete Repairs','Commercial / Industrial','Residential','Public / Municipal'];
+    scopes.forEach(function(sc){var id='gcpq_sc_'+sc.replace(/[^a-z0-9]/gi,'_');var chk=(s.scopes||[]).indexOf(sc)>=0?'checked':'';html+='<label style="display:flex;gap:6px;align-items:center;font-size:12px;color:#e2e8f0;cursor:pointer;"><input type="checkbox" id="'+id+'" '+chk+'> '+sc+'</label>';});
+    html+='</div></div>';
+    html+='<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:14px;">';
+    html+='<div style="font-size:12px;font-weight:700;color:#86efac;margin-bottom:10px;">Safety Record (3-Year)</div>';
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">';
+    html+=inp('EMR','gcpq_emr',s.emr||'','e.g. 0.87');
+    html+=inp('Lost Time Incidents','gcpq_lti',s.lti||'0');
+    html+=inp('Recordable Incidents','gcpq_rec',s.rec||'0');
+    html+=inp('OSHA Violations','gcpq_osha',s.osha||'0');
+    html+='</div></div>';
+    html+='<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:14px;">';
+    html+='<div style="font-size:12px;font-weight:700;color:#86efac;margin-bottom:10px;">References (up to 3)</div>';
+    for(var i=1;i<=3;i++){
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+        html+=inp('GC/Owner','gcpq_ref'+i+'_gc',s['ref'+i+'gc']||'');
+        html+=inp('Project','gcpq_ref'+i+'_proj',s['ref'+i+'proj']||'');
+        html+=inp('Value ($)','gcpq_ref'+i+'_val',s['ref'+i+'val']||'');
+        html+=inp('Contact Phone','gcpq_ref'+i+'_phone',s['ref'+i+'phone']||'');
+        html+='</div>';
+    }
+    html+='</div>';
+    html+='<div style="display:flex;gap:10px;margin-bottom:20px;">';
+    html+='<button onclick="window._gcpqPrint()" style="background:#166534;color:#86efac;border:none;border-radius:8px;padding:10px 24px;cursor:pointer;font-size:13px;font-weight:700;">&#x1F5A8; Print PreQual Package</button>';
+    html+='<button onclick="window._gcpqEmail()" style="background:#374151;color:#e2e8f0;border:none;border-radius:8px;padding:10px 18px;cursor:pointer;font-size:12px;">&#x1F4E7; Copy Email Draft</button>';
+    html+='<button onclick="window._gcpqSave()" style="background:#374151;color:#e2e8f0;border:none;border-radius:8px;padding:10px 18px;cursor:pointer;font-size:12px;">&#x1F4BE; Save</button>';
+    html+='</div></div>';
+    wrap.innerHTML=html;
+}
+function collectState(){
+    var G=function(id){var el=document.getElementById(id);return el?el.value:'';};
+    var scopes=['Flatwork / SOG','Foundations / Footings','Tilt-Up Concrete','CIP Walls / Grade Beams','Post-Tension Slabs','Elevated Decks','Curb & Gutter','Concrete Paving','Concrete Repairs','Commercial / Industrial','Residential','Public / Municipal'];
+    var chkScopes=scopes.filter(function(sc){var el=document.getElementById('gcpq_sc_'+sc.replace(/[^a-z0-9]/gi,'_'));return el&&el.checked;});
+    return {co:G('gcpq_co'),dba:G('gcpq_dba'),contact:G('gcpq_contact'),title:G('gcpq_title'),phone:G('gcpq_phone'),email:G('gcpq_email'),addr:G('gcpq_addr'),lic:G('gcpq_lic'),estab:G('gcpq_estab'),entity:G('gcpq_entity'),ein:G('gcpq_ein'),rev:G('gcpq_rev'),maxJob:G('gcpq_maxJob'),backlog:G('gcpq_backlog'),empField:G('gcpq_empField'),empOffice:G('gcpq_empOffice'),cgl_occ:G('gcpq_cgl_occ'),cgl_agg:G('gcpq_cgl_agg'),auto:G('gcpq_auto'),umbrella:G('gcpq_umbrella'),wc:G('gcpq_wc'),agent:G('gcpq_agent'),bond_single:G('gcpq_bond_single'),bond_agg:G('gcpq_bond_agg'),surety:G('gcpq_surety'),emr:G('gcpq_emr'),lti:G('gcpq_lti'),rec:G('gcpq_rec'),osha:G('gcpq_osha'),scopes:chkScopes,ref1gc:G('gcpq_ref1_gc'),ref1proj:G('gcpq_ref1_proj'),ref1val:G('gcpq_ref1_val'),ref1phone:G('gcpq_ref1_phone'),ref2gc:G('gcpq_ref2_gc'),ref2proj:G('gcpq_ref2_proj'),ref2val:G('gcpq_ref2_val'),ref2phone:G('gcpq_ref2_phone'),ref3gc:G('gcpq_ref3_gc'),ref3proj:G('gcpq_ref3_proj'),ref3val:G('gcpq_ref3_val'),ref3phone:G('gcpq_ref3_phone')};
+}
+window._gcpqSave=function(){var s=collectState();saveState(s);alert('PreQual info saved!');};
+window._gcpqPrint=function(){
+    var s=collectState();saveState(s);
+    var w=window.open('','_blank');
+    w.document.write('<!DOCTYPE html><html><head><title>Contractor PreQual</title><style>body{font-family:Arial;padding:24px;font-size:10px;}h2{font-size:14px;}h3{font-size:11px;margin:14px 0 5px;border-bottom:1px solid #ccc;padding-bottom:3px;}table{width:100%;border-collapse:collapse;margin-bottom:8px;}th,td{border:1px solid #ccc;padding:4px 6px;}th{background:#f3f4f6;text-align:left;}.sig{margin-top:24px;display:grid;grid-template-columns:1fr 1fr;gap:24px;}.sig-line{border-top:1px solid #000;padding-top:5px;font-size:9px;}</style></head><body>');
+    w.document.write('<h2>CONTRACTOR PRE-QUALIFICATION SUBMITTAL</h2><p style="font-size:9px;">'+s.co+(s.dba?' dba '+s.dba:'')+' | Date: '+new Date().toLocaleDateString()+'</p><hr>');
+    w.document.write('<h3>1. Company Information</h3><table>');
+    w.document.write('<tr><th>Legal Name</th><td>'+s.co+'</td><th>DBA</th><td>'+s.dba+'</td></tr>');
+    w.document.write('<tr><th>Entity</th><td>'+s.entity+'</td><th>EIN</th><td>'+s.ein+'</td></tr>');
+    w.document.write('<tr><th>Established</th><td>'+s.estab+'</td><th>TX Lic #</th><td>'+s.lic+'</td></tr>');
+    w.document.write('<tr><th>Address</th><td colspan="3">'+s.addr+'</td></tr>');
+    w.document.write('<tr><th>Contact</th><td>'+s.contact+', '+s.title+'</td><th>Phone</th><td>'+s.phone+'</td></tr>');
+    w.document.write('<tr><th>Email</th><td colspan="3">'+s.email+'</td></tr></table>');
+    w.document.write('<h3>2. Financial Capacity</h3><table>');
+    w.document.write('<tr><th>Annual Revenue</th><td>$'+s.rev+'</td><th>Largest Contract</th><td>$'+s.maxJob+'</td></tr>');
+    w.document.write('<tr><th>Current Backlog</th><td>$'+s.backlog+'</td><th>Field / Office</th><td>'+s.empField+' / '+s.empOffice+'</td></tr></table>');
+    w.document.write('<h3>3. Insurance &amp; Bonding</h3><table><tr><th>Coverage</th><th>Limit / Detail</th></tr>');
+    w.document.write('<tr><td>CGL Occ / Agg</td><td>'+s.cgl_occ+' / '+s.cgl_agg+'</td></tr>');
+    w.document.write('<tr><td>Auto CSL</td><td>'+s.auto+'</td></tr>');
+    if(s.umbrella)w.document.write('<tr><td>Umbrella</td><td>'+s.umbrella+'</td></tr>');
+    w.document.write('<tr><td>WC</td><td>'+s.wc+'</td></tr>');
+    w.document.write('<tr><td>Agent</td><td>'+s.agent+'</td></tr>');
+    w.document.write('<tr><td>Bond (Single/Agg)</td><td>'+s.bond_single+' / '+s.bond_agg+'</td></tr>');
+    w.document.write('<tr><td>Surety</td><td>'+s.surety+'</td></tr></table>');
+    w.document.write('<h3>4. Work Types</h3><p>'+s.scopes.join(' &nbsp;|&nbsp; ')+'</p>');
+    w.document.write('<h3>5. Safety (3-Year)</h3><table><tr><th>EMR</th><td>'+s.emr+'</td><th>Lost Time</th><td>'+s.lti+'</td><th>Recordable</th><td>'+s.rec+'</td><th>OSHA Violations</th><td>'+s.osha+'</td></tr></table>');
+    w.document.write('<h3>6. References</h3><table><tr><th>GC/Owner</th><th>Project</th><th>Value</th><th>Phone</th></tr>');
+    [[s.ref1gc,s.ref1proj,s.ref1val,s.ref1phone],[s.ref2gc,s.ref2proj,s.ref2val,s.ref2phone],[s.ref3gc,s.ref3proj,s.ref3val,s.ref3phone]].forEach(function(r){if(r[0])w.document.write('<tr><td>'+r[0]+'</td><td>'+r[1]+'</td><td>$'+r[2]+'</td><td>'+r[3]+'</td></tr>');});
+    w.document.write('</table><h3>7. Certification</h3><p style="font-size:9px;">Undersigned certifies that information is accurate and complete. Company maintains all required licenses, insurance, and registrations. Valid 12 months from date.</p>');
+    w.document.write('<div class="sig"><div class="sig-line">Authorized Signature / Title / Date</div><div class="sig-line">Printed Name / Company</div></div></body></html>');
+    w.document.close();setTimeout(function(){w.print();},400);
+};
+window._gcpqEmail=function(){
+    var s=collectState();saveState(s);
+    var t='Subject: Contractor Pre-Qualification Submittal — '+s.co+'\n\nDear [GC Estimating Dept],\n\nWe would like to be considered for pre-qualification as a concrete subcontractor.\n\nCOMPANY: '+s.co+(s.dba?' dba '+s.dba:'')+'\nCONTACT: '+s.contact+', '+s.title+'\nPHONE: '+s.phone+'\nEMAIL: '+s.email+'\nESTABLISHED: '+s.estab+' | '+s.entity+'\n\nWORK TYPES: '+s.scopes.join(', ')+'\n\nFINANCIAL:\n  Annual Revenue: $'+s.rev+'\n  Largest Contract: $'+s.maxJob+'\n  Current Backlog: $'+s.backlog+'\n\nINSURANCE:\n  CGL: '+s.cgl_occ+' occ / '+s.cgl_agg+' agg\n  Auto: '+s.auto+'\n  WC: '+s.wc+(s.umbrella?'\n  Umbrella: '+s.umbrella:'')+'\n  Bond: '+s.bond_single+' single / '+s.bond_agg+' aggregate\n  Surety: '+s.surety+'\n\nSAFETY (3-yr): EMR '+s.emr+' | Lost Time: '+s.lti+' | Recordable: '+s.rec+'\n\nFormal pre-qualification package attached. References available on request.\n\n'+s.contact+'\n'+s.co+'\n'+s.phone;
+    navigator.clipboard.writeText(t).then(function(){alert('Email draft copied!');});
+};
+function createButton(){
+    var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='GC PreQual';
+    btn.style.cssText='position:fixed;bottom:890px;right:16px;background:#14532d;color:#86efac;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8900;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+    btn.onclick=function(){var wrap=document.getElementById(WRAP_ID);if(!wrap)return;var show=wrap.style.display==='none';wrap.style.display=show?'block':'none';btn.textContent=show?'Hide PreQual':'GC PreQual';if(show)render();};
+    document.body.appendChild(btn);
+    var wrap=document.createElement('div');wrap.id=WRAP_ID;
+    wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8901;';
+    document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ============================================================
+     PROJECT EARLY WARNING DASHBOARD
+     Scan localStorage across all panels, surface risk flags
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+var BTN_ID='_pewd_btn',WRAP_ID='_pewd_wrap';
+if(document.getElementById(BTN_ID))return;
+var fmtN=function(n){return Number(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});};
+var fmt$=function(n){return '$'+fmtN(n);};
+function render(){
+    var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+    var flags=[],good=[];
+    var today=new Date();today.setHours(0,0,0,0);
+    function daysUntil(ds){if(!ds)return null;var d=new Date(ds);if(isNaN(d.getTime()))return null;return Math.round((d.getTime()-today.getTime())/86400000);}
+    function flag(sev,icon,title,desc){flags.push({sev:sev,icon:icon,title:title,desc:desc});}
+    function ok(icon,title,desc){good.push({icon:icon,title:title,desc:desc});}
+    /* Bond & Insurance */
+    try{var bi=JSON.parse(localStorage.getItem('_bit_state')||'{}');(bi.policies||[]).forEach(function(p){if(!p.expiry)return;var d=daysUntil(p.expiry);if(d===null)return;if(d<0)flag('critical','🚫','EXPIRED: '+p.type,'Expired '+Math.abs(d)+'d ago. Bid disqualification risk.');else if(d<14)flag('high','⚠️','EXPIRING COVERAGE: '+p.type,'Expires in '+d+'d. Renew before next bid submission.');else if(d<30)flag('medium','🔶','COVERAGE <30 DAYS: '+p.type,'Expires in '+d+'d.');});if((bi.policies||[]).length===0)flag('low','🛡️','NO INSURANCE TRACKED','Add policies to Bond & Insurance Tracker to monitor expiry.');}catch(e){}
+    /* AR Aging */
+    try{var ar=JSON.parse(localStorage.getItem('_art_data')||'[]');var od90=ar.filter(function(i){if(i.paid)return false;var d=daysUntil(i.due);return d!==null&&d<-90;}),od60=ar.filter(function(i){if(i.paid)return false;var d=daysUntil(i.due);return d!==null&&d>=-90&&d<-60;});if(od90.length>0)flag('critical','💸','AR 90+ DAYS OVERDUE',od90.length+' invoice(s) = '+fmt$(od90.reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0))+'. TX §53 lien filing window at risk.');if(od60.length>0)flag('high','💸','AR 60-90 DAYS OVERDUE',od60.length+' invoice(s). Send demand letter today.');if(ar.length>0&&ar.filter(function(i){return !i.paid;}).length===0)ok('✅','AR CURRENT','No unpaid overdue invoices.');}catch(e){}
+    /* Proposal Follow-Up */
+    try{var pft=JSON.parse(localStorage.getItem('_pft_data')||'[]');var ofu=pft.filter(function(p){if(['Awarded','Lost'].indexOf(p.status)>=0)return false;var d=daysUntil(p.followUpDate);return d!==null&&d<0;});if(ofu.length>0)flag('medium','📞','OVERDUE FOLLOW-UPS',ofu.length+' proposal(s) need follow-up. Stale bids lose awards.');}catch(e){}
+    /* TX Lien Deadlines */
+    try{var lien=JSON.parse(localStorage.getItem('_txlien_data')||'[]');lien.forEach(function(proj){(proj.deadlines||[]).forEach(function(dl){var d=daysUntil(dl.date);if(d===null)return;if(d<0)flag('critical','⚖️','LIEN DEADLINE MISSED',proj.name+': '+dl.label+' was '+Math.abs(d)+'d ago. Consult TX attorney now.');else if(d<7)flag('critical','⚖️','LIEN DEADLINE IN '+d+'d',proj.name+': '+dl.label+'. File today.');else if(d<30)flag('high','⚖️','LIEN DEADLINE IN '+d+'d',proj.name+': '+dl.label+'.');});});}catch(e){}
+    /* Inspection Hold Points */
+    try{var ihp=JSON.parse(localStorage.getItem('_ihp_data')||'[]');var oh=ihp.filter(function(h){return h.holdType==='HOLD POINT'&&h.status!=='CLEARED'&&h.status!=='WAIVED';});if(oh.length>0)flag('critical','🔴','OPEN HOLD POINTS',oh.length+' open HOLD POINT(s). DO NOT proceed with affected work.');}catch(e){}
+    /* Cylinder Pickups */
+    try{var cps=JSON.parse(localStorage.getItem('_cps_data')||'[]');var od=cps.filter(function(c){return !c.done&&daysUntil(c.pickupDate)<0;}),up=cps.filter(function(c){var d=daysUntil(c.pickupDate);return !c.done&&d!==null&&d>=0&&d<=3;});if(od.length>0)flag('high','🧊','OVERDUE CYLINDER PICKUPS',od.length+' set(s). 28-day breaks losing validity — schedule lab NOW.');if(up.length>0)flag('medium','🧊','CYLINDERS DUE ≤3 DAYS',up.length+' set(s). Coordinate with testing lab.');}catch(e){}
+    /* Finisher Certifications */
+    try{var fct=JSON.parse(localStorage.getItem('_fct_data')||'{}');var expd=[],expg=[];(fct.workers||[]).forEach(function(w){(w.certs||[]).forEach(function(c){var d=daysUntil(c.expiry);if(d===null)return;if(d<0)expd.push(w.name+': '+c.type);else if(d<30)expg.push(w.name+': '+c.type+' ('+d+'d)');});});if(expd.length>0)flag('high','🎓','EXPIRED CERTS',expd.join(', ')+'. May block OCIP or GC mobilization approval.');if(expg.length>0)flag('medium','🎓','CERTS EXPIRING <30 DAYS',expg.join(', ')+'.');}catch(e){}
+    /* Backcharges */
+    try{var bcl=JSON.parse(localStorage.getItem('_bcl_data')||'[]');var obc=bcl.filter(function(b){return b.status==='Open';});if(obc.length>0)flag('medium','⚡','OPEN BACKCHARGES',obc.length+' open item(s) = '+fmt$(obc.reduce(function(s,b){return s+(parseFloat(b.amount)||0);},0))+' exposure. Resolve before final billing.');}catch(e){}
+    /* Material Lead Time */
+    try{var mlt=JSON.parse(localStorage.getItem('_mlt_data')||'[]');var late=mlt.filter(function(m){return m.status!=='Delivered'&&daysUntil(m.neededBy)<0;}),urg=mlt.filter(function(m){var d=daysUntil(m.neededBy);return m.status!=='Delivered'&&d!==null&&d>=0&&d<=2;});if(late.length>0)flag('high','📦','MATERIALS LATE',late.map(function(m){return m.type;}).join(', ')+'. Confirm supplier status NOW.');if(urg.length>0)flag('medium','📦','MATERIALS DUE ≤2 DAYS',urg.map(function(m){return m.type;}).join(', ')+'.');}catch(e){}
+    /* Saved Projects — bid/pour deadlines */
+    try{var db=JSON.parse(localStorage.getItem('onkProjects')||'[]');db.forEach(function(p){var d;if(p.bidDue&&(d=daysUntil(p.bidDue))!==null&&d>=0&&d<=1&&p.status!=='Submitted')flag('high','⏰','BID DUE SOON',p.projectName+': bid due in '+d+'d.');if(p.bidExpiry&&(d=daysUntil(p.bidExpiry))!==null&&d>=0&&d<=3&&['Won','Lost'].indexOf(p.status)<0)flag('medium','📅','BID EXPIRING',p.projectName+': expiry in '+d+'d. Follow up or extend.');});if(db.length>0)ok('📁',db.length+' PROJECT(S) SAVED','Bid/project database active.');}catch(e){}
+    /* Weekly Bid Goal */
+    try{var bg=JSON.parse(localStorage.getItem('_wbgt_data')||'{}');var gc=parseInt(bg.goalCount)||0;if(gc>0){var ws=new Date(today);ws.setDate(today.getDate()-today.getDay());var tw=(bg.bids||[]).filter(function(b){return new Date(b.date)>=ws;}).length;if(tw<gc)flag('low','🎯','WEEKLY BID GOAL',tw+'/'+gc+' bids submitted this week. '+(gc-tw)+' more to hit goal.');}}catch(e){}
+    /* Build UI */
+    var critN=flags.filter(function(f){return f.sev==='critical';}).length;
+    var highN=flags.filter(function(f){return f.sev==='high';}).length;
+    var sevC={critical:'#dc2626',high:'#ea580c',medium:'#d97706',low:'#6b7280'};
+    var sevBG={critical:'#450a0a',high:'#431407',medium:'#422006',low:'#1e293b'};
+    var sevBR={critical:'#dc2626',high:'#ea580c',medium:'#d97706',low:'#374151'};
+    var overallC=critN>0?'#dc2626':highN>0?'#ea580c':flags.length>0?'#d97706':'#10b981';
+    var overallT=critN>0?'CRITICAL — Action Required':highN>0?'HIGH — Review Today':flags.length>0?'WARNINGS — Review Soon':'ALL CLEAR';
+    var overallE=critN>0?'🚨':highN>0?'⚠️':flags.length>0?'🔶':'✅';
+    var html='<div style="max-width:820px;margin:0 auto;padding:24px;">';
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">';
+    html+='<h2 style="color:#fde68a;margin:0;font-size:20px;">&#x26A8; Project Early Warning Dashboard</h2>';
+    html+='<div style="display:flex;gap:8px;"><button onclick="window._pewdRefresh()" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:11px;">&#x21BA; Refresh</button>';
+    html+='<button onclick="document.getElementById(\'_pewd_wrap\').style.display=\'none\';document.getElementById(\'_pewd_btn\').textContent=\'&#x26A8; Warnings\';" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:11px;">&#x2715; Close</button></div></div>';
+    html+='<div style="background:#1e293b;border-radius:10px;padding:16px;margin-bottom:18px;display:flex;align-items:center;gap:14px;">';
+    html+='<div style="font-size:36px;">'+overallE+'</div>';
+    html+='<div><div style="font-size:15px;font-weight:700;color:'+overallC+';">'+overallT+'</div>';
+    html+='<div style="font-size:11px;color:#9ca3af;margin-top:3px;">'+flags.length+' flag(s) detected | Scan: '+new Date().toLocaleTimeString()+'</div></div>';
+    html+='<div style="margin-left:auto;display:flex;gap:8px;">';
+    if(critN>0)html+='<span style="background:#dc2626;color:#fff;border-radius:9999px;padding:3px 10px;font-size:11px;font-weight:700;">'+critN+' Critical</span>';
+    if(highN>0)html+='<span style="background:#ea580c;color:#fff;border-radius:9999px;padding:3px 10px;font-size:11px;font-weight:700;">'+highN+' High</span>';
+    html+='</div></div>';
+    flags.forEach(function(f){
+        html+='<div style="background:'+sevBG[f.sev]+';border:1px solid '+sevBR[f.sev]+';border-radius:8px;padding:11px 13px;margin-bottom:7px;display:flex;gap:10px;align-items:flex-start;">';
+        html+='<div style="font-size:18px;flex-shrink:0;margin-top:1px;">'+f.icon+'</div>';
+        html+='<div style="flex:1"><div style="font-size:12px;font-weight:700;color:'+sevC[f.sev]+';margin-bottom:2px;">'+f.title+'</div><div style="font-size:11px;color:#d1d5db;">'+f.desc+'</div></div>';
+        html+='<span style="font-size:9px;font-weight:700;text-transform:uppercase;color:'+sevC[f.sev]+';flex-shrink:0;margin-top:3px;">'+f.sev+'</span></div>';
+    });
+    if(flags.length===0){
+        html+='<div style="background:#0f172a;border-radius:8px;padding:20px;text-align:center;color:#6b7280;font-size:12px;">';
+        html+='No flags detected. '+(good.length>0?'See all-clear items below.':'Start filling in tool panels — this dashboard will scan them automatically.')+'</div>';
+    }
+    if(good.length>0){
+        html+='<div style="background:#0f172a;border-radius:8px;padding:12px;margin-top:12px;">';
+        html+='<div style="font-size:11px;font-weight:700;color:#4ade80;margin-bottom:8px;">&#x2705; All Clear</div>';
+        good.forEach(function(g){html+='<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid #1e293b;font-size:11px;color:#6b7280;">'+g.icon+' <span style="color:#9ca3af;font-weight:600;">'+g.title+'</span> &mdash; '+g.desc+'</div>';});
+        html+='</div>';
+    }
+    html+='<div style="font-size:9px;color:#374151;margin-top:10px;text-align:center;">Scans: Bond/Insurance &bull; AR Aging &bull; TX Lien Deadlines &bull; Hold Points &bull; Cylinder Pickups &bull; Certifications &bull; Backcharges &bull; Material Lead Time &bull; Bid Deadlines &bull; Weekly Goal</div></div>';
+    wrap.innerHTML=html;
+}
+window._pewdRefresh=function(){render();};
+function createButton(){
+    var btn=document.createElement('button');btn.id=BTN_ID;
+    btn.innerHTML='&#x26A8; Warnings';
+    btn.style.cssText='position:fixed;bottom:930px;right:16px;background:#7c2d12;color:#fde68a;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8900;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+    btn.onclick=function(){var wrap=document.getElementById(WRAP_ID);if(!wrap)return;var show=wrap.style.display==='none';wrap.style.display=show?'block':'none';btn.textContent=show?'Hide Warnings':'⚠️ Warnings';if(show)render();};
+    document.body.appendChild(btn);
+    var wrap=document.createElement('div');wrap.id=WRAP_ID;
+    wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8901;';
+    document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
