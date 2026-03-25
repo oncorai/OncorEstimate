@@ -40129,3 +40129,484 @@ Retain one (1) copy for your records. Return stamped copies as indicated above.
     if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
 })();
 </script>
+
+<!-- TOOL: PLANT-TO-POUR HAUL TIME TRACKER (🚛) -->
+<script>
+(function(){
+'use strict';
+var BTN_ID='htt-btn',WRAP_ID='htt-wrap',LS='htt_data_v1';
+function ts(){return new Date().toISOString();}
+function fmtDate(s){if(!s)return'—';var d=new Date(s);return isNaN(d)?s:d.toLocaleDateString();}
+function load(){try{return JSON.parse(localStorage.getItem(LS)||'[]');}catch(e){return[];}}
+function save(d){localStorage.setItem(LS,JSON.stringify(d));}
+
+function calcStatus(batchTime,arriveTime,tempF){
+    // ASTM C94 §11.8: discharge within 90 min OR 300 revolutions of drum after water first added
+    // Cold weather (temp <=50F): some specs allow 60min additional
+    if(!batchTime||!arriveTime)return null;
+    var batch=new Date(batchTime),arrive=new Date(arriveTime);
+    var elapsedMin=Math.round((arrive-batch)/60000);
+    var limit=90;
+    if(tempF&&parseFloat(tempF)<=50)limit=105; // ACI 305.1 cold weather allowance
+    var pct=Math.round(elapsedMin/limit*100);
+    var status=elapsedMin<=limit?'OK':'EXCEEDED';
+    return{elapsedMin:elapsedMin,limit:limit,pct:pct,status:status};
+}
+
+function render(){
+    var records=load();
+    var html='<div style="max-width:900px;margin:0 auto;padding:20px;font-family:Arial,sans-serif;color:#e2e8f0;">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">';
+    html+='<h2 style="color:#fbbf24;font-size:18px;margin:0;">🚛 Plant-to-Pour Haul Time Tracker</h2>';
+    html+='<button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'Haul Time Tracker\'" style="background:#374151;color:#9ca3af;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;">✕ Close</button></div>';
+
+    // Stats
+    var exceeded=records.filter(function(r){var s=calcStatus(r.batchTime,r.arriveTime,r.tempF);return s&&s.status==='EXCEEDED';});
+    var ok=records.filter(function(r){var s=calcStatus(r.batchTime,r.arriveTime,r.tempF);return s&&s.status==='OK';});
+    html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">';
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#e2e8f0;">'+records.length+'</div><div style="font-size:11px;color:#9ca3af;">Total Deliveries</div></div>';
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#4ade80;">'+ok.length+'</div><div style="font-size:11px;color:#9ca3af;">Within 90 Min</div></div>';
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#f87171;">'+exceeded.length+'</div><div style="font-size:11px;color:#9ca3af;">ASTM C94 Violations</div></div>';
+    html+='</div>';
+
+    if(exceeded.length>0){
+        html+='<div style="background:#7f1d1d;border:2px solid #f87171;border-radius:8px;padding:12px;margin-bottom:16px;">';
+        html+='<strong style="color:#fca5a5;">⛔ ASTM C94 VIOLATIONS LOGGED — '+exceeded.length+' load(s) exceeded 90-minute discharge limit.</strong>';
+        html+='<div style="font-size:11px;color:#fca5a5;margin-top:4px;">Per ASTM C94 §11.8: concrete must be discharged within 90 minutes AND 300 revolutions after water introduction. Loads exceeding this are non-conforming — reject or document engineer acceptance.</div></div>';
+    }
+
+    // ASTM C94 reference
+    html+='<div style="background:#1e3a5f;border:1px solid #1d4ed8;border-radius:8px;padding:10px;margin-bottom:16px;font-size:11px;color:#93c5fd;">';
+    html+='📋 <strong>ASTM C94 §11.8:</strong> Discharge within 90 min OR 300 drum revolutions from water addition, whichever comes first. Exception: if concrete temp ≤50°F, limit may extend to 105 min with EOR approval (ACI 306R). 75°F+ ambient = consider 60-min practical limit.';
+    html+='</div>';
+
+    // Add form
+    html+='<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:16px;">';
+    html+='<div style="font-size:13px;font-weight:700;color:#fbbf24;margin-bottom:12px;">Log Delivery</div>';
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+    html+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Project / Pour Element</label><input id="htt-proj" placeholder="e.g. Slab-Zone A" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Ticket # / Truck ID</label><input id="htt-ticket" placeholder="e.g. 48291 / T-7" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Batch/Water Time</label><input id="htt-batch" type="datetime-local" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Arrive on Site Time</label><input id="htt-arrive" type="datetime-local" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Discharge Start Time</label><input id="htt-discharge" type="datetime-local" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Concrete Temp (°F)</label><input id="htt-temp" type="number" placeholder="e.g. 78" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Drum Revs at Arrival</label><input id="htt-revs" type="number" placeholder="e.g. 185" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Plant Distance (miles)</label><input id="htt-miles" type="number" placeholder="e.g. 8.5" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='</div>';
+    html+='<div style="margin-bottom:10px;"><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Notes (disposition, rejection, driver, inspector)</label><textarea id="htt-notes" rows="2" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;resize:vertical;"></textarea></div>';
+    html+='<button onclick="window._httAdd()" style="background:#1d4ed8;color:white;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:13px;font-weight:600;">📋 Log Delivery</button>';
+    html+='</div>';
+
+    // Log
+    var sorted=records.slice().reverse();
+    if(sorted.length===0){
+        html+='<div style="text-align:center;padding:30px;color:#4b5563;">No deliveries logged yet.</div>';
+    } else {
+        html+='<div style="font-size:12px;font-weight:700;color:#9ca3af;margin-bottom:8px;">DELIVERY LOG ('+records.length+')</div>';
+        sorted.forEach(function(r,ri){
+            var realIdx=records.length-1-ri;
+            var s=calcStatus(r.batchTime,r.arriveTime,r.tempF);
+            var ds=calcStatus(r.batchTime,r.discharge,r.tempF);
+            var sColor=s?( s.status==='OK'?'#4ade80':'#f87171'):'#9ca3af';
+            var sText=s?( s.status==='OK'?'✓ OK':'⚠ EXCEEDED'):'—';
+            var revOk=!r.revs||parseInt(r.revs)<=300;
+            html+='<div style="background:#1e293b;border:1px solid '+(s&&s.status==='EXCEEDED'?'#f87171':'#374151')+';border-left:4px solid '+sColor+';border-radius:8px;padding:12px;margin-bottom:8px;">';
+            html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+            html+='<div style="display:flex;gap:8px;align-items:center;">';
+            html+='<span style="font-weight:700;color:#e2e8f0;font-size:13px;">'+(r.proj||'—')+'</span>';
+            if(r.ticket)html+='<span style="font-size:11px;color:#9ca3af;background:#374151;padding:2px 6px;border-radius:3px;">#'+r.ticket+'</span>';
+            html+='<span style="background:'+sColor+'22;color:'+sColor+';font-size:11px;padding:2px 8px;border-radius:4px;font-weight:700;">'+sText+'</span>';
+            if(!revOk)html+='<span style="background:#f87171;color:#fff;font-size:11px;padding:2px 8px;border-radius:4px;font-weight:700;">⚠ 300-REV EXCEEDED</span>';
+            html+='</div>';
+            html+='<button onclick="window._httDel('+realIdx+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:11px;">✕</button></div>';
+            html+='<div style="font-size:11px;color:#9ca3af;display:flex;gap:16px;flex-wrap:wrap;">';
+            if(s)html+='<span>⏱ <strong style="color:'+sColor+';">'+s.elapsedMin+' min</strong> elapsed (limit: '+s.limit+' min) — '+Math.min(100,s.pct)+'% of window</span>';
+            if(r.discharge&&r.batchTime){var ds2=calcStatus(r.batchTime,r.discharge,r.tempF);if(ds2)html+='<span>🕐 Discharge: '+ds2.elapsedMin+' min after batch</span>';}
+            if(r.tempF)html+='<span>🌡 '+r.tempF+'°F</span>';
+            if(r.revs)html+='<span style="color:'+(revOk?'#9ca3af':'#f87171')+';">🔄 '+r.revs+' revs</span>';
+            if(r.miles)html+='<span>📍 '+r.miles+' mi</span>';
+            html+='</div>';
+            if(r.notes)html+='<div style="font-size:11px;color:#6b7280;margin-top:4px;">📝 '+r.notes+'</div>';
+            html+='</div>';
+        });
+    }
+
+    // Print + Copy
+    html+='<div style="display:flex;gap:10px;margin-top:16px;">';
+    html+='<button onclick="window._httPrint()" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;">🖨 Print ASTM C94 Log</button>';
+    html+='<button onclick="window._httCopy()" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;">📋 Copy Log</button>';
+    html+='</div>';
+    html+='</div>';
+    var wrap=document.getElementById(WRAP_ID);if(wrap){wrap.innerHTML=html;}
+}
+
+window._httAdd=function(){
+    var proj=(document.getElementById('htt-proj')||{}).value||'';
+    if(!proj){alert('Project / element required.');return;}
+    var records=load();
+    records.push({proj:proj.trim(),ticket:((document.getElementById('htt-ticket')||{}).value||'').trim(),batchTime:(document.getElementById('htt-batch')||{}).value||'',arriveTime:(document.getElementById('htt-arrive')||{}).value||'',discharge:(document.getElementById('htt-discharge')||{}).value||'',tempF:((document.getElementById('htt-temp')||{}).value||'').trim(),revs:((document.getElementById('htt-revs')||{}).value||'').trim(),miles:((document.getElementById('htt-miles')||{}).value||'').trim(),notes:((document.getElementById('htt-notes')||{}).value||'').trim(),ts:ts()});
+    save(records);render();
+};
+window._httDel=function(i){var r=load();r.splice(i,1);save(r);render();};
+window._httPrint=function(){
+    var records=load();
+    var w=window.open('','_blank');
+    var rows=records.map(function(r){
+        var s=calcStatus(r.batchTime,r.arriveTime,r.tempF);
+        var sText=s?s.elapsedMin+' min / limit '+s.limit+' — '+(s.status==='OK'?'OK':'EXCEEDED'):'—';
+        var revOk=!r.revs||parseInt(r.revs)<=300;
+        var style=s&&s.status==='EXCEEDED'?'background:#fee2e2;font-weight:700;':'';
+        return'<tr style="'+style+'"><td>'+r.ticket+'</td><td>'+r.proj+'</td><td>'+(r.batchTime?new Date(r.batchTime).toLocaleString():'—')+'</td><td>'+(r.arriveTime?new Date(r.arriveTime).toLocaleString():'—')+'</td><td>'+(r.discharge?new Date(r.discharge).toLocaleString():'—')+'</td><td>'+(r.tempF?r.tempF+'°F':'—')+'</td><td>'+(r.revs||'—')+(revOk?'':' ⚠')+'</td><td style="font-weight:700;">'+sText+'</td><td>'+r.notes+'</td></tr>';
+    }).join('');
+    var violated=records.filter(function(r){var s=calcStatus(r.batchTime,r.arriveTime,r.tempF);return s&&s.status==='EXCEEDED';});
+    w.document.write('<!DOCTYPE html><html><head><title>ASTM C94 Haul Time Log</title><style>body{font-family:Arial,sans-serif;padding:20px;font-size:10px;}table{width:100%;border-collapse:collapse;margin-bottom:16px;}th,td{border:1px solid #ccc;padding:5px;text-align:left;}.sig{margin-top:24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;}.sig-line{border-top:1px solid #000;padding-top:6px;font-size:10px;}</style></head><body>');
+    w.document.write('<h2>ASTM C94 HAUL TIME & DISCHARGE COMPLIANCE LOG</h2>');
+    w.document.write('<p style="font-size:10px;color:#555;margin-bottom:10px;">Generated: '+new Date().toLocaleString()+'<br>Reference: ASTM C94/C94M §11.8 — Discharge within 90 minutes OR 300 drum revolutions from water introduction, whichever occurs first.</p>');
+    if(violated.length>0)w.document.write('<div style="background:#fee2e2;border:2px solid red;padding:10px;margin-bottom:12px;"><strong>VIOLATIONS ('+violated.length+'):</strong> '+violated.map(function(r){var s=calcStatus(r.batchTime,r.arriveTime,r.tempF);return r.proj+' Ticket #'+r.ticket+' — '+s.elapsedMin+' min elapsed';}).join('; ')+'<br>These loads are non-conforming per ASTM C94 §11.8. Document engineer acceptance or rejection per ACI 301-16 §1.6.8.</div>');
+    w.document.write('<table><tr><th>Ticket</th><th>Element</th><th>Batch Time</th><th>Arrive Time</th><th>Discharge</th><th>Temp</th><th>Revs</th><th>Elapsed / Status</th><th>Notes</th></tr>'+rows+'</table>');
+    w.document.write('<div class="sig"><div class="sig-line">QC Inspector / Date</div><div class="sig-line">Foreman / Date</div><div class="sig-line">PM / Date</div></div>');
+    w.document.write('</body></html>');w.document.close();setTimeout(function(){w.print();},400);
+};
+window._httCopy=function(){
+    var records=load();
+    var lines=['ASTM C94 HAUL TIME LOG — Generated: '+new Date().toLocaleString(),''];
+    records.forEach(function(r){
+        var s=calcStatus(r.batchTime,r.arriveTime,r.tempF);
+        lines.push([r.proj,'Ticket:'+r.ticket,r.batchTime?'Batch:'+new Date(r.batchTime).toLocaleString():'','Arrive:'+new Date(r.arriveTime).toLocaleString(),s?s.elapsedMin+' min ('+s.status+')':'',r.notes].filter(Boolean).join(' | '));
+    });
+    navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Copied!');});
+};
+
+function createButton(){
+    var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='Haul Time Tracker';
+    btn.style.cssText='position:fixed;bottom:490px;right:16px;background:#78350f;color:#fde68a;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8900;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+    btn.onclick=togglePanel;document.body.appendChild(btn);
+    var wrap=document.createElement('div');wrap.id=WRAP_ID;
+    wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8901;';
+    document.body.appendChild(wrap);
+}
+function togglePanel(){
+    var wrap=document.getElementById(WRAP_ID);if(!wrap)return;var show=wrap.style.display==='none';
+    wrap.style.display=show?'block':'none';document.getElementById(BTN_ID).textContent=show?'Hide Haul Tracker':'Haul Time Tracker';
+    if(show)render();
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- TOOL: SUBCONTRACTOR CHANGE ORDER LOG (📝) -->
+<script>
+(function(){
+'use strict';
+var BTN_ID='scol-btn',WRAP_ID='scol-wrap',LS='scol_data_v1';
+var STATUSES=['Pending','Submitted to Sub','Executed','Disputed','Voided'];
+var SCOLS={'Pending':'#f59e0b','Submitted to Sub':'#60a5fa','Executed':'#4ade80','Disputed':'#f87171','Voided':'#6b7280'};
+function ts(){return new Date().toISOString();}
+function fmtDate(s){if(!s)return'—';var d=new Date(s);return isNaN(d)?s:d.toLocaleDateString();}
+function load(){try{return JSON.parse(localStorage.getItem(LS)||'[]');}catch(e){return[];}}
+function save(d){localStorage.setItem(LS,JSON.stringify(d));}
+function nextNum(recs){return String(recs.length+1).padStart(3,'0');}
+function getProj(){return((document.getElementById('project-name-input')||{}).value||'Project').trim();}
+
+function render(){
+    var recs=load();
+    var proj=getProj();
+    var totalExecuted=recs.filter(function(r){return r.status==='Executed';}).reduce(function(a,r){return a+(parseFloat(r.amount)||0);},0);
+    var totalPending=recs.filter(function(r){return r.status==='Pending'||r.status==='Submitted to Sub';}).reduce(function(a,r){return a+(parseFloat(r.amount)||0);},0);
+    var fmt=function(n){return'$'+(Math.round(n)).toLocaleString();};
+
+    var html='<div style="max-width:900px;margin:0 auto;padding:20px;font-family:Arial,sans-serif;color:#e2e8f0;">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">';
+    html+='<h2 style="color:#a78bfa;font-size:18px;margin:0;">📝 Subcontractor Change Order Log — '+proj+'</h2>';
+    html+='<button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'Sub CO Log\'" style="background:#374151;color:#9ca3af;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;">✕ Close</button></div>';
+
+    html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">';
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#e2e8f0;">'+recs.length+'</div><div style="font-size:11px;color:#9ca3af;">Total COs</div></div>';
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#4ade80;">'+fmt(totalExecuted)+'</div><div style="font-size:11px;color:#9ca3af;">Executed Total</div></div>';
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#fbbf24;">'+fmt(totalPending)+'</div><div style="font-size:11px;color:#9ca3af;">Pending/Submitted</div></div>';
+    html+='</div>';
+
+    var disputed=recs.filter(function(r){return r.status==='Disputed';});
+    if(disputed.length>0){
+        html+='<div style="background:#7f1d1d;border:2px solid #f87171;border-radius:8px;padding:12px;margin-bottom:16px;">';
+        html+='<strong style="color:#fca5a5;">⚠ '+disputed.length+' DISPUTED CO(s) require resolution.</strong>';
+        html+='</div>';
+    }
+
+    // Add form
+    html+='<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:16px;">';
+    html+='<div style="font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:12px;">Issue Subcontractor CO</div>';
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+    html+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">CO Number</label><input id="scol-num" placeholder="auto" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Date</label><input id="scol-date" type="date" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Subcontractor / Vendor</label><input id="scol-sub" placeholder="e.g. ABC Pump Co." style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Scope / Trade</label><input id="scol-scope" placeholder="e.g. Concrete Pumping" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">CO Amount ($)</label><input id="scol-amount" type="number" placeholder="e.g. 3500" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">GC Source CO # (if applicable)</label><input id="scol-gcco" placeholder="e.g. GC-CO-007" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='</div>';
+    html+='<div style="margin-bottom:10px;"><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Change Description</label><textarea id="scol-desc" rows="2" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;resize:vertical;" placeholder="Describe the scope change requiring this CO..."></textarea></div>';
+    html+='<div style="margin-bottom:10px;"><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Justification / Supporting Docs</label><input id="scol-basis" placeholder="e.g. GC direction per RFI-14, added 200 LF haul" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='<button onclick="window._scolAdd()" style="background:#7c3aed;color:white;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:13px;font-weight:600;">📝 Issue CO</button>';
+    html+='</div>';
+
+    // CO List
+    if(recs.length===0){
+        html+='<div style="text-align:center;padding:30px;color:#4b5563;">No COs issued yet.</div>';
+    } else {
+        html+='<div style="font-size:12px;font-weight:700;color:#9ca3af;margin-bottom:8px;">ISSUED COs ('+recs.length+')</div>';
+        recs.slice().reverse().forEach(function(r,ri){
+            var realIdx=recs.length-1-ri;
+            var sc=SCOLS[r.status]||'#9ca3af';
+            html+='<div style="background:#1e293b;border:1px solid #374151;border-left:4px solid '+sc+';border-radius:8px;padding:12px;margin-bottom:8px;">';
+            html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+            html+='<div style="display:flex;gap:8px;align-items:center;">';
+            html+='<span style="font-size:11px;color:#9ca3af;background:#374151;padding:2px 6px;border-radius:3px;">CO-'+r.num+'</span>';
+            html+='<span style="font-weight:700;color:#e2e8f0;font-size:13px;">'+(r.sub||'—')+'</span>';
+            if(r.scope)html+='<span style="font-size:11px;color:#9ca3af;background:#1e3a5f;padding:2px 6px;border-radius:3px;">'+r.scope+'</span>';
+            html+='<span style="font-weight:700;color:#4ade80;font-size:13px;">$'+(parseFloat(r.amount)||0).toLocaleString()+'</span>';
+            html+='</div>';
+            html+='<div style="display:flex;gap:6px;align-items:center;">';
+            html+='<span onclick="window._scolCycleStatus('+realIdx+')" style="background:'+sc+'22;color:'+sc+';font-size:11px;padding:2px 8px;border-radius:4px;font-weight:700;cursor:pointer;" title="Click to advance status">'+r.status+'</span>';
+            html+='<button onclick="window._scolDel('+realIdx+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:11px;">✕</button></div></div>';
+            html+='<div style="font-size:11px;color:#9ca3af;display:flex;gap:16px;flex-wrap:wrap;">';
+            if(r.date)html+='<span>📅 '+fmtDate(r.date)+'</span>';
+            if(r.gcco)html+='<span>📎 GC-CO: '+r.gcco+'</span>';
+            html+='</div>';
+            if(r.desc)html+='<div style="font-size:11px;color:#d1d5db;margin-top:4px;">📋 '+r.desc+'</div>';
+            if(r.basis)html+='<div style="font-size:11px;color:#6b7280;margin-top:2px;">📄 Basis: '+r.basis+'</div>';
+            html+='</div>';
+        });
+    }
+
+    html+='<div style="display:flex;gap:10px;margin-top:16px;">';
+    html+='<button onclick="window._scolPrint()" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;">🖨 Print Sub CO Log</button>';
+    html+='<button onclick="window._scolCopy()" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;">📋 Copy Log</button>';
+    html+='</div>';
+    html+='</div>';
+    var wrap=document.getElementById(WRAP_ID);if(wrap){wrap.innerHTML=html;}
+}
+
+window._scolAdd=function(){
+    var sub=(document.getElementById('scol-sub')||{}).value||'';if(!sub){alert('Sub name required.');return;}
+    var amount=(document.getElementById('scol-amount')||{}).value||'0';
+    var recs=load();
+    recs.push({num:(document.getElementById('scol-num')||{}).value||nextNum(recs),date:(document.getElementById('scol-date')||{}).value||new Date().toISOString().slice(0,10),sub:sub.trim(),scope:((document.getElementById('scol-scope')||{}).value||'').trim(),amount:parseFloat(amount)||0,gcco:((document.getElementById('scol-gcco')||{}).value||'').trim(),desc:((document.getElementById('scol-desc')||{}).value||'').trim(),basis:((document.getElementById('scol-basis')||{}).value||'').trim(),status:'Pending',ts:ts()});
+    save(recs);render();
+};
+window._scolDel=function(i){var r=load();r.splice(i,1);save(r);render();};
+window._scolCycleStatus=function(i){var r=load();if(!r[i])return;var cur=STATUSES.indexOf(r[i].status);r[i].status=STATUSES[(cur+1)%STATUSES.length];save(r);render();};
+window._scolPrint=function(){
+    var recs=load();var proj=getProj();
+    var totalEx=recs.filter(function(r){return r.status==='Executed';}).reduce(function(a,r){return a+(r.amount||0);},0);
+    var totalPend=recs.filter(function(r){return r.status==='Pending'||r.status==='Submitted to Sub';}).reduce(function(a,r){return a+(r.amount||0);},0);
+    var w=window.open('','_blank');
+    var rows=recs.map(function(r){return'<tr><td>CO-'+r.num+'</td><td>'+(r.date||'—')+'</td><td>'+r.sub+'</td><td>'+r.scope+'</td><td>$'+(r.amount||0).toLocaleString()+'</td><td>'+r.gcco+'</td><td>'+r.desc+'</td><td>'+r.status+'</td><td>'+r.basis+'</td></tr>';}).join('');
+    w.document.write('<!DOCTYPE html><html><head><title>Sub CO Log — '+proj+'</title><style>body{font-family:Arial,sans-serif;padding:20px;font-size:10px;}table{width:100%;border-collapse:collapse;margin-bottom:16px;}th,td{border:1px solid #ccc;padding:5px;text-align:left;}.sig{margin-top:24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;}.sig-line{border-top:1px solid #000;padding-top:6px;font-size:10px;}</style></head><body>');
+    w.document.write('<h2>SUBCONTRACTOR CHANGE ORDER LOG — '+proj+'</h2>');
+    w.document.write('<p style="font-size:10px;margin-bottom:10px;">Generated: '+new Date().toLocaleString()+' | Executed: $'+totalEx.toLocaleString()+' | Pending/Submitted: $'+totalPend.toLocaleString()+'</p>');
+    w.document.write('<table><tr><th>CO #</th><th>Date</th><th>Sub/Vendor</th><th>Scope</th><th>Amount</th><th>GC-CO Ref</th><th>Description</th><th>Status</th><th>Basis</th></tr>'+rows+'</table>');
+    w.document.write('<p style="font-size:9px;color:#555;">All subcontractor COs must be executed in writing before sub performs additional work. Verbal authorizations are unenforceable. Retain executed COs with contract documents.</p>');
+    w.document.write('<div class="sig"><div class="sig-line">Authorized By (GC/PM) / Date</div><div class="sig-line">Subcontractor Acceptance / Date</div><div class="sig-line">Controller / Date</div></div>');
+    w.document.write('</body></html>');w.document.close();setTimeout(function(){w.print();},400);
+};
+window._scolCopy=function(){
+    var recs=load();
+    var lines=['SUBCONTRACTOR CO LOG — '+getProj(),'Generated: '+new Date().toLocaleString(),''];
+    recs.forEach(function(r){lines.push('CO-'+r.num+' | '+r.sub+' | $'+(r.amount||0).toLocaleString()+' | '+r.status+(r.desc?' | '+r.desc:''));});
+    navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Copied!');});
+};
+
+function createButton(){
+    var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='Sub CO Log';
+    btn.style.cssText='position:fixed;bottom:530px;right:16px;background:#4c1d95;color:#ddd6fe;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8900;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+    btn.onclick=togglePanel;document.body.appendChild(btn);
+    var wrap=document.createElement('div');wrap.id=WRAP_ID;
+    wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8901;';
+    document.body.appendChild(wrap);
+}
+function togglePanel(){
+    var wrap=document.getElementById(WRAP_ID);if(!wrap)return;var show=wrap.style.display==='none';
+    wrap.style.display=show?'block':'none';document.getElementById(BTN_ID).textContent=show?'Hide Sub CO Log':'Sub CO Log';
+    if(show)render();
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- TOOL: CONCRETE FLOOR REPAIR COST ESTIMATOR (🔧) -->
+<script>
+(function(){
+'use strict';
+var BTN_ID='cfre-btn',WRAP_ID='cfre-wrap',LS='cfre_saves_v1';
+
+var REPAIR_TYPES=[
+    {name:'Crack Routing & Sealing',unit:'LF',$/unit:8.50,method:'ASTM C920 / ACI 224R — route 1/4" wide × 1/4" deep, apply polyurethane sealant.',aci:'ACI 224R-01'},
+    {name:'Epoxy Injection (Structural Crack)',unit:'LF',$/unit:28.00,method:'ASTM C881 Type I/IV low-viscosity epoxy injection. Ports @ 6" spacing. Restore monolithic section.',aci:'ACI 301-16 §5.3 / ACI 503.7'},
+    {name:'Spall Repair — Partial Depth',unit:'SF',$/unit:35.00,method:'ACI 301 §5.3.2: saw cut perimeter to 1" depth, remove to sound concrete, apply bonding agent + polymer concrete.',aci:'ACI 301-16 / ACI 546R-14'},
+    {name:'Spall Repair — Full Depth',unit:'SF',$/unit:85.00,method:'Saw cut perimeter, break out full depth, clean substrate, apply bonding agent, place repair concrete, cure.',aci:'ACI 301-16 §5.3 / ACI 546R-14'},
+    {name:'Slab Panel Replacement',unit:'SF',$/unit:18.00,method:'Remove existing slab (saw cut + break out), prepare subgrade, place new concrete per original spec.',aci:'ACI 360R-10'},
+    {name:'Diamond Grinding (FF Correction)',unit:'SF',$/unit:1.80,method:'Planetary grind for F-number correction. ASTM E1155 survey required before/after. Typ. 1-3 passes.',aci:'ASTM E1155 / ACI 117'},
+    {name:'Joint Re-sealing (Rout & Seal)',unit:'LF',$/unit:5.50,method:'Route existing joint, clean, install backer rod, apply ASTM C920 Type S sealant. Reservoir: 1/4" wide × 1/4" deep min.',aci:'ACI 504R / ASTM C920'},
+    {name:'Curling/Corner Repair',unit:'EA',$/unit:450.00,method:'Remove curled slab segment, improve subgrade, tie to adjacent slab with epoxy dowels, place patch concrete.',aci:'ACI 360R-10 §7'},
+    {name:'Honeycombing Repair (Formed Element)',unit:'SF',$/unit:65.00,method:'ACI 301 §5.3.3: probe extent, saw cut perimeter, remove unsound concrete, abrasive blast, non-shrink grout + form.',aci:'ACI 301-16 §5.3.3'},
+    {name:'Delamination Repair',unit:'SF',$/unit:42.00,method:'Chain drag survey, saw cut delaminated zone, remove to sound depth, clean + prep, polymer-modified topping.',aci:'ACI 546R-14'},
+    {name:'Cold Joint Remediation',unit:'LF',$/unit:45.00,method:'Probe full depth. If structural: EOR consult + ACI 224.1R analysis. Surface treatment: route, clean, epoxy or grout per EOR.',aci:'ACI 301-16 §5.3 / ACI 224.1R'},
+];
+
+function load(){try{return JSON.parse(localStorage.getItem(LS)||'[]');}catch(e){return[];}}
+function save(d){localStorage.setItem(LS,JSON.stringify(d));}
+function fmt(n){return'$'+(isNaN(n)?'—':parseFloat(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}));}
+
+function render(){
+    var saves=load();
+    var html='<div style="max-width:900px;margin:0 auto;padding:20px;font-family:Arial,sans-serif;color:#e2e8f0;">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">';
+    html+='<h2 style="color:#fb923c;font-size:18px;margin:0;">🔧 Concrete Floor Repair Cost Estimator</h2>';
+    html+='<button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'Floor Repair Est.\'" style="background:#374151;color:#9ca3af;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;">✕ Close</button></div>';
+
+    html+='<div style="background:#1e3a5f;border:1px solid #1d4ed8;border-radius:8px;padding:10px;margin-bottom:16px;font-size:11px;color:#93c5fd;">';
+    html+='📋 <strong>ACI 301-16 / ACI 546R-14 / ACI 224R-01</strong> — Pricing based on El Paso/SW market 2025. All repairs require sound substrate + ACI 546R spec review. Structural cracks require EOR assessment before pricing.';
+    html+='</div>';
+
+    // Repair lines
+    html+='<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:16px;">';
+    html+='<div style="font-size:13px;font-weight:700;color:#fb923c;margin-bottom:12px;">Build Repair Estimate</div>';
+    html+='<div style="margin-bottom:10px;">';
+    html+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Project / Location</label>';
+    html+='<input id="cfre-proj" placeholder="e.g. Warehouse Floor — Dock Area" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/>';
+    html+='</div>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+    html+='<tr style="background:#0f172a;"><th style="padding:8px 6px;text-align:left;color:#9ca3af;border-bottom:1px solid #374151;">Repair Type</th><th style="padding:8px 6px;text-align:center;color:#9ca3af;border-bottom:1px solid #374151;">Unit</th><th style="padding:8px 6px;text-align:center;color:#9ca3af;border-bottom:1px solid #374151;">$/Unit</th><th style="padding:8px 6px;text-align:center;color:#9ca3af;border-bottom:1px solid #374151;">Qty</th><th style="padding:8px 6px;text-align:right;color:#9ca3af;border-bottom:1px solid #374151;">Total</th></tr>';
+    REPAIR_TYPES.forEach(function(rt,i){
+        html+='<tr style="border-bottom:1px solid #1e293b;">';
+        html+='<td style="padding:8px 6px;"><div style="font-weight:600;color:#e2e8f0;">'+rt.name+'</div><div style="font-size:10px;color:#6b7280;margin-top:2px;">'+rt.method.substring(0,80)+'...</div></td>';
+        html+='<td style="padding:8px 6px;text-align:center;color:#9ca3af;">'+rt.unit+'</td>';
+        html+='<td style="padding:8px 6px;text-align:center;"><input id="cfre-rate-'+i+'" type="number" value="'+rt['$/unit']+'" step="0.01" style="width:70px;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:4px;color:#e2e8f0;font-size:12px;text-align:center;" onchange="window._cfreCalc()"/></td>';
+        html+='<td style="padding:8px 6px;text-align:center;"><input id="cfre-qty-'+i+'" type="number" min="0" value="" placeholder="0" style="width:70px;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:4px;color:#e2e8f0;font-size:12px;text-align:center;" oninput="window._cfreCalc()"/></td>';
+        html+='<td style="padding:8px 6px;text-align:right;font-weight:700;color:#4ade80;" id="cfre-line-'+i+'">—</td>';
+        html+='</tr>';
+    });
+    html+='<tr style="background:#0f172a;border-top:2px solid #374151;">';
+    html+='<td colspan="3" style="padding:8px 6px;font-weight:700;color:#e2e8f0;">SUBTOTAL</td>';
+    html+='<td style="padding:8px 6px;"></td>';
+    html+='<td style="padding:8px 6px;text-align:right;font-weight:700;color:#4ade80;font-size:14px;" id="cfre-subtotal">—</td></tr>';
+    html+='</table>';
+
+    // Markup
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:14px;">';
+    html+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Mobilization ($)</label><input id="cfre-mob" type="number" value="0" placeholder="0" oninput="window._cfreCalc()" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Overhead %</label><input id="cfre-oh" type="number" value="12" oninput="window._cfreCalc()" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">Profit %</label><input id="cfre-profit" type="number" value="15" oninput="window._cfreCalc()" style="width:100%;background:#0f172a;border:1px solid #374151;border-radius:4px;padding:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"/></div>';
+    html+='</div>';
+    html+='<div id="cfre-total-block" style="margin-top:14px;background:#0f172a;border-radius:8px;padding:14px;display:none;">';
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;text-align:center;">';
+    html+='<div><div style="font-size:11px;color:#9ca3af;">Subtotal</div><div style="font-weight:700;color:#e2e8f0;font-size:16px;" id="cfre-t-sub">—</div></div>';
+    html+='<div><div style="font-size:11px;color:#9ca3af;">Markup</div><div style="font-weight:700;color:#fbbf24;font-size:16px;" id="cfre-t-markup">—</div></div>';
+    html+='<div><div style="font-size:11px;color:#9ca3af;">Mob</div><div style="font-weight:700;color:#60a5fa;font-size:16px;" id="cfre-t-mob">—</div></div>';
+    html+='<div><div style="font-size:11px;color:#9ca3af;font-weight:700;">TOTAL BID</div><div style="font-weight:700;color:#4ade80;font-size:20px;" id="cfre-t-total">—</div></div>';
+    html+='</div></div>';
+    html+='<div style="display:flex;gap:10px;margin-top:14px;">';
+    html+='<button onclick="window._cfreSave()" style="background:#ea580c;color:white;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:13px;font-weight:600;">💾 Save Estimate</button>';
+    html+='<button onclick="window._cfrePrint()" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;">🖨 Print Estimate</button>';
+    html+='<button onclick="window._cfreCopy()" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;">📋 Copy</button>';
+    html+='</div>';
+    html+='</div>';
+
+    // Saved estimates
+    if(saves.length>0){
+        html+='<div style="font-size:12px;font-weight:700;color:#9ca3af;margin-top:20px;margin-bottom:8px;">SAVED ESTIMATES ('+saves.length+')</div>';
+        saves.slice().reverse().forEach(function(s,si){
+            var realIdx=saves.length-1-si;
+            html+='<div style="background:#1e293b;border:1px solid #374151;border-radius:8px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">';
+            html+='<div><span style="font-weight:700;color:#e2e8f0;">'+s.proj+'</span>';
+            html+='<span style="font-size:12px;color:#4ade80;margin-left:12px;font-weight:700;">'+fmt(s.total)+'</span>';
+            html+='<span style="font-size:11px;color:#9ca3af;margin-left:8px;">'+new Date(s.ts).toLocaleDateString()+'</span></div>';
+            html+='<button onclick="window._cfreDel('+realIdx+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:11px;">✕</button>';
+            html+='</div>';
+        });
+    }
+    html+='</div>';
+    var wrap=document.getElementById(WRAP_ID);if(wrap){wrap.innerHTML=html;}
+}
+
+window._cfreCalc=function(){
+    var sub=0;
+    var lines=[];
+    REPAIR_TYPES.forEach(function(rt,i){
+        var rate=parseFloat((document.getElementById('cfre-rate-'+i)||{}).value||rt['$/unit'])||rt['$/unit'];
+        var qty=parseFloat((document.getElementById('cfre-qty-'+i)||{}).value)||0;
+        var line=rate*qty;sub+=line;
+        var el=document.getElementById('cfre-line-'+i);
+        if(el)el.textContent=qty>0?'$'+line.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
+        if(qty>0)lines.push({name:rt.name,unit:rt.unit,rate:rate,qty:qty,total:line});
+    });
+    var mob=parseFloat((document.getElementById('cfre-mob')||{}).value)||0;
+    var oh=parseFloat((document.getElementById('cfre-oh')||{}).value)||0;
+    var profit=parseFloat((document.getElementById('cfre-profit')||{}).value)||0;
+    var markup=sub*(oh+profit)/100;
+    var total=sub+markup+mob;
+    var subEl=document.getElementById('cfre-subtotal');if(subEl)subEl.textContent=sub>0?'$'+sub.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
+    var tb=document.getElementById('cfre-total-block');if(tb)tb.style.display=sub>0?'block':'none';
+    var tSub=document.getElementById('cfre-t-sub');if(tSub)tSub.textContent=fmt(sub);
+    var tMkp=document.getElementById('cfre-t-markup');if(tMkp)tMkp.textContent=fmt(markup);
+    var tMob=document.getElementById('cfre-t-mob');if(tMob)tMob.textContent=fmt(mob);
+    var tTotal=document.getElementById('cfre-t-total');if(tTotal)tTotal.textContent=fmt(total);
+    window._cfre_current={lines:lines,sub:sub,markup:markup,mob:mob,total:total,oh:oh,profit:profit};
+};
+
+window._cfreSave=function(){
+    window._cfreCalc();
+    var d=window._cfre_current;if(!d||d.total<=0){alert('Nothing to save — enter quantities first.');return;}
+    var proj=((document.getElementById('cfre-proj')||{}).value||'Floor Repair').trim();
+    var saves=load();
+    saves.push({proj:proj,lines:d.lines,sub:d.sub,markup:d.markup,mob:d.mob,total:d.total,oh:d.oh,profit:d.profit,ts:new Date().toISOString()});
+    save(saves);render();alert('Saved!');
+};
+window._cfreDel=function(i){var s=load();s.splice(i,1);save(s);render();};
+window._cfrePrint=function(){
+    window._cfreCalc();var d=window._cfre_current;
+    if(!d||d.total<=0){alert('Nothing to print.');return;}
+    var proj=((document.getElementById('cfre-proj')||{}).value||'Floor Repair').trim();
+    var w=window.open('','_blank');
+    var rows=d.lines.map(function(l){return'<tr><td>'+l.name+'</td><td style="text-align:center;">'+l.unit+'</td><td style="text-align:right;">$'+l.rate.toFixed(2)+'</td><td style="text-align:center;">'+l.qty+'</td><td style="text-align:right;font-weight:700;">$'+l.total.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td></tr>';}).join('');
+    w.document.write('<!DOCTYPE html><html><head><title>Floor Repair Estimate — '+proj+'</title><style>body{font-family:Arial,sans-serif;padding:20px;font-size:10px;}table{width:100%;border-collapse:collapse;margin-bottom:16px;}th,td{border:1px solid #ccc;padding:5px;text-align:left;}.sig{margin-top:24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;}.sig-line{border-top:1px solid #000;padding-top:6px;font-size:10px;}</style></head><body>');
+    w.document.write('<h2>CONCRETE FLOOR REPAIR ESTIMATE — '+proj+'</h2><p style="font-size:10px;color:#555;">Generated: '+new Date().toLocaleString()+' | ACI 301-16 / ACI 546R-14 / ACI 224R-01</p>');
+    w.document.write('<table><tr><th>Repair Type</th><th>Unit</th><th>$/Unit</th><th>Qty</th><th>Total</th></tr>'+rows);
+    w.document.write('<tr><td colspan="4" style="font-weight:700;">Subtotal</td><td style="text-align:right;font-weight:700;">$'+d.sub.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td></tr>');
+    w.document.write('<tr><td colspan="4">Overhead & Profit ('+d.oh+'%+'+d.profit+'%)</td><td style="text-align:right;">$'+d.markup.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td></tr>');
+    if(d.mob>0)w.document.write('<tr><td colspan="4">Mobilization</td><td style="text-align:right;">$'+d.mob.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td></tr>');
+    w.document.write('<tr style="background:#f3f4f6;"><td colspan="4" style="font-weight:700;font-size:12px;">TOTAL</td><td style="text-align:right;font-weight:700;font-size:12px;">$'+d.total.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td></tr>');
+    w.document.write('</table>');
+    w.document.write('<p style="font-size:9px;color:#555;">All repair work per ACI 301-16 / ACI 546R-14. Structural cracks require Engineer of Record assessment before work. Final quantities subject to field verification. Prices valid 30 days from date of estimate.</p>');
+    w.document.write('<div class="sig"><div class="sig-line">Estimator / Date</div><div class="sig-line">PM / Date</div><div class="sig-line">Client Acceptance / Date</div></div>');
+    w.document.write('</body></html>');w.document.close();setTimeout(function(){w.print();},400);
+};
+window._cfreCopy=function(){
+    window._cfreCalc();var d=window._cfre_current;
+    if(!d||d.total<=0){alert('Nothing to copy.');return;}
+    var proj=((document.getElementById('cfre-proj')||{}).value||'Floor Repair').trim();
+    var lines=['FLOOR REPAIR ESTIMATE — '+proj,'Generated: '+new Date().toLocaleString(),''];
+    d.lines.forEach(function(l){lines.push(l.name+' | '+l.qty+' '+l.unit+' @ $'+l.rate.toFixed(2)+'/'+l.unit+' = $'+l.total.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}));});
+    lines.push('','Subtotal: $'+d.sub.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}));
+    lines.push('Overhead & Profit: $'+d.markup.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}));
+    if(d.mob>0)lines.push('Mobilization: $'+d.mob.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}));
+    lines.push('TOTAL: $'+d.total.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}));
+    navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Copied!');});
+};
+
+function createButton(){
+    var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='Floor Repair Est.';
+    btn.style.cssText='position:fixed;bottom:570px;right:16px;background:#7c2d12;color:#fed7aa;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8900;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+    btn.onclick=togglePanel;document.body.appendChild(btn);
+    var wrap=document.createElement('div');wrap.id=WRAP_ID;
+    wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8901;';
+    document.body.appendChild(wrap);
+}
+function togglePanel(){
+    var wrap=document.getElementById(WRAP_ID);if(!wrap)return;var show=wrap.style.display==='none';
+    wrap.style.display=show?'block':'none';document.getElementById(BTN_ID).textContent=show?'Hide Floor Repair':'Floor Repair Est.';
+    if(show)render();
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
