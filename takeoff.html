@@ -41778,3 +41778,678 @@ function createButton(){
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
 })();
 </script>
+
+<!-- ============================================================
+     CONCRETE PUMP LINE PRESSURE CALCULATOR
+     ACI 304.2R — boom vs. line pump selection, pipe diameter,
+     pumpability check from w/c ratio and slump
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+var BTN_ID='_plpc_btn',WRAP_ID='_plpc_wrap';
+if(document.getElementById(BTN_ID))return;
+
+/* ACI 304.2R Table 3.1 — max horizontal distance at sea level, various slumps */
+var SLUMP_PUMP={3:300,4:600,5:900,6:1200,7:1400};
+
+function calcPressure(st){
+  // ACI 304.2R §4.3 simplified line pressure formula
+  // P = (L_horiz + L_vert*4.5 + N_90*20 + N_45*10) / C
+  // C = pumpability coefficient from slump (ft/psi):
+  //   3" slump: 2.0, 4": 2.8, 5": 3.8, 6": 5.0, 7": 6.5
+  var slumpC={3:2.0,4:2.8,5:3.8,6:5.0,7:6.5};
+  var slump=parseFloat(st.slump)||4;
+  if(slump<3)slump=3;if(slump>7)slump=7;
+  var slumpKey=Math.round(slump);
+  var C=slumpC[slumpKey]||slumpC[4];
+
+  var lh=parseFloat(st.horiz)||0;
+  var lv=parseFloat(st.vert)||0;
+  var n90=parseInt(st.elbows90)||0;
+  var n45=parseInt(st.elbows45)||0;
+  var nRed=parseInt(st.reducers)||0;
+  var pipeDia=parseInt(st.pipeDia)||4; // inches
+
+  // Pipe diameter factor (smaller diameter = more friction)
+  var diaFactor={3:1.8,4:1.0,5:0.65,6:0.45};
+  var dF=diaFactor[pipeDia]||diaFactor[4];
+
+  var equivLen = lh + (lv*4.5) + (n90*20) + (n45*10) + (nRed*50);
+  var pressure = (equivLen / C) * dF; // psi
+
+  // Concrete unit weight effect (heavier mixes = more pressure)
+  var unitWt=parseFloat(st.unitWt)||145;
+  var wtFactor=unitWt/145;
+  pressure *= wtFactor;
+
+  return {
+    equivLen: Math.round(equivLen),
+    pressure: Math.round(pressure),
+    C: C,
+    dF: dF
+  };
+}
+
+function pumpType(lv, pressure, yd3){
+  if(lv<=0 && pressure<=800){
+    if(yd3 <= 30) return {type:'Trailer/Line Pump', icon:'🚛', reason:'Small volume, no elevation — line pump sufficient.'};
+    return {type:'36m Boom Pump', icon:'🏗️', reason:'Standard commercial slab — 36m boom covers most setups.'};
+  }
+  if(lv<=50 && pressure<=1200){
+    return {type:'36m–47m Boom Pump', icon:'🏗️', reason:'Moderate height and volume.'};
+  }
+  if(lv<=100 && pressure<=1800){
+    return {type:'47m–52m Boom Pump', icon:'🏗️', reason:'High elevation or long horizontal run.'};
+  }
+  if(pressure<=2500){
+    return {type:'High-Pressure 52m+ Boom or Line Pump', icon:'⚙️', reason:'High pressure required. Verify pump specs with supplier.'};
+  }
+  return {type:'HIGH-PRESSURE SPECIAL PUMP', icon:'🚨', reason:'Pressure exceeds standard boom pump limits. Consult pump company engineer.'};
+}
+
+function render(st){
+  var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+  var saved=JSON.parse(localStorage.getItem('_plpc_saved')||'{}');
+  var sl=parseFloat(st.slump)||4;
+  var yd3=parseFloat(st.yd3)||0;
+  var pr=calcPressure(st);
+  var pumpRec=pumpType(parseFloat(st.vert)||0, pr.pressure, yd3);
+
+  // w/c ratio pumpability check
+  var wc=parseFloat(st.wc)||0;
+  var wcWarn='';
+  if(wc>0){
+    if(wc<0.38)wcWarn='<span style="color:#ef4444;font-weight:700;">⚠️ w/c ratio too low for pumping — extreme pressure, risk of plug. Increase slump or w/c.</span>';
+    else if(wc>0.65)wcWarn='<span style="color:#d97706;">w/c ratio high (>0.65) — pumpable but 28-day strength penalty. Verify mix design.</span>';
+    else wcWarn='<span style="color:#4ade80;">w/c ratio acceptable for pumping.</span>';
+  }
+
+  // Max slump check
+  if(sl>7)wcWarn+='<br><span style="color:#ef4444;">⚠️ Slump >7" — over-watered mix, strength loss risk (ACI 304.2R §4.2).</span>';
+
+  // Pressure verdict
+  var presColor='#4ade80',presLabel='OK — STANDARD PUMP';
+  if(pr.pressure>2500){presColor='#dc2626';presLabel='EXCEEDS STANDARD LIMITS';}
+  else if(pr.pressure>1800){presColor='#ea580c';presLabel='HIGH — VERIFY PUMP SPECS';}
+  else if(pr.pressure>1200){presColor='#d97706';presLabel='MODERATE-HIGH';}
+
+  var html='<div style="max-width:820px;margin:0 auto;padding:24px;">';
+  html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">';
+  html+='<h2 style="color:#93c5fd;margin:0;">📐 Concrete Pump Line Pressure Calculator</h2>';
+  html+='<div style="display:flex;gap:8px;"><button onclick="document.getElementById(\'_plpc_wrap\').style.display=\'none\';document.getElementById(\'_plpc_btn\').textContent=\'📐 Pump Pressure\';" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:11px;">✕ Close</button></div></div>';
+
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">';
+
+  // LEFT: Inputs
+  html+='<div style="background:#1e293b;border-radius:10px;padding:18px;">';
+  html+='<div style="font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:14px;">Circuit Inputs</div>';
+  function inp(label,key,val,unit,hint){
+    return '<div style="margin-bottom:11px;"><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">'+label+(hint?'<span style="color:#6b7280;"> — '+hint+'</span>':'')+'</label><div style="display:flex;gap:6px;align-items:center;"><input id="plpc_'+key+'" value="'+val+'" onchange="window._plpcCalc()" style="background:#0f172a;color:#e2e8f0;border:1px solid #374151;border-radius:5px;padding:5px 8px;font-size:12px;width:90px;">'+(unit?'<span style="font-size:11px;color:#6b7280;">'+unit+'</span>':'')+'</div></div>';
+  }
+  function sel(label,key,options,val){
+    var s='<div style="margin-bottom:11px;"><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">'+label+'</label><select id="plpc_'+key+'" onchange="window._plpcCalc()" style="background:#0f172a;color:#e2e8f0;border:1px solid #374151;border-radius:5px;padding:5px 8px;font-size:12px;">';
+    options.forEach(function(o){s+='<option value="'+o[0]+'"'+(o[0]==val?' selected':'')+'>'+o[1]+'</option>';});
+    return s+'</select></div>';
+  }
+  html+=inp('Horizontal run (pipe LF)','horiz',st.horiz||'','ft','ground-level LF');
+  html+=inp('Vertical rise','vert',st.vert||'','ft','floors × ~12ft');
+  html+=inp('90° elbows (count)','elbows90',st.elbows90||'0','ea','');
+  html+=inp('45° elbows (count)','elbows45',st.elbows45||'0','ea','');
+  html+=inp('Reducers (count)','reducers',st.reducers||'0','ea','each ≈ 50 eq. ft');
+  html+=sel('Pipe diameter','pipeDia',[[3,'3" pipe'],[4,'4" pipe (std)'],[5,'5" pipe'],[6,'6" pipe']],st.pipeDia||4);
+  html+='</div>';
+
+  // RIGHT: Mix + Volume
+  html+='<div style="background:#1e293b;border-radius:10px;padding:18px;">';
+  html+='<div style="font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:14px;">Mix & Volume</div>';
+  html+=sel('Design slump','slump',[[3,'3" (marginal for pumping)'],[4,'4"'],[5,'5"'],[6,'6"'],[7,'7" (max — over-water risk)']],st.slump||4);
+  html+=inp('w/c ratio (optional)','wc',st.wc||'','','e.g. 0.45');
+  html+=inp('Unit weight','unitWt',st.unitWt||'145','pcf','normal wt=145, LW=110');
+  html+=inp('Total yd³ (pour)','yd3',st.yd3||'','yd³','for pump type suggestion');
+  if(wcWarn)html+='<div style="background:#0f172a;border-radius:6px;padding:8px;font-size:11px;margin-top:8px;">'+wcWarn+'</div>';
+  html+='</div>';
+  html+='</div>';
+
+  // Results
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px;">';
+  function card(label,val,color){return '<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="font-size:19px;font-weight:700;color:'+(color||'#e2e8f0')+';margin-bottom:5px;">'+val+'</div><div style="font-size:10px;color:#6b7280;">'+label+'</div></div>';}
+  html+=card('Equiv. Pipe Length',pr.equivLen+' ft','#93c5fd');
+  html+=card('Est. Line Pressure',pr.pressure+' psi',presColor);
+  html+=card('Pressure Verdict','<span style="font-size:11px;">'+presLabel+'</span>',presColor);
+  html+=card('Pipe Friction Factor',pr.dF+'×','#9ca3af');
+  html+='</div>';
+
+  // Pump recommendation
+  html+='<div style="background:#0f172a;border:2px solid #1e3a5f;border-radius:10px;padding:14px;margin-bottom:16px;display:flex;gap:12px;align-items:flex-start;">';
+  html+='<div style="font-size:28px;">'+pumpRec.icon+'</div>';
+  html+='<div><div style="font-size:14px;font-weight:700;color:#60a5fa;margin-bottom:4px;">Recommended: '+pumpRec.type+'</div>';
+  html+='<div style="font-size:11px;color:#9ca3af;">'+pumpRec.reason+'</div></div></div>';
+
+  // Reference table
+  html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:16px;">';
+  html+='<div style="font-size:11px;font-weight:700;color:#fde68a;margin-bottom:8px;">ACI 304.2R Reference — Slump vs. Max Pumpable Distance (ft, sea level, 4" pipe)</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;">';
+  [[3,300],[4,600],[5,900],[6,1200],[7,1400]].forEach(function(r){
+    html+='<div style="background:#0f172a;border-radius:5px;padding:8px;text-align:center;border-left:3px solid '+(sl==r[0]?'#3b82f6':'#374151')+';"><div style="font-size:14px;font-weight:700;color:#93c5fd;">'+r[0]+'"</div><div style="font-size:10px;color:#6b7280;">max '+r[1]+'ft</div></div>';
+  });
+  html+='</div></div>';
+
+  // Action buttons
+  html+='<div style="display:flex;gap:8px;margin-bottom:16px;">';
+  html+='<button onclick="window._plpcSave()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:11px;font-weight:600;">💾 Save Inputs</button>';
+  html+='<button onclick="window._plpcPrint()" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:11px;">🖨️ Print Calc Sheet</button>';
+  html+='<button onclick="window._plpcCopy()" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:11px;">📋 Copy Result</button>';
+  html+='</div>';
+
+  html+='<div style="font-size:9px;color:#374151;margin-top:6px;">Calculations per ACI 304.2R "Guide for Measuring, Mixing, Transporting, and Placing Concrete." Simplified line pressure formula — verify with pump company engineer for critical applications. High-rise, SCC, or heavyweight concrete requires manufacturer consultation.</div>';
+  html+='</div>';
+  wrap.innerHTML=html;
+}
+
+function gatherState(){
+  function v(id){var el=document.getElementById(id);return el?el.value:'';}
+  return {
+    horiz:v('plpc_horiz'),vert:v('plpc_vert'),elbows90:v('plpc_elbows90'),elbows45:v('plpc_elbows45'),
+    reducers:v('plpc_reducers'),pipeDia:v('plpc_pipeDia'),slump:v('plpc_slump'),
+    wc:v('plpc_wc'),unitWt:v('plpc_unitWt'),yd3:v('plpc_yd3')
+  };
+}
+
+window._plpcCalc=function(){var st=gatherState();render(st);};
+window._plpcSave=function(){var st=gatherState();localStorage.setItem('_plpc_saved',JSON.stringify(st));alert('Inputs saved.');};
+window._plpcCopy=function(){
+  var st=gatherState();var pr=calcPressure(st);
+  var pt=pumpType(parseFloat(st.vert)||0,pr.pressure,parseFloat(st.yd3)||0);
+  var txt='PUMP LINE PRESSURE CALC (ACI 304.2R)\n';
+  txt+='Horiz: '+st.horiz+'ft | Vert: '+st.vert+'ft | 90°: '+st.elbows90+' | 45°: '+st.elbows45+' | Reducers: '+st.reducers+'\n';
+  txt+='Pipe: '+st.pipeDia+'" | Slump: '+st.slump+'" | Unit Wt: '+st.unitWt+' pcf | yd³: '+st.yd3+'\n';
+  txt+='Equiv Length: '+pr.equivLen+'ft | Est Pressure: '+pr.pressure+' psi\n';
+  txt+='Recommended: '+pt.type+' — '+pt.reason;
+  try{navigator.clipboard.writeText(txt);alert('Copied!');}catch(e){alert(txt);}
+};
+window._plpcPrint=function(){
+  var st=gatherState();var pr=calcPressure(st);
+  var pt=pumpType(parseFloat(st.vert)||0,pr.pressure,parseFloat(st.yd3)||0);
+  var wStr='';
+  var wc=parseFloat(st.wc)||0;
+  if(wc>0){
+    if(wc<0.38)wStr='LOW w/c: Risk of pump plug — increase slump.';
+    else if(wc>0.65)wStr='HIGH w/c: Pumpable but strength penalty.';
+    else wStr='w/c acceptable.';
+  }
+  var w=window.open('','_blank');
+  w.document.write('<!DOCTYPE html><html><head><title>Pump Pressure Calc</title>');
+  w.document.write('<style>body{font-family:Arial;padding:24px;font-size:10px;}h2{font-size:14px;}h3{font-size:11px;margin:10px 0 4px;border-bottom:1px solid #ccc;padding-bottom:2px;}table{width:100%;border-collapse:collapse;margin-bottom:8px;}th,td{border:1px solid #ccc;padding:4px 6px;}th{background:#f3f4f6;text-align:left;}.sig{margin-top:24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}.sig-line{border-top:1px solid #000;padding-top:4px;font-size:9px;}.warn{color:#dc2626;font-weight:bold;}</style>');
+  w.document.write('</head><body>');
+  w.document.write('<h2>📐 Concrete Pump Line Pressure Calculation — ACI 304.2R</h2>');
+  w.document.write('<p style="font-size:9px;color:#666;">Calculated: '+new Date().toLocaleString()+'</p>');
+  w.document.write('<h3>Circuit Parameters</h3>');
+  w.document.write('<table><tr><th>Parameter</th><th>Value</th><th>Equiv. Length Used</th></tr>');
+  var lh=parseFloat(st.horiz)||0,lv=parseFloat(st.vert)||0,n90=parseInt(st.elbows90)||0,n45=parseInt(st.elbows45)||0,nR=parseInt(st.reducers)||0;
+  w.document.write('<tr><td>Horizontal run</td><td>'+lh+' ft</td><td>'+lh+' ft</td></tr>');
+  w.document.write('<tr><td>Vertical rise</td><td>'+lv+' ft</td><td>'+(lv*4.5)+' ft (×4.5)</td></tr>');
+  w.document.write('<tr><td>90° elbows</td><td>'+n90+'</td><td>'+(n90*20)+' ft (×20 each)</td></tr>');
+  w.document.write('<tr><td>45° elbows</td><td>'+n45+'</td><td>'+(n45*10)+' ft (×10 each)</td></tr>');
+  w.document.write('<tr><td>Reducers</td><td>'+nR+'</td><td>'+(nR*50)+' ft (×50 each)</td></tr>');
+  w.document.write('<tr><td><b>Total Equiv Length</b></td><td colspan="2"><b>'+pr.equivLen+' ft</b></td></tr></table>');
+  w.document.write('<h3>Mix Parameters</h3>');
+  w.document.write('<table><tr><th>Slump</th><th>w/c Ratio</th><th>Unit Weight</th><th>Pipe Dia.</th><th>Pour Volume</th></tr>');
+  w.document.write('<tr><td>'+st.slump+'"</td><td>'+(st.wc||'—')+'</td><td>'+st.unitWt+' pcf</td><td>'+st.pipeDia+'"</td><td>'+(st.yd3||'—')+' yd³</td></tr></table>');
+  if(wStr)w.document.write('<p class="warn">w/c Check: '+wStr+'</p>');
+  w.document.write('<h3>Results</h3>');
+  w.document.write('<table><tr><th>Equiv Pipe Length</th><th>Est. Line Pressure</th><th>Pumpability Coeff.</th><th>Pipe Friction Factor</th></tr>');
+  w.document.write('<tr><td><b>'+pr.equivLen+' ft</b></td><td><b>'+pr.pressure+' psi</b></td><td>'+pr.C+'</td><td>'+pr.dF+'×</td></tr></table>');
+  w.document.write('<h3>Pump Recommendation</h3>');
+  w.document.write('<table><tr><th>Type</th><th>Rationale</th></tr>');
+  w.document.write('<tr><td><b>'+pt.icon+' '+pt.type+'</b></td><td>'+pt.reason+'</td></tr></table>');
+  w.document.write('<p style="font-size:9px;color:#555;font-style:italic;">ACI 304.2R §4.3 simplified line pressure formula. Verify with pump company engineer for critical applications.</p>');
+  w.document.write('<div class="sig"><div><div class="sig-line">Estimator / Pump Coordinator &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</div></div>');
+  w.document.write('<div><div class="sig-line">Project Manager &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</div></div>');
+  w.document.write('<div><div class="sig-line">Pump Operator / Supplier Rep &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</div></div></div>');
+  w.document.write('</body></html>');
+  w.document.close();w.print();
+};
+
+function createButton(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='📐 Pump Pressure';
+  btn.style.cssText='position:fixed;bottom:850px;right:16px;background:#1e3a5f;color:#93c5fd;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8900;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){
+    var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+    var show=wrap.style.display==='none';wrap.style.display=show?'block':'none';
+    btn.textContent=show?'✕ Pump Pressure':'📐 Pump Pressure';
+    if(show){var saved=JSON.parse(localStorage.getItem('_plpc_saved')||'{}');render(saved);}
+  };
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;
+  wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8901;';
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ============================================================
+     OWNER / GC POTENTIAL CHANGE ORDER (PCO) LOG
+     Track PCOs you receive direction on — price, submit, track
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+var BTN_ID='_pco_btn',WRAP_ID='_pco_wrap';
+var STORE='_pco_data';
+var STATUS_CYCLE=['Identified','Pricing','Submitted','Under Review','Approved','Partially Approved','Rejected','Withdrawn'];
+var STATUS_COLORS={Identified:'#6b7280',Pricing:'#2563eb',Submitted:'#7c3aed',
+  'Under Review':'#d97706','Approved':'#16a34a','Partially Approved':'#0891b2',
+  Rejected:'#dc2626',Withdrawn:'#374151'};
+var nextId=1;
+
+function load(){var d=JSON.parse(localStorage.getItem(STORE)||'[]');if(d.length){nextId=Math.max.apply(null,d.map(function(x){return parseInt(x.id)||0;}))+1;}return d;}
+function save(d){localStorage.setItem(STORE,JSON.stringify(d));}
+
+function fmt$(n){return '$'+(parseFloat(n)||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});}
+
+function render(){
+  var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+  var data=load();
+
+  var totalSub=data.filter(function(p){return ['Submitted','Under Review','Approved','Partially Approved'].indexOf(p.status)>=0;}).reduce(function(s,p){return s+(parseFloat(p.amount)||0);},0);
+  var totalAppr=data.filter(function(p){return p.status==='Approved';}).reduce(function(s,p){return s+(parseFloat(p.amount)||0);},0);
+  var totalPartial=data.filter(function(p){return p.status==='Partially Approved';}).reduce(function(s,p){return s+(parseFloat(p.approvedAmount)||0);},0);
+  var totalPending=data.filter(function(p){return ['Submitted','Under Review'].indexOf(p.status)>=0;}).reduce(function(s,p){return s+(parseFloat(p.amount)||0);},0);
+  var openCount=data.filter(function(p){return ['Identified','Pricing','Submitted','Under Review'].indexOf(p.status)>=0;}).length;
+
+  var html='<div style="max-width:900px;margin:0 auto;padding:24px;">';
+  html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">';
+  html+='<h2 style="color:#a78bfa;margin:0;">📝 Potential Change Order (PCO) Log</h2>';
+  html+='<button onclick="document.getElementById(\'_pco_wrap\').style.display=\'none\';document.getElementById(\'_pco_btn\').textContent=\'📝 PCO Log\';" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:11px;">✕ Close</button></div>';
+
+  // Dashboard
+  html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">';
+  function card(t,v,c){return '<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:17px;font-weight:700;color:'+(c||'#e2e8f0')+';margin-bottom:4px;">'+v+'</div><div style="font-size:10px;color:#6b7280;">'+t+'</div></div>';}
+  html+=card('Approved PCOs',fmt$(totalAppr+totalPartial),'#4ade80');
+  html+=card('Pending ($)',fmt$(totalPending),'#d97706');
+  html+=card('Open Items',openCount,'#a78bfa');
+  html+=card('Total Submitted',fmt$(totalSub),'#60a5fa');
+  html+='</div>';
+
+  // Add form
+  html+='<div style="background:#1e293b;border-radius:10px;padding:16px;margin-bottom:16px;">';
+  html+='<div style="font-size:12px;font-weight:700;color:#a78bfa;margin-bottom:12px;">+ Add PCO</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+  html+='<div><label style="font-size:10px;color:#9ca3af;">GC/Owner</label><input id="pco_gcowner" placeholder="Company" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #374151;border-radius:4px;padding:5px;font-size:11px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:10px;color:#9ca3af;">GC CO# / Bulletin</label><input id="pco_gcnum" placeholder="GC-CO-012" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #374151;border-radius:4px;padding:5px;font-size:11px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:10px;color:#9ca3af;">Date Identified</label><input id="pco_date" type="date" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #374151;border-radius:4px;padding:5px;font-size:11px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<div style="margin-bottom:8px;"><label style="font-size:10px;color:#9ca3af;">Description of Changed Work</label><textarea id="pco_desc" rows="2" placeholder="Additional grade beam per arch rev 3, added rebar density in shear wall..." style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #374151;border-radius:4px;padding:5px;font-size:11px;box-sizing:border-box;"></textarea></div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+  html+='<div><label style="font-size:10px;color:#9ca3af;">Your PCO Amount ($)</label><input id="pco_amount" type="number" placeholder="12500" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #374151;border-radius:4px;padding:5px;font-size:11px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:10px;color:#9ca3af;">Approved Amount ($)</label><input id="pco_approved" type="number" placeholder="0 until approved" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #374151;border-radius:4px;padding:5px;font-size:11px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:10px;color:#9ca3af;">Submission Date</label><input id="pco_subdate" type="date" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #374151;border-radius:4px;padding:5px;font-size:11px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:10px;color:#9ca3af;">Response Due</label><input id="pco_duedate" type="date" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #374151;border-radius:4px;padding:5px;font-size:11px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-bottom:10px;">';
+  html+='<div><label style="font-size:10px;color:#9ca3af;">Initial Status</label><select id="pco_status" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #374151;border-radius:4px;padding:5px;font-size:11px;">';
+  STATUS_CYCLE.forEach(function(s){html+='<option value="'+s+'">'+s+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="font-size:10px;color:#9ca3af;">Notes / Supporting Docs</label><input id="pco_notes" placeholder="RFI-023, Email from GC PM 3/10, Plan sheet A-14..." style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #374151;border-radius:4px;padding:5px;font-size:11px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<button onclick="window._pcoAdd()" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:12px;font-weight:600;">+ Log PCO</button>';
+  html+='</div>';
+
+  // Log
+  if(data.length===0){
+    html+='<div style="background:#0f172a;border-radius:8px;padding:20px;text-align:center;color:#6b7280;font-size:12px;">No PCOs logged yet. Add the first one above.</div>';
+  } else {
+    html+='<div style="display:flex;gap:8px;margin-bottom:10px;">';
+    html+='<button onclick="window._pcoPrint()" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:11px;">🖨️ Print PCO Log</button>';
+    html+='<button onclick="window._pcoCopy()" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:11px;">📋 Copy Report</button>';
+    html+='</div>';
+
+    data.slice().reverse().forEach(function(p){
+      var sc=STATUS_COLORS[p.status]||'#6b7280';
+      var today=new Date();today.setHours(0,0,0,0);
+      var dueSoon=p.duedate&&((new Date(p.duedate)-today)/86400000<=3)&&['Submitted','Under Review'].indexOf(p.status)>=0;
+      html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:8px;border-left:3px solid '+sc+(dueSoon?';outline:1px solid #ef4444':'')+'">';
+      html+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">';
+      html+='<div style="flex:1;">';
+      html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">';
+      html+='<span style="font-size:11px;color:#9ca3af;font-weight:600;">PCO-'+String(p.id).padStart(3,'0')+'</span>';
+      if(p.gcnum)html+='<span style="font-size:10px;color:#6b7280;">GC Ref: '+p.gcnum+'</span>';
+      if(p.gcowner)html+='<span style="font-size:10px;color:#6b7280;">| '+p.gcowner+'</span>';
+      if(p.date)html+='<span style="font-size:10px;color:#6b7280;">| '+p.date+'</span>';
+      if(dueSoon)html+='<span style="font-size:9px;font-weight:700;color:#ef4444;background:#450a0a;padding:2px 6px;border-radius:4px;">RESPONSE DUE SOON</span>';
+      html+='</div>';
+      if(p.desc)html+='<div style="font-size:11px;color:#e2e8f0;margin-bottom:6px;">'+p.desc+'</div>';
+      html+='<div style="display:flex;gap:12px;flex-wrap:wrap;">';
+      html+='<span style="font-size:11px;color:#a78bfa;">Your Price: <b>'+fmt$(p.amount)+'</b></span>';
+      if(parseFloat(p.approvedAmount)>0)html+='<span style="font-size:11px;color:#4ade80;">Approved: <b>'+fmt$(p.approvedAmount)+'</b></span>';
+      if(p.subdate)html+='<span style="font-size:10px;color:#6b7280;">Submitted: '+p.subdate+'</span>';
+      if(p.duedate)html+='<span style="font-size:10px;color:#6b7280;">Due: '+p.duedate+'</span>';
+      if(p.notes)html+='<span style="font-size:10px;color:#6b7280;font-style:italic;">'+p.notes+'</span>';
+      html+='</div></div>';
+      html+='<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">';
+      html+='<button onclick="window._pcoCycle('+p.id+')" style="background:'+sc+';color:#fff;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:10px;font-weight:600;white-space:nowrap;">'+p.status+'</button>';
+      html+='<button onclick="window._pcoDel('+p.id+')" style="background:#374151;color:#9ca3af;border:none;border-radius:5px;padding:3px 8px;cursor:pointer;font-size:10px;">🗑</button>';
+      html+='</div></div></div>';
+    });
+  }
+
+  html+='<div style="font-size:9px;color:#374151;margin-top:10px;">PCO = Potential Change Order. Track every verbal direction, plan revision, differing site condition, or owner-directed extra work. Failure to submit a timely PCO waives your right to additional compensation under most AIA A201 / ConsensusDocs contracts. Submit written notice within the contract-specified window (typically 7–21 days of discovery).</div>';
+  html+='</div>';
+  wrap.innerHTML=html;
+}
+
+window._pcoAdd=function(){
+  var data=load();
+  function v(id){var el=document.getElementById(id);return el?el.value.trim():'';}
+  var amount=parseFloat(v('pco_amount'))||0;
+  if(!v('pco_desc')&&!amount){alert('Add a description or amount.');return;}
+  data.push({id:nextId++,gcowner:v('pco_gcowner'),gcnum:v('pco_gcnum'),date:v('pco_date'),
+    desc:v('pco_desc'),amount:amount,approvedAmount:parseFloat(v('pco_approved'))||0,
+    subdate:v('pco_subdate'),duedate:v('pco_duedate'),status:v('pco_status'),notes:v('pco_notes')});
+  save(data);render();
+};
+window._pcoCycle=function(id){
+  var data=load();
+  var p=data.find(function(x){return x.id===id;});if(!p)return;
+  var idx=STATUS_CYCLE.indexOf(p.status);
+  p.status=STATUS_CYCLE[(idx+1)%STATUS_CYCLE.length];
+  save(data);render();
+};
+window._pcoDel=function(id){
+  if(!confirm('Delete PCO-'+String(id).padStart(3,'0')+'?'))return;
+  var data=load().filter(function(x){return x.id!==id;});
+  save(data);render();
+};
+window._pcoCopy=function(){
+  var data=load();
+  var lines=['PCO LOG — '+new Date().toLocaleDateString(),'---'];
+  data.forEach(function(p){
+    lines.push('PCO-'+String(p.id).padStart(3,'0')+' | '+p.status+' | '+p.desc+' | Amount: $'+p.amount+(parseFloat(p.approvedAmount)>0?' | Approved: $'+p.approvedAmount:'')+(p.gcnum?' | GC Ref: '+p.gcnum:'')+(p.notes?' | Notes: '+p.notes:''));
+  });
+  var totalAppr=data.filter(function(p){return p.status==='Approved';}).reduce(function(s,p){return s+(parseFloat(p.amount)||0);},0);
+  var totalPend=data.filter(function(p){return ['Submitted','Under Review'].indexOf(p.status)>=0;}).reduce(function(s,p){return s+(parseFloat(p.amount)||0);},0);
+  lines.push('---');lines.push('Approved: $'+totalAppr+' | Pending: $'+totalPend);
+  try{navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');}catch(e){alert(lines.join('\n'));}
+};
+window._pcoPrint=function(){
+  var data=load();
+  var w=window.open('','_blank');
+  w.document.write('<!DOCTYPE html><html><head><title>PCO Log</title>');
+  w.document.write('<style>body{font-family:Arial;padding:24px;font-size:10px;}h2{font-size:14px;}h3{font-size:11px;border-bottom:1px solid #ccc;padding-bottom:2px;margin:14px 0 6px;}table{width:100%;border-collapse:collapse;margin-bottom:10px;}th,td{border:1px solid #ccc;padding:3px 5px;font-size:9px;}th{background:#f3f4f6;text-align:left;}.approved{background:#dcfce7;}.pending{background:#fef9c3;}.rejected{background:#fee2e2;}.sig{margin-top:24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;}.sig-line{border-top:1px solid #000;padding-top:4px;font-size:9px;}</style>');
+  w.document.write('</head><body>');
+  w.document.write('<h2>📝 Potential Change Order (PCO) Log</h2>');
+  w.document.write('<p style="font-size:9px;color:#666;">Printed: '+new Date().toLocaleString()+'</p>');
+  var totalAppr=data.filter(function(p){return p.status==='Approved';}).reduce(function(s,p){return s+(parseFloat(p.amount)||0);},0);
+  var totalPend=data.filter(function(p){return ['Submitted','Under Review'].indexOf(p.status)>=0;}).reduce(function(s,p){return s+(parseFloat(p.amount)||0);},0);
+  var totalOpen=data.filter(function(p){return ['Identified','Pricing'].indexOf(p.status)>=0;}).reduce(function(s,p){return s+(parseFloat(p.amount)||0);},0);
+  w.document.write('<table style="margin-bottom:14px;"><tr><th>Approved</th><th>Pending ($)</th><th>Open/Pricing ($)</th><th>Total PCOs</th></tr>');
+  w.document.write('<tr><td><b>$'+totalAppr.toLocaleString()+'</b></td><td>$'+totalPend.toLocaleString()+'</td><td>$'+totalOpen.toLocaleString()+'</td><td>'+data.length+'</td></tr></table>');
+  w.document.write('<table><tr><th>#</th><th>Status</th><th>GC Owner</th><th>GC Ref#</th><th>Description</th><th>Date ID</th><th>Submitted</th><th>Due</th><th>Your Price</th><th>Approved $</th><th>Notes</th></tr>');
+  data.forEach(function(p){
+    var cls=p.status==='Approved'?'approved':(['Submitted','Under Review'].indexOf(p.status)>=0)?'pending':p.status==='Rejected'?'rejected':'';
+    w.document.write('<tr class="'+cls+'"><td>PCO-'+String(p.id).padStart(3,'0')+'</td><td><b>'+p.status+'</b></td><td>'+(p.gcowner||'')+'</td><td>'+(p.gcnum||'')+'</td><td>'+(p.desc||'')+'</td><td>'+(p.date||'')+'</td><td>'+(p.subdate||'')+'</td><td>'+(p.duedate||'')+'</td><td>$'+(parseFloat(p.amount)||0).toLocaleString()+'</td><td>$'+(parseFloat(p.approvedAmount)||0).toLocaleString()+'</td><td style="font-size:8px;">'+(p.notes||'')+'</td></tr>');
+  });
+  w.document.write('</table>');
+  w.document.write('<p style="font-size:8px;color:#555;font-style:italic;">Timely written PCO submission is required to preserve rights to additional compensation per AIA A201 §7.3 / ConsensusDocs §9. Contract notice window typically 7–21 days from discovery. Consult contract terms.</p>');
+  w.document.write('<div class="sig"><div><div class="sig-line">Project Manager &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</div></div>');
+  w.document.write('<div><div class="sig-line">Principal / Owner &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</div></div>');
+  w.document.write('<div><div class="sig-line">GC Authorization &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</div></div></div>');
+  w.document.write('</body></html>');w.document.close();w.print();
+};
+
+function createButton(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='📝 PCO Log';
+  btn.style.cssText='position:fixed;bottom:810px;right:16px;background:#2e1065;color:#a78bfa;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8900;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){
+    var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+    var show=wrap.style.display==='none';wrap.style.display=show?'block':'none';
+    btn.textContent=show?'✕ PCO Log':'📝 PCO Log';
+    if(show)render();
+  };
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;
+  wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8901;';
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
+
+<!-- ============================================================
+     BID MARKUP OPTIMIZER
+     Breakeven analysis: monthly overhead ÷ yd³ × markup scenarios
+     Shows go/no-go threshold and target margin vs. volume
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+var BTN_ID='_bmo_btn',WRAP_ID='_bmo_wrap';
+var STORE='_bmo_saved';
+
+function calc(st){
+  var monthlyOH=parseFloat(st.monthlyOH)||0;
+  var avgYd3=parseFloat(st.avgYd3)||0; // avg yd³/month
+  var avgPrice=parseFloat(st.avgPrice)||185; // avg $/yd³ installed (revenue)
+  var directCostPct=parseFloat(st.directCostPct)||72; // direct costs as % of revenue
+  var targetNetPct=parseFloat(st.targetNet)||12; // desired net margin
+
+  // Per yd³ contribution = avg_price × (1 - direct_cost_pct/100)
+  var contribPerYd3=avgPrice*(1-directCostPct/100);
+
+  // Breakeven yd³/month (cover overhead only, 0 profit)
+  var breakevenYd3=monthlyOH/contribPerYd3;
+
+  // Target yd³/month (cover overhead + target net profit on revenue)
+  var targetNetPerYd3=avgPrice*(targetNetPct/100);
+  var targetYd3=(monthlyOH)/(contribPerYd3-targetNetPerYd3);
+
+  // Markup scenarios: for a given yd³ volume, what OH% and net margin do different markups produce?
+  var scenarios=[];
+  [8,10,12,15,18,22].forEach(function(ohPct){
+    [8,10,12,15,18,22].forEach(function(profPct){
+      var markup=(1+(ohPct+profPct)/100);
+      var revenuePerYd3=avgPrice*markup; // total $/yd³ with markup
+      var directPerYd3=avgPrice; // direct cost basis
+      var grossMargin=(revenuePerYd3-directPerYd3)/revenuePerYd3*100;
+      var ohCoverage=avgYd3>0?(ohPct/100*directPerYd3*avgYd3):null;
+      var netProfit=avgYd3>0?((profPct/100)*directPerYd3*avgYd3):null;
+      scenarios.push({ohPct:ohPct,profPct:profPct,markup:markup,
+        revenuePerYd3:revenuePerYd3,grossMargin:grossMargin,
+        ohCoverage:ohCoverage,netProfit:netProfit,netPct:profPct/(ohPct+profPct+100/(markup))*100});
+    });
+  });
+
+  return {monthlyOH:monthlyOH,avgYd3:avgYd3,avgPrice:avgPrice,
+    directCostPct:directCostPct,targetNetPct:targetNetPct,
+    contribPerYd3:contribPerYd3,breakevenYd3:breakevenYd3,targetYd3:targetYd3};
+}
+
+function render(){
+  var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+  var st=JSON.parse(localStorage.getItem(STORE)||'{}');
+  var r=calc(st);
+
+  var fmt$=function(n){return '$'+Math.round(n).toLocaleString();};
+  var fmt1=function(n){return n.toFixed(1);};
+
+  var html='<div style="max-width:820px;margin:0 auto;padding:24px;">';
+  html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">';
+  html+='<h2 style="color:#fde68a;margin:0;">📊 Bid Markup Optimizer & Breakeven Analysis</h2>';
+  html+='<button onclick="document.getElementById(\'_bmo_wrap\').style.display=\'none\';document.getElementById(\'_bmo_btn\').textContent=\'📊 Markup Optimizer\';" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:11px;">✕ Close</button></div>';
+
+  // Inputs
+  html+='<div style="background:#1e293b;border-radius:10px;padding:16px;margin-bottom:16px;">';
+  html+='<div style="font-size:12px;font-weight:700;color:#fde68a;margin-bottom:12px;">Business Parameters</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;">';
+  function inp(label,id,val,placeholder,hint){
+    return '<div><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px;">'+label+(hint?'<br><span style="color:#6b7280;">'+hint+'</span>':'')+'</label><input id="bmo_'+id+'" value="'+(val||'')+'" placeholder="'+(placeholder||'')+'" onchange="window._bmoCalc()" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #374151;border-radius:5px;padding:6px;font-size:12px;box-sizing:border-box;"></div>';
+  }
+  html+=inp('Monthly Overhead ($)','monthlyOH',st.monthlyOH||'','8000','rent, insurance, vehicles...');
+  html+=inp('Avg yd³/month','avgYd3',st.avgYd3||'','150','your current volume');
+  html+=inp('Avg Installed $/yd³','avgPrice',st.avgPrice||'185','185','your direct cost basis');
+  html+=inp('Direct Cost %','directCostPct',st.directCostPct||'72','72','mat + labor + pump + subs');
+  html+=inp('Target Net Margin %','targetNet',st.targetNet||'12','12','desired profitability');
+  html+='</div>';
+  html+='<div style="margin-top:10px;display:flex;gap:8px;">';
+  html+='<button onclick="window._bmoSave()" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:11px;">💾 Save</button>';
+  html+='<button onclick="window._bmoPrint()" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:11px;">🖨️ Print</button>';
+  html+='<button onclick="window._bmoCopy()" style="background:#374151;color:#e2e8f0;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:11px;">📋 Copy</button>';
+  html+='</div></div>';
+
+  if(!r.monthlyOH||!r.avgPrice){
+    html+='<div style="background:#0f172a;border-radius:8px;padding:20px;text-align:center;color:#6b7280;font-size:12px;">Enter monthly overhead and avg price to see analysis.</div>';
+    html+='</div>';wrap.innerHTML=html;return;
+  }
+
+  // Key results
+  html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">';
+  function card(t,v,c,sub){return '<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:19px;font-weight:700;color:'+(c||'#e2e8f0')+';margin-bottom:4px;">'+v+'</div>'+(sub?'<div style="font-size:9px;color:#6b7280;margin-bottom:4px;">'+sub+'</div>':'')+'<div style="font-size:10px;color:#6b7280;">'+t+'</div></div>';}
+  html+=card('Contrib/yd³',fmt$(r.contribPerYd3),'#60a5fa','after direct costs');
+  html+=card('Breakeven yd³/mo',Math.ceil(r.breakevenYd3)+' yd³',(r.avgYd3>0&&r.avgYd3>=r.breakevenYd3)?'#4ade80':'#ef4444','to cover OH');
+  html+=card('Target yd³/mo',isFinite(r.targetYd3)&&r.targetYd3>0?Math.ceil(r.targetYd3)+' yd³':'—',(r.avgYd3>0&&r.targetYd3>0&&r.avgYd3>=r.targetYd3)?'#4ade80':'#d97706','to hit '+r.targetNetPct+'% net');
+  if(r.avgYd3>0){
+    var curNet=(r.contribPerYd3*r.avgYd3-r.monthlyOH);
+    var curNetPct=curNet/(r.avgPrice*(1-r.directCostPct/100)*r.avgYd3/(1-r.directCostPct/100))*100; // approximate
+    // simpler: net profit = contrib - OH; net margin = net / revenue
+    var revenue=r.avgYd3*r.avgPrice*(1/(1-r.directCostPct/100)); // this gets circular — let's use:
+    // revenue = avgYd3 × avgPrice (avgPrice IS the revenue/yd³ in this model)
+    var rev2=r.avgYd3*r.avgPrice;
+    var netM=curNet/rev2*100;
+    var col=netM>=r.targetNetPct?'#4ade80':netM>=8?'#d97706':'#ef4444';
+    html+=card('Current Net Margin',fmt1(netM)+'%',col,fmt$(curNet)+'/mo');
+  } else {
+    html+=card('Current Net Margin','—','#6b7280','enter avg yd³/mo');
+  }
+  html+='</div>';
+
+  // Markup scenario table
+  html+='<div style="background:#1e293b;border-radius:10px;padding:14px;margin-bottom:16px;">';
+  html+='<div style="font-size:12px;font-weight:700;color:#fde68a;margin-bottom:10px;">Markup Scenario Matrix — OH % + Profit % → Revenue/yd³ and Net Margin</div>';
+  html+='<div style="overflow-x:auto;">';
+  var OHs=[8,10,12,15,18,22];
+  var Ps=[8,10,12,15,18,22];
+  html+='<table style="border-collapse:collapse;width:100%;font-size:10px;">';
+  html+='<tr><th style="border:1px solid #374151;padding:5px;color:#9ca3af;background:#0f172a;text-align:left;">OH% \\ Profit%</th>';
+  Ps.forEach(function(p){html+='<th style="border:1px solid #374151;padding:5px;color:#a78bfa;background:#0f172a;text-align:center;">Profit '+p+'%</th>';});
+  html+='</tr>';
+  OHs.forEach(function(oh){
+    html+='<tr>';
+    html+='<td style="border:1px solid #374151;padding:5px;color:#60a5fa;background:#0f172a;font-weight:700;">OH '+oh+'%</td>';
+    Ps.forEach(function(pr){
+      var totalMarkupPct=oh+pr;
+      var revenuePerYd3=r.avgPrice*(1+totalMarkupPct/100);
+      var netPerYd3=r.avgPrice*(pr/100);
+      var ohPerYd3=r.avgPrice*(oh/100);
+      var netM=netPerYd3/revenuePerYd3*100;
+      var ohOK=r.avgYd3>0&&(ohPerYd3*r.avgYd3>=r.monthlyOH);
+      var bgColor=netM>=r.targetNetPct&&ohOK?'#14532d':netM>=10?'#422006':'#0f172a';
+      var textColor=netM>=r.targetNetPct&&ohOK?'#4ade80':netM>=10?'#fb923c':'#6b7280';
+      html+='<td style="border:1px solid #374151;padding:5px;background:'+bgColor+';text-align:center;color:'+textColor+';">';
+      html+='<span style="font-weight:700;">'+fmt$(revenuePerYd3)+'/yd³</span><br>';
+      html+='<span style="font-size:9px;">'+fmt1(netM)+'% net</span>';
+      html+='</td>';
+    });
+    html+='</tr>';
+  });
+  html+='</table></div>';
+  html+='<div style="font-size:9px;color:#6b7280;margin-top:8px;">Green = meets your target net margin AND covers overhead at current volume. Revenue/yd³ = your direct cost basis × (1 + OH% + profit%). Increase volume or markup to move cells green.</div>';
+  html+='</div>';
+
+  // Volume breakeven curve
+  html+='<div style="background:#1e293b;border-radius:10px;padding:14px;margin-bottom:14px;">';
+  html+='<div style="font-size:12px;font-weight:700;color:#fde68a;margin-bottom:10px;">Volume Breakeven Curve — yd³/month at 3 markup levels</div>';
+  html+='<table style="width:100%;border-collapse:collapse;font-size:10px;">';
+  html+='<tr><th style="border:1px solid #374151;padding:5px;background:#0f172a;color:#9ca3af;text-align:left;">yd³/month</th>';
+  [[8,10,'Standard (OH8+P10)'],[10,12,'Growth (OH10+P12)'],[12,15,'Premium (OH12+P15)']].forEach(function(m){
+    html+='<th style="border:1px solid #374151;padding:5px;background:#0f172a;color:#a78bfa;text-align:center;">'+m[2]+'</th>';
+  });
+  html+='</tr>';
+  [50,100,150,200,300,400,500].forEach(function(vol){
+    html+='<tr>';
+    html+='<td style="border:1px solid #374151;padding:5px;color:#60a5fa;font-weight:700;">'+vol+' yd³</td>';
+    [[8,10],[10,12],[12,15]].forEach(function(m){
+      var revenue=vol*r.avgPrice*(1+(m[0]+m[1])/100);
+      var directCost=vol*r.avgPrice;
+      var gross=revenue-directCost;
+      var net=gross-r.monthlyOH;
+      var netM=net/revenue*100;
+      var bg=net>0?'#14532d':'#450a0a';
+      var tc=net>0?'#4ade80':'#ef4444';
+      html+='<td style="border:1px solid #374151;padding:5px;background:'+bg+';text-align:center;color:'+tc+';"><span style="font-weight:700;">'+fmt$(net)+'/mo</span><br><span style="font-size:9px;">'+fmt1(Math.max(netM,0))+'% net</span></td>';
+    });
+    html+='</tr>';
+  });
+  html+='</table>';
+  html+='<div style="font-size:9px;color:#6b7280;margin-top:8px;">Monthly OH assumed: '+fmt$(r.monthlyOH)+'. Net profit after OH = (Revenue − Direct Costs − Monthly OH). Green = profitable. Red = losing money at this volume.</div>';
+  html+='</div>';
+
+  html+='<div style="font-size:9px;color:#374151;">Direct cost % should include concrete, rebar, forms, labor, pump, subcontractors. Exclude company overhead (insurance, vehicles, rent) — those are in monthly overhead. Typical TX concrete sub: 68-75% direct costs, 8-12% OH, 10-18% net margin when running efficiently.</div>';
+  html+='</div>';
+  wrap.innerHTML=html;
+}
+
+function gatherState(){
+  function v(id){var el=document.getElementById(id);return el?el.value:'';}
+  return {monthlyOH:v('bmo_monthlyOH'),avgYd3:v('bmo_avgYd3'),avgPrice:v('bmo_avgPrice'),directCostPct:v('bmo_directCostPct'),targetNet:v('bmo_targetNet')};
+}
+window._bmoCalc=function(){var st=gatherState();localStorage.setItem(STORE,JSON.stringify(st));render();};
+window._bmoSave=function(){var st=gatherState();localStorage.setItem(STORE,JSON.stringify(st));alert('Saved.');};
+window._bmoCopy=function(){
+  var st=JSON.parse(localStorage.getItem(STORE)||'{}');var r=calc(st);
+  var fmt$=function(n){return '$'+Math.round(n).toLocaleString();};
+  var lines=['BID MARKUP OPTIMIZER — '+new Date().toLocaleDateString(),'Monthly OH: '+fmt$(r.monthlyOH),'Avg Price/yd³: '+fmt$(r.avgPrice)+' | Direct Cost: '+r.directCostPct+'%','Contrib/yd³: '+fmt$(r.contribPerYd3),'Breakeven: '+Math.ceil(r.breakevenYd3)+' yd³/mo','Target ('+r.targetNetPct+'% net): '+Math.ceil(r.targetYd3)+' yd³/mo'];
+  try{navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');}catch(e){alert(lines.join('\n'));}
+};
+window._bmoPrint=function(){
+  var st=JSON.parse(localStorage.getItem(STORE)||'{}');var r=calc(st);
+  var fmt$=function(n){return '$'+Math.round(n).toLocaleString();};
+  var w=window.open('','_blank');
+  w.document.write('<!DOCTYPE html><html><head><title>Markup Optimizer</title>');
+  w.document.write('<style>body{font-family:Arial;padding:24px;font-size:10px;}h2{font-size:14px;}h3{font-size:11px;border-bottom:1px solid #ccc;padding-bottom:2px;margin:12px 0 5px;}table{width:100%;border-collapse:collapse;margin-bottom:8px;}th,td{border:1px solid #ccc;padding:3px 5px;}th{background:#f3f4f6;text-align:left;}.pos{background:#dcfce7;}.neg{background:#fee2e2;}.sig{margin-top:24px;display:grid;grid-template-columns:1fr 1fr;gap:20px;}.sig-line{border-top:1px solid #000;padding-top:4px;font-size:9px;}</style>');
+  w.document.write('</head><body>');
+  w.document.write('<h2>📊 Bid Markup Optimizer & Breakeven Analysis</h2>');
+  w.document.write('<p style="font-size:9px;color:#666;">Generated: '+new Date().toLocaleString()+'</p>');
+  w.document.write('<h3>Business Parameters</h3>');
+  w.document.write('<table><tr><th>Monthly Overhead</th><th>Avg yd³/mo</th><th>Direct Cost Basis $/yd³</th><th>Direct Cost %</th><th>Target Net %</th></tr>');
+  w.document.write('<tr><td>'+fmt$(r.monthlyOH)+'</td><td>'+(r.avgYd3||'—')+'</td><td>'+fmt$(r.avgPrice)+'</td><td>'+r.directCostPct+'%</td><td>'+r.targetNetPct+'%</td></tr></table>');
+  w.document.write('<h3>Key Results</h3>');
+  w.document.write('<table><tr><th>Contribution/yd³</th><th>Breakeven yd³/mo</th><th>Target yd³/mo</th></tr>');
+  w.document.write('<tr><td>'+fmt$(r.contribPerYd3)+'</td><td>'+Math.ceil(r.breakevenYd3)+'</td><td>'+(isFinite(r.targetYd3)&&r.targetYd3>0?Math.ceil(r.targetYd3):'—')+'</td></tr></table>');
+  w.document.write('<h3>Volume Profit Table (Monthly Net After OH)</h3>');
+  w.document.write('<table><tr><th>yd³/mo</th><th>OH8+P10</th><th>OH10+P12</th><th>OH12+P15</th></tr>');
+  [50,100,150,200,300,400,500].forEach(function(vol){
+    w.document.write('<tr><td><b>'+vol+'</b></td>');
+    [[8,10],[10,12],[12,15]].forEach(function(m){
+      var revenue=vol*r.avgPrice*(1+(m[0]+m[1])/100);
+      var net=revenue-vol*r.avgPrice-r.monthlyOH;
+      var cls=net>0?'pos':'neg';
+      w.document.write('<td class="'+cls+'">'+fmt$(net)+' ('+Math.max((net/revenue*100),0).toFixed(1)+'%)</td>');
+    });
+    w.document.write('</tr>');
+  });
+  w.document.write('</table>');
+  w.document.write('<p style="font-size:8px;color:#555;font-style:italic;">Direct costs = concrete, rebar, labor, pump, subs. Monthly overhead = rent, insurance, vehicles, admin. Typical TX concrete sub: 68-75% direct costs.</p>');
+  w.document.write('<div class="sig"><div><div class="sig-line">Estimator / Principal &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</div></div>');
+  w.document.write('<div><div class="sig-line">Accountant / Controller &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</div></div></div>');
+  w.document.write('</body></html>');w.document.close();w.print();
+};
+
+function createButton(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='📊 Markup Optimizer';
+  btn.style.cssText='position:fixed;bottom:770px;right:16px;background:#422006;color:#fde68a;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8900;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){
+    var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+    var show=wrap.style.display==='none';wrap.style.display=show?'block':'none';
+    btn.textContent=show?'✕ Markup Optimizer':'📊 Markup Optimizer';
+    if(show)render();
+  };
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;
+  wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8901;';
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createButton);}else{createButton();}
+})();
+</script>
