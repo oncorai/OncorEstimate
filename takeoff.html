@@ -43986,3 +43986,768 @@ function createMSButton(){
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createMSButton);}else{createMSButton();}
 })();
 </script>
+
+<!-- ============================================================
+     13-WEEK CASH FLOW FORECAST
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+var BTN_ID='cf13-btn',WRAP_ID='cf13-wrap',SK='oncor_cf13_v1';
+var CATS=['Pay Application Draw','Subcontractor Payment','Material Purchase','Labor Payroll','Equipment/Pump Rental','Overhead/G&A','Misc Expense','Other Income'];
+var TYPES=['Inflow','Outflow'];
+function today(){var d=new Date();return d.toISOString().slice(0,10);}
+function addWeeks(dateStr,n){var d=new Date(dateStr);d.setDate(d.getDate()+n*7);return d.toISOString().slice(0,10);}
+function fmtDate(s){if(!s)return'';var p=s.split('-');return p[1]+'/'+p[2]+'/'+p[0];}
+function fmt(v){return '$'+Number(v||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});}
+function load(){try{return JSON.parse(localStorage.getItem(SK)||'null');}catch(e){return null;}}
+function save(d){localStorage.setItem(SK,JSON.stringify(d));}
+function blank(){
+  var startDate=today();
+  var weeks=[];
+  for(var i=0;i<13;i++){weeks.push({weekNum:i+1,startDate:addWeeks(startDate,i),items:[]});}
+  return{startDate:startDate,openingBalance:0,weeks:weeks};
+}
+function computeWeeks(data){
+  var bal=Number(data.openingBalance||0);
+  return data.weeks.map(function(w){
+    var inflow=0,outflow=0;
+    (w.items||[]).forEach(function(it){
+      var amt=Number(it.amount||0);
+      if(it.type==='Inflow')inflow+=amt;else outflow+=amt;
+    });
+    var net=inflow-outflow;
+    var openBal=bal;
+    bal+=net;
+    return{weekNum:w.weekNum,startDate:w.startDate,inflow:inflow,outflow:outflow,net:net,openBal:openBal,closeBal:bal,items:w.items||[]};
+  });
+}
+function render(data){
+  var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+  var weeks=computeWeeks(data);
+  var totalIn=weeks.reduce(function(s,w){return s+w.inflow;},0);
+  var totalOut=weeks.reduce(function(s,w){return s+w.outflow;},0);
+  var minBal=Math.min.apply(null,weeks.map(function(w){return w.closeBal;}));
+  var html='<div style="padding:16px;max-width:1100px;margin:0 auto;">';
+  html+='<h2 style="color:#38bdf8;margin-bottom:4px;">📈 13-Week Cash Flow Forecast</h2>';
+  html+='<p style="color:#94a3b8;font-size:12px;margin-bottom:16px;">Forward-looking cash position for the next 13 weeks. Add draws, payments, payroll, and overhead — see ending balance each week.</p>';
+
+  // Settings bar
+  html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">';
+  html+='<div><label style="color:#94a3b8;font-size:11px;display:block;">Forecast Start Date</label>';
+  html+='<input type="date" id="cf13-start" value="'+data.startDate+'" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px 10px;border-radius:6px;font-size:13px;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;display:block;">Opening Bank Balance ($)</label>';
+  html+='<input type="number" id="cf13-opening" value="'+(data.openingBalance||0)+'" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px 10px;border-radius:6px;font-size:13px;width:140px;"></div>';
+  html+='<button onclick="window.cf13Save()" style="background:#0284c7;color:#fff;border:none;padding:7px 18px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">Save Settings</button>';
+  html+='</div>';
+
+  // Dashboard
+  var negBal=weeks.some(function(w){return w.closeBal<0;});
+  if(negBal){html+='<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;padding:10px 14px;margin-bottom:12px;color:#fca5a5;font-weight:600;">⚠️ NEGATIVE CASH POSITION PROJECTED — review outflows or accelerate billing.</div>';}
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px;">';
+  var cards=[
+    {label:'13-Wk Total Inflow',val:fmt(totalIn),color:'#4ade80'},
+    {label:'13-Wk Total Outflow',val:fmt(totalOut),color:'#f87171'},
+    {label:'Net Cash Flow',val:fmt(totalIn-totalOut),color:totalIn-totalOut>=0?'#4ade80':'#f87171'},
+    {label:'Ending Balance',val:fmt(weeks[12].closeBal),color:weeks[12].closeBal>=0?'#38bdf8':'#f87171'},
+    {label:'Minimum Balance',val:fmt(minBal),color:minBal>=0?'#fbbf24':'#ef4444'}
+  ];
+  cards.forEach(function(c){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;">';
+    html+='<div style="color:'+c.color+';font-size:18px;font-weight:700;">'+c.val+'</div>';
+    html+='<div style="color:#94a3b8;font-size:11px;">'+c.label+'</div></div>';
+  });
+  html+='</div>';
+
+  // Weekly table
+  html+='<div style="overflow-x:auto;margin-bottom:16px;">';
+  html+='<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  html+='<thead><tr style="background:#1e3a5f;color:#93c5fd;">';
+  ['Wk','Week Start','Open Bal','Inflow','Outflow','Net','Close Bal',''].forEach(function(h){
+    html+='<th style="padding:8px;text-align:right;border:1px solid #1e293b;white-space:nowrap;">'+h+'</th>';
+  });
+  html+='</tr></thead><tbody>';
+  weeks.forEach(function(w){
+    var bg=w.closeBal<0?'background:#7f1d1d;':w.net>0?'background:#052e16;':'';
+    html+='<tr style="'+bg+'">';
+    html+='<td style="padding:6px 8px;border:1px solid #1e293b;color:#94a3b8;text-align:center;">'+w.weekNum+'</td>';
+    html+='<td style="padding:6px 8px;border:1px solid #1e293b;color:#e2e8f0;white-space:nowrap;">'+fmtDate(w.startDate)+'</td>';
+    html+='<td style="padding:6px 8px;border:1px solid #1e293b;color:#94a3b8;text-align:right;">'+fmt(w.openBal)+'</td>';
+    html+='<td style="padding:6px 8px;border:1px solid #1e293b;color:#4ade80;text-align:right;">'+fmt(w.inflow)+'</td>';
+    html+='<td style="padding:6px 8px;border:1px solid #1e293b;color:#f87171;text-align:right;">'+fmt(w.outflow)+'</td>';
+    html+='<td style="padding:6px 8px;border:1px solid #1e293b;font-weight:600;text-align:right;color:'+(w.net>=0?'#4ade80':'#f87171')+';">'+fmt(w.net)+'</td>';
+    html+='<td style="padding:6px 8px;border:1px solid #1e293b;font-weight:700;text-align:right;color:'+(w.closeBal>=0?'#38bdf8':'#ef4444')+';">'+fmt(w.closeBal)+'</td>';
+    html+='<td style="padding:6px 8px;border:1px solid #1e293b;text-align:center;"><button onclick="window.cf13EditWeek('+w.weekNum+')" style="background:#0369a1;color:#fff;border:none;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;">✏️ Edit</button></td>';
+    html+='</tr>';
+  });
+  html+='</tbody></table></div>';
+
+  // Add item section
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:16px;">';
+  html+='<h3 style="color:#38bdf8;margin:0 0 10px;font-size:14px;">Add Cash Flow Item</h3>';
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:10px;">';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Week</label><select id="cf13-wk" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;">';
+  weeks.forEach(function(w){html+='<option value="'+w.weekNum+'">Wk '+w.weekNum+' ('+fmtDate(w.startDate)+')</option>';});
+  html+='</select></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Type</label><select id="cf13-type" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;">';
+  TYPES.forEach(function(t){html+='<option>'+t+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Category</label><select id="cf13-cat" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;">';
+  CATS.forEach(function(c){html+='<option>'+c+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Description</label><input type="text" id="cf13-desc" placeholder="e.g. Pay App #3 draw" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Amount ($)</label><input type="number" id="cf13-amt" placeholder="0" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<button onclick="window.cf13AddItem()" style="background:#16a34a;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">Add Item</button>';
+  html+='</div>';
+
+  // All items list
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;">';
+  html+='<h3 style="color:#38bdf8;margin:0 0 10px;font-size:14px;">All Scheduled Items</h3>';
+  var hasItems=false;
+  data.weeks.forEach(function(w){
+    if(!w.items||!w.items.length)return;
+    hasItems=true;
+    html+='<div style="color:#7dd3fc;font-size:12px;font-weight:600;margin:8px 0 4px;">Week '+w.weekNum+' — '+fmtDate(w.startDate)+'</div>';
+    w.items.forEach(function(it,idx){
+      html+='<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #1e3a5f;">';
+      html+='<span style="color:'+(it.type==='Inflow'?'#4ade80':'#f87171')+';">'+it.type+'</span>';
+      html+='<span style="color:#94a3b8;font-size:11px;">['+it.category+']</span>';
+      html+='<span style="color:#e2e8f0;flex:1;">'+it.description+'</span>';
+      html+='<span style="font-weight:700;color:'+(it.type==='Inflow'?'#4ade80':'#f87171')+';">'+fmt(it.amount)+'</span>';
+      html+='<button onclick="window.cf13Del('+w.weekNum+','+idx+')" style="background:#7f1d1d;color:#fca5a5;border:none;padding:2px 7px;border-radius:4px;cursor:pointer;font-size:11px;">✕</button>';
+      html+='</div>';
+    });
+  });
+  if(!hasItems)html+='<p style="color:#64748b;font-size:12px;">No items added yet. Add inflows (pay app draws, misc income) and outflows (payroll, sub payments, materials, overhead) for each week.</p>';
+  html+='</div>';
+
+  html+='<div style="margin-top:14px;display:flex;gap:10px;">';
+  html+='<button onclick="window.cf13Print()" style="background:#7c3aed;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">🖨️ Print Forecast</button>';
+  html+='<button onclick="window.cf13Copy()" style="background:#0369a1;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">📋 Copy Report</button>';
+  html+='<button onclick="window.cf13Reset()" style="background:#374151;color:#d1d5db;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:13px;">↺ Reset</button>';
+  html+='</div>';
+  html+='</div>';
+  wrap.innerHTML=html;
+}
+window.cf13Save=function(){
+  var data=load()||blank();
+  data.startDate=document.getElementById('cf13-start').value||today();
+  data.openingBalance=Number(document.getElementById('cf13-opening').value||0);
+  // Rebuild week dates from start
+  for(var i=0;i<13;i++){if(!data.weeks[i])data.weeks[i]={weekNum:i+1,items:[]};data.weeks[i].startDate=addWeeks(data.startDate,i);}
+  save(data);render(data);
+};
+window.cf13AddItem=function(){
+  var data=load()||blank();
+  var wk=parseInt(document.getElementById('cf13-wk').value);
+  var type=document.getElementById('cf13-type').value;
+  var cat=document.getElementById('cf13-cat').value;
+  var desc=document.getElementById('cf13-desc').value.trim();
+  var amt=Number(document.getElementById('cf13-amt').value||0);
+  if(!desc||!amt){alert('Enter description and amount.');return;}
+  var w=data.weeks.find(function(x){return x.weekNum===wk;});
+  if(!w){alert('Week not found.');return;}
+  if(!w.items)w.items=[];
+  w.items.push({type:type,category:cat,description:desc,amount:amt});
+  save(data);render(data);
+};
+window.cf13Del=function(weekNum,idx){
+  var data=load()||blank();
+  var w=data.weeks.find(function(x){return x.weekNum===weekNum;});
+  if(w&&w.items){w.items.splice(idx,1);}
+  save(data);render(data);
+};
+window.cf13EditWeek=function(weekNum){
+  alert('To edit week '+weekNum+': use the Add Cash Flow Item form above — select Week '+weekNum+' and add or delete items below.');
+};
+window.cf13Reset=function(){
+  if(!confirm('Reset all 13-week cash flow data?'))return;
+  save(blank());render(blank());
+};
+window.cf13Print=function(){
+  var data=load()||blank();
+  var weeks=computeWeeks(data);
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>13-Week Cash Flow Forecast</title>');
+  pw.document.write('<style>body{font-family:Arial,sans-serif;font-size:10pt;margin:20px;} table{width:100%;border-collapse:collapse;font-size:9pt;} th,td{border:1px solid #ccc;padding:5px;} th{background:#1e3a5f;color:#fff;} .inflow{color:green;font-weight:700;} .outflow{color:red;} .neg{background:#fee2e2;} .pos{background:#dcfce7;} h2{color:#1e3a5f;} .sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:30px;} .sig-line{border-top:1px solid #000;margin-top:40px;padding-top:4px;font-size:9pt;color:#555;}</style>');
+  pw.document.write('</head><body>');
+  pw.document.write('<h2>13-Week Cash Flow Forecast</h2>');
+  pw.document.write('<p><b>Opening Balance:</b> '+fmt(data.openingBalance)+' &nbsp;&nbsp; <b>Period Start:</b> '+fmtDate(data.startDate)+' &nbsp;&nbsp; <b>Generated:</b> '+new Date().toLocaleDateString()+'</p>');
+  pw.document.write('<table><thead><tr><th>Wk</th><th>Week Start</th><th>Open Bal</th><th>Inflow</th><th>Outflow</th><th>Net</th><th>Close Bal</th></tr></thead><tbody>');
+  weeks.forEach(function(w){
+    var cls=w.closeBal<0?' class="neg"':w.net>0?' class="pos"':'';
+    pw.document.write('<tr'+cls+'><td style="text-align:center">'+w.weekNum+'</td><td>'+fmtDate(w.startDate)+'</td>');
+    pw.document.write('<td style="text-align:right">'+fmt(w.openBal)+'</td>');
+    pw.document.write('<td class="inflow" style="text-align:right">'+fmt(w.inflow)+'</td>');
+    pw.document.write('<td class="outflow" style="text-align:right">'+fmt(w.outflow)+'</td>');
+    pw.document.write('<td style="text-align:right;font-weight:700;">'+fmt(w.net)+'</td>');
+    pw.document.write('<td style="text-align:right;font-weight:700;">'+fmt(w.closeBal)+'</td></tr>');
+  });
+  var tIn=weeks.reduce(function(s,w){return s+w.inflow;},0);
+  var tOut=weeks.reduce(function(s,w){return s+w.outflow;},0);
+  pw.document.write('<tr style="background:#e8f4f8;font-weight:700;"><td colspan="3">TOTALS</td>');
+  pw.document.write('<td style="text-align:right;color:green;">'+fmt(tIn)+'</td>');
+  pw.document.write('<td style="text-align:right;color:red;">'+fmt(tOut)+'</td>');
+  pw.document.write('<td style="text-align:right;">'+fmt(tIn-tOut)+'</td>');
+  pw.document.write('<td style="text-align:right;">'+fmt(weeks[12].closeBal)+'</td></tr>');
+  pw.document.write('</tbody></table>');
+  // Item detail
+  pw.document.write('<h3 style="margin-top:20px;">Scheduled Items Detail</h3>');
+  pw.document.write('<table><thead><tr><th>Wk</th><th>Type</th><th>Category</th><th>Description</th><th>Amount</th></tr></thead><tbody>');
+  data.weeks.forEach(function(w){
+    (w.items||[]).forEach(function(it){
+      pw.document.write('<tr><td>'+w.weekNum+'</td><td>'+(it.type==='Inflow'?'<span class="inflow">Inflow</span>':'<span class="outflow">Outflow</span>')+'</td>');
+      pw.document.write('<td>'+it.category+'</td><td>'+it.description+'</td><td style="text-align:right;">'+fmt(it.amount)+'</td></tr>');
+    });
+  });
+  pw.document.write('</tbody></table>');
+  pw.document.write('<div class="sig-grid"><div><b>Project Manager</b><div class="sig-line">Signature / Date</div></div>');
+  pw.document.write('<div><b>Principal</b><div class="sig-line">Signature / Date</div></div>');
+  pw.document.write('<div><b>Controller / Lender</b><div class="sig-line">Signature / Date</div></div></div>');
+  pw.document.write('<p style="font-size:9px;margin-top:15px;color:#888;">This is a forward-looking cash flow projection based on scheduled draws, payments, and expenses. Actual results may vary. Review weekly and update as project conditions change.</p>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+window.cf13Copy=function(){
+  var data=load()||blank();
+  var weeks=computeWeeks(data);
+  var lines=['13-WEEK CASH FLOW FORECAST','Opening Balance: '+fmt(data.openingBalance),'Period Start: '+fmtDate(data.startDate),'','Wk | Week Start | Open Bal | Inflow | Outflow | Net | Close Bal'];
+  weeks.forEach(function(w){
+    lines.push('W'+w.weekNum+' | '+fmtDate(w.startDate)+' | '+fmt(w.openBal)+' | +'+fmt(w.inflow)+' | -'+fmt(w.outflow)+' | '+fmt(w.net)+' | '+fmt(w.closeBal));
+  });
+  var tIn=weeks.reduce(function(s,w){return s+w.inflow;},0);
+  var tOut=weeks.reduce(function(s,w){return s+w.outflow;},0);
+  lines.push('','TOTALS | | | +'+fmt(tIn)+' | -'+fmt(tOut)+' | '+fmt(tIn-tOut)+' | Ending: '+fmt(weeks[12].closeBal));
+  navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Cash flow report copied!');});
+};
+function createCF13Button(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='📈 Cash Flow';
+  btn.style.cssText='position:fixed;bottom:1330px;right:16px;background:#065f46;color:#6ee7b7;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8800;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){
+    var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+    var show=wrap.style.display==='none';wrap.style.display=show?'block':'none';
+    btn.textContent=show?'✕ Cash Flow':'📈 Cash Flow';
+    if(show){var d=load()||blank();render(d);}
+  };
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;
+  wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8801;';
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createCF13Button);}else{createCF13Button();}
+})();
+</script>
+
+<!-- ============================================================
+     EMPLOYEE WEEKLY PAYROLL REGISTER
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+var BTN_ID='payroll-btn',WRAP_ID='payroll-wrap',SK='oncor_payroll_v1';
+var ROLES=['Laborer','Lead Finisher','Finisher','Rebar Hand','Form Carpenter','Pump Operator','Foreman','Superintendent','PM','Admin/Office','Other'];
+var STATES_FIT={10:10,12:12,15:15,22:22};
+function fmt(v){return '$'+Number(v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function today(){return new Date().toISOString().slice(0,10);}
+function weekOf(){var d=new Date();d.setDate(d.getDate()-d.getDay());return d.toISOString().slice(0,10);}
+function load(){try{return JSON.parse(localStorage.getItem(SK)||'null');}catch(e){return null;}}
+function save(d){localStorage.setItem(SK,JSON.stringify(d));}
+function blankState(){return{employees:[],payrolls:[],fitPct:12,ficaPct:7.65,wcPct:10,statePct:0,otherPct:0};}
+function computeEntry(e){
+  var baseRate=Number(e.rate||0);
+  var regHrs=Number(e.regHrs||0);
+  var otHrs=Number(e.otHrs||0);
+  var gross=baseRate*regHrs+baseRate*1.5*otHrs;
+  var fica=gross*(Number(e.ficaPct||7.65)/100);
+  var fit=gross*(Number(e.fitPct||12)/100);
+  var wc=gross*(Number(e.wcPct||0)/100);
+  var state=gross*(Number(e.statePct||0)/100);
+  var other=Number(e.otherDeductions||0);
+  var totalDed=fica+fit+wc+state+other;
+  var net=gross-totalDed;
+  return{gross:gross,fica:fica,fit:fit,wc:wc,state:state,other:other,totalDed:totalDed,net:net};
+}
+function render(st){
+  var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+  var html='<div style="padding:16px;max-width:1100px;margin:0 auto;">';
+  html+='<h2 style="color:#38bdf8;margin-bottom:4px;">💼 Weekly Payroll Register</h2>';
+  html+='<p style="color:#94a3b8;font-size:12px;margin-bottom:14px;">FLSA-compliant weekly payroll processing. Computes gross wages, FICA, FIT, WC, and net pay per employee. Print payroll summary for records.</p>';
+
+  // Global rates
+  html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:14px;">';
+  html+='<h3 style="color:#7dd3fc;font-size:13px;margin:0 0 10px;">Default Deduction Rates (can override per entry)</h3>';
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">';
+  [
+    {id:'pr-fica',label:'FICA %',key:'ficaPct',def:7.65},
+    {id:'pr-fit',label:'FIT % (est.)',key:'fitPct',def:12},
+    {id:'pr-wc',label:'Workers Comp %',key:'wcPct',def:10},
+    {id:'pr-state',label:'State Tax %',key:'statePct',def:0},
+    {id:'pr-other',label:'Other Ded %',key:'otherPct',def:0}
+  ].forEach(function(f){
+    html+='<div><label style="color:#94a3b8;font-size:11px;display:block;">'+f.label+'</label>';
+    html+='<input type="number" id="'+f.id+'" value="'+(st[f.key]!==undefined?st[f.key]:f.def)+'" step="0.01" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;box-sizing:border-box;"></div>';
+  });
+  html+='</div>';
+  html+='<button onclick="window.prSaveRates()" style="margin-top:8px;background:#0284c7;color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;">Save Rates</button>';
+  html+='</div>';
+
+  // Add entry form
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:14px;">';
+  html+='<h3 style="color:#7dd3fc;font-size:13px;margin:0 0 10px;">Add Payroll Entry</h3>';
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:10px;">';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Week Of</label><input type="date" id="pr-week" value="'+weekOf()+'" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Employee Name</label><input type="text" id="pr-name" placeholder="Full name" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Role</label><select id="pr-role" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;">';
+  ROLES.forEach(function(r){html+='<option>'+r+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Base $/hr</label><input type="number" id="pr-rate" placeholder="22.00" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Reg Hours</label><input type="number" id="pr-reg" placeholder="40" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">OT Hours</label><input type="number" id="pr-ot" placeholder="0" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Other Ded $</label><input type="number" id="pr-otherded" placeholder="0" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Project/Element</label><input type="text" id="pr-proj" placeholder="optional" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<button onclick="window.prAdd()" style="background:#16a34a;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">Add to Register</button>';
+  html+='</div>';
+
+  // Payroll register
+  if(!st.payrolls||!st.payrolls.length){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:20px;text-align:center;color:#64748b;">No payroll entries yet. Add employees above to build the register.</div>';
+  } else {
+    // Group by week
+    var byWeek={};
+    st.payrolls.forEach(function(e){
+      if(!byWeek[e.week])byWeek[e.week]=[];
+      byWeek[e.week].push(e);
+    });
+    Object.keys(byWeek).sort().reverse().forEach(function(wk){
+      var entries=byWeek[wk];
+      var totGross=0,totNet=0,totFica=0,totFit=0,totHrs=0;
+      entries.forEach(function(e){totGross+=e.comp.gross;totNet+=e.comp.net;totFica+=e.comp.fica;totFit+=e.comp.fit;totHrs+=Number(e.regHrs||0)+Number(e.otHrs||0);});
+      html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:12px;">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+      html+='<h3 style="color:#38bdf8;font-size:14px;margin:0;">Week of '+wk+' ('+entries.length+' entries)</h3>';
+      html+='<div style="display:flex;gap:16px;">';
+      html+='<span style="color:#94a3b8;font-size:12px;">Total Hrs: <b style="color:#e2e8f0;">'+totHrs+'</b></span>';
+      html+='<span style="color:#94a3b8;font-size:12px;">Gross: <b style="color:#4ade80;">'+fmt(totGross)+'</b></span>';
+      html+='<span style="color:#94a3b8;font-size:12px;">Net Pay: <b style="color:#38bdf8;">'+fmt(totNet)+'</b></span>';
+      html+='<button onclick="window.prPrintWeek(\''+wk+'\')" style="background:#7c3aed;color:#fff;border:none;padding:4px 12px;border-radius:5px;cursor:pointer;font-size:11px;">🖨️ Print</button>';
+      html+='</div></div>';
+      html+='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;">';
+      html+='<thead><tr style="background:#1e3a5f;color:#93c5fd;">';
+      ['Employee','Role','$/hr','Reg','OT','Gross','FICA','FIT','WC','Other Ded','Net Pay','Project',''].forEach(function(h){
+        html+='<th style="padding:5px;text-align:right;border:1px solid #1e293b;white-space:nowrap;">'+h+'</th>';
+      });
+      html+='</tr></thead><tbody>';
+      entries.forEach(function(e,idx){
+        var c=e.comp;
+        html+='<tr>';
+        html+='<td style="padding:5px;border:1px solid #1e293b;color:#e2e8f0;white-space:nowrap;">'+e.name+'</td>';
+        html+='<td style="padding:5px;border:1px solid #1e293b;color:#94a3b8;white-space:nowrap;">'+e.role+'</td>';
+        html+='<td style="padding:5px;border:1px solid #1e293b;color:#94a3b8;text-align:right;">'+fmt(e.rate)+'</td>';
+        html+='<td style="padding:5px;border:1px solid #1e293b;text-align:right;color:#e2e8f0;">'+e.regHrs+'</td>';
+        html+='<td style="padding:5px;border:1px solid #1e293b;text-align:right;color:'+(Number(e.otHrs)>0?'#fbbf24':'#64748b')+';">'+e.otHrs+'</td>';
+        html+='<td style="padding:5px;border:1px solid #1e293b;text-align:right;color:#4ade80;font-weight:700;">'+fmt(c.gross)+'</td>';
+        html+='<td style="padding:5px;border:1px solid #1e293b;text-align:right;color:#f87171;">'+fmt(c.fica)+'</td>';
+        html+='<td style="padding:5px;border:1px solid #1e293b;text-align:right;color:#f87171;">'+fmt(c.fit)+'</td>';
+        html+='<td style="padding:5px;border:1px solid #1e293b;text-align:right;color:#f87171;">'+fmt(c.wc)+'</td>';
+        html+='<td style="padding:5px;border:1px solid #1e293b;text-align:right;color:#f87171;">'+fmt(c.other)+'</td>';
+        html+='<td style="padding:5px;border:1px solid #1e293b;text-align:right;color:#38bdf8;font-weight:700;">'+fmt(c.net)+'</td>';
+        html+='<td style="padding:5px;border:1px solid #1e293b;color:#64748b;font-size:10px;">'+( e.project||'—')+'</td>';
+        html+='<td style="padding:5px;border:1px solid #1e293b;"><button onclick="window.prDel('+idx+',\''+wk+'\')" style="background:#7f1d1d;color:#fca5a5;border:none;padding:2px 6px;border-radius:4px;cursor:pointer;font-size:10px;">✕</button></td>';
+        html+='</tr>';
+      });
+      html+='<tr style="background:#0c1e14;font-weight:700;">';
+      html+='<td colspan="5" style="padding:5px 8px;border:1px solid #1e293b;color:#94a3b8;">TOTALS</td>';
+      html+='<td style="padding:5px;border:1px solid #1e293b;text-align:right;color:#4ade80;">'+fmt(totGross)+'</td>';
+      html+='<td style="padding:5px;border:1px solid #1e293b;text-align:right;color:#f87171;">'+fmt(totFica)+'</td>';
+      html+='<td style="padding:5px;border:1px solid #1e293b;text-align:right;color:#f87171;">'+fmt(totFit)+'</td>';
+      html+='<td colspan="2" style="border:1px solid #1e293b;"></td>';
+      html+='<td style="padding:5px;border:1px solid #1e293b;text-align:right;color:#38bdf8;">'+fmt(totNet)+'</td>';
+      html+='<td colspan="2" style="border:1px solid #1e293b;"></td>';
+      html+='</tr></tbody></table></div></div>';
+    });
+  }
+
+  html+='<div style="margin-top:10px;color:#475569;font-size:10px;">⚠️ FIT % is an estimate. Actual withholding depends on employee W-4. WC % is employer cost (not employee deduction). Consult a payroll provider or CPA for formal payroll processing.</div>';
+  html+='</div>';
+  wrap.innerHTML=html;
+}
+window.prSaveRates=function(){
+  var st=load()||blankState();
+  st.ficaPct=Number(document.getElementById('pr-fica').value||7.65);
+  st.fitPct=Number(document.getElementById('pr-fit').value||12);
+  st.wcPct=Number(document.getElementById('pr-wc').value||10);
+  st.statePct=Number(document.getElementById('pr-state').value||0);
+  st.otherPct=Number(document.getElementById('pr-other').value||0);
+  save(st);render(st);
+};
+window.prAdd=function(){
+  var st=load()||blankState();
+  var name=document.getElementById('pr-name').value.trim();
+  var role=document.getElementById('pr-role').value;
+  var rate=Number(document.getElementById('pr-rate').value||0);
+  var regHrs=Number(document.getElementById('pr-reg').value||0);
+  var otHrs=Number(document.getElementById('pr-ot').value||0);
+  var otherDed=Number(document.getElementById('pr-otherded').value||0);
+  var proj=document.getElementById('pr-proj').value.trim();
+  var week=document.getElementById('pr-week').value||weekOf();
+  if(!name||!rate){alert('Enter employee name and hourly rate.');return;}
+  var entry={name:name,role:role,rate:rate,regHrs:regHrs,otHrs:otHrs,week:week,project:proj,
+    ficaPct:st.ficaPct,fitPct:st.fitPct,wcPct:st.wcPct,statePct:st.statePct,otherDeductions:otherDed};
+  entry.comp=computeEntry(entry);
+  if(!st.payrolls)st.payrolls=[];
+  st.payrolls.push(entry);
+  save(st);render(st);
+};
+window.prDel=function(idx,wk){
+  var st=load()||blankState();
+  var byWeek=[];var global=[];
+  st.payrolls.forEach(function(e,i){if(e.week===wk)byWeek.push({e:e,i:i});});
+  if(byWeek[idx]){st.payrolls.splice(byWeek[idx].i,1);}
+  save(st);render(st);
+};
+window.prPrintWeek=function(wk){
+  var st=load()||blankState();
+  var entries=st.payrolls.filter(function(e){return e.week===wk;});
+  var totGross=0,totNet=0,totFica=0,totFit=0,totWc=0;
+  entries.forEach(function(e){totGross+=e.comp.gross;totNet+=e.comp.net;totFica+=e.comp.fica;totFit+=e.comp.fit;totWc+=e.comp.wc;});
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>Payroll Register — Week of '+wk+'</title>');
+  pw.document.write('<style>body{font-family:Arial,sans-serif;font-size:9pt;margin:20px;} table{width:100%;border-collapse:collapse;font-size:8pt;} th,td{border:1px solid #ccc;padding:4px 6px;} th{background:#1e3a5f;color:#fff;} tfoot td{font-weight:700;background:#f8f9fa;} h2{color:#1e3a5f;} .sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:30px;} .sig-line{border-top:1px solid #000;margin-top:40px;padding-top:4px;font-size:8pt;color:#555;}</style>');
+  pw.document.write('</head><body>');
+  pw.document.write('<h2>Weekly Payroll Register — Week of '+wk+'</h2>');
+  pw.document.write('<p>Generated: '+new Date().toLocaleDateString()+' &nbsp;&nbsp; Employees: '+entries.length+'</p>');
+  pw.document.write('<table><thead><tr><th>Employee</th><th>Role</th><th>$/hr</th><th>Reg Hrs</th><th>OT Hrs</th><th>Gross</th><th>FICA</th><th>FIT (est)</th><th>WC</th><th>Other Ded</th><th>Net Pay</th><th>Project</th></tr></thead><tbody>');
+  entries.forEach(function(e){
+    var c=e.comp;
+    pw.document.write('<tr><td>'+e.name+'</td><td>'+e.role+'</td><td style="text-align:right">$'+Number(e.rate).toFixed(2)+'</td>');
+    pw.document.write('<td style="text-align:center">'+e.regHrs+'</td><td style="text-align:center">'+e.otHrs+'</td>');
+    pw.document.write('<td style="text-align:right">'+fmt(c.gross)+'</td><td style="text-align:right">'+fmt(c.fica)+'</td>');
+    pw.document.write('<td style="text-align:right">'+fmt(c.fit)+'</td><td style="text-align:right">'+fmt(c.wc)+'</td>');
+    pw.document.write('<td style="text-align:right">'+fmt(c.other)+'</td><td style="text-align:right;font-weight:700;">'+fmt(c.net)+'</td>');
+    pw.document.write('<td>'+(e.project||'—')+'</td></tr>');
+  });
+  pw.document.write('</tbody><tfoot><tr><td colspan="5">TOTALS</td>');
+  pw.document.write('<td style="text-align:right">'+fmt(totGross)+'</td><td style="text-align:right">'+fmt(totFica)+'</td>');
+  pw.document.write('<td style="text-align:right">'+fmt(totFit)+'</td><td style="text-align:right">'+fmt(totWc)+'</td>');
+  pw.document.write('<td></td><td style="text-align:right">'+fmt(totNet)+'</td><td></td></tr></tfoot></table>');
+  pw.document.write('<div class="sig-grid"><div><b>Payroll Preparer</b><div class="sig-line">Signature / Date</div></div>');
+  pw.document.write('<div><b>Foreman / PM Approval</b><div class="sig-line">Signature / Date</div></div>');
+  pw.document.write('<div><b>Principal Authorization</b><div class="sig-line">Signature / Date</div></div></div>');
+  pw.document.write('<p style="font-size:8px;margin-top:20px;color:#888;">FIT is an estimate — actual federal withholding depends on employee W-4 elections. WC deduction shown is employer burden not employee deduction. TX has no state income tax. Retain payroll records per FLSA §516.5 (3 years). Form 941 quarterly deposits due by last day of month following quarter end. W-2 due to employees by Jan 31 each year.</p>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+function createPayrollButton(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='💼 Payroll';
+  btn.style.cssText='position:fixed;bottom:1370px;right:16px;background:#4c1d95;color:#c4b5fd;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8700;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){
+    var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+    var show=wrap.style.display==='none';wrap.style.display=show?'block':'none';
+    btn.textContent=show?'✕ Payroll':'💼 Payroll';
+    if(show){var st=load()||blankState();render(st);}
+  };
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;
+  wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8701;';
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createPayrollButton);}else{createPayrollButton();}
+})();
+</script>
+
+<!-- ============================================================
+     SUBGRADE LIME / CEMENT STABILIZATION ESTIMATOR
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+var BTN_ID='stab-btn',WRAP_ID='stab-wrap',SK='oncor_stab_v1';
+function fmt(v){return '$'+Number(v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmtN(v,d){return Number(v||0).toLocaleString('en-US',{minimumFractionDigits:d||0,maximumFractionDigits:d||0});}
+function load(){try{return JSON.parse(localStorage.getItem(SK)||'null');}catch(e){return null;}}
+function save(d){localStorage.setItem(SK,JSON.stringify(d));}
+function blank(){return{sf:0,depth:6,treatmentType:'hydrated-lime',dosage:6,unitCost:220,equipRateSF:0.45,
+  mobilization:2500,labRateSF:0.30,notes:'',history:[]};}
+var TREATMENTS={
+  'hydrated-lime':{label:'Hydrated Lime (Ca(OH)₂)',unit:'tons',pcf:33.7,dosePct:true,
+    desc:'Best for high-PI (>20) clay soils. React pozzolanic with clay minerals. 2-4 passes: spread, mix, compact, cure 72h min. ASTM D5102 / TxDOT 260.',
+    minDose:4,maxDose:8,typDose:6,astm:'ASTM D5102 / TxDOT Item 260'},
+  'quicklime':{label:'Quicklime (CaO)',unit:'tons',pcf:56,dosePct:true,
+    desc:'More reactive than hydrated lime. 10-40% reduction in lime quantity vs. hydrated. Exothermic reaction dries wet soils. Hazardous — PPE critical. ASTM C977.',
+    minDose:3,maxDose:6,typDose:5,astm:'ASTM C977 / TxDOT Item 260'},
+  'portland-cement':{label:'Portland Cement (Type I/II)',unit:'tons',pcf:94,dosePct:true,
+    desc:'Best for low-PI (<12) sandy/silty soils. Rapid strength gain (7-day). ASTM D1633. TxDOT 275. Do not use on high-PI clay — gel cracking.',
+    minDose:3,maxDose:8,typDose:5,astm:'ASTM D1633 / TxDOT Item 275'},
+  'fly-ash':{label:'Class C Fly Ash',unit:'tons',pcf:70,dosePct:true,
+    desc:'Self-cementitious. Best for moderate PI soils. Slower strength gain than cement. ASTM C618 Class C. Often combined with lime.',
+    minDose:8,maxDose:20,typDose:12,astm:'ASTM C618 / TxDOT Item 265'},
+  'lime-fly-ash':{label:'Lime + Fly Ash (blend)',unit:'tons',pcf:50,dosePct:false,
+    desc:'2-4% lime + 8-16% Class C fly ash. Handles high-PI clay better than cement alone. Used for heavy base stabilization.',
+    minDose:10,maxDose:20,typDose:14,astm:'ASTM D5239'},
+  'cement-lime':{label:'Cement + Lime Blend',unit:'tons',pcf:50,dosePct:false,
+    desc:'For intermediate PI soils or when lime alone insufficient. Typical 2-4% lime + 3-5% cement.',
+    minDose:5,maxDose:12,typDose:8,astm:'ASTM D5102 / ASTM D1633'}
+};
+var PI_GUIDE=[
+  {label:'PI < 8 (sandy/granular)',rec:'portland-cement',note:'Cement is most cost-effective. Lime has little effect on non-plastic soils.'},
+  {label:'PI 8–15 (silty loam)',rec:'portland-cement',note:'Cement preferred. Fly ash or lime-fly-ash if sulfate present.'},
+  {label:'PI 15–25 (lean clay)',rec:'hydrated-lime',note:'Lime is best. El Paso caliche-clay blends typically in this range.'},
+  {label:'PI > 25 (fat clay / CH)',rec:'hydrated-lime',note:'Lime only. High-PI expansive clay — cement will not work effectively.'},
+  {label:'Sulfate-bearing soil',rec:'fly-ash',note:'⚠️ Do NOT use lime on sulfate soils (>3000 ppm SO₄) — ettringite heave. Use fly ash or cement after sulfate treatment.'}
+];
+function compute(d){
+  var sf=Number(d.sf||0);
+  var depIn=Number(d.depth||6);
+  var depFt=depIn/12;
+  var cf=sf*depFt;
+  var cy=cf/27;
+  var t=TREATMENTS[d.treatmentType]||TREATMENTS['hydrated-lime'];
+  // dry mass of soil to treat
+  var soilDensityPcf=110; // typical
+  var soilLbs=cf*soilDensityPcf;
+  var dosePct=Number(d.dosage||6)/100;
+  // treatment quantity = % of dry soil weight
+  var treatLbs=soilLbs*dosePct;
+  var treatTons=treatLbs/2000;
+  var treatBags50=treatLbs/50;
+  // cost
+  var materialCost=treatTons*Number(d.unitCost||220);
+  var equipCost=sf*Number(d.equipRateSF||0.45);
+  var labCost=sf*Number(d.labRateSF||0.30);
+  var mob=Number(d.mobilization||2500);
+  var total=materialCost+equipCost+labCost+mob;
+  var perSF=sf>0?total/sf:0;
+  return{sf:sf,depIn:depIn,depFt:depFt,cf:cf,cy:cy,treatLbs:treatLbs,treatTons:treatTons,treatBags50:treatBags50,
+    materialCost:materialCost,equipCost:equipCost,labCost:labCost,mob:mob,total:total,perSF:perSF};
+}
+function render(d){
+  var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+  var c=compute(d);
+  var t=TREATMENTS[d.treatmentType]||TREATMENTS['hydrated-lime'];
+  var html='<div style="padding:16px;max-width:900px;margin:0 auto;">';
+  html+='<h2 style="color:#38bdf8;margin-bottom:4px;">🪨 Subgrade Lime / Cement Stabilization Estimator</h2>';
+  html+='<p style="color:#94a3b8;font-size:12px;margin-bottom:14px;">Estimate stabilization agent quantity and total cost for subgrade improvement. References: ASTM D5102 (lime), D1633 (cement), C618 (fly ash), TxDOT Items 260/275/265.</p>';
+
+  // PI guide
+  html+='<details style="background:#1e293b;border-radius:8px;padding:10px 14px;margin-bottom:14px;">';
+  html+='<summary style="color:#7dd3fc;font-weight:600;cursor:pointer;font-size:13px;">📖 PI-Based Treatment Selection Guide</summary>';
+  html+='<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;">';
+  html+='<thead><tr style="color:#93c5fd;"><th style="padding:6px;border:1px solid #334155;text-align:left;">Plasticity Index (PI)</th><th style="padding:6px;border:1px solid #334155;">Recommended Treatment</th><th style="padding:6px;border:1px solid #334155;text-align:left;">Notes</th></tr></thead><tbody>';
+  PI_GUIDE.forEach(function(row){
+    var tname=TREATMENTS[row.rec]?TREATMENTS[row.rec].label:row.rec;
+    html+='<tr><td style="padding:6px;border:1px solid #334155;color:#e2e8f0;">'+row.label+'</td>';
+    html+='<td style="padding:6px;border:1px solid #334155;text-align:center;color:#4ade80;font-weight:600;">'+tname+'</td>';
+    html+='<td style="padding:6px;border:1px solid #334155;color:#94a3b8;">'+row.note+'</td></tr>';
+  });
+  html+='</tbody></table></details>';
+
+  // Inputs
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:14px;">';
+  html+='<h3 style="color:#7dd3fc;font-size:13px;margin:0 0 10px;">Project Parameters</h3>';
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Treatment Area (SF)</label>';
+  html+='<input type="number" id="stab-sf" value="'+d.sf+'" placeholder="e.g. 10000" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Treatment Depth (inches)</label>';
+  html+='<input type="number" id="stab-depth" value="'+d.depth+'" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Treatment Type</label>';
+  html+='<select id="stab-type" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;">';
+  Object.keys(TREATMENTS).forEach(function(k){
+    html+='<option value="'+k+'"'+(d.treatmentType===k?' selected':'')+'>'+TREATMENTS[k].label+'</option>';
+  });
+  html+='</select></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Dosage Rate (% dry weight)</label>';
+  html+='<input type="number" id="stab-dose" value="'+d.dosage+'" step="0.5" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;box-sizing:border-box;">';
+  html+='<div style="color:#64748b;font-size:10px;margin-top:2px;">Typical: '+t.minDose+'%–'+t.maxDose+'% ('+t.typDose+'% std)</div></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Agent Unit Cost ($/ton)</label>';
+  html+='<input type="number" id="stab-cost" value="'+d.unitCost+'" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Equipment Rate ($/SF)</label>';
+  html+='<input type="number" id="stab-equip" value="'+d.equipRateSF+'" step="0.05" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;box-sizing:border-box;">';
+  html+='<div style="color:#64748b;font-size:10px;margin-top:2px;">Pulverizer/stabilizer + water truck. ~$0.35–0.60/SF</div></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Labor Rate ($/SF)</label>';
+  html+='<input type="number" id="stab-lab" value="'+d.labRateSF+'" step="0.05" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Mobilization ($)</label>';
+  html+='<input type="number" id="stab-mob" value="'+d.mobilization+'" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:6px;border-radius:6px;width:100%;font-size:13px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<textarea id="stab-notes" rows="2" placeholder="Project notes, soil conditions, PI, existing moisture content..." style="margin-top:10px;width:100%;background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:8px;border-radius:6px;font-size:12px;box-sizing:border-box;">'+( d.notes||'')+'</textarea>';
+  html+='<button onclick="window.stabCalc()" style="margin-top:10px;background:#0284c7;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">Calculate</button>';
+  html+='</div>';
+
+  // Treatment info
+  html+='<div style="background:#1e293b;border:1px solid #0369a1;border-radius:8px;padding:12px;margin-bottom:14px;">';
+  html+='<b style="color:#38bdf8;">'+t.label+'</b> — <span style="color:#94a3b8;font-size:12px;">'+t.astm+'</span>';
+  html+='<p style="color:#cbd5e1;font-size:12px;margin:6px 0 0;">'+t.desc+'</p>';
+  html+='</div>';
+
+  // Results
+  if(c.sf>0){
+    html+='<div style="background:#0c2a1c;border:1px solid #16a34a;border-radius:8px;padding:14px;margin-bottom:14px;">';
+    html+='<h3 style="color:#4ade80;margin:0 0 12px;font-size:14px;">📊 Estimated Quantities & Costs</h3>';
+    html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px;">';
+    var cards=[
+      {label:'Treatment Area',val:fmtN(c.sf)+' SF'},
+      {label:'Depth / CY Soil',val:c.depIn+'" / '+fmtN(c.cy,1)+' CY'},
+      {label:t.label+' Required',val:fmtN(c.treatTons,2)+' tons'},
+      {label:'Bags Required (50 lb)',val:fmtN(c.treatBags50,0)+' bags'},
+      {label:'Material Cost',val:fmt(c.materialCost)},
+      {label:'Equipment Cost',val:fmt(c.equipCost)},
+      {label:'Labor Cost',val:fmt(c.labCost)},
+      {label:'Mobilization',val:fmt(c.mob)},
+      {label:'TOTAL ESTIMATE',val:fmt(c.total),big:true},
+      {label:'Cost per SF',val:fmt(c.perSF)+'/SF'}
+    ];
+    cards.forEach(function(card){
+      html+='<div style="background:#1e293b;border-radius:6px;padding:10px;">';
+      html+='<div style="color:'+(card.big?'#4ade80':'#38bdf8')+';font-size:'+(card.big?'20px':'16px')+';font-weight:700;">'+card.val+'</div>';
+      html+='<div style="color:#94a3b8;font-size:11px;">'+card.label+'</div></div>';
+    });
+    html+='</div>';
+    // Dosage notes
+    html+='<div style="background:#1e3a5f;border-radius:6px;padding:10px;">';
+    html+='<b style="color:#93c5fd;font-size:12px;">Field Application Notes</b>';
+    html+='<ul style="color:#cbd5e1;font-size:12px;margin:6px 0 0;padding-left:16px;">';
+    html+='<li>Dosage: '+d.dosage+'% of dry soil weight = '+fmtN(c.treatLbs,0)+' lbs total</li>';
+    html+='<li>Apply at ~'+fmtN(c.treatTons/(c.sf/1000),2)+' tons per 1,000 SF</li>';
+    html+='<li>Minimum cure: 72 hours before compaction (lime) / 24 hours (cement)</li>';
+    html+='<li>Compact to 95% Modified Proctor (ASTM D1557)</li>';
+    html+='<li>Test: lime — ASTM D5102 unconfined strength ≥ 50 psi at 7 days; cement — ASTM D1633</li>';
+    html+='<li>El Paso: caliche base (+6") benefits from lime stabilization before slab. Expansive clay common in south EP.</li>';
+    html+='</ul></div>';
+    html+='</div>';
+
+    // Save to history
+    html+='<button onclick="window.stabSaveHist()" style="background:#16a34a;color:#fff;border:none;padding:7px 16px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;margin-right:8px;">💾 Save Estimate</button>';
+  }
+  html+='<div style="display:inline-flex;gap:8px;flex-wrap:wrap;">';
+  html+='<button onclick="window.stabPrint()" style="background:#7c3aed;color:#fff;border:none;padding:7px 16px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">🖨️ Print</button>';
+  html+='<button onclick="window.stabCopy()" style="background:#0369a1;color:#fff;border:none;padding:7px 16px;border-radius:6px;cursor:pointer;font-size:12px;">📋 Copy</button>';
+  html+='</div>';
+
+  // History
+  if(d.history&&d.history.length){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-top:14px;">';
+    html+='<h3 style="color:#7dd3fc;font-size:13px;margin:0 0 10px;">Saved Estimates</h3>';
+    html+='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;">';
+    html+='<thead><tr style="background:#1e3a5f;color:#93c5fd;"><th style="padding:5px;border:1px solid #334155;">Date</th><th>Treatment</th><th>SF</th><th>Depth</th><th>Dosage</th><th>Tons</th><th>Total</th><th>$/SF</th><th></th></tr></thead><tbody>';
+    d.history.forEach(function(h,idx){
+      html+='<tr><td style="padding:5px;border:1px solid #334155;color:#94a3b8;white-space:nowrap;">'+h.date+'</td>';
+      html+='<td style="border:1px solid #334155;color:#e2e8f0;">'+h.label+'</td>';
+      html+='<td style="border:1px solid #334155;text-align:right;color:#94a3b8;">'+fmtN(h.sf)+'</td>';
+      html+='<td style="border:1px solid #334155;text-align:right;color:#94a3b8;">'+h.depth+'"</td>';
+      html+='<td style="border:1px solid #334155;text-align:right;color:#94a3b8;">'+h.dosage+'%</td>';
+      html+='<td style="border:1px solid #334155;text-align:right;color:#38bdf8;">'+fmtN(h.treatTons,2)+'</td>';
+      html+='<td style="border:1px solid #334155;text-align:right;color:#4ade80;font-weight:700;">'+fmt(h.total)+'</td>';
+      html+='<td style="border:1px solid #334155;text-align:right;color:#94a3b8;">'+fmt(h.perSF)+'</td>';
+      html+='<td style="border:1px solid #334155;text-align:center;"><button onclick="window.stabDelHist('+idx+')" style="background:#7f1d1d;color:#fca5a5;border:none;padding:2px 6px;border-radius:4px;cursor:pointer;font-size:10px;">✕</button></td></tr>';
+    });
+    html+='</tbody></table></div></div>';
+  }
+  html+='</div>';
+  wrap.innerHTML=html;
+}
+function readInputs(d){
+  d.sf=Number(document.getElementById('stab-sf').value||0);
+  d.depth=Number(document.getElementById('stab-depth').value||6);
+  d.treatmentType=document.getElementById('stab-type').value;
+  d.dosage=Number(document.getElementById('stab-dose').value||6);
+  d.unitCost=Number(document.getElementById('stab-cost').value||220);
+  d.equipRateSF=Number(document.getElementById('stab-equip').value||0.45);
+  d.labRateSF=Number(document.getElementById('stab-lab').value||0.30);
+  d.mobilization=Number(document.getElementById('stab-mob').value||2500);
+  d.notes=document.getElementById('stab-notes').value;
+}
+window.stabCalc=function(){
+  var d=load()||blank();
+  readInputs(d);
+  save(d);render(d);
+};
+window.stabSaveHist=function(){
+  var d=load()||blank();
+  readInputs(d);
+  var c=compute(d);
+  var t=TREATMENTS[d.treatmentType]||TREATMENTS['hydrated-lime'];
+  if(!d.history)d.history=[];
+  d.history.unshift({date:new Date().toLocaleDateString(),label:t.label,sf:c.sf,depth:d.depth,dosage:d.dosage,treatTons:c.treatTons,total:c.total,perSF:c.perSF,notes:d.notes});
+  save(d);render(d);
+};
+window.stabDelHist=function(idx){
+  var d=load()||blank();
+  if(d.history)d.history.splice(idx,1);
+  save(d);render(d);
+};
+window.stabPrint=function(){
+  var d=load()||blank();
+  readInputs(d);
+  var c=compute(d);
+  var t=TREATMENTS[d.treatmentType]||TREATMENTS['hydrated-lime'];
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>Subgrade Stabilization Estimate</title>');
+  pw.document.write('<style>body{font-family:Arial,sans-serif;font-size:10pt;margin:20px;} table{width:100%;border-collapse:collapse;} th,td{border:1px solid #ccc;padding:5px;} th{background:#1e3a5f;color:#fff;} h2{color:#1e3a5f;} .sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:30px;} .sig-line{border-top:1px solid #000;margin-top:40px;padding-top:4px;font-size:9pt;color:#555;}</style>');
+  pw.document.write('</head><body>');
+  pw.document.write('<h2>Subgrade Stabilization Estimate</h2>');
+  pw.document.write('<p><b>Treatment:</b> '+t.label+' &nbsp; <b>Standard:</b> '+t.astm+'<br><b>Date:</b> '+new Date().toLocaleDateString()+'</p>');
+  if(d.notes)pw.document.write('<p><b>Notes:</b> '+d.notes+'</p>');
+  pw.document.write('<table><thead><tr><th>Parameter</th><th>Value</th></tr></thead><tbody>');
+  var rows=[
+    ['Treatment Area',fmtN(c.sf)+' SF'],
+    ['Treatment Depth',d.depth+' inches ('+c.depFt.toFixed(3)+' ft)'],
+    ['Volume to Treat',fmtN(c.cf,1)+' CF / '+fmtN(c.cy,1)+' CY'],
+    ['Dosage Rate',d.dosage+'% of dry soil weight'],
+    [t.label+' Required',fmtN(c.treatLbs,0)+' lbs / '+fmtN(c.treatTons,2)+' tons'],
+    ['Bags Required (50 lb)',fmtN(c.treatBags50,0)+' bags'],
+  ];
+  rows.forEach(function(r){pw.document.write('<tr><td>'+r[0]+'</td><td style="text-align:right;font-weight:600;">'+r[1]+'</td></tr>');});
+  pw.document.write('</tbody></table>');
+  pw.document.write('<h3 style="margin-top:20px;">Cost Estimate</h3>');
+  pw.document.write('<table><thead><tr><th>Line Item</th><th style="text-align:right;">Amount</th></tr></thead><tbody>');
+  [
+    [t.label+' material ('+fmtN(c.treatTons,2)+' tons × $'+fmtN(d.unitCost,2)+'/ton)',fmt(c.materialCost)],
+    ['Equipment / pulverizer ('+fmtN(c.sf)+' SF × $'+fmtN(d.equipRateSF,2)+'/SF)',fmt(c.equipCost)],
+    ['Labor ('+fmtN(c.sf)+' SF × $'+fmtN(d.labRateSF,2)+'/SF)',fmt(c.labCost)],
+    ['Mobilization',fmt(c.mob)],
+    ['TOTAL',fmt(c.total)],
+    ['Cost per SF',fmt(c.perSF)+'/SF']
+  ].forEach(function(r){pw.document.write('<tr><td>'+r[0]+'</td><td style="text-align:right;font-weight:600;">'+r[1]+'</td></tr>');});
+  pw.document.write('</tbody></table>');
+  pw.document.write('<h3 style="margin-top:20px;">Field Application Requirements</h3>');
+  pw.document.write('<ul style="font-size:10pt;">');
+  pw.document.write('<li>Minimum cure: 72 hours before compaction (lime) / 24 hours (cement)</li>');
+  pw.document.write('<li>Compact to 95% Modified Proctor per ASTM D1557</li>');
+  pw.document.write('<li>Acceptance testing: '+t.astm+'</li>');
+  pw.document.write('<li>Proof-roll completed area before placing concrete</li>');
+  pw.document.write('<li>Do NOT place concrete until written engineer clearance received</li>');
+  pw.document.write('</ul>');
+  pw.document.write('<div class="sig-grid"><div><b>Estimator</b><div class="sig-line">Signature / Date</div></div>');
+  pw.document.write('<div><b>Geotechnical Engineer Review</b><div class="sig-line">Signature / Date</div></div>');
+  pw.document.write('<div><b>GC Acceptance</b><div class="sig-line">Signature / Date</div></div></div>');
+  pw.document.write('<p style="font-size:9px;margin-top:20px;color:#888;">Dosage rates are estimates based on typical soil conditions. Actual dosage must be determined by geotechnical testing (ASTM D5102 lime series, ASTM D1633 cement series). Do not use lime on soils with sulfate content > 3,000 ppm — ettringite heaving. Consult project geotechnical report.</p>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+window.stabCopy=function(){
+  var d=load()||blank();
+  readInputs(d);
+  var c=compute(d);
+  var t=TREATMENTS[d.treatmentType]||TREATMENTS['hydrated-lime'];
+  var lines=['SUBGRADE STABILIZATION ESTIMATE','Treatment: '+t.label,'Area: '+fmtN(c.sf)+' SF at '+d.depth+'" depth','Dosage: '+d.dosage+'% of dry soil weight',
+    t.label+': '+fmtN(c.treatTons,2)+' tons ('+fmtN(c.treatBags50,0)+' bags × 50 lb)',
+    '','COSTS:','  Material: '+fmt(c.materialCost),'  Equipment: '+fmt(c.equipCost),'  Labor: '+fmt(c.labCost),'  Mob: '+fmt(c.mob),
+    '  TOTAL: '+fmt(c.total),'  Per SF: '+fmt(c.perSF)];
+  if(d.notes)lines.push('','Notes: '+d.notes);
+  navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Estimate copied!');});
+};
+function createStabButton(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='🪨 Lime Stab';
+  btn.style.cssText='position:fixed;bottom:1410px;right:16px;background:#78350f;color:#fde68a;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8600;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){
+    var wrap=document.getElementById(WRAP_ID);if(!wrap)return;
+    var show=wrap.style.display==='none';wrap.style.display=show?'block':'none';
+    btn.textContent=show?'✕ Lime Stab':'🪨 Lime Stab';
+    if(show){var d=load()||blank();render(d);}
+  };
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;
+  wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8601;';
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createStabButton);}else{createStabButton();}
+})();
+</script>
