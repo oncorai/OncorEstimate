@@ -46434,3 +46434,607 @@ function createRMButton(){
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createRMButton);}else{createRMButton();}
 })();
 </script>
+
+<!-- ============================================================
+  FIRE STOP / SLEEVE PENETRATION LOG
+  IBC §714 / NFPA 285 / UL System listings
+  Documents all penetrations through fire-rated concrete walls/slabs
+  ============================================================ -->
+<script>
+(function(){
+'use strict';
+var STORE='ocFSP_v1';
+var BTN_ID='fspen_btn';
+var WRAP_ID='fspen_wrap';
+function load(){try{return JSON.parse(localStorage.getItem(STORE)||'[]');}catch(e){return[];}}
+function save(d){localStorage.setItem(STORE,JSON.stringify(d));}
+var TYPES=['Electrical Conduit (EMT)','Electrical Conduit (PVC)','Mechanical Pipe (Copper)','Mechanical Pipe (PVC DWV)','Mechanical Pipe (Cast Iron)','HVAC Duct','Plumbing Sleeve','Cable Tray','Sprinkler Pipe','Structural Sleeve (Empty)','Other'];
+var RATINGS=['1-Hour','2-Hour','3-Hour','4-Hour','Unrated (non-fire-rated assembly)'];
+var STATUSES=['Pending Installation','Sleeve Installed','Through-Penetrant Installed','Fire Stop Applied','Inspected & Accepted','Deficient – Requires Rework','N/A (non-fire-rated)'];
+var STATUS_COLORS={'Pending Installation':'#94a3b8','Sleeve Installed':'#60a5fa','Through-Penetrant Installed':'#a78bfa','Fire Stop Applied':'#f59e0b','Inspected & Accepted':'#22c55e','Deficient – Requires Rework':'#ef4444','N/A (non-fire-rated)':'#475569'};
+function nextIdx(arr){var max=0;arr.forEach(function(e){if(e.num&&e.num>max)max=e.num;});return max+1;}
+function render(){
+  var entries=load();
+  var pending=entries.filter(function(e){return e.status==='Pending Installation'||e.status==='Sleeve Installed'||e.status==='Through-Penetrant Installed';});
+  var deficient=entries.filter(function(e){return e.status==='Deficient – Requires Rework';});
+  var accepted=entries.filter(function(e){return e.status==='Inspected & Accepted';});
+  var hasIssue=deficient.length>0||pending.filter(function(e){return e.fireRated;}).length>0;
+  var w=document.getElementById(WRAP_ID);
+  var html='<div style="max-width:900px;margin:0 auto;padding:24px;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">';
+  html+='<h2 style="margin:0;color:#f97316;font-size:20px;">🔥 Fire Stop / Sleeve Penetration Log</h2>';
+  html+='<button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'🔥 FS Pen\'" style="background:#374151;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;">✕ Close</button>';
+  html+='</div>';
+  html+='<div style="background:#1e1f2e;border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;color:#94a3b8;line-height:1.5;">';
+  html+='<strong style="color:#f97316;">IBC §714 / UL System Listings:</strong> All penetrations through fire-rated concrete walls and slabs require a listed fire-stop system (UL Design FW/WL/FL/FS series). Through-penetrants must be sealed with an IBC §714-compliant assembly before inspection. This log tracks every penetration from sleeve installation through fire-stop inspection acceptance.';
+  html+='</div>';
+  if(hasIssue){
+    html+='<div style="background:#450a0a;border:1px solid #ef4444;border-radius:8px;padding:12px;margin-bottom:12px;">';
+    html+='<strong style="color:#ef4444;">⛔ OPEN FIRE-STOP ISSUES</strong><br>';
+    if(deficient.length>0)html+='<span style="color:#fca5a5;">'+deficient.length+' deficient penetration(s) require rework before concealment or occupancy.</span><br>';
+    var frPending=pending.filter(function(e){return e.fireRated;});
+    if(frPending.length>0)html+='<span style="color:#fca5a5;">'+frPending.length+' fire-rated penetration(s) not yet inspected & accepted.</span>';
+    html+='</div>';
+  }
+  html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">';
+  var cards=[['Total Entries','#334155',entries.length,'#e2e8f0'],['Accepted','#052e16',accepted.length,'#86efac'],['Deficient','#450a0a',deficient.length,'#fca5a5'],['Pending/Open','#172554',pending.length,'#93c5fd']];
+  cards.forEach(function(c){html+='<div style="background:'+c[0]+';border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:'+c[3]+';">'+c[2]+'</div><div style="font-size:11px;color:#94a3b8;margin-top:4px;">'+c[1]+'</div></div>';});
+  html+='</div>';
+  // Add form
+  html+='<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:16px;">';
+  html+='<h3 style="margin:0 0 12px 0;color:#f97316;font-size:14px;">Log New Penetration</h3>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Element / Location</label><br><input id="fsp_elem" placeholder="e.g. West Wall Grid B-3, El.+12\'" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Penetration Type</label><br><select id="fsp_type" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;">';
+  TYPES.forEach(function(t){html+='<option>'+t+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Wall/Slab Fire Rating</label><br><select id="fsp_rating" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;">';
+  RATINGS.forEach(function(r){html+='<option>'+r+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Sleeve Size (diameter/dims)</label><br><input id="fsp_size" placeholder="e.g. 4\" EMT, 6\" PVC sleeve" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">UL System / Fire Stop Product</label><br><input id="fsp_ul" placeholder="e.g. 3M CP 25WB+, UL WL1001" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Installed By</label><br><input id="fsp_by" placeholder="Initials or company" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Date</label><br><input type="date" id="fsp_date" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Fire-Rated Assembly?</label><br><select id="fsp_fr" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;">'
+    +'<option value="1">Yes – fire-rated</option><option value="0">No – non-fire-rated</option></select></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Status</label><br><select id="fsp_status" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;">';
+  STATUSES.forEach(function(s){html+='<option>'+s+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Inspector</label><br><input id="fsp_insp" placeholder="Inspector name/agency" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<div style="margin-bottom:10px;"><label style="font-size:11px;color:#94a3b8;">Notes</label><br><input id="fsp_notes" placeholder="Remediation required, conditions, cross-reference drawing number..." style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<button onclick="window.fspAdd()" style="background:#f97316;color:#fff;border:none;padding:9px 18px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;">+ Log Penetration</button>';
+  html+='</div>';
+  // Log table
+  if(entries.length>0){
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+    html+='<h3 style="margin:0;color:#e2e8f0;font-size:14px;">Penetration Log ('+entries.length+')</h3>';
+    html+='<div><button onclick="window.fspPrint()" style="background:#1e40af;color:#fff;border:none;padding:7px 12px;border-radius:5px;cursor:pointer;font-size:12px;margin-right:6px;">🖨 Print Log</button>';
+    html+='<button onclick="window.fspCopy()" style="background:#374151;color:#fff;border:none;padding:7px 12px;border-radius:5px;cursor:pointer;font-size:12px;">📋 Copy</button></div></div>';
+    html+='<div>';
+    entries.slice().reverse().forEach(function(e,ri){
+      var idx=entries.length-1-ri;
+      var sc=STATUS_COLORS[e.status]||'#94a3b8';
+      var isDeficient=e.status==='Deficient – Requires Rework';
+      html+='<div style="background:#1e293b;border-left:4px solid '+sc+';border-radius:6px;padding:12px;margin-bottom:8px;'+(isDeficient?'border:1px solid #ef4444;border-left:4px solid #ef4444;':'')+';">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;">';
+      html+='<div><span style="font-weight:600;color:#e2e8f0;font-size:13px;">PEN-'+String(e.num).padStart(3,'0')+' — '+e.elem+'</span>';
+      if(e.fireRated)html+='<span style="background:#7c2d12;color:#fed7aa;font-size:10px;padding:2px 6px;border-radius:10px;margin-left:6px;">🔥 FIRE-RATED</span>';
+      html+='<br><span style="color:#94a3b8;font-size:11px;">'+e.type+' | '+e.size+(e.rating?' | '+e.rating:'')+'</span></div>';
+      html+='<div style="text-align:right;"><span style="background:'+sc+'22;color:'+sc+';font-size:11px;padding:3px 8px;border-radius:10px;cursor:pointer;" onclick="window.fspCycleStatus('+idx+')">'+e.status+'</span>';
+      html+='<br><button onclick="window.fspDelete('+idx+')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:11px;margin-top:4px;">🗑 Delete</button></div></div>';
+      html+='<div style="font-size:11px;color:#64748b;margin-top:6px;">';
+      if(e.ul)html+='UL/Product: <span style="color:#a5b4fc;">'+e.ul+'</span> | ';
+      html+='By: '+e.by+' | Date: '+e.date;
+      if(e.inspector)html+=' | Inspector: '+e.inspector;
+      html+='</div>';
+      if(e.notes)html+='<div style="font-size:11px;color:#94a3b8;margin-top:4px;font-style:italic;">'+e.notes+'</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+  html+='</div>';
+  w.innerHTML=html;
+  // Set today as default date
+  var dField=document.getElementById('fsp_date');
+  if(dField&&!dField.value)dField.valueAsDate=new Date();
+}
+window.fspAdd=function(){
+  var elem=document.getElementById('fsp_elem').value.trim();
+  if(!elem){alert('Element/Location required.');return;}
+  var entries=load();
+  var e={
+    num:nextIdx(entries),
+    elem:elem,
+    type:document.getElementById('fsp_type').value,
+    rating:document.getElementById('fsp_rating').value,
+    size:document.getElementById('fsp_size').value.trim(),
+    ul:document.getElementById('fsp_ul').value.trim(),
+    by:document.getElementById('fsp_by').value.trim(),
+    date:document.getElementById('fsp_date').value,
+    fireRated:document.getElementById('fsp_fr').value==='1',
+    status:document.getElementById('fsp_status').value,
+    inspector:document.getElementById('fsp_insp').value.trim(),
+    notes:document.getElementById('fsp_notes').value.trim()
+  };
+  entries.push(e);save(entries);render();
+};
+window.fspCycleStatus=function(idx){
+  var entries=load();
+  var e=entries[idx];
+  var i=STATUSES.indexOf(e.status);
+  e.status=STATUSES[(i+1)%STATUSES.length];
+  save(entries);render();
+};
+window.fspDelete=function(idx){
+  if(!confirm('Delete this penetration entry?'))return;
+  var entries=load();entries.splice(idx,1);save(entries);render();
+};
+window.fspCopy=function(){
+  var entries=load();
+  var lines=['FIRE STOP / SLEEVE PENETRATION LOG','IBC §714 / UL System Listings','Generated: '+new Date().toLocaleDateString(),''];
+  entries.forEach(function(e){
+    lines.push('PEN-'+String(e.num).padStart(3,'0')+' | '+e.elem);
+    lines.push('  Type: '+e.type+' | Size: '+e.size+' | Rating: '+e.rating);
+    lines.push('  Fire-Rated: '+(e.fireRated?'YES':'No')+' | Status: '+e.status);
+    if(e.ul)lines.push('  UL System/Product: '+e.ul);
+    lines.push('  By: '+e.by+' | Date: '+e.date+(e.inspector?' | Inspector: '+e.inspector:''));
+    if(e.notes)lines.push('  Notes: '+e.notes);
+    lines.push('');
+  });
+  navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Log copied to clipboard.');});
+};
+window.fspPrint=function(){
+  var entries=load();
+  var deficient=entries.filter(function(e){return e.status==='Deficient – Requires Rework';});
+  var frPending=entries.filter(function(e){return e.fireRated&&e.status!=='Inspected & Accepted'&&e.status!=='N/A (non-fire-rated)';});
+  var projEl=document.getElementById('projName');
+  var proj=(projEl&&projEl.value)||'Project';
+  var pw=window.open('','_blank');
+  var rows='';
+  entries.forEach(function(e){
+    var isD=e.status==='Deficient – Requires Rework';
+    var isFR=e.fireRated;
+    rows+='<tr style="'+(isD?'background:#fef2f2;':'')+(isFR&&e.status!=='Inspected & Accepted'?'background:#fff7ed;':'')+'"><td>PEN-'+String(e.num).padStart(3,'0')+'</td><td>'+e.elem+'</td><td>'+e.type+'</td><td>'+e.size+'</td><td>'+(e.fireRated?'<strong>YES</strong>':'No')+'</td><td>'+e.rating+'</td><td>'+(e.ul||'—')+'</td><td>'+e.status+'</td><td>'+e.by+'</td><td>'+e.date+'</td><td>'+(e.inspector||'—')+'</td><td>'+(e.notes||'')+'</td></tr>';
+  });
+  pw.document.write('<html><head><title>Fire Stop Log</title><style>body{font-family:Arial,sans-serif;padding:30px;max-width:1100px;margin:0 auto;font-size:11px;}h2{margin:0;}table{width:100%;border-collapse:collapse;margin:12px 0;font-size:10px;}th,td{border:1px solid #333;padding:5px;text-align:left;}th{background:#7c2d12;color:#fff;}.alert{background:#fef2f2;border:1px solid #ef4444;padding:10px;margin:12px 0;}.sig{display:flex;gap:30px;margin-top:24px;}.sig div{flex:1;border-top:1px solid #333;padding-top:6px;}</style></head><body>'
+    +'<div style="display:flex;justify-content:space-between;border-bottom:2px solid #333;padding-bottom:10px;margin-bottom:14px;">'
+    +'<div><h2>FIRE STOP / SLEEVE PENETRATION LOG</h2><p style="margin:4px 0;color:#666;">Project: '+proj+' | IBC §714 / UL System Listings Compliance</p></div>'
+    +'<div style="text-align:right;font-size:11px;">Printed: '+new Date().toLocaleDateString()+'<br>Entries: '+entries.length+'</div></div>'
+    +(deficient.length>0||frPending.length>0?'<div class="alert"><strong>⛔ OPEN ISSUES:</strong><br>'+(deficient.length>0?'• '+deficient.length+' deficient penetration(s) require rework before concealment or occupancy.<br>':'')+(frPending.length>0?'• '+frPending.length+' fire-rated penetration(s) not yet accepted by inspector.':'')+'</div>':'')
+    +'<table><tr><th>#</th><th>Location</th><th>Type</th><th>Size</th><th>Fire-Rated</th><th>Assembly Rating</th><th>UL System/Product</th><th>Status</th><th>By</th><th>Date</th><th>Inspector</th><th>Notes</th></tr>'+rows+'</table>'
+    +'<div style="background:#fef9c3;border:1px solid #ca8a04;padding:10px;margin:14px 0;font-size:10px;">'
+    +'<strong>IBC §714 Requirements:</strong> All penetrations through fire-rated assemblies must be protected with a listed fire-stop system per IBC §714.3 (through-penetration) or §714.4 (membrane penetration). UL Fire Resistance Directory: FW (wall penetrations), FL (floor penetrations), WL (wall/floor combined). Do not conceal until inspected and accepted.'
+    +'</div>'
+    +'<div class="sig"><div>Fire Stop Contractor / Date</div><div>Special Inspector / Date</div><div>GC Superintendent / Date</div><div>Building Official (if required) / Date</div></div>'
+    +'</body></html>');
+  pw.document.close();pw.print();
+};
+function createFSPButton(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='🔥 FS Pen';
+  btn.style.cssText='position:fixed;bottom:1796px;right:16px;background:#7c2d12;color:#fed7aa;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8650;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ FS Pen':'🔥 FS Pen';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8651;';
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createFSPButton);}else{createFSPButton();}
+})();
+</script>
+
+<!-- ============================================================
+  SOIL BEARING CAPACITY QUICK REFERENCE & FOOTING SIZER
+  IBC 2021 Table 1806.2 / ACI 336.2R / ACI 360R-10
+  Pick soil type → get allowable bearing pressure → size footings
+  ============================================================ -->
+<script>
+(function(){
+'use strict';
+var BTN_ID='soilbear_btn';
+var WRAP_ID='soilbear_wrap';
+var STORE='ocSoilBear_v1';
+function load(){try{return JSON.parse(localStorage.getItem(STORE)||'[]');}catch(e){return[];}}
+function save(d){localStorage.setItem(STORE,JSON.stringify(d));}
+var SOILS=[
+  {name:'Crystalline Bedrock',code:'1',allow:12000,note:'IBC Table 1806.2 Class 1 — granite, trap rock, gneiss'},
+  {name:'Sedimentary & Foliated Rock',code:'2',allow:4000,note:'IBC Table 1806.2 Class 2 — limestone, schist, slate'},
+  {name:'Sandy Gravel or Gravel (GW, GP)',code:'3',allow:3000,note:'IBC Table 1806.2 Class 3 — dense, well-graded'},
+  {name:'Sand, Silty Sand, Clayey Sand (SW, SP, SM, SC)',code:'4',allow:2000,note:'IBC Table 1806.2 Class 4 — medium dense'},
+  {name:'Clay, Sandy Clay, Silty Clay, Clayey Silt (CL, ML)',code:'5',allow:1500,note:'IBC Table 1806.2 Class 5 — stiff'},
+  {name:'Soft Clay or Silt (CH, MH, OL, OH)',code:'6',allow:1000,note:'IBC Table 1806.2 Class 6 — requires soils investigation'},
+  {name:'Expansive Caliche (El Paso typical)',code:'7',allow:2000,note:'Regional note — El Paso caliche; verify with geotech; can swell when wetted'},
+  {name:'Expansive Clay (El Paso south EP)',code:'8',allow:800,note:'Regional note — south El Paso expansive clay PI>20; soils engineer required'},
+  {name:'Structural Fill (engineered, 95% Modified Proctor)',code:'9',allow:2000,note:'Engineered compacted fill per ASTM D1557 — must have compaction testing'},
+  {name:'Custom (enter manually)',code:'0',allow:0,note:''}
+];
+function render(){
+  var calcs=load();
+  var w=document.getElementById(WRAP_ID);
+  var html='<div style="max-width:920px;margin:0 auto;padding:24px;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">';
+  html+='<h2 style="margin:0;color:#84cc16;font-size:20px;">🏗️ Soil Bearing & Footing Sizer</h2>';
+  html+='<button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'🏗️ Bearing\'" style="background:#374151;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;">✕ Close</button>';
+  html+='</div>';
+  html+='<div style="background:#1e1f2e;border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:#94a3b8;line-height:1.5;">';
+  html+='<strong style="color:#84cc16;">IBC 2021 Table 1806.2 / ACI 336.2R:</strong> Allowable bearing values below are presumptive — use for preliminary sizing and feasibility. A licensed geotechnical engineer should verify actual bearing capacity for structural footings on any project. El Paso notes: caliche is prevalent but variable; expansive clay in south EP requires special design.';
+  html+='</div>';
+  // Soil reference table
+  html+='<div style="margin-bottom:16px;">';
+  html+='<h3 style="color:#84cc16;font-size:14px;margin-bottom:8px;">IBC 1806.2 Presumptive Bearing Reference</h3>';
+  html+='<div style="overflow-x:auto;">';
+  html+='<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  html+='<tr><th style="background:#166534;color:#fff;padding:7px;text-align:left;">Soil Class</th><th style="background:#166534;color:#fff;padding:7px;">Allow. (psf)</th><th style="background:#166534;color:#fff;padding:7px;text-align:left;">Description / Notes</th></tr>';
+  SOILS.filter(function(s){return s.code!=='0';}).forEach(function(s){
+    var color=s.allow>=3000?'#16a34a':s.allow>=1500?'#ca8a04':s.allow>0?'#dc2626':'#94a3b8';
+    html+='<tr><td style="padding:6px;border-bottom:1px solid #1e293b;color:#e2e8f0;">'+s.name+'</td>'
+      +'<td style="padding:6px;border-bottom:1px solid #1e293b;text-align:center;font-weight:700;color:'+color+';">'+s.allow.toLocaleString()+'</td>'
+      +'<td style="padding:6px;border-bottom:1px solid #1e293b;color:#94a3b8;font-size:11px;">'+s.note+'</td></tr>';
+  });
+  html+='</table></div></div>';
+  // Footing sizer
+  html+='<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:16px;">';
+  html+='<h3 style="margin:0 0 12px 0;color:#84cc16;font-size:14px;">Footing Sizer Calculator</h3>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Column/Load Description</label><br><input id="sb_desc" placeholder="e.g. Column C3, bearing wall" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Column Load (kips)</label><br><input type="number" id="sb_load" placeholder="e.g. 80" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Footing Type</label><br><select id="sb_ftype" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;">'
+    +'<option value="isolated">Isolated/Spread</option>'
+    +'<option value="strip">Strip/Continuous (per LF)</option>'
+    +'<option value="mat">Mat/Raft Slab (total load)</option>'
+    +'</select></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Soil Class</label><br><select id="sb_soil" onchange="window.sbSoilChange()" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;">';
+  SOILS.forEach(function(s){html+='<option value="'+s.code+'">'+s.name+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Allowable Bearing (psf)</label><br><input type="number" id="sb_allow" placeholder="Auto-fills from soil class" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Safety Factor</label><br><select id="sb_sf" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;">'
+    +'<option value="1.0">1.0 (EOR already factored)</option>'
+    +'<option value="1.5" selected>1.5 (conservative preliminary)</option>'
+    +'<option value="2.0">2.0 (typical geotech report)</option>'
+    +'<option value="3.0">3.0 (rock/bedrock)</option>'
+    +'</select></div>';
+  html+='</div>';
+  html+='<button onclick="window.sbCalc()" style="background:#84cc16;color:#0f172a;border:none;padding:9px 18px;border-radius:6px;cursor:pointer;font-weight:700;font-size:13px;">Calculate Footing Size</button>';
+  html+='<div id="sb_result" style="margin-top:14px;"></div>';
+  html+='</div>';
+  // Saved calcs
+  if(calcs.length>0){
+    html+='<h3 style="color:#e2e8f0;font-size:14px;margin-bottom:8px;">Saved Calculations ('+calcs.length+')</h3>';
+    html+='<div><button onclick="window.sbPrintAll()" style="background:#1e40af;color:#fff;border:none;padding:7px 12px;border-radius:5px;cursor:pointer;font-size:12px;margin-bottom:10px;">🖨 Print All</button></div>';
+    calcs.forEach(function(c,idx){
+      html+='<div style="background:#1e293b;border-left:4px solid #84cc16;border-radius:6px;padding:10px;margin-bottom:8px;">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;">';
+      html+='<span style="font-weight:600;color:#e2e8f0;font-size:13px;">'+c.desc+'</span>';
+      html+='<button onclick="window.sbDelete('+idx+')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:11px;">🗑</button>';
+      html+='</div>';
+      html+='<div style="font-size:12px;color:#94a3b8;margin-top:4px;">';
+      html+='Load: <strong style="color:#84cc16;">'+c.load+' kips</strong> | Soil: '+c.soilName+' @ <strong style="color:#84cc16;">'+c.allow.toLocaleString()+' psf</strong>';
+      html+=' | Type: '+c.ftype+' | SF: '+c.sf;
+      html+='</div>';
+      html+='<div style="font-size:12px;color:#e2e8f0;margin-top:4px;"><strong>Result: '+c.result+'</strong></div>';
+      html+='</div>';
+    });
+  }
+  html+='</div>';
+  w.innerHTML=html;
+  // Auto-fill first soil
+  window.sbSoilChange();
+}
+window.sbSoilChange=function(){
+  var sel=document.getElementById('sb_soil');
+  var inp=document.getElementById('sb_allow');
+  if(!sel||!inp)return;
+  var code=sel.value;
+  var soil=SOILS.find(function(s){return s.code===code;});
+  if(soil&&soil.allow>0){inp.value=soil.allow;inp.readOnly=true;inp.style.color='#86efac';}
+  else{inp.value='';inp.readOnly=false;inp.style.color='#e2e8f0';}
+};
+window.sbCalc=function(){
+  var desc=document.getElementById('sb_desc').value.trim()||'Unnamed';
+  var loadKips=parseFloat(document.getElementById('sb_load').value);
+  var ftype=document.getElementById('sb_ftype').value;
+  var allowPSF=parseFloat(document.getElementById('sb_allow').value);
+  var sf=parseFloat(document.getElementById('sb_sf').value);
+  var soilSel=document.getElementById('sb_soil');
+  var soilCode=soilSel?soilSel.value:'0';
+  var soil=SOILS.find(function(s){return s.code===soilCode;})||{name:'Custom',allow:allowPSF};
+  var res=document.getElementById('sb_result');
+  if(isNaN(loadKips)||loadKips<=0||isNaN(allowPSF)||allowPSF<=0){res.innerHTML='<span style="color:#ef4444;">Enter load (kips) and allowable bearing (psf).</span>';return;}
+  var loadLbs=loadKips*1000;
+  var netAllow=allowPSF/sf;
+  var reqSF=loadLbs/netAllow; // required area in sq ft
+  var html='<div style="background:#0f172a;border-radius:8px;padding:14px;">';
+  var resultStr='';
+  if(ftype==='isolated'){
+    var side=Math.sqrt(reqSF);
+    var roundedSide=Math.ceil(side*2)/2; // round up to nearest 0.5 ft
+    var roundedSF=roundedSide*roundedSide;
+    html+='<div style="font-size:14px;color:#84cc16;font-weight:700;margin-bottom:8px;">Isolated Footing Result</div>';
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">';
+    html+='<div style="text-align:center;"><div style="font-size:22px;font-weight:700;color:#84cc16;">'+side.toFixed(2)+'\'</div><div style="font-size:11px;color:#64748b;">Theoretical side</div></div>';
+    html+='<div style="text-align:center;"><div style="font-size:22px;font-weight:700;color:#86efac;">'+roundedSide+'\'×'+roundedSide+'\'</div><div style="font-size:11px;color:#64748b;">Rounded up (use this)</div></div>';
+    html+='<div style="text-align:center;"><div style="font-size:22px;font-weight:700;color:#e2e8f0;">'+roundedSF.toFixed(1)+' SF</div><div style="font-size:11px;color:#64748b;">Actual area provided</div></div>';
+    html+='</div>';
+    html+='<div style="font-size:12px;color:#94a3b8;">Net allowable bearing = '+netAllow.toFixed(0)+' psf | Required area = '+reqSF.toFixed(1)+' SF | Provided = '+roundedSF.toFixed(1)+' SF</div>';
+    var concreteVol=(roundedSF*(18/12))/27; // assume 18" deep footing
+    html+='<div style="font-size:12px;color:#64748b;margin-top:4px;">Estimated concrete: '+concreteVol.toFixed(2)+' yd³ @ 18" depth (verify with EOR)</div>';
+    resultStr=roundedSide+'\'×'+roundedSide+'\' footing ('+roundedSF.toFixed(1)+' SF)';
+    if(allowPSF<1500)html+='<div style="background:#450a0a;border:1px solid #ef4444;border-radius:6px;padding:8px;margin-top:10px;font-size:12px;color:#fca5a5;">⚠️ Allowable bearing below 1,500 psf — IBC Table 1806.2 Class 6 or lower. Geotechnical report required. Do not use presumptive values for structural design.</div>';
+  } else if(ftype==='strip'){
+    var width=reqSF; // reqSF is actually width per LF for strip
+    var roundedW=Math.ceil(width*4)/4; // round to nearest 0.25 ft
+    html+='<div style="font-size:14px;color:#84cc16;font-weight:700;margin-bottom:8px;">Strip/Continuous Footing Result (per linear foot of wall)</div>';
+    html+='<div style="font-size:16px;color:#86efac;font-weight:700;margin-bottom:8px;">Minimum width: '+roundedW.toFixed(2)+'\' ('+Math.round(roundedW*12)+'") per LF</div>';
+    html+='<div style="font-size:12px;color:#94a3b8;">Net allowable bearing = '+netAllow.toFixed(0)+' psf | Required width = '+width.toFixed(2)+'\'</div>';
+    resultStr='Strip footing: '+roundedW.toFixed(2)+'\'W ('+Math.round(roundedW*12)+'") min';
+    if(allowPSF<1500)html+='<div style="background:#450a0a;border:1px solid #ef4444;border-radius:6px;padding:8px;margin-top:10px;font-size:12px;color:#fca5a5;">⚠️ Low bearing capacity — geotech report required.</div>';
+  } else {
+    html+='<div style="font-size:14px;color:#84cc16;font-weight:700;margin-bottom:8px;">Mat/Raft Slab Result</div>';
+    html+='<div style="font-size:16px;color:#86efac;font-weight:700;margin-bottom:8px;">Required mat area: '+reqSF.toFixed(1)+' SF</div>';
+    var matSide=Math.sqrt(reqSF);
+    html+='<div style="font-size:12px;color:#94a3b8;">If square mat: '+matSide.toFixed(1)+'\'×'+matSide.toFixed(1)+'\' minimum</div>';
+    html+='<div style="font-size:12px;color:#64748b;margin-top:4px;">Mat slabs require structural engineering design per ACI 336.2R — this is preliminary area only.</div>';
+    resultStr='Mat/raft: '+reqSF.toFixed(1)+' SF required';
+  }
+  html+='<button onclick="window.sbSave(\''+desc.replace(/'/g,'').replace(/"/g,'')+'\','+loadKips+',\''+soil.name+'\','+allowPSF+',\''+ftype+'\','+sf+',\''+resultStr+'\')" style="background:#166534;color:#fff;border:none;padding:7px 14px;border-radius:5px;cursor:pointer;font-size:12px;margin-top:12px;">💾 Save This Calc</button>';
+  html+='</div>';
+  res.innerHTML=html;
+};
+window.sbSave=function(desc,load,soilName,allow,ftype,sf,result){
+  var calcs=load_old();
+  calcs.push({desc:desc,load:load,soilName:soilName,allow:allow,ftype:ftype,sf:sf,result:result,date:new Date().toLocaleDateString()});
+  save(calcs);render();
+};
+// Rename load to avoid collision
+var load_old=load;
+window.sbDelete=function(idx){
+  var calcs=load_old();calcs.splice(idx,1);save(calcs);render();
+};
+window.sbPrintAll=function(){
+  var calcs=load_old();
+  var pw=window.open('','_blank');
+  var rows='';
+  calcs.forEach(function(c){rows+='<tr><td>'+c.desc+'</td><td>'+c.load+' kips</td><td>'+c.soilName+'</td><td>'+c.allow.toLocaleString()+' psf</td><td>'+c.sf+'</td><td>'+c.ftype+'</td><td>'+c.result+'</td><td>'+c.date+'</td></tr>';});
+  pw.document.write('<html><head><title>Soil Bearing Calcs</title><style>body{font-family:Arial,sans-serif;padding:30px;max-width:1000px;margin:0 auto;font-size:12px;}table{width:100%;border-collapse:collapse;margin:12px 0;}th,td{border:1px solid #333;padding:6px;text-align:left;}th{background:#166534;color:#fff;}.sig{display:flex;gap:30px;margin-top:24px;}.sig div{flex:1;border-top:1px solid #333;padding-top:6px;font-size:10px;}</style></head><body>'
+    +'<h2 style="margin:0;">SOIL BEARING & FOOTING SIZER — PRELIMINARY CALCULATIONS</h2>'
+    +'<p style="color:#666;font-size:11px;margin:4px 0 14px 0;">IBC 2021 Table 1806.2 / ACI 336.2R | Generated: '+new Date().toLocaleDateString()+'</p>'
+    +'<table><tr><th>Description</th><th>Load</th><th>Soil Class</th><th>Allow. Bearing</th><th>SF</th><th>Footing Type</th><th>Result</th><th>Date</th></tr>'+rows+'</table>'
+    +'<div style="background:#fef9c3;border:1px solid #ca8a04;padding:10px;font-size:11px;margin:14px 0;">'
+    +'<strong>DISCLAIMER:</strong> These calculations use IBC 2021 Table 1806.2 presumptive bearing values for preliminary estimating purposes ONLY. Actual footing design must be performed or reviewed by a licensed structural or geotechnical engineer using project-specific soil investigation data. Presumptive values may not be used for final design without geotechnical verification.'
+    +'</div>'
+    +'<div class="sig"><div>Estimator / Date</div><div>Project Manager / Date</div><div>Engineer of Record (verify) / Date</div></div>'
+    +'</body></html>');
+  pw.document.close();pw.print();
+};
+function createSBButton(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='🏗️ Bearing';
+  btn.style.cssText='position:fixed;bottom:1834px;right:16px;background:#14532d;color:#86efac;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8700;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Bearing':'🏗️ Bearing';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8701;';
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createSBButton);}else{createSBButton();}
+})();
+</script>
+
+<!-- ============================================================
+  ELECTRICAL CONDUIT IN SLAB ESTIMATOR
+  ACI 318-19 §26.6.2 conduit impact on slab
+  Quantify conduit runs + structural impact check
+  ============================================================ -->
+<script>
+(function(){
+'use strict';
+var STORE='ocConduitEst_v1';
+var BTN_ID='conduit_btn';
+var WRAP_ID='conduit_wrap';
+function load(){try{return JSON.parse(localStorage.getItem(STORE)||'[]');}catch(e){return[];}}
+function save(d){localStorage.setItem(STORE,JSON.stringify(d));}
+var TYPES=[
+  {name:'EMT (Electrical Metallic Tubing)',sizes:['1/2"','3/4"','1"','1-1/4"','1-1/2"','2"','2-1/2"','3"','3-1/2"','4"'],ODs:[0.706,0.922,1.163,1.510,1.740,2.197,2.875,3.500,4.000,4.500]},
+  {name:'Rigid PVC Conduit (Schedule 40)',sizes:['1/2"','3/4"','1"','1-1/4"','1-1/2"','2"','2-1/2"','3"','4"'],ODs:[0.840,1.050,1.315,1.660,1.900,2.375,2.875,3.500,4.500]},
+  {name:'IMC (Intermediate Metal Conduit)',sizes:['1/2"','3/4"','1"','1-1/4"','1-1/2"','2"','2-1/2"','3"','4"'],ODs:[0.815,1.029,1.290,1.638,1.883,2.360,2.875,3.476,4.476]},
+  {name:'Rigid Metal Conduit (RMC/GRC)',sizes:['1/2"','3/4"','1"','1-1/4"','1-1/2"','2"','2-1/2"','3"','4"'],ODs:[0.840,1.050,1.315,1.660,1.900,2.375,2.875,3.500,4.500]}
+];
+function render(){
+  var runs=load();
+  var w=document.getElementById(WRAP_ID);
+  var html='<div style="max-width:920px;margin:0 auto;padding:24px;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">';
+  html+='<h2 style="margin:0;color:#fbbf24;font-size:20px;">⚡ Electrical Conduit in Slab Estimator</h2>';
+  html+='<button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'⚡ Conduit\'" style="background:#374151;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;">✕ Close</button>';
+  html+='</div>';
+  html+='<div style="background:#1e1f2e;border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:#94a3b8;line-height:1.5;">';
+  html+='<strong style="color:#fbbf24;">ACI 318-19 §26.6.2 Conduit Limitations:</strong> Conduit embedded in concrete must have OD ≤ 1/3 of slab thickness; aggregate spacing between conduits ≥ 3× conduit OD; conduit displaced from desired position of steel ≤ 1/3 slab thickness. Bundles of parallel conduits must have center-to-center spacing ≥ 3× OD. Structural impact zone calculations help determine if engineering review is required.';
+  html+='</div>';
+  // ACI 318-19 reference
+  html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:16px;">';
+  html+='<h3 style="margin:0 0 10px 0;color:#fbbf24;font-size:13px;">ACI 318-19 §26.6.2 Quick Reference</h3>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">';
+  var rules=[
+    ['Max conduit OD','≤ 1/3 of slab thickness','#22c55e'],
+    ['Min spacing between conduits','≥ 3× larger conduit OD','#22c55e'],
+    ['Parallel conduit bundles','Center-to-center ≥ 3× OD','#fbbf24'],
+    ['Conduit displacement from rebar','≤ 1/3 slab thickness','#60a5fa'],
+    ['Cross-sectional area limit','No more than 1/3 of cross-section','#f97316'],
+    ['Conduit ID','Must be recorded on drawings','#94a3b8']
+  ];
+  rules.forEach(function(r){
+    html+='<div style="background:#0f172a;border-radius:6px;padding:8px;">';
+    html+='<span style="color:#94a3b8;font-size:11px;">'+r[0]+'</span><br>';
+    html+='<span style="color:'+r[2]+';font-weight:600;">'+r[1]+'</span></div>';
+  });
+  html+='</div></div>';
+  // Add run form
+  html+='<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:16px;">';
+  html+='<h3 style="margin:0 0 12px 0;color:#fbbf24;font-size:14px;">Add Conduit Run</h3>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Description / Circuit</label><br><input id="cd_desc" placeholder="e.g. Panel A to Column C4, 4-circuit home run" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Conduit Type</label><br><select id="cd_type" onchange="window.cdTypeChange()" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;">';
+  TYPES.forEach(function(t,i){html+='<option value="'+i+'">'+t.name+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Trade Size</label><br><select id="cd_size" onchange="window.cdSizeChange()" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;"></select></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Conduit OD (inches)</label><br><input type="number" id="cd_od" step="0.001" placeholder="Auto from type/size" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Quantity (# of conduits)</label><br><input type="number" id="cd_qty" value="1" min="1" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Run Length (LF)</label><br><input type="number" id="cd_lf" placeholder="e.g. 45" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Slab Thickness (inches)</label><br><input type="number" id="cd_slab" placeholder="e.g. 6" value="6" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">$/LF Installed (elec sub rate)</label><br><input type="number" id="cd_rate" placeholder="e.g. 4.50" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Zone / Floor Level</label><br><input id="cd_zone" placeholder="e.g. Level 1, Bay 4" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<div style="margin-bottom:10px;"><label style="font-size:11px;color:#94a3b8;">Notes</label><br><input id="cd_notes" placeholder="Engineering review flag, coordination notes, drawing ref..." style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px;border-radius:4px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<button onclick="window.cdAdd()" style="background:#fbbf24;color:#0f172a;border:none;padding:9px 18px;border-radius:6px;cursor:pointer;font-weight:700;font-size:13px;">+ Add Conduit Run</button>';
+  html+='</div>';
+  // Summary
+  if(runs.length>0){
+    var totalLF=0,totalCost=0,violations=[];
+    runs.forEach(function(r){totalLF+=r.lf*r.qty;totalCost+=r.lf*r.qty*(r.rate||0);if(r.violates)violations.push(r);});
+    if(violations.length>0){
+      html+='<div style="background:#450a0a;border:1px solid #ef4444;border-radius:8px;padding:12px;margin-bottom:12px;">';
+      html+='<strong style="color:#ef4444;">⚠️ ACI 318-19 §26.6.2 VIOLATIONS — '+violations.length+' run(s) exceed slab thickness limits</strong><br>';
+      violations.forEach(function(r){html+='<div style="color:#fca5a5;font-size:12px;margin-top:4px;">• '+r.desc+': '+r.violateReason+'</div>';});
+      html+='<div style="color:#f87171;font-size:11px;margin-top:6px;">Notify EOR — conduit exceeding ACI 318-19 §26.6.2 limits requires structural engineering review and possible design modification.</div>';
+      html+='</div>';
+    }
+    html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">';
+    html+='<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#fbbf24;">'+runs.length+'</div><div style="font-size:11px;color:#64748b;">Runs Logged</div></div>';
+    html+='<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#60a5fa;">'+totalLF.toLocaleString(undefined,{maximumFractionDigits:0})+'</div><div style="font-size:11px;color:#64748b;">Total LF (all conduits)</div></div>';
+    html+='<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#86efac;">$'+totalCost.toLocaleString(undefined,{maximumFractionDigits:0})+'</div><div style="font-size:11px;color:#64748b;">Est. Material+Install Cost</div></div>';
+    html+='</div>';
+    html+='<div style="display:flex;gap:8px;margin-bottom:10px;"><button onclick="window.cdPrint()" style="background:#1e40af;color:#fff;border:none;padding:7px 12px;border-radius:5px;cursor:pointer;font-size:12px;">🖨 Print Report</button>';
+    html+='<button onclick="window.cdCopy()" style="background:#374151;color:#fff;border:none;padding:7px 12px;border-radius:5px;cursor:pointer;font-size:12px;">📋 Copy</button></div>';
+    html+='<div>';
+    runs.slice().reverse().forEach(function(r,ri){
+      var idx=runs.length-1-ri;
+      var vColor=r.violates?'#ef4444':'#22c55e';
+      var vLabel=r.violates?'⚠️ EXCEEDS ACI LIMIT':'✓ ACI OK';
+      html+='<div style="background:#1e293b;border-left:4px solid '+(r.violates?'#ef4444':'#fbbf24')+';border-radius:6px;padding:12px;margin-bottom:8px;">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;">';
+      html+='<div><span style="font-weight:600;color:#e2e8f0;font-size:13px;">'+r.desc+'</span>';
+      html+='<br><span style="color:#94a3b8;font-size:11px;">'+r.qty+'× '+r.tradeSz+' '+r.typeName+' | OD: '+r.od+'" | '+r.lf+' LF each | Slab: '+r.slabT+'"</span></div>';
+      html+='<div style="text-align:right;"><span style="background:'+vColor+'22;color:'+vColor+';font-size:11px;padding:3px 8px;border-radius:10px;">'+vLabel+'</span>';
+      html+='<br><button onclick="window.cdDelete('+idx+')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:11px;margin-top:4px;">🗑</button></div></div>';
+      html+='<div style="font-size:11px;color:#64748b;margin-top:6px;">';
+      html+='Max OD allowed: <strong style="color:#94a3b8;">'+(r.slabT/3).toFixed(3)+'"</strong> (1/3 × '+r.slabT+'" slab)';
+      if(r.rate)html+=' | Est. cost: $'+((r.lf*r.qty*r.rate).toLocaleString(undefined,{maximumFractionDigits:0}));
+      if(r.zone)html+=' | Zone: '+r.zone;
+      html+='</div>';
+      if(r.violates)html+='<div style="font-size:11px;color:#fca5a5;margin-top:4px;">'+r.violateReason+'</div>';
+      if(r.notes)html+='<div style="font-size:11px;color:#94a3b8;margin-top:4px;font-style:italic;">'+r.notes+'</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+  html+='</div>';
+  w.innerHTML=html;
+  window.cdTypeChange();
+}
+window.cdTypeChange=function(){
+  var ti=parseInt((document.getElementById('cd_type')||{value:'0'}).value)||0;
+  var t=TYPES[ti];
+  var sel=document.getElementById('cd_size');
+  if(!sel||!t)return;
+  sel.innerHTML='';
+  t.sizes.forEach(function(s,i){var opt=document.createElement('option');opt.value=i;opt.textContent=s;sel.appendChild(opt);});
+  window.cdSizeChange();
+};
+window.cdSizeChange=function(){
+  var ti=parseInt((document.getElementById('cd_type')||{value:'0'}).value)||0;
+  var si=parseInt((document.getElementById('cd_size')||{value:'0'}).value)||0;
+  var t=TYPES[ti];
+  if(!t)return;
+  var odField=document.getElementById('cd_od');
+  if(odField&&t.ODs&&t.ODs[si]){odField.value=t.ODs[si];odField.readOnly=true;odField.style.color='#86efac';}
+};
+window.cdAdd=function(){
+  var desc=document.getElementById('cd_desc').value.trim();
+  if(!desc){alert('Description/circuit required.');return;}
+  var ti=parseInt(document.getElementById('cd_type').value)||0;
+  var si=parseInt(document.getElementById('cd_size').value)||0;
+  var t=TYPES[ti];
+  var od=parseFloat(document.getElementById('cd_od').value);
+  var qty=parseInt(document.getElementById('cd_qty').value)||1;
+  var lf=parseFloat(document.getElementById('cd_lf').value)||0;
+  var slabT=parseFloat(document.getElementById('cd_slab').value)||6;
+  var rate=parseFloat(document.getElementById('cd_rate').value)||0;
+  var zone=document.getElementById('cd_zone').value.trim();
+  var notes=document.getElementById('cd_notes').value.trim();
+  var maxOD=slabT/3;
+  var violates=od>maxOD;
+  var violateReason='';
+  if(violates)violateReason='Conduit OD '+od+'" exceeds 1/3 of '+slabT+'" slab thickness (max '+maxOD.toFixed(3)+'") — ACI 318-19 §26.6.2 structural engineering review required.';
+  var runs=load();
+  runs.push({
+    desc:desc,
+    typeName:t.name,
+    tradeSz:t.sizes[si]||'custom',
+    od:od,qty:qty,lf:lf,slabT:slabT,rate:rate,zone:zone,notes:notes,
+    violates:violates,violateReason:violateReason,
+    date:new Date().toLocaleDateString()
+  });
+  save(runs);render();
+};
+window.cdDelete=function(idx){
+  if(!confirm('Delete this conduit run?'))return;
+  var runs=load();runs.splice(idx,1);save(runs);render();
+};
+window.cdCopy=function(){
+  var runs=load();
+  var lines=['ELECTRICAL CONDUIT IN SLAB ESTIMATOR','ACI 318-19 §26.6.2 | Generated: '+new Date().toLocaleDateString(),''];
+  var totalLF=0,totalCost=0;
+  runs.forEach(function(r,i){
+    lines.push((i+1)+'. '+r.desc);
+    lines.push('   Type: '+r.tradeSz+' '+r.typeName+' | OD: '+r.od+'" | Qty: '+r.qty+' | LF: '+r.lf);
+    lines.push('   Slab: '+r.slabT+'" | ACI Status: '+(r.violates?'⚠️ EXCEEDS LIMIT — '+r.violateReason:'✓ OK'));
+    if(r.rate)lines.push('   Est. Cost: $'+(r.lf*r.qty*r.rate).toFixed(0));
+    if(r.zone)lines.push('   Zone: '+r.zone);
+    lines.push('');
+    totalLF+=r.lf*r.qty;totalCost+=r.lf*r.qty*r.rate;
+  });
+  lines.push('TOTALS: '+runs.length+' runs | '+totalLF.toFixed(0)+' total LF | Est. $'+totalCost.toFixed(0));
+  navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Report copied to clipboard.');});
+};
+window.cdPrint=function(){
+  var runs=load();
+  var projEl=document.getElementById('projName');
+  var proj=(projEl&&projEl.value)||'Project';
+  var totalLF=0,totalCost=0;
+  var rows='';
+  runs.forEach(function(r){
+    var isViolate=r.violates;
+    totalLF+=r.lf*r.qty;totalCost+=r.lf*r.qty*(r.rate||0);
+    rows+='<tr style="'+(isViolate?'background:#fef2f2;':'')+'"><td>'+r.desc+'</td><td>'+r.tradeSz+' '+r.typeName+'</td><td style="text-align:center;">'+r.od+'"</td><td style="text-align:center;">'+r.qty+'</td><td style="text-align:center;">'+r.lf+'</td><td style="text-align:center;font-weight:700;">'+(r.lf*r.qty)+'</td><td style="text-align:center;">'+r.slabT+'"</td><td style="text-align:center;">'+((r.slabT/3).toFixed(3))+'"</td><td style="text-align:center;color:'+(r.violates?'#dc2626':'#16a34a')+';">'+(r.violates?'⚠️ EXCEEDS':'✓ OK')+'</td><td style="text-align:right;">$'+((r.lf*r.qty*(r.rate||0)).toFixed(0))+'</td></tr>';
+  });
+  var violations=runs.filter(function(r){return r.violates;});
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>Conduit Report</title><style>body{font-family:Arial,sans-serif;padding:30px;max-width:1100px;margin:0 auto;font-size:11px;}h2{margin:0;}table{width:100%;border-collapse:collapse;margin:12px 0;font-size:10px;}th,td{border:1px solid #333;padding:5px;text-align:left;}th{background:#78350f;color:#fff;}.alert{background:#fef2f2;border:1px solid #ef4444;padding:10px;margin:12px 0;}.sig{display:flex;gap:30px;margin-top:24px;}.sig div{flex:1;border-top:1px solid #333;padding-top:6px;}</style></head><body>'
+    +'<div style="display:flex;justify-content:space-between;border-bottom:2px solid #333;padding-bottom:10px;margin-bottom:14px;">'
+    +'<div><h2>ELECTRICAL CONDUIT IN SLAB REPORT</h2><p style="margin:4px 0;color:#666;">Project: '+proj+' | ACI 318-19 §26.6.2 Compliance</p></div>'
+    +'<div style="text-align:right;font-size:11px;">Printed: '+new Date().toLocaleDateString()+'<br>Runs: '+runs.length+' | Total LF: '+totalLF.toFixed(0)+'</div></div>'
+    +(violations.length>0?'<div class="alert"><strong>⚠️ ACI 318-19 §26.6.2 VIOLATIONS ('+violations.length+'):</strong><br>'+violations.map(function(r){return '• '+r.desc+': '+r.violateReason;}).join('<br>')+'<br><strong>Action required: Notify Engineer of Record for structural review and design modification before placement.</strong></div>':'')
+    +'<table><tr><th>Description</th><th>Type & Size</th><th>OD"</th><th>Qty</th><th>LF ea</th><th>Total LF</th><th>Slab T"</th><th>Max OD"</th><th>ACI Status</th><th>Est. Cost</th></tr>'+rows
+    +'<tr style="font-weight:bold;background:#f3f4f6;"><td colspan="5">TOTALS</td><td>'+totalLF.toFixed(0)+'</td><td colspan="3"></td><td>$'+totalCost.toFixed(0)+'</td></tr></table>'
+    +'<div style="background:#fef9c3;border:1px solid #ca8a04;padding:10px;font-size:10px;margin:14px 0;">'
+    +'<strong>ACI 318-19 §26.6.2 Key Requirements:</strong><br>'
+    +'• Conduit OD ≤ 1/3 of slab thickness<br>'
+    +'• Clear spacing between conduits ≥ 3× larger conduit OD<br>'
+    +'• Parallel conduit bundles: c-to-c spacing ≥ 3× OD<br>'
+    +'• Conduit may not impair strength of construction — total cross-sectional conduit area in any 12" strip ≤ 1/3 of slab thickness × 12"<br>'
+    +'• All conduit runs must be shown on structural drawings'
+    +'</div>'
+    +'<div class="sig"><div>Estimator / Date</div><div>Project Manager / Date</div><div>Electrical Sub / Date</div><div>Engineer of Record (review) / Date</div></div>'
+    +'</body></html>');
+  pw.document.close();pw.print();
+};
+function createConduitButton(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='⚡ Conduit';
+  btn.style.cssText='position:fixed;bottom:1872px;right:16px;background:#78350f;color:#fde68a;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8750;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Conduit':'⚡ Conduit';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8751;';
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createConduitButton);}else{createConduitButton();}
+})();
+</script>
