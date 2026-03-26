@@ -53770,3 +53770,706 @@ function createBtn(){
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
 })();
 </script>
+<script>
+/* ============================================================
+   TOOL 64: CONCRETE FLOOR JOINT MAINTENANCE SCHEDULE
+   ACI 302.1R-15 §4.6 / ASTM C1193 / ASTM C920
+   ============================================================ */
+(function(){
+'use strict';
+var BTN_ID='cfjm_btn',WRAP_ID='cfjm_wrap',STORE='oncor_cfjm_v1';
+function load(){try{return JSON.parse(localStorage.getItem(STORE)||'{"projects":[]}')}catch(e){return{projects:[]}}}
+function save(d){localStorage.setItem(STORE,JSON.stringify(d));}
+
+var SEALANT_LIFE={
+  'Polyurethane (ASTM C920 Grade NS)':5,
+  'Silicone (ASTM C920 Grade P)':7,
+  'Epoxy Semi-Rigid (MM-80 / Euclid)':10,
+  'Hot-Pour Rubberized Asphalt':3,
+  'Acrylic Latex Caulk':2,
+  'Polyurea (Fast-Set)':6
+};
+
+function calcStatus(proj){
+  var pourDate=new Date(proj.pourDate);
+  var sealantLife=SEALANT_LIFE[proj.sealantType]||5;
+  var today=new Date();
+  var ageYrs=(today-pourDate)/(1000*60*60*24*365.25);
+  var nextDue=new Date(pourDate);
+  nextDue.setFullYear(nextDue.getFullYear()+sealantLife);
+  var lastMaint=proj.lastMaintDate?new Date(proj.lastMaintDate):null;
+  if(lastMaint){nextDue=new Date(lastMaint);nextDue.setFullYear(nextDue.getFullYear()+sealantLife);}
+  var daysUntil=Math.round((nextDue-today)/(1000*60*60*24));
+  var status,color;
+  if(daysUntil<0){status='OVERDUE';color='#dc2626';}
+  else if(daysUntil<=30){status='DUE SOON';color='#d97706';}
+  else if(daysUntil<=90){status='UPCOMING';color='#ca8a04';}
+  else{status='OK';color='#16a34a';}
+  return{ageYrs:ageYrs.toFixed(1),nextDue:nextDue.toLocaleDateString('en-US'),daysUntil:daysUntil,status:status,color:color,sealantLife:sealantLife};
+}
+
+function renderForm(){
+  var d=load();
+  var overdue=d.projects.filter(function(p){return calcStatus(p).status==='OVERDUE';}).length;
+  var dueSoon=d.projects.filter(function(p){return calcStatus(p).status==='DUE SOON';}).length;
+  var html='<div style="max-width:800px;margin:0 auto;padding:24px 16px;">';
+  html+='<h2 style="color:#fef9c3;font-size:18px;margin-bottom:4px;">🔩 Concrete Floor Joint Maintenance Schedule</h2>';
+  html+='<p style="color:#a8a29e;font-size:12px;margin-bottom:16px;">ACI 302.1R-15 §4.6 / ASTM C1193 / ASTM C920 — Track joint sealant service life & re-seal scheduling</p>';
+  if(overdue>0){html+='<div style="background:#7f1d1d;border:1px solid #dc2626;border-radius:8px;padding:10px 14px;margin-bottom:12px;color:#fca5a5;font-size:13px;font-weight:600;">⚠️ '+overdue+' project(s) with OVERDUE joint maintenance — schedule re-sealing immediately</div>';}
+  if(dueSoon>0){html+='<div style="background:#78350f;border:1px solid #d97706;border-radius:8px;padding:10px 14px;margin-bottom:12px;color:#fcd34d;font-size:13px;">⏰ '+dueSoon+' project(s) due within 30 days</div>';}
+  html+='<div style="background:#1c1917;border:1px solid #44403c;border-radius:10px;padding:16px;margin-bottom:20px;">';
+  html+='<h3 style="color:#e7e5e4;font-size:14px;margin-bottom:12px;">Add Project / Slab</h3>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Project / Facility Name</label><input id="cfjm_name" placeholder="e.g. Desert Ridge Warehouse" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Slab Element</label><input id="cfjm_elem" placeholder="e.g. Main floor SOG" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Slab SF</label><input id="cfjm_sf" type="number" placeholder="50000" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Total CJ LF</label><input id="cfjm_lf" type="number" placeholder="8300" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Traffic Level</label><select id="cfjm_traffic" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:13px;">';
+  html+='<option>Foot Traffic Only</option><option>Light Pneumatic Wheels</option><option selected>Hard-Wheel Forklifts</option><option>Heavy Forklifts >10k lbs</option><option>Trucks / Vehicular</option></select></div>';
+  html+='</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Original Pour Date</label><input id="cfjm_pour" type="date" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Sealant Type</label><select id="cfjm_stype" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:13px;">';
+  Object.keys(SEALANT_LIFE).forEach(function(k){html+='<option>'+k+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Last Maint. Date (if any)</label><input id="cfjm_maint" type="date" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Re-seal Cost $/LF</label><input id="cfjm_rate" type="number" value="5.50" step="0.25" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Notes</label><input id="cfjm_notes" placeholder="Observed cracking, joint lip chipping..." style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<button onclick="window.cfjm_add()" style="background:#0f766e;color:#ccfbf1;border:none;border-radius:6px;padding:9px 20px;cursor:pointer;font-size:13px;font-weight:600;">+ Add to Schedule</button>';
+  html+='</div>';
+
+  if(d.projects.length>0){
+    html+='<div style="margin-bottom:16px;">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+    html+='<h3 style="color:#e7e5e4;font-size:14px;margin:0;">Maintenance Schedule ('+d.projects.length+' projects)</h3>';
+    html+='<div style="display:flex;gap:8px;"><button onclick="window.cfjm_print()" style="background:#1c1917;color:#d6d3d1;border:1px solid #57534e;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">🖨 Print Schedule</button><button onclick="window.cfjm_copy()" style="background:#1c1917;color:#d6d3d1;border:1px solid #57534e;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">📋 Copy</button></div>';
+    html+='</div>';
+    d.projects.forEach(function(p,i){
+      var st=calcStatus(p);
+      var resealCost=((p.lf||0)*(p.rate||5.5)).toFixed(0);
+      html+='<div style="background:#1c1917;border:1px solid #44403c;border-left:4px solid '+st.color+';border-radius:8px;padding:14px;margin-bottom:10px;">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">';
+      html+='<div><div style="color:#e7e5e4;font-size:14px;font-weight:600;">'+p.name+(p.elem?' — '+p.elem:'')+'</div>';
+      html+='<div style="color:#a8a29e;font-size:12px;">'+p.traffic+' | Pour: '+p.pourDate+(p.sf?' | '+Number(p.sf).toLocaleString()+' SF':'')+(p.lf?' | '+Number(p.lf).toLocaleString()+' LF':'')+'</div></div>';
+      html+='<div style="text-align:right;"><span style="background:'+st.color+';color:#fff;border-radius:4px;padding:3px 8px;font-size:11px;font-weight:700;">'+st.status+'</span></div>';
+      html+='</div>';
+      html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
+      html+='<div style="background:#292524;border-radius:6px;padding:8px;text-align:center;"><div style="color:#fbbf24;font-size:16px;font-weight:700;">'+st.ageYrs+'</div><div style="color:#a8a29e;font-size:10px;">Slab Age (yrs)</div></div>';
+      html+='<div style="background:#292524;border-radius:6px;padding:8px;text-align:center;"><div style="color:#60a5fa;font-size:16px;font-weight:700;">'+st.sealantLife+'</div><div style="color:#a8a29e;font-size:10px;">Sealant Life (yrs)</div></div>';
+      html+='<div style="background:#292524;border-radius:6px;padding:8px;text-align:center;"><div style="color:'+st.color+';font-size:16px;font-weight:700;">'+(st.daysUntil<0?Math.abs(st.daysUntil)+' overdue':st.daysUntil+' days')+'</div><div style="color:#a8a29e;font-size:10px;">Until Next Due</div></div>';
+      html+='<div style="background:#292524;border-radius:6px;padding:8px;text-align:center;"><div style="color:#86efac;font-size:16px;font-weight:700;">$'+Number(resealCost).toLocaleString()+'</div><div style="color:#a8a29e;font-size:10px;">Est. Re-seal Cost</div></div>';
+      html+='</div>';
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;">';
+      html+='<div style="color:#a8a29e;font-size:12px;">Sealant: <span style="color:#d6d3d1;">'+p.sealantType+'</span> | Next Due: <span style="color:'+st.color+';">'+st.nextDue+'</span>'+(p.notes?' | '+p.notes:'')+'</div>';
+      html+='<div style="display:flex;gap:6px;">';
+      html+='<button onclick="window.cfjm_markMaint('+i+')" style="background:#0f766e;color:#ccfbf1;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;">✓ Log Maint.</button>';
+      html+='<button onclick="window.cfjm_del('+i+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;">🗑</button>';
+      html+='</div></div>';
+      html+='</div>';
+    });
+    html+='</div>';
+
+    // ASTM C920 sealant reference
+    html+='<details style="margin-bottom:16px;"><summary style="color:#fef9c3;font-size:13px;cursor:pointer;padding:8px;background:#1c1917;border-radius:6px;">📖 ACI 302.1R Joint Sealant Reference Table</summary>';
+    html+='<div style="background:#1c1917;border-radius:0 0 6px 6px;padding:12px;overflow-x:auto;">';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px;color:#d6d3d1;">';
+    html+='<tr style="background:#292524;"><th style="padding:6px;text-align:left;">Sealant Type</th><th>ASTM</th><th>Traffic</th><th>Typical Life</th><th>ACI Notes</th></tr>';
+    var sealants=[
+      ['Epoxy Semi-Rigid (MM-80)','C881','Hard-wheel forklifts','8–12 yrs','ACI 302.1R §4.6.1 — required for forklift traffic; fills joint full depth'],
+      ['Polyurethane Flexible','C920 Type NS','Light/pneumatic','4–6 yrs','Self-leveling grade; allows joint movement; not for hard-wheel traffic'],
+      ['Silicone','C920 Grade P','Foot/light','6–8 yrs','Best UV/weather resistance; exterior or dock aprons'],
+      ['Polyurea (Fast-Set)','C1386','All traffic','5–7 yrs','Fast return to service (<1hr); good for operational floors'],
+      ['Hot-Pour Rubberized','D5893','Foot/vehicle','2–4 yrs','Budget option; bleeds in summer heat; avoid interior floors'],
+      ['Backer Rod + Polyurethane','C920 + C1330','Expansion joints','5–7 yrs','ASTM C1330 backer rod controls joint depth; ratio 1:1 depth:width'],
+    ];
+    sealants.forEach(function(r){
+      html+='<tr style="border-bottom:1px solid #44403c;"><td style="padding:6px;">'+r[0]+'</td><td style="padding:6px;text-align:center;">'+r[1]+'</td><td style="padding:6px;text-align:center;">'+r[2]+'</td><td style="padding:6px;text-align:center;">'+r[3]+'</td><td style="padding:6px;font-size:10px;color:#a8a29e;">'+r[4]+'</td></tr>';
+    });
+    html+='</table>';
+    html+='<p style="color:#a8a29e;font-size:10px;margin-top:8px;">ACI 302.1R §4.6: Hard-wheel forklift traffic requires semi-rigid epoxy filler (MM-80 or equivalent). Using flexible sealant on forklift joints causes lip chipping and spalling within 1–3 years.</p>';
+    html+='</div></details>';
+  }
+  html+='</div>';
+  document.getElementById('cfjm_inner').innerHTML=html;
+}
+
+window.cfjm_add=function(){
+  var name=document.getElementById('cfjm_name').value.trim();
+  var pour=document.getElementById('cfjm_pour').value;
+  if(!name||!pour){alert('Project name and pour date are required.');return;}
+  var d=load();
+  d.projects.push({
+    name:name,
+    elem:document.getElementById('cfjm_elem').value.trim(),
+    sf:parseFloat(document.getElementById('cfjm_sf').value)||0,
+    lf:parseFloat(document.getElementById('cfjm_lf').value)||0,
+    traffic:document.getElementById('cfjm_traffic').value,
+    pourDate:pour,
+    sealantType:document.getElementById('cfjm_stype').value,
+    lastMaintDate:document.getElementById('cfjm_maint').value||'',
+    rate:parseFloat(document.getElementById('cfjm_rate').value)||5.5,
+    notes:document.getElementById('cfjm_notes').value.trim()
+  });
+  save(d);renderForm();
+};
+
+window.cfjm_markMaint=function(i){
+  var d=load();
+  d.projects[i].lastMaintDate=new Date().toISOString().split('T')[0];
+  save(d);renderForm();
+};
+
+window.cfjm_del=function(i){
+  if(!confirm('Remove this project?'))return;
+  var d=load();d.projects.splice(i,1);save(d);renderForm();
+};
+
+window.cfjm_copy=function(){
+  var d=load();
+  var lines=['CONCRETE FLOOR JOINT MAINTENANCE SCHEDULE','Generated: '+new Date().toLocaleDateString(),''];
+  d.projects.forEach(function(p){
+    var st=calcStatus(p);
+    lines.push(p.name+(p.elem?' — '+p.elem:''));
+    lines.push('  Traffic: '+p.traffic+' | Slab Age: '+st.ageYrs+' yrs | Sealant: '+p.sealantType);
+    lines.push('  Status: '+st.status+' | Next Due: '+st.nextDue+(st.daysUntil<0?' ('+Math.abs(st.daysUntil)+'d overdue)':' ('+st.daysUntil+'d)')+' | Est Re-seal: $'+((p.lf||0)*(p.rate||5.5)).toFixed(0));
+    lines.push('');
+  });
+  navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Copied!');});
+};
+
+window.cfjm_print=function(){
+  var d=load();
+  var pw=window.open('','_blank');
+  pw.document.write('<!DOCTYPE html><html><head><title>Joint Maintenance Schedule</title><style>body{font-family:Arial,sans-serif;padding:32px;font-size:11px;max-width:900px;margin:0 auto;}h2{font-size:15px;text-align:center;}table{width:100%;border-collapse:collapse;margin:16px 0;}th,td{border:1px solid #999;padding:6px;text-align:left;font-size:10px;}th{background:#eee;}.overdue{background:#fee2e2;}.duesoon{background:#fef9c3;}.ok{background:#f0fdf4;}.sig{display:flex;gap:20px;margin-top:30px;}.sig div{flex:1;border-top:1px solid #333;padding-top:4px;font-size:10px;}</style></head><body>');
+  pw.document.write('<h2>CONCRETE FLOOR JOINT MAINTENANCE SCHEDULE</h2>');
+  pw.document.write('<p style="text-align:center;">ACI 302.1R-15 §4.6 / ASTM C1193 / ASTM C920 &nbsp;|&nbsp; Generated: '+new Date().toLocaleDateString()+'</p>');
+  var overdue=d.projects.filter(function(p){return calcStatus(p).status==='OVERDUE';});
+  if(overdue.length>0){
+    pw.document.write('<div style="border:2px solid #dc2626;background:#fee2e2;padding:8px;margin:12px 0;font-weight:bold;">⚠️ OVERDUE MAINTENANCE: '+overdue.map(function(p){return p.name;}).join(', ')+'</div>');
+  }
+  pw.document.write('<table>');
+  pw.document.write('<tr><th>Project / Element</th><th>Traffic</th><th>Pour Date</th><th>Sealant Type</th><th>Slab Age</th><th>CJ LF</th><th>Next Due</th><th>Days Until</th><th>Status</th><th>Est. Cost</th></tr>');
+  d.projects.forEach(function(p){
+    var st=calcStatus(p);
+    var cls=st.status==='OVERDUE'?'overdue':st.status==='DUE SOON'?'duesoon':'ok';
+    pw.document.write('<tr class="'+cls+'"><td>'+p.name+(p.elem?'<br><em>'+p.elem+'</em>':'')+'</td><td>'+p.traffic+'</td><td>'+p.pourDate+'</td><td>'+p.sealantType+'</td><td>'+st.ageYrs+' yrs</td><td>'+(p.lf?Number(p.lf).toLocaleString():'—')+'</td><td>'+st.nextDue+'</td><td>'+(st.daysUntil<0?Math.abs(st.daysUntil)+' OVERDUE':st.daysUntil)+'</td><td><strong>'+st.status+'</strong></td><td>$'+((p.lf||0)*(p.rate||5.5)).toFixed(0)+'</td></tr>');
+  });
+  pw.document.write('</table>');
+  pw.document.write('<p style="font-size:10px;"><strong>ACI 302.1R §4.6.1:</strong> Hard-wheel forklift traffic requires semi-rigid epoxy (MM-80 equivalent). Standard polyurethane sealant will fail under hard-wheel traffic within 1–3 years. Joints must be cleaned and re-profiled before re-sealing per ICRI 310.2R surface preparation.</p>');
+  pw.document.write('<p style="font-size:10px;"><strong>ASTM C920 Sealant Application:</strong> Joint depth-to-width ratio 1:1 (max 1/2" depth regardless of width). Backer rod required for joints &gt;3/4" wide. Prime concrete surfaces per manufacturer requirements.</p>');
+  pw.document.write('<div class="sig"><div>Facilities Manager / Owner</div><div>Contractor</div><div>Date</div></div>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='🔩 Joint Maint.';
+  btn.style.cssText='position:fixed;bottom:3676px;right:16px;background:#0f172a;color:#ccfbf1;border:1px solid #0f766e;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8890;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Joint Maint.':'🔩 Joint Maint.';if(s)renderForm();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8891;';
+  var inner=document.createElement('div');inner.id='cfjm_inner';wrap.appendChild(inner);
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+<script>
+/* ============================================================
+   TOOL 65: SUBCONTRACT RISK SCORING MATRIX
+   AIA A401 / ConsensusDocs 750 / Surety Best Practices
+   ============================================================ */
+(function(){
+'use strict';
+var BTN_ID='csrsm_btn',WRAP_ID='csrsm_wrap',STORE='oncor_csrsm_v1';
+function load(){try{return JSON.parse(localStorage.getItem(STORE)||'{"subs":[]}')}catch(e){return{subs:[]}}}
+function save(d){localStorage.setItem(STORE,JSON.stringify(d));}
+
+var FACTORS=[
+  {key:'experience',label:'Experience on Similar Work',max:20,opts:[
+    {v:20,l:'3+ years, 5+ similar projects, references available'},
+    {v:14,l:'1-3 years, 2-4 similar projects, references available'},
+    {v:8,l:'Some experience, limited references'},
+    {v:3,l:'First time on this scope'},
+    {v:0,l:'No relevant experience'}
+  ]},
+  {key:'capacity',label:'Crew Capacity vs Project Size',max:15,opts:[
+    {v:15,l:'Crew size adequate, no backlog conflict'},
+    {v:10,l:'Adequate crew, minor backlog concern'},
+    {v:5,l:'Limited crew — may need to hire'},
+    {v:0,l:'Inadequate capacity — high risk of abandonment'}
+  ]},
+  {key:'financial',label:'Financial Stability',max:20,opts:[
+    {v:20,l:'Bondable / financial statements available'},
+    {v:14,l:'Stable, no known disputes or liens'},
+    {v:7,l:'Some concern — verbal only, no financials'},
+    {v:0,l:'Known financial distress, liens, or judgments'}
+  ]},
+  {key:'insurance',label:'Insurance / COI Status',max:10,opts:[
+    {v:10,l:'COI received, all limits met, AI endorsed'},
+    {v:6,l:'COI promised, minor limit gap'},
+    {v:2,l:'Insurance unverified — COI pending'},
+    {v:0,l:'No insurance / limits deficient'}
+  ]},
+  {key:'safety',label:'Safety Record / EMR',max:10,opts:[
+    {v:10,l:'EMR ≤0.80, no OSHA recordables in 3 yrs'},
+    {v:7,l:'EMR 0.80–1.00, minor recordables'},
+    {v:3,l:'EMR 1.00–1.25, some incidents'},
+    {v:0,l:'EMR >1.25, OSHA citations, or unknown'}
+  ]},
+  {key:'exclusions',label:'Scope Exclusions / Conditions',max:10,opts:[
+    {v:10,l:'Clean bid — no material exclusions'},
+    {v:6,l:'Minor exclusions, manageable'},
+    {v:2,l:'Significant exclusions — scope gap risk'},
+    {v:0,l:'Bid full of exclusions — scope uncertain'}
+  ]},
+  {key:'communication',label:'Communication & Responsiveness',max:10,opts:[
+    {v:10,l:'Fast, clear, professional communication'},
+    {v:6,l:'Adequate, some delays in response'},
+    {v:2,l:'Slow to respond, hard to reach'},
+    {v:0,l:'Non-responsive — scheduling risk'}
+  ]},
+  {key:'references',label:'Past Performance / References',max:5,opts:[
+    {v:5,l:'Strong references from GCs you know'},
+    {v:3,l:'References available, not yet checked'},
+    {v:1,l:'References from unknown sources'},
+    {v:0,l:'No references or negative feedback'}
+  ]}
+];
+
+function calcScore(sub){
+  var score=0;
+  FACTORS.forEach(function(f){score+=parseInt(sub.scores&&sub.scores[f.key]||0);});
+  return score;
+}
+
+function getVerdict(score){
+  if(score>=80)return{label:'LOW RISK — Award',color:'#16a34a',retainage:'5%',bond:'Not required',terms:'Standard pay-when-paid, 5% retainage'};
+  if(score>=60)return{label:'MODERATE RISK — Award with Controls',color:'#d97706',retainage:'10%',bond:'Recommended for >$50k',terms:'10% retainage, weekly cost reports if >$100k, joint-check on materials'};
+  if(score>=40)return{label:'HIGH RISK — Conditional Award',color:'#dc2626',retainage:'15%',bond:'Required if >$25k',terms:'15% retainage, P&P bond required, progress milestones, weekly site visits'};
+  return{label:'VERY HIGH RISK — Do Not Award',color:'#7f1d1d',retainage:'N/A',bond:'N/A',terms:'Find alternate sub — risk of abandonment, non-performance, or liens exceeds sub savings'};
+}
+
+function renderForm(){
+  var d=load();
+  var html='<div style="max-width:820px;margin:0 auto;padding:24px 16px;">';
+  html+='<h2 style="color:#fef9c3;font-size:18px;margin-bottom:4px;">⚠️ Subcontract Risk Scoring Matrix</h2>';
+  html+='<p style="color:#a8a29e;font-size:12px;margin-bottom:16px;">AIA A401 / ConsensusDocs 750 — Score subs before awarding scope; drive retainage & bond requirements from risk data</p>';
+
+  html+='<div style="background:#1c1917;border:1px solid #44403c;border-radius:10px;padding:16px;margin-bottom:20px;">';
+  html+='<h3 style="color:#e7e5e4;font-size:14px;margin-bottom:12px;">Evaluate Subcontractor</h3>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Sub / Vendor Company</label><input id="csrsm_co" placeholder="ABC Rebar Fabricators" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Scope / Trade</label><select id="csrsm_scope" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:13px;">';
+  ['Concrete Pump','Rebar Fabrication','Formwork','Saw Cutting','Post-Tension Strand','Testing Lab','Excavation / Earthwork','Vapor Barrier / Waterproofing','Concrete Finishing (sub)','General Labor','Equipment Rental','Demo / Haul-Off','Other'].forEach(function(s){html+='<option>'+s+'</option>';});
+  html+='</select></div></div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Project</label><input id="csrsm_proj" placeholder="Project name" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Sub Bid Amount ($)</label><input id="csrsm_amt" type="number" placeholder="48000" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Evaluated By</label><input id="csrsm_by" placeholder="PM initials" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:13px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  // Factor scoring
+  html+='<div style="margin-bottom:12px;">';
+  FACTORS.forEach(function(f){
+    html+='<div style="margin-bottom:8px;">';
+    html+='<label style="color:#d6d3d1;font-size:12px;font-weight:600;">'+f.label+' <span style="color:#a8a29e;">(max '+f.max+' pts)</span></label>';
+    html+='<select id="csrsm_'+f.key+'" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:7px;font-size:12px;margin-top:3px;">';
+    html+='<option value="">-- Select --</option>';
+    f.opts.forEach(function(o){html+='<option value="'+o.v+'">'+o.v+' pts — '+o.l+'</option>';});
+    html+='</select></div>';
+  });
+  html+='</div>';
+  html+='<div style="margin-bottom:12px;"><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Notes / Qualifications</label><textarea id="csrsm_notes" rows="2" placeholder="Additional observations, reference check results, exclusion details..." style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></textarea></div>';
+  html+='<button onclick="window.csrsm_add()" style="background:#b45309;color:#fef3c7;border:none;border-radius:6px;padding:9px 20px;cursor:pointer;font-size:13px;font-weight:600;">+ Save Risk Assessment</button>';
+  html+='</div>';
+
+  if(d.subs.length>0){
+    html+='<div>';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+    html+='<h3 style="color:#e7e5e4;font-size:14px;margin:0;">Risk Assessments ('+d.subs.length+')</h3>';
+    html+='<div style="display:flex;gap:8px;"><button onclick="window.csrsm_print()" style="background:#1c1917;color:#d6d3d1;border:1px solid #57534e;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">🖨 Print</button><button onclick="window.csrsm_copy()" style="background:#1c1917;color:#d6d3d1;border:1px solid #57534e;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">📋 Copy</button></div>';
+    html+='</div>';
+    d.subs.slice().reverse().forEach(function(sub,ri){
+      var i=d.subs.length-1-ri;
+      var score=calcScore(sub);
+      var v=getVerdict(score);
+      html+='<div style="background:#1c1917;border:1px solid #44403c;border-left:4px solid '+v.color+';border-radius:8px;padding:14px;margin-bottom:10px;">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">';
+      html+='<div><div style="color:#e7e5e4;font-size:14px;font-weight:600;">'+sub.co+' — '+sub.scope+'</div>';
+      html+='<div style="color:#a8a29e;font-size:12px;">'+(sub.proj||'')+(sub.amt?' | $'+Number(sub.amt).toLocaleString():'')+(sub.by?' | Eval: '+sub.by:'')+'</div></div>';
+      html+='<div style="text-align:right;"><div style="color:'+v.color+';font-size:22px;font-weight:700;">'+score+'<span style="font-size:12px;">/100</span></div><span style="background:'+v.color+';color:#fff;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;">'+v.label+'</span></div>';
+      html+='</div>';
+      html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';
+      html+='<div style="background:#292524;border-radius:6px;padding:8px;"><div style="color:#fbbf24;font-size:12px;font-weight:600;">Retainage</div><div style="color:#e7e5e4;font-size:13px;">'+v.retainage+'</div></div>';
+      html+='<div style="background:#292524;border-radius:6px;padding:8px;"><div style="color:#fbbf24;font-size:12px;font-weight:600;">Bond Requirement</div><div style="color:#e7e5e4;font-size:13px;">'+v.bond+'</div></div>';
+      html+='<div style="background:#292524;border-radius:6px;padding:8px;"><div style="color:#fbbf24;font-size:12px;font-weight:600;">Contract Terms</div><div style="color:#e7e5e4;font-size:11px;">'+v.terms+'</div></div>';
+      html+='</div>';
+      // Score breakdown bar
+      html+='<div style="margin-bottom:8px;">';
+      FACTORS.forEach(function(f){
+        var pts=parseInt(sub.scores&&sub.scores[f.key]||0);
+        var pct=(pts/f.max)*100;
+        var barColor=pct>=80?'#16a34a':pct>=50?'#d97706':'#dc2626';
+        html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">';
+        html+='<div style="color:#a8a29e;font-size:10px;width:160px;flex-shrink:0;">'+f.label+'</div>';
+        html+='<div style="flex:1;background:#292524;border-radius:3px;height:8px;"><div style="background:'+barColor+';width:'+pct+'%;height:8px;border-radius:3px;"></div></div>';
+        html+='<div style="color:#d6d3d1;font-size:10px;width:40px;text-align:right;">'+pts+'/'+f.max+'</div>';
+        html+='</div>';
+      });
+      html+='</div>';
+      if(sub.notes){html+='<div style="color:#a8a29e;font-size:11px;margin-bottom:6px;">Notes: '+sub.notes+'</div>';}
+      html+='<button onclick="window.csrsm_del('+i+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;">🗑 Remove</button>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+  html+='</div>';
+  document.getElementById('csrsm_inner').innerHTML=html;
+}
+
+window.csrsm_add=function(){
+  var co=document.getElementById('csrsm_co').value.trim();
+  if(!co){alert('Company name required.');return;}
+  var scores={};
+  FACTORS.forEach(function(f){scores[f.key]=parseInt(document.getElementById('csrsm_'+f.key).value)||0;});
+  var d=load();
+  d.subs.push({
+    co:co,
+    scope:document.getElementById('csrsm_scope').value,
+    proj:document.getElementById('csrsm_proj').value.trim(),
+    amt:parseFloat(document.getElementById('csrsm_amt').value)||0,
+    by:document.getElementById('csrsm_by').value.trim(),
+    notes:document.getElementById('csrsm_notes').value.trim(),
+    date:new Date().toLocaleDateString(),
+    scores:scores
+  });
+  save(d);renderForm();
+};
+
+window.csrsm_del=function(i){
+  if(!confirm('Remove this assessment?'))return;
+  var d=load();d.subs.splice(i,1);save(d);renderForm();
+};
+
+window.csrsm_copy=function(){
+  var d=load();
+  var lines=['SUBCONTRACT RISK SCORING MATRIX','Generated: '+new Date().toLocaleDateString(),''];
+  d.subs.forEach(function(sub){
+    var score=calcScore(sub);
+    var v=getVerdict(score);
+    lines.push(sub.co+' — '+sub.scope+(sub.proj?' | '+sub.proj:'')+(sub.amt?' | $'+Number(sub.amt).toLocaleString():''));
+    lines.push('  Score: '+score+'/100 — '+v.label);
+    lines.push('  Retainage: '+v.retainage+' | Bond: '+v.bond);
+    if(sub.notes)lines.push('  Notes: '+sub.notes);
+    lines.push('');
+  });
+  navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Copied!');});
+};
+
+window.csrsm_print=function(){
+  var d=load();
+  var pw=window.open('','_blank');
+  pw.document.write('<!DOCTYPE html><html><head><title>Subcontract Risk Scoring Matrix</title><style>body{font-family:Arial,sans-serif;padding:32px;font-size:11px;max-width:900px;margin:0 auto;}h2{font-size:15px;text-align:center;}table{width:100%;border-collapse:collapse;margin:12px 0;}th,td{border:1px solid #999;padding:5px;font-size:10px;}th{background:#eee;}.low{background:#f0fdf4;}.mod{background:#fefce8;}.high{background:#fff7ed;}.vhigh{background:#fef2f2;}.sig{display:flex;gap:20px;margin-top:28px;}.sig div{flex:1;border-top:1px solid #333;padding-top:4px;font-size:10px;}</style></head><body>');
+  pw.document.write('<h2>SUBCONTRACT RISK SCORING MATRIX</h2>');
+  pw.document.write('<p style="text-align:center;">AIA A401 / ConsensusDocs 750 &nbsp;|&nbsp; Date: '+new Date().toLocaleDateString()+'</p>');
+  pw.document.write('<table>');
+  pw.document.write('<tr><th>Sub / Vendor</th><th>Scope</th><th>Project</th><th>Bid Amt</th><th>Score</th><th>Verdict</th><th>Retainage</th><th>Bond Req.</th></tr>');
+  d.subs.forEach(function(sub){
+    var score=calcScore(sub);
+    var v=getVerdict(score);
+    var cls=score>=80?'low':score>=60?'mod':score>=40?'high':'vhigh';
+    pw.document.write('<tr class="'+cls+'"><td>'+sub.co+'</td><td>'+sub.scope+'</td><td>'+(sub.proj||'—')+'</td><td>'+(sub.amt?'$'+Number(sub.amt).toLocaleString():'—')+'</td><td><strong>'+score+'/100</strong></td><td>'+v.label+'</td><td>'+v.retainage+'</td><td>'+v.bond+'</td></tr>');
+    if(sub.notes){pw.document.write('<tr><td colspan="8" style="font-size:10px;color:#555;"><em>Notes: '+sub.notes+'</em></td></tr>');}
+  });
+  pw.document.write('</table>');
+  pw.document.write('<h3>Scoring Criteria</h3><table><tr><th>Score Range</th><th>Verdict</th><th>Retainage</th><th>Bond</th><th>Required Contract Controls</th></tr>');
+  pw.document.write('<tr class="low"><td>80–100</td><td>LOW RISK — Award</td><td>5%</td><td>Not required</td><td>Standard pay-when-paid, 5% retainage</td></tr>');
+  pw.document.write('<tr class="mod"><td>60–79</td><td>MODERATE — Award with Controls</td><td>10%</td><td>Recommended &gt;$50k</td><td>10% retainage, weekly reports if &gt;$100k, joint-check materials</td></tr>');
+  pw.document.write('<tr class="high"><td>40–59</td><td>HIGH RISK — Conditional Award</td><td>15%</td><td>Required &gt;$25k</td><td>15% retainage, P&P bond, progress milestones, weekly visits</td></tr>');
+  pw.document.write('<tr class="vhigh"><td>0–39</td><td>VERY HIGH — Do Not Award</td><td>N/A</td><td>N/A</td><td>Find alternate sub</td></tr>');
+  pw.document.write('</table>');
+  pw.document.write('<p style="font-size:10px;margin-top:12px;"><strong>Note:</strong> This scoring matrix is a risk management tool, not a definitive award criterion. Contractor management retains authority to override scoring with documented justification. High-risk awards should be escalated to Principal review before execution.</p>');
+  pw.document.write('<div class="sig"><div>Project Manager</div><div>Principal</div><div>Date</div></div>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='⚠️ Sub Risk Score';
+  btn.style.cssText='position:fixed;bottom:3728px;right:16px;background:#1c0a0d;color:#fef3c7;border:1px solid #b45309;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8892;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Sub Risk Score':'⚠️ Sub Risk Score';if(s)renderForm();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8893;';
+  var inner=document.createElement('div');inner.id='csrsm_inner';wrap.appendChild(inner);
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+<script>
+/* ============================================================
+   TOOL 66: CONCRETE SUSTAINABILITY / LEED TRACKER
+   LEED v4.1 MRc3 / ACI 239R / ACI 211.1 / EPA WARM
+   ============================================================ */
+(function(){
+'use strict';
+var BTN_ID='cleed_btn',WRAP_ID='cleed_wrap',STORE='oncor_cleed_v1';
+function load(){try{return JSON.parse(localStorage.getItem(STORE)||'{"mixes":[]}')}catch(e){return{mixes:[]}}}
+function save(d){localStorage.setItem(STORE,JSON.stringify(d));}
+
+// CO2e (kg/yd3) approximate values by material
+var CO2_FACTORS={
+  'OPC Portland (lb/yd3)':0.00192,   // kg CO2e per lb OPC
+  'Fly Ash Class F (lb/yd3)':0.000062,
+  'Fly Ash Class C (lb/yd3)':0.000095,
+  'GGBS Slag (lb/yd3)':0.000193,
+  'Silica Fume (lb/yd3)':0.00064,
+  'Fine Aggregate (lb/yd3)':0.0000386,
+  'Coarse Aggregate (lb/yd3)':0.0000386,
+  'Mixing Water (lb/yd3)':0.0000003,
+  'Rebar per yd3 (lb/yd3)':0.00072    // AISC ~0.72 kg CO2e/lb steel
+};
+// LEED v4.1 MRc3: EPD disclosure credit. SCM substitution reduces GWP.
+// Baseline mix (ACI 211.1): ~660 lb OPC/yd3, no SCMs
+var BASELINE_OPC=660; // lb/yd3
+
+function calcGWP(mix){
+  // kg CO2e per yd3
+  var opc=(mix.opc||0)*0.00192;
+  var fa=(mix.flyash||0)*0.000062;
+  var faC=(mix.flyashC||0)*0.000095;
+  var slag=(mix.slag||0)*0.000193;
+  var sf=(mix.sf||0)*0.00064;
+  var fa_agg=(mix.fineAgg||1200)*0.0000386;
+  var ca_agg=(mix.coarseAgg||1800)*0.0000386;
+  var water=(mix.water||300)*0.0000003;
+  var rebar=(mix.rebar||0)*0.00072;
+  return opc+fa+faC+slag+sf+fa_agg+ca_agg+water+rebar;
+}
+
+function calcBaselineGWP(){
+  return BASELINE_OPC*0.00192 + 1200*0.0000386 + 1800*0.0000386 + 300*0.0000003;
+}
+
+function scmPct(mix){
+  var total=(mix.opc||0)+(mix.flyash||0)+(mix.flyashC||0)+(mix.slag||0)+(mix.sf||0);
+  if(!total)return 0;
+  return (((mix.flyash||0)+(mix.flyashC||0)+(mix.slag||0)+(mix.sf||0))/total*100).toFixed(1);
+}
+
+function renderForm(){
+  var d=load();
+  var baseGWP=calcBaselineGWP();
+  var totalYd3=d.mixes.reduce(function(a,m){return a+(m.yd3||0);},0);
+  var totalCO2=d.mixes.reduce(function(a,m){return a+calcGWP(m)*(m.yd3||0);},0);
+  var baselineCO2=baseGWP*totalYd3;
+  var reduction=baselineCO2>0?((baselineCO2-totalCO2)/baselineCO2*100).toFixed(1):0;
+
+  var html='<div style="max-width:860px;margin:0 auto;padding:24px 16px;">';
+  html+='<h2 style="color:#fef9c3;font-size:18px;margin-bottom:4px;">🌿 Concrete Sustainability / LEED Tracker</h2>';
+  html+='<p style="color:#a8a29e;font-size:12px;margin-bottom:16px;">LEED v4.1 MRc3 / ACI 239R / EPA WARM — Track SCM content, embodied carbon (GWP), and LEED documentation</p>';
+
+  if(totalYd3>0){
+    var leedPts=totalCO2<baselineCO2*0.90?1:0;
+    html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">';
+    html+='<div style="background:#14532d;border:1px solid #16a34a;border-radius:8px;padding:12px;text-align:center;"><div style="color:#86efac;font-size:22px;font-weight:700;">'+totalYd3.toLocaleString()+'</div><div style="color:#a8a29e;font-size:11px;">Total yd³ Tracked</div></div>';
+    html+='<div style="background:#1e1b4b;border:1px solid #4f46e5;border-radius:8px;padding:12px;text-align:center;"><div style="color:#a5b4fc;font-size:22px;font-weight:700;">'+(totalCO2/1000).toFixed(2)+'</div><div style="color:#a8a29e;font-size:11px;">Total CO₂e (metric tons)</div></div>';
+    html+='<div style="background:'+(reduction>0?'#14532d':'#1c1917')+';border:1px solid '+(reduction>0?'#16a34a':'#44403c')+';border-radius:8px;padding:12px;text-align:center;"><div style="color:'+(reduction>0?'#86efac':'#e7e5e4')+';font-size:22px;font-weight:700;">'+reduction+'%</div><div style="color:#a8a29e;font-size:11px;">GWP Reduction vs Baseline</div></div>';
+    html+='<div style="background:'+(leedPts?'#14532d':'#1c1917')+';border:1px solid '+(leedPts?'#16a34a':'#44403c')+';border-radius:8px;padding:12px;text-align:center;"><div style="color:'+(leedPts?'#86efac':'#a8a29e')+';font-size:22px;font-weight:700;">'+(leedPts?'✓ Credit':'—')+'</div><div style="color:#a8a29e;font-size:11px;">LEED v4.1 MRc3 (≥10% GWP ↓)</div></div>';
+    html+='</div>';
+  }
+
+  html+='<div style="background:#1c1917;border:1px solid #44403c;border-radius:10px;padding:16px;margin-bottom:20px;">';
+  html+='<h3 style="color:#e7e5e4;font-size:14px;margin-bottom:12px;">Log Mix Design</h3>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Mix Name / ID</label><input id="cleed_name" placeholder="4000 PSI SOG w/ 20% FA" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Supplier / Plant</label><input id="cleed_plant" placeholder="CEMEX El Paso" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">yd³ in this Mix</label><input id="cleed_yd3" type="number" placeholder="250" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<p style="color:#a8a29e;font-size:11px;margin-bottom:8px;">Cementitious Materials (lb/yd³) — from plant mix design or batch ticket:</p>';
+  html+='<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="color:#d6d3d1;font-size:11px;display:block;margin-bottom:4px;">OPC Portland (lb)</label><input id="cleed_opc" type="number" value="564" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#d6d3d1;font-size:11px;display:block;margin-bottom:4px;">Fly Ash Cl. F (lb)</label><input id="cleed_flyash" type="number" value="0" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#d6d3d1;font-size:11px;display:block;margin-bottom:4px;">Fly Ash Cl. C (lb)</label><input id="cleed_flyashC" type="number" value="0" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#d6d3d1;font-size:11px;display:block;margin-bottom:4px;">GGBS Slag (lb)</label><input id="cleed_slag" type="number" value="0" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#d6d3d1;font-size:11px;display:block;margin-bottom:4px;">Silica Fume (lb)</label><input id="cleed_sf" type="number" value="0" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<p style="color:#a8a29e;font-size:11px;margin-bottom:8px;">Aggregates & Water (lb/yd³) — default values provided:</p>';
+  html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;">';
+  html+='<div><label style="color:#d6d3d1;font-size:11px;display:block;margin-bottom:4px;">Fine Agg. (lb)</label><input id="cleed_fineAgg" type="number" value="1200" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#d6d3d1;font-size:11px;display:block;margin-bottom:4px;">Coarse Agg. (lb)</label><input id="cleed_coarseAgg" type="number" value="1800" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#d6d3d1;font-size:11px;display:block;margin-bottom:4px;">Mix Water (lb)</label><input id="cleed_water" type="number" value="300" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#d6d3d1;font-size:11px;display:block;margin-bottom:4px;">Rebar/SF avg (lb/yd³)</label><input id="cleed_rebar" type="number" value="0" placeholder="e.g. 50" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+  html+='<button onclick="window.cleed_preview()" style="background:#1e3a5f;color:#bae6fd;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;">👁 Preview GWP</button>';
+  html+='<button onclick="window.cleed_add()" style="background:#14532d;color:#bbf7d0;border:none;border-radius:6px;padding:9px 20px;cursor:pointer;font-size:13px;font-weight:600;">+ Log This Mix</button>';
+  html+='<span id="cleed_preview_out" style="color:#86efac;font-size:12px;"></span>';
+  html+='</div>';
+  html+='</div>';
+
+  if(d.mixes.length>0){
+    html+='<div>';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+    html+='<h3 style="color:#e7e5e4;font-size:14px;margin:0;">Mix Designs Logged ('+d.mixes.length+')</h3>';
+    html+='<div style="display:flex;gap:8px;"><button onclick="window.cleed_print()" style="background:#1c1917;color:#d6d3d1;border:1px solid #57534e;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">🖨 LEED Report</button><button onclick="window.cleed_copy()" style="background:#1c1917;color:#d6d3d1;border:1px solid #57534e;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">📋 Copy</button></div>';
+    html+='</div>';
+    d.mixes.forEach(function(m,i){
+      var gwp=calcGWP(m);
+      var totalGWP=gwp*(m.yd3||0);
+      var baselineGWP=baseGWP*(m.yd3||0);
+      var red=baselineGWP>0?((baselineGWP-totalGWP)/baselineGWP*100).toFixed(1):0;
+      var scm=scmPct(m);
+      var gwpColor=red>0?'#86efac':'#fca5a5';
+      html+='<div style="background:#1c1917;border:1px solid #44403c;border-left:4px solid '+(red>=10?'#16a34a':'#44403c')+';border-radius:8px;padding:14px;margin-bottom:10px;">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">';
+      html+='<div><div style="color:#e7e5e4;font-size:14px;font-weight:600;">'+m.name+'</div>';
+      html+='<div style="color:#a8a29e;font-size:12px;">'+(m.plant||'')+(m.yd3?' | '+m.yd3+' yd³':'')+' | SCM: '+scm+'%</div></div>';
+      html+='<div style="text-align:right;"><div style="color:'+gwpColor+';font-size:18px;font-weight:700;">'+red+'% GWP ↓</div>';
+      html+='<div style="color:#a8a29e;font-size:11px;">'+(totalGWP/1000).toFixed(3)+' metric tons CO₂e</div></div>';
+      html+='</div>';
+      html+='<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:8px;">';
+      [['OPC',m.opc||0],['Fly Ash F',m.flyash||0],['Fly Ash C',m.flyashC||0],['Slag',m.slag||0],['Silica Fume',m.sf||0]].forEach(function(pair){
+        html+='<div style="background:#292524;border-radius:6px;padding:6px;text-align:center;"><div style="color:#e7e5e4;font-size:13px;font-weight:600;">'+pair[1]+'</div><div style="color:#a8a29e;font-size:10px;">'+pair[0]+' lb</div></div>';
+      });
+      html+='</div>';
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;">';
+      html+='<div style="color:#a8a29e;font-size:11px;">GWP: <span style="color:#e7e5e4;">'+gwp.toFixed(3)+' kg CO₂e/yd³</span> | Baseline: '+baseGWP.toFixed(3)+' kg CO₂e/yd³'+(red>=10?' | <span style="color:#86efac;">✓ LEED MRc3 eligible</span>':'')+'</div>';
+      html+='<button onclick="window.cleed_del('+i+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;">🗑</button>';
+      html+='</div></div>';
+    });
+
+    // LEED guidance
+    html+='<details style="margin-top:16px;"><summary style="color:#fef9c3;font-size:13px;cursor:pointer;padding:8px;background:#1c1917;border-radius:6px;">📖 LEED v4.1 MRc3 Guidance & CO₂e Reference</summary>';
+    html+='<div style="background:#1c1917;border-radius:0 0 6px 6px;padding:12px;font-size:11px;color:#d6d3d1;">';
+    html+='<p><strong style="color:#fef9c3;">LEED v4.1 MRc3 — Building Product Disclosure & Optimization (EPD):</strong></p>';
+    html+='<p>1 LEED point available for using ≥20 permanently installed products from ≥5 different manufacturers with third-party EPDs. Concrete with ≥10% GWP reduction vs. industry benchmark qualifies. Industry benchmark (NRMCA regional): typically 350–450 kg CO₂e/yd³ for 4000 PSI. Fly ash, slag, and silica fume substitution are the most cost-effective GWP reduction strategies.</p>';
+    html+='<table style="width:100%;border-collapse:collapse;margin:8px 0;"><tr><th style="border:1px solid #44403c;padding:5px;background:#292524;">SCM</th><th style="border:1px solid #44403c;padding:5px;background:#292524;">CO₂e Factor</th><th style="border:1px solid #44403c;padding:5px;background:#292524;">Typical Substitution Rate</th><th style="border:1px solid #44403c;padding:5px;background:#292524;">Performance Notes</th></tr>';
+    [
+      ['Fly Ash Class F','0.062 kg/lb','15–25% of OPC','ACI 318-19 §26.4.1: OK to 25%; strength gain slower (ACI 211.4R)'],
+      ['Fly Ash Class C','0.095 kg/lb','10–20% of OPC','Higher reactivity; reduces w/c needed; check ASR risk in El Paso'],
+      ['GGBS Slag','0.193 kg/lb','20–70% of OPC','ASTM C989; delays set; use with caution in cold weather (ACI 306R)'],
+      ['Silica Fume','0.640 kg/lb','5–10% of OPC','ASTM C1240; improves density/chloride resistance; needs HRWR (ASTM C494 F/G)'],
+    ].forEach(function(r){
+      html+='<tr><td style="border:1px solid #44403c;padding:5px;">'+r[0]+'</td><td style="border:1px solid #44403c;padding:5px;">'+r[1]+'</td><td style="border:1px solid #44403c;padding:5px;">'+r[2]+'</td><td style="border:1px solid #44403c;padding:5px;font-size:10px;">'+r[3]+'</td></tr>';
+    });
+    html+='</table>';
+    html+='<p><strong>El Paso Context:</strong> TX power plants (Tolk, Harrington) produce Class C fly ash — readily available from CEMEX and ARGOS. 20% Class C substitution on 4000 PSI mix reduces GWP by ~14% at minimal cost premium ($0.50–$2.00/yd³). Ideal for LEED v4.1 projects (medical, institutional, government).</p>';
+    html+='</div></details>';
+    html+='</div>';
+  }
+  html+='</div>';
+  document.getElementById('cleed_inner').innerHTML=html;
+}
+
+window.cleed_preview=function(){
+  var mix={
+    opc:parseFloat(document.getElementById('cleed_opc').value)||0,
+    flyash:parseFloat(document.getElementById('cleed_flyash').value)||0,
+    flyashC:parseFloat(document.getElementById('cleed_flyashC').value)||0,
+    slag:parseFloat(document.getElementById('cleed_slag').value)||0,
+    sf:parseFloat(document.getElementById('cleed_sf').value)||0,
+    fineAgg:parseFloat(document.getElementById('cleed_fineAgg').value)||1200,
+    coarseAgg:parseFloat(document.getElementById('cleed_coarseAgg').value)||1800,
+    water:parseFloat(document.getElementById('cleed_water').value)||300,
+    rebar:parseFloat(document.getElementById('cleed_rebar').value)||0
+  };
+  var gwp=calcGWP(mix);
+  var baseGWP2=calcBaselineGWP();
+  var red=baseGWP2>0?((baseGWP2-gwp)/baseGWP2*100).toFixed(1):0;
+  var scm=scmPct(mix);
+  document.getElementById('cleed_preview_out').textContent=gwp.toFixed(3)+' kg CO₂e/yd³ | '+scm+'% SCM | GWP ↓ '+red+'%'+(red>=10?' ✓ LEED MRc3':'');
+};
+
+window.cleed_add=function(){
+  var name=document.getElementById('cleed_name').value.trim();
+  if(!name){alert('Mix name required.');return;}
+  var d=load();
+  d.mixes.push({
+    name:name,
+    plant:document.getElementById('cleed_plant').value.trim(),
+    yd3:parseFloat(document.getElementById('cleed_yd3').value)||0,
+    opc:parseFloat(document.getElementById('cleed_opc').value)||0,
+    flyash:parseFloat(document.getElementById('cleed_flyash').value)||0,
+    flyashC:parseFloat(document.getElementById('cleed_flyashC').value)||0,
+    slag:parseFloat(document.getElementById('cleed_slag').value)||0,
+    sf:parseFloat(document.getElementById('cleed_sf').value)||0,
+    fineAgg:parseFloat(document.getElementById('cleed_fineAgg').value)||1200,
+    coarseAgg:parseFloat(document.getElementById('cleed_coarseAgg').value)||1800,
+    water:parseFloat(document.getElementById('cleed_water').value)||300,
+    rebar:parseFloat(document.getElementById('cleed_rebar').value)||0,
+    date:new Date().toLocaleDateString()
+  });
+  save(d);renderForm();
+};
+
+window.cleed_del=function(i){
+  if(!confirm('Remove this mix?'))return;
+  var d=load();d.mixes.splice(i,1);save(d);renderForm();
+};
+
+window.cleed_copy=function(){
+  var d=load();var baseGWP2=calcBaselineGWP();
+  var lines=['CONCRETE SUSTAINABILITY / LEED TRACKER','Generated: '+new Date().toLocaleDateString(),'ACI 239R / LEED v4.1 MRc3',''];
+  d.mixes.forEach(function(m){
+    var gwp=calcGWP(m);
+    var red=baseGWP2>0?((baseGWP2-gwp)/baseGWP2*100).toFixed(1):0;
+    lines.push(m.name+(m.plant?' | '+m.plant:'')+(m.yd3?' | '+m.yd3+' yd³':''));
+    lines.push('  OPC:'+m.opc+' FA-F:'+m.flyash+' FA-C:'+m.flyashC+' Slag:'+m.slag+' SF:'+m.sf+' lb/yd³ | SCM: '+scmPct(m)+'%');
+    lines.push('  GWP: '+gwp.toFixed(3)+' kg CO₂e/yd³ | Reduction: '+red+'%'+(red>=10?' — LEED MRc3 eligible':''));
+    lines.push('');
+  });
+  navigator.clipboard.writeText(lines.join('\n')).then(function(){alert('Copied!');});
+};
+
+window.cleed_print=function(){
+  var d=load();var baseGWP2=calcBaselineGWP();
+  var totalYd3=d.mixes.reduce(function(a,m){return a+(m.yd3||0);},0);
+  var totalCO2=d.mixes.reduce(function(a,m){return a+calcGWP(m)*(m.yd3||0);},0);
+  var baselineCO2=baseGWP2*totalYd3;
+  var reduction=baselineCO2>0?((baselineCO2-totalCO2)/baselineCO2*100).toFixed(1):0;
+  var company=(document.getElementById('companyName')&&document.getElementById('companyName').value)||'Your Company';
+  var pw=window.open('','_blank');
+  pw.document.write('<!DOCTYPE html><html><head><title>Concrete Sustainability Report</title><style>body{font-family:Arial,sans-serif;padding:32px;font-size:11px;max-width:900px;margin:0 auto;}h2{font-size:15px;text-align:center;}h3{font-size:12px;margin-top:18px;}table{width:100%;border-collapse:collapse;margin:10px 0;}th,td{border:1px solid #999;padding:5px;font-size:10px;}th{background:#eee;}.leed{background:#f0fdf4;}.sig{display:flex;gap:20px;margin-top:28px;}.sig div{flex:1;border-top:1px solid #333;padding-top:4px;font-size:10px;}</style></head><body>');
+  pw.document.write('<h2>CONCRETE SUSTAINABILITY DOCUMENTATION</h2>');
+  pw.document.write('<p style="text-align:center;">LEED v4.1 MRc3 / ACI 239R &nbsp;|&nbsp; '+company+' &nbsp;|&nbsp; '+new Date().toLocaleDateString()+'</p>');
+  pw.document.write('<h3>Project Summary</h3>');
+  pw.document.write('<table><tr><th>Total yd³ Tracked</th><th>Baseline CO₂e (metric tons)</th><th>Actual CO₂e (metric tons)</th><th>CO₂e Reduction</th><th>LEED MRc3 Eligible</th></tr>');
+  pw.document.write('<tr class="leed"><td>'+totalYd3.toLocaleString()+'</td><td>'+(baselineCO2/1000).toFixed(2)+'</td><td>'+(totalCO2/1000).toFixed(2)+'</td><td>'+reduction+'%</td><td>'+(reduction>=10?'Yes — ≥10% GWP reduction':'No — increase SCM content')+'</td></tr></table>');
+  pw.document.write('<h3>Mix Designs</h3>');
+  pw.document.write('<table><tr><th>Mix Name</th><th>Supplier</th><th>yd³</th><th>OPC (lb)</th><th>Fly Ash F (lb)</th><th>Fly Ash C (lb)</th><th>Slag (lb)</th><th>SF (lb)</th><th>SCM %</th><th>GWP kg CO₂e/yd³</th><th>GWP Reduction</th></tr>');
+  d.mixes.forEach(function(m){
+    var gwp=calcGWP(m);
+    var red=baseGWP2>0?((baseGWP2-gwp)/baseGWP2*100).toFixed(1):0;
+    var cls=red>=10?'leed':'';
+    pw.document.write('<tr class="'+cls+'"><td>'+m.name+'</td><td>'+(m.plant||'—')+'</td><td>'+(m.yd3||0)+'</td><td>'+m.opc+'</td><td>'+(m.flyash||0)+'</td><td>'+(m.flyashC||0)+'</td><td>'+(m.slag||0)+'</td><td>'+(m.sf||0)+'</td><td>'+scmPct(m)+'%</td><td>'+gwp.toFixed(3)+'</td><td>'+red+'%'+(red>=10?' ✓':'')+'</td></tr>');
+  });
+  pw.document.write('</table>');
+  pw.document.write('<h3>CO₂e Factors Used (ACI 239R / ICE Database v3.0)</h3>');
+  pw.document.write('<table><tr><th>Material</th><th>kg CO₂e / lb</th><th>Source</th></tr>');
+  pw.document.write('<tr><td>OPC Portland Cement</td><td>0.00192</td><td>ACI 239R / EPA WARM</td></tr>');
+  pw.document.write('<tr><td>Fly Ash Class F</td><td>0.000062</td><td>ICE Database v3.0</td></tr>');
+  pw.document.write('<tr><td>Fly Ash Class C</td><td>0.000095</td><td>ICE Database v3.0</td></tr>');
+  pw.document.write('<tr><td>GGBS Slag</td><td>0.000193</td><td>ICE Database v3.0</td></tr>');
+  pw.document.write('<tr><td>Silica Fume</td><td>0.000640</td><td>ICE Database v3.0</td></tr>');
+  pw.document.write('<tr><td>Fine / Coarse Aggregate</td><td>0.0000386</td><td>NRMCA EPD 2023</td></tr>');
+  pw.document.write('<tr><td>Rebar / Structural Steel</td><td>0.000720</td><td>AISC EPD 2022</td></tr>');
+  pw.document.write('</table>');
+  pw.document.write('<p style="font-size:10px;margin-top:10px;"><strong>LEED v4.1 MRc3 Compliance Path:</strong> Environmental Product Declarations (EPD) — 1 point for ≥20 products with third-party EPDs achieving ≥10% GWP reduction vs. industry benchmark. Concrete with documented SCM content and calculated GWP reduction qualifies. Plant-specific EPDs (NRMCA facility EPDs) provide project-specific documentation. Consult LEED consultant to confirm credit compliance for your specific project and LEED version.</p>');
+  pw.document.write('<p style="font-size:10px;"><em>Disclaimer: GWP factors are approximate estimates based on published industry data. For LEED certification, use plant-specific EPDs from NRMCA or individual plant declarations. Consult a LEED Accredited Professional for credit compliance determination.</em></p>');
+  pw.document.write('<div class="sig"><div>Sustainability Manager / Estimator</div><div>Project Manager</div><div>Date</div></div>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='🌿 LEED / Sustain.';
+  btn.style.cssText='position:fixed;bottom:3780px;right:16px;background:#052e16;color:#bbf7d0;border:1px solid #16a34a;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8894;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ LEED / Sustain.':'🌿 LEED / Sustain.';if(s)renderForm();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8895;';
+  var inner=document.createElement('div');inner.id='cleed_inner';wrap.appendChild(inner);
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
