@@ -58681,3 +58681,248 @@ function createBtn(){var btn=document.createElement('button');btn.id=BTN;btn.tex
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
 })();
 </script>
+
+<!-- TOOL 100: CONCRETE COST INDEX TRACKER -->
+<script>
+(function(){
+'use strict';
+var KEY='oncor_costindex_v1',BTN='cciBtn',WRAP='cciWrap',INNER='cciInner';
+var MATERIALS=['Ready-Mix 3000 PSI','Ready-Mix 4000 PSI','Ready-Mix 5000 PSI','Rebar #4 (per LF)','Rebar #5 (per LF)','WWF 6x6-W1.4 (per SF)','Fiber poly (per yd)','Curing Compound (per SF)','Form Lumber 2x8 (per LF)','Labor Foreman (per hr)','Labor Finisher (per hr)','Labor Laborer (per hr)','Pump Mob 36m','Pump Per Yd 36m'];
+var EP_BASE={'Ready-Mix 3000 PSI':155,'Ready-Mix 4000 PSI':175,'Ready-Mix 5000 PSI':195,'Rebar #4 (per LF)':0.68,'Rebar #5 (per LF)':1.05,'WWF 6x6-W1.4 (per SF)':0.32,'Fiber poly (per yd)':8,'Curing Compound (per SF)':0.12,'Form Lumber 2x8 (per LF)':1.10,'Labor Foreman (per hr)':35,'Labor Finisher (per hr)':24,'Labor Laborer (per hr)':18,'Pump Mob 36m':1200,'Pump Per Yd 36m':8};
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||{entries:[]};}catch(e){return{entries:[]};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function render(){
+  var d=load(),entries=d.entries||[];
+  var html='<div style="background:#1e293b;min-height:100vh;padding:16px;">';
+  html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;"><button onclick="document.getElementById(\''+WRAP+'\').style.display=\'none\';document.getElementById(\''+BTN+'\').textContent=\'📊 Cost Index\'" style="background:#334155;color:#94a3b8;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">← Back</button><h2 style="color:#e2e8f0;font-size:16px;margin:0;">📊 Concrete Cost Index Tracker</h2></div>';
+  html+='<p style="color:#64748b;font-size:11px;margin:0 0 12px 0;">Track actual supplier quotes over time to build your own El Paso cost index. After 5+ quotes per material, trends become visible. Materials with >5% escalation trigger clause recommendation.</p>';
+  html+='<div style="background:#0f172a;border-radius:8px;padding:14px;margin-bottom:12px;">';
+  html+='<h3 style="color:#f59e0b;font-size:13px;margin:0 0 10px 0;">Log Price Quote</h3>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Date</label><br><input id="cciDate" type="date" value="'+new Date().toISOString().slice(0,10)+'" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;width:100%;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Material</label><br><select id="cciMat" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;width:100%;font-size:12px;box-sizing:border-box;">';
+  MATERIALS.forEach(function(m){html+='<option value="'+esc(m)+'">'+esc(m)+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Quoted Price ($)</label><br><input id="cciPrice" type="number" placeholder="e.g. 165" step="0.01" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;width:100%;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Supplier</label><br><input id="cciSupplier" type="text" placeholder="e.g. CEMEX El Paso" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;width:100%;font-size:12px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<button onclick="cciLog()" style="background:#f59e0b;color:#000;border:none;border-radius:6px;padding:7px 18px;cursor:pointer;font-size:12px;font-weight:600;">+ Log Quote</button></div>';
+  if(entries.length>=2){
+    var byMat={};entries.forEach(function(e){if(!byMat[e.mat])byMat[e.mat]=[];byMat[e.mat].push(e);});
+    html+='<div style="background:#0f172a;border-radius:8px;padding:14px;margin-bottom:12px;">';
+    html+='<h3 style="color:#34d399;font-size:13px;margin:0 0 10px 0;">Price Trend vs EP Baseline</h3>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px;"><tr style="background:#1e293b;"><th style="padding:5px;border:1px solid #334155;color:#94a3b8;text-align:left;">Material</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Base</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Earliest</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Latest</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Trend</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">n</th></tr>';
+    var highEsc=[];
+    Object.keys(byMat).forEach(function(mat){
+      var sorted=byMat[mat].slice().sort(function(a,b){return a.date>b.date?1:-1;});
+      var e0=sorted[0],eN=sorted[sorted.length-1];
+      var base=EP_BASE[mat]||null;
+      var chgPct=e0.price>0?((eN.price-e0.price)/e0.price*100).toFixed(1):'0';
+      var color=parseFloat(chgPct)>0?'#f87171':parseFloat(chgPct)<0?'#34d399':'#94a3b8';
+      if(parseFloat(chgPct)>5)highEsc.push({mat:mat,pct:chgPct});
+      html+='<tr><td style="padding:4px;border:1px solid #334155;color:#e2e8f0;">'+esc(mat)+'</td>';
+      html+='<td style="padding:4px;border:1px solid #334155;color:#64748b;text-align:center;">'+(base?'$'+base:'--')+'</td>';
+      html+='<td style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:center;">$'+e0.price+'</td>';
+      html+='<td style="padding:4px;border:1px solid #334155;color:#e2e8f0;text-align:center;font-weight:700;">$'+eN.price+'</td>';
+      html+='<td style="padding:4px;border:1px solid #334155;color:'+color+';text-align:center;font-weight:700;">'+(parseFloat(chgPct)>=0?'+':'')+chgPct+'%</td>';
+      html+='<td style="padding:4px;border:1px solid #334155;color:#64748b;text-align:center;">'+sorted.length+'</td></tr>';
+    });
+    html+='</table>';
+    if(highEsc.length>0){
+      html+='<div style="background:#1e293b;border-radius:6px;padding:10px;margin-top:10px;border:1px solid #92400e;">';
+      html+='<p style="color:#fbbf24;font-size:11px;font-weight:600;margin:0 0 4px 0;">⚠ Escalation Clause Recommended: '+highEsc.map(function(x){return x.mat+' +'+x.pct+'%';}).join(', ')+'</p>';
+      html+='<p style="color:#64748b;font-size:10px;margin:0;font-style:italic;">"Contract price is based on material costs as of bid date. If material prices increase >5% between bid and delivery, Contractor may submit CO for documented cost differential with supplier invoices."</p>';
+      html+='<button onclick="cciCopyClause()" style="margin-top:6px;background:#92400e;color:#fef3c7;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:10px;">📋 Copy Clause</button></div>';
+    }
+    html+='</div>';
+  }
+  if(entries.length>0){
+    var recent=entries.slice().sort(function(a,b){return b.ts-a.ts;}).slice(0,25);
+    html+='<div style="background:#0f172a;border-radius:8px;padding:12px;margin-bottom:12px;">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><h3 style="color:#f59e0b;font-size:12px;margin:0;">Quote Log ('+entries.length+')</h3><div style="display:flex;gap:6px;"><button onclick="cciPrint()" style="background:#7c3aed;color:#fff;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:11px;">🖨 Print</button><button onclick="cciCopy()" style="background:#1e3a5f;color:#93c5fd;border:1px solid #1d4ed8;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:11px;">📋 Copy</button></div></div>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px;"><tr style="background:#1e293b;"><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Date</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:left;">Material</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Price</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:left;">Supplier</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">vs Base</th><th style="padding:4px;border:1px solid #334155;width:32px;">Del</th></tr>';
+    recent.forEach(function(e){
+      var idx=entries.indexOf(e);
+      var base=EP_BASE[e.mat];var vs=base?((e.price-base)/base*100).toFixed(1)+'%':'--';
+      var col=base?(e.price>base?'#f87171':e.price<base?'#34d399':'#94a3b8'):'#94a3b8';
+      html+='<tr><td style="padding:4px;border:1px solid #334155;color:#64748b;">'+esc(e.date)+'</td><td style="padding:4px;border:1px solid #334155;color:#e2e8f0;">'+esc(e.mat)+'</td><td style="padding:4px;border:1px solid #334155;color:'+col+';text-align:center;font-weight:700;">$'+e.price+'</td><td style="padding:4px;border:1px solid #334155;color:#94a3b8;">'+esc(e.supplier||'--')+'</td><td style="padding:4px;border:1px solid #334155;color:'+col+';text-align:center;">'+vs+'</td><td style="padding:4px;border:1px solid #334155;"><button onclick="cciDel('+idx+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:3px;padding:2px 5px;cursor:pointer;font-size:10px;">×</button></td></tr>';
+    });
+    html+='</table></div>';
+  } else {
+    html+='<div style="background:#0f172a;border-radius:8px;padding:16px;text-align:center;"><p style="color:#475569;font-size:12px;margin:0;">No quotes logged yet. EP 2025 Baseline: 3k PSI $155/yd³ · 4k PSI $175/yd³ · #4 rebar $0.68/LF · Foreman $35/hr</p></div>';
+  }
+  html+='</div>';
+  document.getElementById(INNER).innerHTML=html;
+}
+window.cciLog=function(){
+  var date=document.getElementById('cciDate').value,mat=document.getElementById('cciMat').value,price=parseFloat(document.getElementById('cciPrice').value),supplier=document.getElementById('cciSupplier').value.trim();
+  if(!date||!mat||isNaN(price)||price<=0){alert('Enter date, material, and price.');return;}
+  var d=load();d.entries=d.entries||[];d.entries.push({date:date,mat:mat,price:price,supplier:supplier,ts:Date.now()});
+  if(d.entries.length>500)d.entries=d.entries.slice(-500);save(d);render();
+};
+window.cciDel=function(i){var d=load();if(confirm('Remove?')){d.entries.splice(i,1);save(d);render();}};
+window.cciCopy=function(){var d=load();var lines=['CONCRETE COST INDEX — Oncor El Paso','Date\tMaterial\tPrice\tSupplier'];(d.entries||[]).slice().sort(function(a,b){return a.date>b.date?1:-1;}).forEach(function(e){lines.push(e.date+'\t'+e.mat+'\t$'+e.price+'\t'+(e.supplier||'--'));});navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');};
+window.cciCopyClause=function(){navigator.clipboard.writeText('Contract price is based on material costs as of bid date. In the event that the published price of specified materials increases by more than 5% between bid date and delivery, Contractor reserves the right to submit a Change Order for documented cost differential, supported by supplier invoices.');alert('Escalation clause copied!');};
+window.cciPrint=function(){var d=load();var pw=window.open('','_blank');pw.document.write('<html><head><title>Cost Index</title><style>body{font-family:Arial;font-size:10px;margin:20px;}h2{font-size:14px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:4px;}.sig{display:flex;gap:30px;margin-top:20px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;}</style></head><body>');pw.document.write('<h2>Concrete Cost Index Log</h2><p><strong>El Paso Market Price Tracker</strong> — Generated '+new Date().toLocaleDateString()+'</p>');pw.document.write('<table><tr><th>Date</th><th>Material</th><th>Price</th><th>Supplier</th><th>vs EP Baseline</th></tr>');(d.entries||[]).slice().sort(function(a,b){return a.date>b.date?1:-1;}).forEach(function(e){var base=EP_BASE[e.mat];var vs=base?((e.price-base)/base*100).toFixed(1)+'%':'--';pw.document.write('<tr><td>'+e.date+'</td><td>'+e.mat+'</td><td style="font-weight:bold;">$'+e.price+'</td><td>'+(e.supplier||'--')+'</td><td>'+vs+'</td></tr>');});pw.document.write('</table><p style="font-size:9px;margin-top:10px;">EP 2025 Baseline: 3k $155/yd³, 4k $175, 5k $195, #4 $0.68/LF, #5 $1.05/LF, Foreman $35/hr, Finisher $24/hr, 36m Boom Mob $1,200.</p><div class="sig"><div>Estimator / Date</div><div>PM / Date</div><div>Principal / Date</div></div></body></html>');pw.document.close();pw.print();};
+function createBtn(){var btn=document.createElement('button');btn.id=BTN;btn.textContent='📊 Cost Index';btn.style.cssText='position:fixed;bottom:5850px;right:16px;background:#1e293b;color:#fbbf24;border:1px solid #b45309;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9062;box-shadow:0 2px 8px rgba(0,0,0,0.4);';btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Cost Index':'📊 Cost Index';if(s)render();};document.body.appendChild(btn);var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9063;';var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<!-- TOOL 101: FIRST DELIVERY ACCEPTANCE CHECKLIST -->
+<script>
+(function(){
+'use strict';
+var KEY='oncor_firstdel_v1',BTN='fdaBtn',WRAP='fdaWrap',INNER='fdaInner';
+var ITEMS=[
+  {cat:'Ticket Verification',items:[
+    {id:'fd01',ref:'ASTM C94 §11.10',text:'Batch ticket present with load'},
+    {id:'fd02',ref:'ASTM C94 §11.10',text:'Mix design ID matches approved submittal'},
+    {id:'fd03',ref:'ACI 301-16 §4.2.3',text:'Specified PSI matches Division 03 spec'},
+    {id:'fd04',ref:'ASTM C94 §11.10',text:'w/c ratio does not exceed approved max'},
+    {id:'fd05',ref:'ASTM C94 §11.8',text:'Admixtures match approved mix design'}
+  ]},
+  {cat:'Timing Compliance',items:[
+    {id:'fd06',ref:'ASTM C94 §11.8',text:'Elapsed time from batch < 90 minutes'},
+    {id:'fd07',ref:'ASTM C94 §11.8',text:'Drum revolutions < 300 at arrival'},
+    {id:'fd08',ref:'ASTM C94 §11.8',text:'No unauthorized water addition by driver'}
+  ]},
+  {cat:'Fresh Concrete Testing',items:[
+    {id:'fd09',ref:'ASTM C143',text:'Slump test — result within spec range'},
+    {id:'fd10',ref:'ASTM C1064',text:'Concrete temp within spec (50°F–95°F)'},
+    {id:'fd11',ref:'ASTM C138',text:'Unit weight test if required by spec'},
+    {id:'fd12',ref:'ASTM C231',text:'Air content test if air-entrained specified'},
+    {id:'fd13',ref:'ACI 301-16 §1.6.8',text:'Test cylinders cast from first load'}
+  ]},
+  {cat:'Visual Acceptance',items:[
+    {id:'fd14',ref:'ACI 304R',text:'Uniform appearance — no segregation'},
+    {id:'fd15',ref:'ACI 304R §4.1',text:'No signs of over-watering'},
+    {id:'fd16',ref:'ASTM C94 §11.8',text:'Drum rotating at arrival'}
+  ]},
+  {cat:'Site Readiness',items:[
+    {id:'fd17',ref:'ACI 304R §3.1',text:'Subgrade/forms ready before discharge'},
+    {id:'fd18',ref:'ACI 304R §3.2',text:'Pump primed and discharge point verified'},
+    {id:'fd19',ref:'OSHA 1926.701',text:'All personnel have PPE (concrete is caustic)'},
+    {id:'fd20',ref:'ACI 305R/306R',text:'Weather conditions acceptable'}
+  ]}
+];
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||{checks:{},meta:{}};}catch(e){return{checks:{},meta:{}};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function render(){
+  var d=load(),checks=d.checks||{},meta=d.meta||{};
+  var total=0,ok=0,na=0;ITEMS.forEach(function(cat){cat.items.forEach(function(it){total++;var s=checks[it.id]||'open';if(s==='ok')ok++;if(s==='na')na++;});});
+  var cleared=ok+na===total,prog=Math.round((ok+na)/total*100);
+  var html='<div style="background:#1e293b;min-height:100vh;padding:16px;">';
+  html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;"><button onclick="document.getElementById(\''+WRAP+'\').style.display=\'none\';document.getElementById(\''+BTN+'\').textContent=\'✅ 1st Delivery\'" style="background:#334155;color:#94a3b8;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">← Back</button><h2 style="color:#e2e8f0;font-size:16px;margin:0;">✅ First Delivery Acceptance Checklist</h2></div>';
+  html+='<p style="color:#64748b;font-size:11px;margin:0 0 12px 0;">ASTM C94 / ACI 301-16 / ACI 304R — 20-item acceptance check for first ready-mix delivery. Complete before allowing discharge. Click items to cycle: OPEN → OK → N/A.</p>';
+  html+='<div style="background:#0f172a;border-radius:8px;padding:12px;margin-bottom:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Project/Element</label><br><input id="fdaProject" type="text" placeholder="e.g. Warehouse SOG" value="'+esc(meta.project||'')+'" oninput="fdaMeta()" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;width:100%;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Pour Date</label><br><input id="fdaDate" type="date" value="'+esc(meta.date||new Date().toISOString().slice(0,10))+'" oninput="fdaMeta()" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;width:100%;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">First Ticket #</label><br><input id="fdaTicket" type="text" placeholder="e.g. 12345" value="'+esc(meta.ticket||'')+'" oninput="fdaMeta()" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;width:100%;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">QC Inspector</label><br><input id="fdaInspector" type="text" placeholder="Initials" value="'+esc(meta.inspector||'')+'" oninput="fdaMeta()" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;width:100%;font-size:12px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  if(cleared){
+    html+='<div style="background:#052e16;border:1px solid #166534;border-radius:8px;padding:12px;margin-bottom:12px;text-align:center;"><p style="color:#4ade80;font-size:14px;font-weight:700;margin:0;">✅ CLEARED — AUTHORIZE DISCHARGE</p><p style="color:#86efac;font-size:11px;margin:4px 0 0 0;">All '+total+' items verified.</p></div>';
+  } else {
+    var open=total-ok-na;
+    html+='<div style="background:#450a0a;border:1px solid #b91c1c;border-radius:8px;padding:12px;margin-bottom:12px;">';
+    html+='<p style="color:#f87171;font-size:13px;font-weight:700;margin:0 0 4px 0;">⛔ DO NOT DISCHARGE — '+open+' Item'+(open>1?'s':'')+' Remaining</p>';
+    html+='<div style="background:#1e293b;border-radius:4px;height:6px;margin:6px 0;"><div style="background:#ef4444;height:100%;border-radius:4px;width:'+prog+'%;"></div></div>';
+    html+='<p style="color:#94a3b8;font-size:11px;margin:0;">'+ok+' OK · '+na+' N/A · '+open+' Open — '+prog+'% complete</p></div>';
+  }
+  ITEMS.forEach(function(cat){
+    html+='<div style="background:#0f172a;border-radius:8px;padding:12px;margin-bottom:10px;">';
+    html+='<h3 style="color:#f59e0b;font-size:12px;margin:0 0 8px 0;">'+esc(cat.cat)+'</h3>';
+    cat.items.forEach(function(it){
+      var s=checks[it.id]||'open';
+      var bg=s==='ok'?'#052e16':s==='na'?'#1e293b':'#1e293b';
+      var border=s==='ok'?'#166534':s==='na'?'#334155':'#475569';
+      var badge=s==='ok'?'<span style="background:#166534;color:#4ade80;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:700;">OK</span>':s==='na'?'<span style="background:#334155;color:#94a3b8;border-radius:4px;padding:1px 7px;font-size:10px;">N/A</span>':'<span style="background:#7c2d12;color:#fb923c;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:700;">OPEN</span>';
+      html+='<div onclick="fdaCycle(\''+it.id+'\')" style="background:'+bg+';border:1px solid '+border+';border-radius:6px;padding:8px 10px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">';
+      html+='<div style="flex:1;"><p style="color:#e2e8f0;font-size:11px;margin:0 0 2px 0;">'+esc(it.text)+'</p><p style="color:#475569;font-size:9px;margin:0;">'+esc(it.ref)+'</p></div>'+badge+'</div>';
+    });
+    html+='</div>';
+  });
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;">';
+  html+='<button onclick="fdaPrint()" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;font-weight:600;">🖨 Print Acceptance Record</button>';
+  html+='<button onclick="fdaReset()" style="background:#334155;color:#94a3b8;border:none;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:12px;">↺ Reset Checklist</button></div>';
+  html+='<div style="background:#0f172a;border-radius:8px;padding:10px;margin-top:10px;"><p style="color:#64748b;font-size:10px;margin:0;"><strong>ASTM C94 §11.10:</strong> Signed ticket acknowledges receipt. Without this record, you have no basis to dispute GC rejection claims.</p></div></div>';
+  document.getElementById(INNER).innerHTML=html;
+}
+window.fdaCycle=function(id){var d=load();var s=d.checks[id]||'open';d.checks[id]=s==='open'?'ok':s==='ok'?'na':'open';save(d);render();};
+window.fdaMeta=function(){var d=load();d.meta=d.meta||{};['fdaProject','fdaDate','fdaTicket','fdaInspector'].forEach(function(id){var el=document.getElementById(id);if(el)d.meta[id.replace('fda','').toLowerCase()]=el.value;});save(d);};
+window.fdaReset=function(){if(confirm('Reset all items?')){var d=load();d.checks={};save(d);render();}};
+window.fdaPrint=function(){var d=load(),checks=d.checks||{},meta=d.meta||{};var pw=window.open('','_blank');pw.document.write('<html><head><title>First Delivery Acceptance</title><style>body{font-family:Arial;font-size:10px;margin:20px;}h2{font-size:14px;}h3{font-size:11px;background:#f5f5f5;padding:4px 6px;margin-top:12px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:4px;}.ok{background:#e6f4ea;color:#1a7f37;font-weight:bold;}.na{color:#999;}.open{background:#fff3cd;color:#b45309;font-weight:bold;}.sig{display:flex;gap:30px;margin-top:20px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;}</style></head><body>');pw.document.write('<h2>First Delivery Acceptance Checklist</h2><p><strong>ASTM C94 / ACI 301-16 / ACI 304R</strong></p>');pw.document.write('<p>Project: <strong>'+(meta.project||'--')+'</strong> | Date: <strong>'+(meta.date||'--')+'</strong> | Ticket #: <strong>'+(meta.ticket||'--')+'</strong> | Inspector: <strong>'+(meta.inspector||'--')+'</strong></p>');ITEMS.forEach(function(cat){pw.document.write('<h3>'+cat.cat+'</h3><table><tr><th style="width:55%">Item</th><th style="width:20%">Ref</th><th style="width:10%">Status</th></tr>');cat.items.forEach(function(it){var s=checks[it.id]||'open';pw.document.write('<tr><td>'+it.text+'</td><td style="font-size:9px;color:#666;">'+it.ref+'</td><td class="'+s+'" style="text-align:center;">'+s.toUpperCase()+'</td></tr>');});pw.document.write('</table>');});pw.document.write('<p style="font-size:9px;margin-top:10px;"><strong>ASTM C94 §11.10:</strong> Signed ticket acknowledges receipt. Rejection right: Purchaser may reject any load not conforming to mix design, slump, or temperature.</p><div class="sig"><div>QC Inspector / Date</div><div>Foreman / Date</div><div>GC Inspector / Date</div></div></body></html>');pw.document.close();pw.print();};
+function createBtn(){var btn=document.createElement('button');btn.id=BTN;btn.textContent='✅ 1st Delivery';btn.style.cssText='position:fixed;bottom:5900px;right:16px;background:#1e293b;color:#4ade80;border:1px solid #166534;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9064;box-shadow:0 2px 8px rgba(0,0,0,0.4);';btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ 1st Delivery':'✅ 1st Delivery';if(s)render();};document.body.appendChild(btn);var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9065;';var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<!-- TOOL 102: POUR RATE BENCHMARKING LOG -->
+<script>
+(function(){
+'use strict';
+var KEY='oncor_pourrate_v1',BTN='prbBtn',WRAP='prbWrap',INNER='prbInner';
+var ELEM_TYPES=['SOG (Slab on Grade)','Elevated Deck','Tilt-Up Panel','CIP Wall','CIP Column/Pier','Grade Beam/Footing','Curb & Gutter','Drilled Shaft','Pump & Dump','Other'];
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||{entries:[]};}catch(e){return{entries:[]};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function stats(entries,type){var rows=entries.filter(function(e){return e.type===type;});if(!rows.length)return null;var rates=rows.map(function(e){return e.rate;});var avg=rates.reduce(function(a,b){return a+b;},0)/rates.length;return{n:rows.length,avg:avg.toFixed(1),min:Math.min.apply(null,rates).toFixed(1),max:Math.max.apply(null,rates).toFixed(1)};}
+function render(){
+  var d=load(),entries=d.entries||[];
+  var typeStats={};ELEM_TYPES.forEach(function(t){var s=stats(entries,t);if(s)typeStats[t]=s;});
+  var aciRef={'SOG (Slab on Grade)':{typical:'20-35'},'Elevated Deck':{typical:'12-20'},'Tilt-Up Panel':{typical:'15-25'},'CIP Wall':{typical:'8-18'},'CIP Column/Pier':{typical:'5-12'},'Grade Beam/Footing':{typical:'20-30'},'Curb & Gutter':{typical:'10-20'},'Drilled Shaft':{typical:'5-10'},'Pump & Dump':{typical:'30-50'},'Other':{typical:'Varies'}};
+  var html='<div style="background:#1e293b;min-height:100vh;padding:16px;">';
+  html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;"><button onclick="document.getElementById(\''+WRAP+'\').style.display=\'none\';document.getElementById(\''+BTN+'\').textContent=\'⚡ Pour Rates\'" style="background:#334155;color:#94a3b8;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">← Back</button><h2 style="color:#e2e8f0;font-size:16px;margin:0;">⚡ Pour Rate Benchmarking Log</h2></div>';
+  html+='<p style="color:#64748b;font-size:11px;margin:0 0 12px 0;">ACI 304R — Track actual placement rate (yd³/hr) per element type. After 5-10 entries, benchmark your avg pour rate to calibrate schedule estimates, crew planning, and pump selection.</p>';
+  html+='<div style="background:#0f172a;border-radius:8px;padding:14px;margin-bottom:12px;">';
+  html+='<h3 style="color:#f59e0b;font-size:13px;margin:0 0 10px 0;">Log Actual Pour Rate</h3>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Date</label><br><input id="prbDate" type="date" value="'+new Date().toISOString().slice(0,10)+'" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;width:100%;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Project/GC</label><br><input id="prbProject" type="text" placeholder="e.g. Mesa Logistics" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;width:100%;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Element Type</label><br><select id="prbType" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;width:100%;font-size:12px;box-sizing:border-box;">';
+  ELEM_TYPES.forEach(function(t){html+='<option value="'+esc(t)+'">'+esc(t)+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Total yd³</label><br><input id="prbYds" type="number" placeholder="e.g. 120" step="0.5" min="0" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;width:100%;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Duration (hours)</label><br><input id="prbHours" type="number" placeholder="e.g. 3.5" step="0.25" min="0.25" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;width:100%;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Crew Size</label><br><input id="prbCrew" type="number" placeholder="e.g. 6" step="1" min="1" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;width:100%;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Pump Type</label><br><select id="prbPump" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;width:100%;font-size:12px;box-sizing:border-box;"><option>36m Boom</option><option>47m Boom</option><option>52m+ Boom</option><option>Line Pump</option><option>Gravity/Chute</option><option>None/Direct</option></select></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Notes</label><br><input id="prbNotes" type="text" placeholder="e.g. pump issue 30 min" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;width:100%;font-size:12px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<button onclick="prbLog()" style="background:#f59e0b;color:#000;border:none;border-radius:6px;padding:7px 18px;cursor:pointer;font-size:12px;font-weight:600;">+ Log Pour</button></div>';
+  if(Object.keys(typeStats).length>0){
+    html+='<div style="background:#0f172a;border-radius:8px;padding:14px;margin-bottom:12px;">';
+    html+='<h3 style="color:#34d399;font-size:13px;margin:0 0 10px 0;">Benchmark by Element Type (Your Actuals vs ACI Typical)</h3>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px;"><tr style="background:#1e293b;"><th style="padding:5px;border:1px solid #334155;color:#94a3b8;text-align:left;">Element</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Pours</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Avg Rate</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Min</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Max</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">ACI Typical</th></tr>';
+    Object.keys(typeStats).forEach(function(t){var s=typeStats[t];var ref=aciRef[t]||{typical:'--'};html+='<tr><td style="padding:4px;border:1px solid #334155;color:#e2e8f0;">'+esc(t)+'</td><td style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:center;">'+s.n+'</td><td style="padding:4px;border:1px solid #334155;color:#34d399;text-align:center;font-weight:700;">'+s.avg+' yd³/hr</td><td style="padding:4px;border:1px solid #334155;color:#64748b;text-align:center;">'+s.min+'</td><td style="padding:4px;border:1px solid #334155;color:#64748b;text-align:center;">'+s.max+'</td><td style="padding:4px;border:1px solid #334155;color:#64748b;text-align:center;">'+esc(ref.typical)+' yd³/hr</td></tr>';});
+    html+='</table>';
+    html+='<p style="color:#64748b;font-size:10px;margin:8px 0 0 0;"><strong>Use your avg rates to:</strong> (1) plan truck interval, (2) flag slow pours, (3) calibrate schedule float per element.</p></div>';
+  }
+  if(entries.length>0){
+    var recent=entries.slice().sort(function(a,b){return b.ts-a.ts;}).slice(0,25);
+    html+='<div style="background:#0f172a;border-radius:8px;padding:12px;margin-bottom:12px;">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><h3 style="color:#f59e0b;font-size:12px;margin:0;">Pour Log ('+entries.length+')</h3><div style="display:flex;gap:6px;"><button onclick="prbPrint()" style="background:#7c3aed;color:#fff;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:11px;">🖨 Print</button><button onclick="prbCopy()" style="background:#1e3a5f;color:#93c5fd;border:1px solid #1d4ed8;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:11px;">📋 Copy</button></div></div>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px;"><tr style="background:#1e293b;"><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Date</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:left;">Type</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">yd³</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Hours</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Rate</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Crew</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:left;">Project</th><th style="padding:4px;border:1px solid #334155;width:32px;">Del</th></tr>';
+    recent.forEach(function(e){var idx=entries.indexOf(e);html+='<tr><td style="padding:4px;border:1px solid #334155;color:#64748b;">'+esc(e.date)+'</td><td style="padding:4px;border:1px solid #334155;color:#e2e8f0;">'+esc(e.type)+'</td><td style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:center;">'+e.yds+'</td><td style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:center;">'+e.hours+'</td><td style="padding:4px;border:1px solid #334155;color:#34d399;text-align:center;font-weight:700;">'+e.rate+' yd³/hr</td><td style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:center;">'+e.crew+'</td><td style="padding:4px;border:1px solid #334155;color:#94a3b8;">'+esc(e.project||'--')+'</td><td style="padding:4px;border:1px solid #334155;"><button onclick="prbDel('+idx+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:3px;padding:2px 5px;cursor:pointer;font-size:10px;">×</button></td></tr>';});
+    html+='</table></div>';
+  } else {
+    html+='<div style="background:#0f172a;border-radius:8px;padding:16px;text-align:center;"><p style="color:#475569;font-size:12px;margin:0;">No pours logged yet. ACI 304R typical: SOG 20-35 yd³/hr · Elevated 12-20 · CIP Wall 8-18 · Drilled Shaft 5-10</p></div>';
+  }
+  html+='<div style="background:#0f172a;border-radius:8px;padding:10px;margin-top:8px;"><p style="color:#64748b;font-size:10px;margin:0;"><strong>ACI 304R:</strong> Cold joint risk is a function of placement rate vs set time. Rate below ~15 yd³/hr on a large El Paso summer slab = high cold joint risk.</p></div></div>';
+  document.getElementById(INNER).innerHTML=html;
+}
+window.prbLog=function(){
+  var date=document.getElementById('prbDate').value,proj=document.getElementById('prbProject').value.trim(),type=document.getElementById('prbType').value,yds=parseFloat(document.getElementById('prbYds').value),hours=parseFloat(document.getElementById('prbHours').value),crew=parseInt(document.getElementById('prbCrew').value)||1,pump=document.getElementById('prbPump').value,notes=document.getElementById('prbNotes').value.trim();
+  if(!date||!type||isNaN(yds)||yds<=0||isNaN(hours)||hours<=0){alert('Enter date, type, yd³, and hours.');return;}
+  var rate=yds/hours;var d=load();d.entries=d.entries||[];d.entries.push({date:date,project:proj,type:type,yds:yds,hours:hours,crew:crew,pump:pump,notes:notes,rate:parseFloat(rate.toFixed(1)),ts:Date.now()});
+  if(d.entries.length>500)d.entries=d.entries.slice(-500);save(d);render();
+};
+window.prbDel=function(i){var d=load();if(confirm('Remove?')){d.entries.splice(i,1);save(d);render();}};
+window.prbCopy=function(){var d=load();var lines=['POUR RATE BENCHMARKING — Oncor','Date\tProject\tElement\tyd³\tHours\tRate\tCrew\tPump\tNotes'];(d.entries||[]).slice().sort(function(a,b){return a.date>b.date?1:-1;}).forEach(function(e){lines.push(e.date+'\t'+(e.project||'--')+'\t'+e.type+'\t'+e.yds+'\t'+e.hours+'\t'+e.rate+'\t'+e.crew+'\t'+(e.pump||'--')+'\t'+(e.notes||'--'));});navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');};
+window.prbPrint=function(){var d=load();var pw=window.open('','_blank');pw.document.write('<html><head><title>Pour Rate Benchmark</title><style>body{font-family:Arial;font-size:10px;margin:20px;}h2{font-size:14px;}h3{font-size:11px;background:#f5f5f5;padding:4px 6px;margin-top:12px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:4px;}.sig{display:flex;gap:30px;margin-top:20px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;}</style></head><body>');pw.document.write('<h2>Pour Rate Benchmarking Log</h2><p><strong>ACI 304R — Actual Placement Rate Database</strong></p><p>Generated: '+new Date().toLocaleDateString()+' | Pours: '+d.entries.length+'</p>');var byType={};(d.entries||[]).forEach(function(e){if(!byType[e.type])byType[e.type]=[];byType[e.type].push(e);});pw.document.write('<h3>Benchmark Summary</h3><table><tr><th>Element</th><th>Pours</th><th>Avg Rate</th><th>Min</th><th>Max</th></tr>');Object.keys(byType).forEach(function(t){var rates=byType[t].map(function(e){return e.rate;});var avg=(rates.reduce(function(a,b){return a+b;},0)/rates.length).toFixed(1);pw.document.write('<tr><td>'+t+'</td><td style="text-align:center;">'+byType[t].length+'</td><td style="text-align:center;font-weight:bold;">'+avg+' yd³/hr</td><td style="text-align:center;">'+Math.min.apply(null,rates).toFixed(1)+'</td><td style="text-align:center;">'+Math.max.apply(null,rates).toFixed(1)+'</td></tr>');});pw.document.write('</table>');pw.document.write('<h3>Full Pour Log</h3><table><tr><th>Date</th><th>Project</th><th>Element</th><th>yd³</th><th>Hours</th><th>Rate</th><th>Crew</th><th>Pump</th><th>Notes</th></tr>');(d.entries||[]).slice().sort(function(a,b){return a.date>b.date?1:-1;}).forEach(function(e){pw.document.write('<tr><td>'+e.date+'</td><td>'+(e.project||'--')+'</td><td>'+e.type+'</td><td style="text-align:center;">'+e.yds+'</td><td style="text-align:center;">'+e.hours+'</td><td style="text-align:center;font-weight:bold;">'+e.rate+'</td><td style="text-align:center;">'+e.crew+'</td><td>'+(e.pump||'--')+'</td><td style="font-size:9px;">'+(e.notes||'--')+'</td></tr>');});pw.document.write('</table><p style="font-size:9px;margin-top:10px;"><strong>ACI 304R:</strong> Placement rate drives cold joint risk, crew sizing, pump selection. Your actuals supersede published benchmarks.</p><div class="sig"><div>Estimator / Date</div><div>PM / Date</div><div>Principal / Date</div></div></body></html>');pw.document.close();pw.print();};
+function createBtn(){var btn=document.createElement('button');btn.id=BTN;btn.textContent='⚡ Pour Rates';btn.style.cssText='position:fixed;bottom:5950px;right:16px;background:#1e293b;color:#38bdf8;border:1px solid #0369a1;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9066;box-shadow:0 2px 8px rgba(0,0,0,0.4);';btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Pour Rates':'⚡ Pour Rates';if(s)render();};document.body.appendChild(btn);var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9067;';var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
