@@ -1,5 +1,45 @@
 # Overnight Build Tasks - 2026-02-14
 
+## Session: Mar 26, 2026 - 01:50 UTC
+**Status:** Added 3 proactive features (549 lines)
+
+### New Features Added:
+1. ✅ **Rebar Development & Splice Length Calculator (📏)** - ACI 318-19 §25.4/§25.5
+   - Bar sizes #3-#11, f'c 3k-8k PSI, fy 40/60/80 ksi
+   - Normal/lightweight/sand-LW unit weight (λ factor)
+   - Bar position (ψt), coating (ψe), cover, spacing, Ktr inputs
+   - Computes: tension ld, compression ldc, standard hook ldh
+   - Class A/B tension splices, compression splice lengths
+   - Ft-in conversion display for field use
+   - Print ACI 318-19 formal calc sheet with EOR sign-off
+   - ACI 318-19 quick reference table for all ψ factors
+   - Daily field question answered in 30 seconds with printable record
+
+2. ✅ **Semi-Rigid Floor Joint Filler Estimator (🔩)** - ACI 302.1R-15 §4.6.1 / ASTM C881
+   - Hard epoxy filler for forklift traffic floors
+   - 4 product presets (MM-80, Sikadur 35, Duraltop, custom)
+   - Joint width/depth selection, kit volume calc (in³/LF)
+   - 10% waste factor, total kits, material + labor + markup
+   - Backer rod option for EJ
+   - Pull CJ LF from main tool
+   - Print formal estimate with ACI traffic classification table
+   - Scope routinely missed: 50k SF warehouse = ~$33k in missing scope
+
+3. ✅ **Crane Lift Ticket Log (🏗️)** - OSHA 1926.1412/1416/1427 / ASME B30.5
+   - Per-lift record: crane type, unit ID, piece mark
+   - Load weight + rigging weight, rated capacity at radius
+   - Auto-computes % of rated capacity
+   - OSHA thresholds: ≥75% amber (lift plan required), ≥90% red critical
+   - Dashboard: total lifts, critical count, avg % capacity
+   - Print OSHA 1926.1412 formal log with 4-way sign-off
+   - OSHA/ASME reference table
+   - Tilt-up and precast erection compliance documentation
+
+**Commit:** d892239 → GitHub pushed
+**Total Lines:** 51,239 | **Total Tools:** 51
+
+---
+
 ## Session: Mar 25, 2026 - 16:04 UTC
 **Status:** Added 3 proactive features (604 lines)
 
@@ -663,6 +703,21 @@ Build out Oncor while JFS sleeps. Research, marketing materials, and technical f
   - BID BOND & SURETY COST ESTIMATOR (🏛️): Real-time P&P bond cost calculation. Bid bond (5%, capped $100k). P&P cost from 6-tier sliding scale (2.80% at $100k → 1.30% at $10M). Retainage held computed. Required/not-required verdict by project type: Private (none), TxDOT (>$25k TX §2253), Federal (>$150k Miller Act), Municipal/ISD (TX Little Miller Act >$25k). Statutory reference table for all types. Market rate scale card. Save analyses to history. Answers: 'How much does bonding cost?' and 'Do I need a bond for this job?'
   - CURING SPEC QUICK-PICK (🧊): ACI 308R/305R/306R/ASTM C309 curing selector. Pick element (11 options) + weather → recommended method, minimum duration, ACI-cited field notes. Hot weather banner: ACI 305R fog mist requirements. Cold weather banner: ACI 306R compound ineffectiveness warning. Curing method comparison table: 6 methods with pros/cons/cost. Curing log: element, method, start/end, applied-by, lot#. Print ACI 308R/305R/306R formal log with triple sign-off. El Paso: 115°F summer = white compound + fog; January freezes = insulating blankets. Makes the right answer a 10-second lookup.
   Tool now at 43,469 lines.
+- 03:01 UTC (Mar 26): 3 proactive improvements shipped (commit 0e679fa):
+  - SLAB TURN-DOWN / MONOLITHIC EDGE ESTIMATOR (🔲): ACI 360R-10 / ACI 302.1R-15 thickened perimeter concrete quantity estimator. Slab body + turn-down extra volume computed separately (TD often 8–15% of total on warehouse pads — routinely missed). ACI 360R-10 min dimension warnings (TD depth ≥1.5× slab, width ≥3× slab). +5% waste order qty. Cost with OH+profit markup. Save named estimates, print formal ACI calc sheet with sign-off, copy summary.
+  - FIELD POUR TRUCK COUNTER (🚚): Real-time pour-day truck dispatch tracker with live ACI 304R cold joint window monitoring. Pour setup: total order yd³ (↙ from takeoff), truck capacity, pour rate, cold joint window (45/60/90 min presets). Dashboard: trucks received vs expected, yd³ received/remaining, elapsed pour duration. One-tap truck log with ID, yd³, ticket #. Per-interval alerts: amber at 65% of window, red at 85%, CRITICAL banner at 100% with ACI 304R reference. Auto-refresh every 15s. Print ACI 304R pour log with triple sign-off, copy plain-text.
+  - CONTRACTOR LICENSE & REGISTRATION TRACKER (🪪): Company-wide license/cert/registration register with expiry countdown alerts. 21 type presets (TDLR, TX contractor, city registrations El Paso/Las Cruces/other, TxDOT preQual, DBE/HUB, SAM/CAGE, OSHA 30-hr, ACI certs, NCCCO, biz license, SOS, EIN, WC exemption, surety bond, custom). Expiry color-coded: expired red ⛔, ≤7d, ≤30d, ≤90d, active. Dashboard + alert banners. Items sorted by urgency. Print formal register with compliance notes, copy report. Global localStorage.
+  Tool now at 51,728 lines.
+- 00:44 UTC (Mar 26): 3 proactive improvements shipped (commit 47a2b6d):
+  - DAILY POUR SUMMARY CARD (📋): Fast per-pour documentation card. Date, element, PSI, yd³, trucks, pour window start/end, crew size, foreman, QC inspector, slump range, concrete temp, admixtures used, issue dropdown (12 presets: slump OOS, pump breakdown, cold joint, weather stop, etc.), notes/tomorrow's plan. Saves to localStorage. Print formal card with Foreman/PM/GC Inspector triple sign-off. Auto-computes pour duration. Contemporaneous per-pour record — replaces verbal tailgate notes.
+  - TOPPING SLAB / OVERLAY ESTIMATOR (🏗): ACI 302.1R-15 / ICRI 310.2R / 320.2R. 6 surface prep methods (Shot Blast ICRI CSP6 → pressure wash) with $/SF rates. 6 material types: SLU (ASTM C1708), bonded NW concrete, bonded LW concrete, polymer-modified mortar (ICRI 320.2R), micro-topping (ACI 310.2R), epoxy mortar (ASTM C881) — each with ASTM references and quantity calculations (bags, yd³, or $/SF). ACI 302.1R minimum thickness checks (bonded NW ≥1.5", unbonded ≥2.5") with red warnings. Bonding agent, labor, OH+profit markup. $/SF all-in result. Save named estimates, print formal ACI/ICRI referenced estimate with exclusions note. Overlay scope routinely under-bid — per ACI, an improperly profiled substrate causes delamination that voids contractor warranty.
+  - HYDROSTATIC UPLIFT CHECK (⚓): ACI 336.1 / IBC §1804.3 buoyancy safety factor check for below-grade slabs, elevator pits, tanks, basements. Inputs: slab L×W, thickness, bottom depth below grade, water table depth, soil type (8 presets incl. El Paso caliche 130 pcf, expansive clay), soil unit weight, soil height above slab, anchor capacity (kips/ea). Computes: hydraulic head, uplift pressure (psf) and total uplift force (kips), slab dead load, soil surcharge dead load, FS = resistance ÷ uplift. ACI 336.1 minimum FS = 1.5. Green PASS / Red FAIL verdict. FAIL: computes exact resistance deficit and minimum anchor count at user-specified capacity. Print ACI 336.1/IBC §1804.3 formal calc sheet: full parameters table, force table with uplift/resistance rows, FS verdict, EOR verification block, 3-way sign-off. Save calculations to history. El Paso water table in flood-prone areas (upper valley, mesa) can be ≤6 ft — elevator pits and detention basements need this check before placing concrete.
+  Tool now at 50,690 lines.
+- 23:36 UTC (Mar 25): 3 proactive improvements shipped (commit d2bd195):
+  - INTEGRAL COLOR / PIGMENT DOSAGE ESTIMATOR (🎨): ASTM C979 / ACI 116R compliant pigment quantity and cost calculator. 10 pigment type presets (iron oxide red/brown/yellow/black/buff, carbon black, chromium oxide green, cobalt blue, titanium dioxide white, custom) with ASTM type classification, typical dosage %, and El Paso 2025 market $/lb. Settings panel: cement content lb/yd³, OH%, profit%. Add named estimates: project, pigment type, total yd³, dosage % by weight of cement, pigment $/lb, pour count. Auto-computes: pigment lb/yd³, total pigment lbs, 50-lb bag count, material cost, all-in with markup, $/yd³ adder. ASTM C979 violation flag when dosage >10%. Multi-pour lot consistency warning (ASTM C979 §6.3 — same lot number required across all pours of same element). Pull-from-takeoff button. Print formal ASTM C979/ACI 116R estimate: all parameters, cost table, lot consistency requirement, trial mix requirement note, client acceptance block. Global localStorage. Integral color is consistently either missed or priced as a vague line item — this computes exact pigment quantity from mix design parameters, flags the ASTM limit, and generates a formal estimate for client approval before pour.
+  - BELOW-GRADE WATERPROOFING SCOPE ESTIMATOR (💧): ACI 332R / IBC §1805 / ASTM D7465. 8 system type presets: crystalline admixture ($/yd³), liquid applied polyurethane ($/SF), liquid applied polyurea ($/SF), HDPE/PVC sheet membrane ($/SF), bentonite blanket Voltex ($/SF), cementitious slurry ($/SF), drainage board ($/SF), crystalline surface plug ($/SF), plus custom. Each system has ASTM reference and application notes. Hydrostatic pressure calculator: enter depth to water table + wall depth below water table → psf and psi with risk verdict (LOW/MODERATE/HIGH with system recommendation). Add scope items: project/element, system type, area/qty, rate, OH%, profit%. Running scope total. Print ACI 332R/IBC §1805 formal estimate: all scope items in table, grand total, substrate prep exclusions notice, footer drain requirement note, triple sign-off. Copy plain-text. Global localStorage. Below-grade waterproofing is routinely missing or underscoped in concrete bids — and when the basement leaks, the concrete sub owns it.
+  - CONCRETE DEMO & SAW CUTTING SCOPE ESTIMATOR (🪚): CSDA Standards / ACI 546R-14 / OSHA 1926.702. Two separate entry panels — Saw/Core Cutting (8 types: flat saw walk-behind/ride-on, wall saw, wire saw, ring saw, joint chasing, core drilling 3 diameter tiers) and Demolition (11 types: jackhammer by thickness tier, saw-cut-and-remove, hydrodemolition, surface scarification, grinding, joint re-seal, haul-off per ton). Each type preset has CSDA/ACI reference and field notes. Haul-off volume calculator: SF × thickness → tons of rubble (with 1.30 swell factor). All items: qty × rate × OH/profit → total. Running grand total. Print CSDA/ACI 546R formal scope: dual-category table (purple = saw/core, red = demo), scope summary totals, standard exclusions block (traffic control, abatement, permits, haul-off if not included), OSHA 1926.1153 silica compliance statement, PT slab core warning (GPR scan required per ACI 318-19 §6.3). Copy plain-text. Global localStorage. Demo and saw cutting scope is the #1 consistently under-bid category in concrete repair/rehab work — this forces systematic quantity buildup and documents CSDA and OSHA compliance.
+  Tool now at 50,296 lines. Commit d2bd195 → pushed.
 - 21:25 UTC (Mar 25): 3 proactive improvements shipped (commit 54fd9ee):
   - SILICA EXPOSURE MONITORING LOG (☣️): OSHA 29 CFR §1926.1153 Table 1 compliance tracking for all silica-generating concrete operations. 10 task type presets (angle grinding, sawing, jackhammering, drilling, demolition, finishing, scabbling, troweling, etc.). Per-employee entry log: task, duration hours, respirator type, HEPA vacuum used flag, water suppression flag, non-compliant flag. Dashboard: total entries, employees monitored count, non-compliant entry count. Red alert banner when entries lack required Table 1 engineering controls. Built-in OSHA Table 1 quick-reference card showing required controls and minimum respirator per task. Print OSHA 1926.1153 formal log: full exposure table, non-compliant rows highlighted red, Table 1 reference, action level / PEL notes (25 μg/m³ triggers medical surveillance; 50 μg/m³ PEL), Safety Officer/PM/Superintendent triple sign-off. Global localStorage. GCs on commercial projects increasingly require documented silica compliance programs — OSHA 1926.1153 took effect 2018 and is actively enforced. Without a log, you cannot prove Table 1 controls were used, and workers may face exposure without records to support medical surveillance enrollment.
   - CONCRETE FLATWORK POLISHING / GRINDING ESTIMATOR (💎): ACI 310.2R / CSDA finish level estimator. 6 finish levels: Level 1 Scratch/Matte ($1.20/SF) through Level 4 High Polish 1500+ grit ($3.80/SF), plus Epoxy Broadcast ($2.50/SF) and Floor Hardener/Sealer ($1.20/SF). 4 floor condition modifiers (new concrete → badly damaged, +$0.25–$0.90/SF). Densifier add-on +$0.35/SF. Inputs: SF, finish level, condition, labor $/hr, production rate SF/hr, mobilization, OH%, profit%. Auto-computes: required passes, labor hours (with burden), equipment wear/tooling, mobilization, subtotal, markup, grand total, all-in $/SF. Finish level reference table with grit, passes, and description. Live recalculation on any input change. Print professional estimate with scope summary, cost breakdown, exclusions note, client acceptance block. El Paso 2025 market rates. Polishing/grinding scope is increasingly requested on warehouse and commercial floors — having a calculator prevents under-pricing a scope that requires more passes than a standard finish.
