@@ -60065,3 +60065,587 @@ function createBtn(){
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
 })();
 </script>
+
+<!-- ==================== TOOL 115: CONCRETE DELIVERY TEMPERATURE PREDICTOR ==================== -->
+<script>
+(function(){
+'use strict';
+var KEY='oncor_delivTemp_v1',BTN='delivTempBtn',WRAP='delivTempWrap',INNER='delivTempInner';
+function fmt(n){return '$'+Math.round(n).toLocaleString();}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||{};}catch(e){return{};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+
+var PRESETS=[
+  {label:'El Paso Summer (Peak)',Tw:95,Tc:180,Tfa:110,Tca:105,Ww:0.3,Wc:0.094,Wfa:1.42,Wca:2.5,note:'ACI 305R summer conditions — target delivery <90°F, typically requires ice'},
+  {label:'El Paso Winter (Cold Night)',Tw:50,Tc:75,Tfa:35,Tca:35,Ww:0.3,Wc:0.094,Wfa:1.42,Wca:2.5,note:'ACI 306R cold weather — target delivery 55–70°F, heat mix water'},
+  {label:'Standard 4000 PSI (Mild)',Tw:70,Tc:90,Tfa:70,Tca:70,Ww:0.3,Wc:0.094,Wfa:1.42,Wca:2.5,note:'Normal production — baseline check'},
+  {label:'El Paso Spring/Fall',Tw:75,Tc:120,Tfa:80,Tca:78,Ww:0.3,Wc:0.094,Wfa:1.42,Wca:2.5,note:'Typical ambient 75–85°F — usually compliant without ice'}
+];
+
+function calcTemp(Tw,Tc,Tfa,Tca,Ww,Wc,Wfa,Wca){
+  // ACI 305R Eq. 2-1: Tc = (0.22(TaWa + TcWc) + TwWw + TfaWfa + TcaWca) / (0.22(Wa+Wc) + Ww + Wfa + Wca)
+  // Assuming Wa (aggregate absorbed water) ~ 0 for simplification
+  var num = 0.22*(Tc*Wc) + Tw*Ww + Tfa*Wfa + Tca*Wca;
+  var den = 0.22*(Wc) + Ww + Wfa + Wca;
+  return num/den;
+}
+
+function render(){
+  var d=load();
+  var html='<div style="max-width:700px;margin:0 auto;padding:16px;font-family:Arial,sans-serif;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+  html+='<h2 style="color:#f1f5f9;font-size:16px;margin:0;">🌡️ Tool 115 — Concrete Delivery Temperature Predictor</h2>';
+  html+='<button onclick="document.getElementById(\''+WRAP+'\').style.display=\'none\';document.getElementById(\''+BTN+'\').textContent=\'🌡️ Delivery Temp\';" style="background:#334155;color:#94a3b8;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">✕ Close</button></div>';
+  html+='<p style="color:#94a3b8;font-size:11px;margin-bottom:12px;">ACI 305R Eq. 2-1 / ACI 306R §8 — Predict concrete temperature at point of delivery from batch ingredient temperatures. ACI 305R §4.1 max delivery temp: <strong style="color:#f87171;">90°F</strong>. ACI 306R target: <strong style="color:#60a5fa;">55–70°F</strong> cold weather.</p>';
+
+  // Preset selector
+  html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:12px;">';
+  html+='<label style="color:#94a3b8;font-size:11px;">Quick-Load Scenario</label><br>';
+  html+='<select id="dtPreset" onchange="window.dtLoadPreset()" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:4px;">';
+  PRESETS.forEach(function(p,i){html+='<option value="'+i+'">'+p.label+'</option>';});
+  html+='</select></div>';
+
+  // Ingredient temps + proportions
+  html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:12px;">';
+  html+='<h4 style="color:#e2e8f0;font-size:12px;margin:0 0 10px 0;">Ingredient Temperatures & Batch Weights (per yd³)</h4>';
+  var fields=[
+    {id:'dtTw',label:'Mix Water Temp (°F)',hint:'Cool/chilled: 35–45°F | Ice: 32°F | Heated: 120–140°F',def:75,wid:'dtWw',wlabel:'Water (cwt)',wdef:'0.30'},
+    {id:'dtTc',label:'Cement Temp (°F)',hint:'Freshly ground cement can exceed 200°F; stored cement 80–100°F',def:100,wid:'dtWc',wlabel:'Cement (cwt)',wdef:'0.094'},
+    {id:'dtTfa',label:'Fine Agg Temp (°F)',hint:'Sand stored in shade: near ambient; sun-heated pile: +15°F',def:80,wid:'dtWfa',wlabel:'Fine Agg (cwt)',wdef:'1.42'},
+    {id:'dtTca',label:'Coarse Agg Temp (°F)',hint:'Washed rock: 5–10°F cooler than ambient; dry stockpile: near ambient',def:80,wid:'dtWca',wlabel:'Coarse Agg (cwt)',wdef:'2.50'}
+  ];
+  fields.forEach(function(f){
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+    html+='<div><label style="color:#94a3b8;font-size:10px;">'+f.label+'</label><input id="'+f.id+'" type="number" value="'+f.def+'" oninput="window.dtCalc()" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:13px;margin-top:2px;"><span style="color:#475569;font-size:9px;">'+f.hint+'</span></div>';
+    html+='<div><label style="color:#94a3b8;font-size:10px;">'+f.wlabel+'</label><input id="'+f.wid+'" type="number" step="0.001" value="'+f.wdef+'" oninput="window.dtCalc()" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:13px;margin-top:2px;"><span style="color:#475569;font-size:9px;">cwt = hundredweight (100 lb units)</span></div>';
+    html+='</div>';
+  });
+  html+='</div>';
+
+  // Haul time temp rise
+  html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:12px;">';
+  html+='<h4 style="color:#e2e8f0;font-size:12px;margin:0 0 8px 0;">Haul Time & Ambient Heat Gain</h4>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Haul Time (minutes)</label><input id="dtHaulMin" type="number" value="20" oninput="window.dtCalc()" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:13px;margin-top:2px;"><span style="color:#475569;font-size:9px;">0–90 min (ASTM C94 §11.8 max 90 min)</span></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Ambient Temp (°F)</label><input id="dtAmbient" type="number" value="95" oninput="window.dtCalc()" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:13px;margin-top:2px;"><span style="color:#475569;font-size:9px;">Air temp at plant/site</span></div>';
+  html+='</div></div>';
+
+  // Result
+  html+='<div id="dtResult" style="margin-bottom:12px;"><p style="color:#475569;font-size:12px;">Enter ingredient temperatures to see predicted delivery temperature.</p></div>';
+
+  // ACI reference table
+  html+='<details style="margin-bottom:12px;"><summary style="color:#60a5fa;font-size:11px;cursor:pointer;">ACI 305R/306R Temperature Reference Table</summary>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:10px;margin-top:6px;">';
+  html+='<table style="width:100%;border-collapse:collapse;font-size:10px;">';
+  html+='<tr style="background:#1e293b;"><th style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:left;">Condition</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Standard</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Limit</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Action if Exceeded</th></tr>';
+  var rows=[
+    ['Max delivery temp (hot weather)','ACI 305R §4.1','90°F','Reject load; order ice substitution per ACI 305R §5.3'],
+    ['Min delivery temp (cold weather, ≤30°F ambient)','ACI 306R Table 8.1','55°F','Heat mix water; insulate drum'],
+    ['Min delivery temp (cold, >30°F ambient)','ACI 306R Table 8.1','50°F','Heat mix water'],
+    ['Max concrete temp at placement','ACI 305R §4.1','90°F','Reject / schedule off-peak pour'],
+    ['Max cement temp (plant)','ACI 305R','180°F','Cool cement silo; use supplementary cementite materials'],
+    ['Aggregate temp reduction by wetting','ACI 305R §5.2','≈5–10°F','Sprinkle stockpile 24hr before pour'],
+    ['Ice substitution limit','ACI 305R §5.3','≤75% of water weight','Remaining as chilled water'],
+    ['Hot weather: retarder required','ACI 305R §6.3','>77°F ambient','Add Type B/D retarder per ASTM C494']
+  ];
+  rows.forEach(function(r){html+='<tr><td style="padding:4px;border:1px solid #334155;color:#e2e8f0;">'+r[0]+'</td><td style="padding:4px;border:1px solid #334155;color:#60a5fa;text-align:center;">'+r[1]+'</td><td style="padding:4px;border:1px solid #334155;color:#fbbf24;font-weight:bold;text-align:center;">'+r[2]+'</td><td style="padding:4px;border:1px solid #334155;color:#94a3b8;font-size:9px;">'+r[3]+'</td></tr>';});
+  html+='</table></div></details>';
+
+  // Calculation log
+  html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:12px;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+  html+='<h4 style="color:#e2e8f0;font-size:12px;margin:0;">Saved Calculations</h4>';
+  html+='<div style="display:flex;gap:6px;"><button onclick="window.dtSave()" style="background:#1e40af;color:#fff;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px;">💾 Save</button>';
+  html+='<button onclick="window.dtPrint()" style="background:#0f172a;color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px;">🖨️ Print</button></div></div>';
+  var calcs=(d.calcs||[]).slice().reverse();
+  if(!calcs.length){html+='<p style="color:#475569;font-size:11px;">No saved calculations yet.</p>';}
+  else{
+    html+='<table style="width:100%;border-collapse:collapse;font-size:10px;">';
+    html+='<tr style="background:#0f172a;"><th style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:left;">Label</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Predicted °F</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Delivery °F</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Status</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Date</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;"></th></tr>';
+    calcs.forEach(function(c,i){
+      var idx=d.calcs.length-1-i;
+      var tc=c.result;var td=c.delivery;
+      var col=tc>90?'#f87171':tc<50?'#93c5fd':'#4ade80';
+      html+='<tr><td style="padding:4px;border:1px solid #334155;color:#e2e8f0;font-size:9px;">'+esc(c.label)+'</td><td style="padding:4px;border:1px solid #334155;color:'+col+';font-weight:bold;text-align:center;">'+tc.toFixed(1)+'°F</td><td style="padding:4px;border:1px solid #334155;color:'+col+';font-weight:bold;text-align:center;">'+td.toFixed(1)+'°F</td><td style="padding:4px;border:1px solid #334155;text-align:center;"><span style="background:'+(tc>90?'#7f1d1d':tc<50?'#1e3a5f':'#052e16')+';color:'+col+';border-radius:4px;padding:2px 6px;font-size:9px;font-weight:bold;">'+c.verdict+'</span></td><td style="padding:4px;border:1px solid #334155;color:#475569;text-align:center;">'+c.savedDate+'</td><td style="padding:4px;border:1px solid #334155;text-align:center;"><button onclick="window.dtDel('+idx+')" style="background:#7f1d1d;color:#f87171;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:10px;">✕</button></td></tr>';
+    });
+    html+='</table>';
+  }
+  html+='</div></div>';
+  document.getElementById(INNER).innerHTML=html;
+  setTimeout(function(){window.dtCalc();},50);
+}
+
+window.dtLoadPreset=function(){
+  var idx=parseInt(document.getElementById('dtPreset').value);var p=PRESETS[idx];
+  document.getElementById('dtTw').value=p.Tw;
+  document.getElementById('dtTc').value=p.Tc;
+  document.getElementById('dtTfa').value=p.Tfa;
+  document.getElementById('dtTca').value=p.Tca;
+  document.getElementById('dtWw').value=p.Ww;
+  document.getElementById('dtWc').value=p.Wc;
+  document.getElementById('dtWfa').value=p.Wfa;
+  document.getElementById('dtWca').value=p.Wca;
+  window.dtCalc();
+};
+
+window.dtCalc=function(){
+  var Tw=parseFloat(document.getElementById('dtTw').value)||0;
+  var Tc=parseFloat(document.getElementById('dtTc').value)||0;
+  var Tfa=parseFloat(document.getElementById('dtTfa').value)||0;
+  var Tca=parseFloat(document.getElementById('dtTca').value)||0;
+  var Ww=parseFloat(document.getElementById('dtWw').value)||0;
+  var Wc=parseFloat(document.getElementById('dtWc').value)||0;
+  var Wfa=parseFloat(document.getElementById('dtWfa').value)||0;
+  var Wca=parseFloat(document.getElementById('dtWca').value)||0;
+  var haul=parseFloat(document.getElementById('dtHaulMin').value)||0;
+  var ambient=parseFloat(document.getElementById('dtAmbient').value)||0;
+  var el=document.getElementById('dtResult');if(!el)return;
+
+  var base=calcTemp(Tw,Tc,Tfa,Tca,Ww,Wc,Wfa,Wca);
+  // Heat gain during haul: ~0.15°F per minute above 70°F ambient (ACI 305R estimate)
+  var heatGain=Math.max(0,(ambient-70)*0.15*(haul/60));
+  var delivery=base+heatGain;
+
+  var verdict,color,bg;
+  if(delivery>90){verdict='VIOLATION — REJECT';color='#f87171';bg='#7f1d1d';}
+  else if(delivery>85){verdict='HIGH — USE ICE';color='#fbbf24';bg='#78350f';}
+  else if(delivery<45){verdict='TOO COLD';color='#93c5fd';bg='#1e3a5f';}
+  else if(delivery<55){verdict='MARGINAL — HEAT';color='#fbbf24';bg='#78350f';}
+  else{verdict='✓ COMPLIANT';color='#4ade80';bg='#052e16';}
+
+  var iceNeeded='N/A';
+  if(delivery>90){
+    // Ice to reduce delivery by ΔT: Q_ice = (ΔT × mass_concrete) / heat_fusion
+    // ACI 305R simplified: each lb of ice lowers 1 yd³ by ~0.27°F (rough rule)
+    var delta=delivery-88;// target 88°F
+    var iceLbs=Math.ceil(delta/0.27);
+    iceNeeded=iceLbs+' lb of ice per yd³ (target ≤88°F)';
+  }
+
+  var html='<div style="background:'+(delivery>90?'#7f1d1d':delivery<50?'#1e3a5f':'#1e293b')+';border:1px solid '+(delivery>90?'#ef4444':delivery<50?'#3b82f6':'#334155')+';border-radius:8px;padding:14px;">';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">';
+  html+='<div style="text-align:center;"><div style="color:#94a3b8;font-size:9px;">BATCH PLANT TEMP</div><div style="color:'+color+';font-size:26px;font-weight:700;">'+base.toFixed(1)+'°F</div></div>';
+  html+='<div style="text-align:center;"><div style="color:#94a3b8;font-size:9px;">ESTIMATED DELIVERY</div><div style="color:'+color+';font-size:26px;font-weight:700;">'+delivery.toFixed(1)+'°F</div></div>';
+  html+='<div style="text-align:center;"><div style="color:#94a3b8;font-size:9px;">STATUS</div><div style="background:'+bg+';color:'+color+';border-radius:6px;padding:4px 8px;font-size:13px;font-weight:700;margin-top:4px;">'+verdict+'</div></div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;">';
+  html+='<div><span style="color:#94a3b8;">Heat gain during haul:</span> <span style="color:#e2e8f0;font-weight:600;">+'+heatGain.toFixed(1)+'°F</span> ('+haul+' min @ '+ambient+'°F ambient)</div>';
+  html+='<div><span style="color:#94a3b8;">ACI 305R ice needed:</span> <span style="color:'+(delivery>90?'#f87171':'#4ade80')+';font-weight:600;">'+iceNeeded+'</span></div>';
+  html+='<div><span style="color:#94a3b8;">Water (Tw='+Tw+'°F):</span> <span style="color:#e2e8f0;">Reduces 1°F for every ~0.15°F water temp reduction</span></div>';
+  html+='<div><span style="color:#94a3b8;">Recommendation:</span> <span style="color:#e2e8f0;">'+(delivery>90?'Request ice in order; schedule off-peak pour':delivery<50?'Heat mix water to 120–140°F; insulate drum':'Compliant — no special action needed')+'</span></div>';
+  html+='</div></div>';
+  el.innerHTML=html;
+};
+
+window.dtSave=function(){
+  var el=document.getElementById('dtResult');
+  var Tw=parseFloat(document.getElementById('dtTw').value)||0;
+  var Tc=parseFloat(document.getElementById('dtTc').value)||0;
+  var Tfa=parseFloat(document.getElementById('dtTfa').value)||0;
+  var Tca=parseFloat(document.getElementById('dtTca').value)||0;
+  var Ww=parseFloat(document.getElementById('dtWw').value)||0;
+  var Wc=parseFloat(document.getElementById('dtWc').value)||0;
+  var Wfa=parseFloat(document.getElementById('dtWfa').value)||0;
+  var Wca=parseFloat(document.getElementById('dtWca').value)||0;
+  var haul=parseFloat(document.getElementById('dtHaulMin').value)||0;
+  var ambient=parseFloat(document.getElementById('dtAmbient').value)||0;
+  var base=calcTemp(Tw,Tc,Tfa,Tca,Ww,Wc,Wfa,Wca);
+  var heatGain=Math.max(0,(ambient-70)*0.15*(haul/60));
+  var delivery=base+heatGain;
+  var verdict=delivery>90?'VIOLATION':delivery>85?'HIGH':delivery<50?'TOO COLD':delivery<55?'MARGINAL':'COMPLIANT';
+  var presetIdx=parseInt(document.getElementById('dtPreset').value);
+  var label=PRESETS[presetIdx].label+' | '+new Date().toLocaleTimeString();
+  var d=load();d.calcs=d.calcs||[];
+  d.calcs.push({label:label,result:parseFloat(base.toFixed(1)),delivery:parseFloat(delivery.toFixed(1)),verdict:verdict,Tw:Tw,Tc:Tc,Tfa:Tfa,Tca:Tca,haul:haul,ambient:ambient,savedDate:new Date().toISOString().slice(0,10),ts:Date.now()});
+  if(d.calcs.length>30)d.calcs.shift();
+  save(d);render();
+};
+window.dtDel=function(i){var d=load();if(confirm('Remove?')){d.calcs.splice(i,1);save(d);render();}};
+window.dtPrint=function(){
+  var d=load();if(!d.calcs||!d.calcs.length){alert('No saved calculations.');return;}
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>Delivery Temp Predictions</title><style>body{font-family:Arial;font-size:10px;margin:20px;}h2{font-size:14px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:4px;}.viol{background:#fce8e8;}.ok{background:#e6f4ea;}.cold{background:#e8f0fc;}.sig{display:flex;gap:30px;margin-top:20px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;}</style></head><body>');
+  pw.document.write('<h2>Concrete Delivery Temperature Prediction Log</h2><p><strong>ACI 305R Eq. 2-1 / ACI 306R §8</strong></p><p>Generated: '+new Date().toLocaleDateString()+'</p>');
+  pw.document.write('<p><strong>ACI 305R §4.1:</strong> Maximum concrete temperature at point of discharge: 90°F. ACI 306R: Cold weather minimum 50–55°F depending on ambient. Temperatures exceeding ACI limits require plant corrective action (ice, heated water, reject load) before placement.</p>');
+  pw.document.write('<table><tr><th>Scenario</th><th>Batch Temp (°F)</th><th>Delivery Temp (°F)</th><th>Status</th><th>Date</th></tr>');
+  d.calcs.forEach(function(c){var cls=c.verdict==='VIOLATION'?'viol':c.verdict==='COMPLIANT'?'ok':'cold';pw.document.write('<tr class="'+cls+'"><td>'+esc(c.label)+'</td><td style="text-align:center;font-weight:bold;">'+c.result+'</td><td style="text-align:center;font-weight:bold;">'+c.delivery+'</td><td style="text-align:center;">'+c.verdict+'</td><td>'+c.savedDate+'</td></tr>');});
+  pw.document.write('</table><div class="sig"><div>QC Technician / Date</div><div>Batch Plant Operator / Date</div><div>PM / Date</div></div></body></html>');
+  pw.document.close();pw.print();
+};
+
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN;btn.textContent='🌡️ Delivery Temp';
+  btn.style.cssText='position:fixed;bottom:6600px;right:16px;background:#1e293b;color:#93c5fd;border:1px solid #1d4ed8;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9092;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Delivery Temp':'🌡️ Delivery Temp';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9093;';
+  var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<!-- ==================== TOOL 116: PEMB / METAL BUILDING FOUNDATION EMBED LOG ==================== -->
+<script>
+(function(){
+'use strict';
+var KEY='oncor_pembEmbed_v1',BTN='pembBtn',WRAP='pembWrap',INNER='pembInner';
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||{};}catch(e){return{};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+var STATUS=['Pending Drawing','Template Ordered','Template on Site','Rebar Caged','Inspected — Pre-Pour','Concrete Placed','Survey Verification','Grout Pads Complete','GC Accepted'];
+var STATUS_COLORS=['#475569','#7c3aed','#1d4ed8','#0369a1','#ca8a04','#16a34a','#ea580c','#15803d','#4ade80'];
+var EMBED_TYPES=['Anchor Bolt Group (4-bolt)','Anchor Bolt Group (6-bolt)','Anchor Bolt Group (8-bolt)','Moment Frame Embed Plate','Embed Angle / Haunch','Weld Plate (Misc Steel)','Purlin Bearing Embed','Rake Trim Embed','Door Jamb Embed','Mezzanine Column Base','Custom'];
+
+function nextStatus(s){return(s+1)%STATUS.length;}
+
+function render(){
+  var d=load();var items=d.items||[];
+  var proj=d.proj||'';
+  var total=items.length;
+  var byStatus={};STATUS.forEach(function(s){byStatus[s]=0;});
+  items.forEach(function(it){byStatus[it.status]=byStatus[it.status]||0;byStatus[it.status]++;});
+  var pending=items.filter(function(it){return it.status!=='GC Accepted';}).length;
+
+  var html='<div style="max-width:750px;margin:0 auto;padding:16px;font-family:Arial,sans-serif;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+  html+='<h2 style="color:#f1f5f9;font-size:16px;margin:0;">⚙️ Tool 116 — PEMB Foundation Embed Coordination Log</h2>';
+  html+='<button onclick="document.getElementById(\''+WRAP+'\').style.display=\'none\';document.getElementById(\''+BTN+'\').textContent=\'⚙️ PEMB Embeds\';" style="background:#334155;color:#94a3b8;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">✕ Close</button></div>';
+  html+='<p style="color:#94a3b8;font-size:11px;margin-bottom:12px;">ACI 318-19 §26.6 / AISC Design Guide 1 / MBMA Metal Building Systems Manual — Track anchor bolt templates, embed plates, and base plate grout for PEMB foundations. Anchor bolt errors are the #1 structural-steel erection delay on commercial jobs — a wrong bolt location = $3,500+/day crane sitting while concrete drilling. This creates the pre-pour verification record.</p>';
+
+  html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:12px;">';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;text-align:center;">';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:8px;"><div style="color:#94a3b8;font-size:9px;">TOTAL EMBEDS</div><div style="color:#e2e8f0;font-size:20px;font-weight:700;">'+total+'</div></div>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:8px;"><div style="color:#94a3b8;font-size:9px;">GC ACCEPTED</div><div style="color:#4ade80;font-size:20px;font-weight:700;">'+(byStatus['GC Accepted']||0)+'</div></div>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:8px;"><div style="color:#94a3b8;font-size:9px;">PENDING</div><div style="color:#f87171;font-size:20px;font-weight:700;">'+pending+'</div></div>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:8px;"><div style="color:#94a3b8;font-size:9px;">SURVEYED</div><div style="color:#60a5fa;font-size:20px;font-weight:700;">'+(byStatus['Survey Verification']||0)+(byStatus['Grout Pads Complete']||0)+(byStatus['GC Accepted']||0)+'</div></div>';
+  html+='</div></div>';
+
+  if(pending>0){html+='<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;padding:10px;margin-bottom:12px;color:#fca5a5;font-size:12px;font-weight:600;">⛔ '+pending+' embed'+(pending!==1?'s':'')+' not yet GC-accepted — verify survey results and grouting before steel erection. Per ACI 318-19 §26.6: anchor bolt locations must be surveyed before base plates are set.</div>';}
+  else if(total>0){html+='<div style="background:#052e16;border:1px solid #16a34a;border-radius:8px;padding:10px;margin-bottom:12px;color:#4ade80;font-size:12px;font-weight:600;">✅ All embeds GC-accepted — clear for steel erection.</div>';}
+
+  // Project header
+  html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:12px;">';
+  html+='<label style="color:#94a3b8;font-size:11px;">Project Name</label><input id="pembProj" type="text" value="'+esc(proj)+'" onchange="window.pembSaveProj()" placeholder="e.g. Eastside Industrial Warehouse" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:13px;margin-top:4px;"></div>';
+
+  // Add embed form
+  html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:12px;">';
+  html+='<h4 style="color:#e2e8f0;font-size:12px;margin:0 0 10px 0;">Add Embed Item</h4>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Embed Type</label><select id="pembType" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;">';
+  EMBED_TYPES.forEach(function(t){html+='<option>'+t+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Column Line / Mark</label><input id="pembMark" type="text" placeholder="e.g. A1, B-3, Frame 4" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;"></div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Bolt Size / Spec</label><input id="pembBoltSize" type="text" placeholder="e.g. 1\" Ø x 18\" ASTM F1554 Gr.55" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Bolt Count</label><input id="pembBoltCount" type="number" placeholder="4" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Template / Drawing</label><input id="pembDrawing" type="text" placeholder="S1.3 / Mfr Template" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;"></div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Pour Zone / Footing</label><input id="pembZone" type="text" placeholder="e.g. Grid A, South Wall" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Grout Pad Required?</label><select id="pembGrout" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;"><option>Yes — Structural Non-Shrink</option><option>No — Bare Base Plate</option><option>TBD — Check EOR</option></select></div>';
+  html+='</div>';
+  html+='<div style="margin-bottom:8px;"><label style="color:#94a3b8;font-size:10px;">Notes / Survey Results / As-Built Delta</label><textarea id="pembNotes" rows="2" placeholder="e.g. Survey: NE bolt 3/8\" E — within AISC DG1 tolerance (±1/4\" from design)" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;resize:vertical;"></textarea></div>';
+  html+='<button onclick="window.pembAdd()" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;font-weight:600;">+ Add Embed Item</button></div>';
+
+  // Embed log
+  if(items.length){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:12px;">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+    html+='<h4 style="color:#e2e8f0;font-size:12px;margin:0;">Embed Schedule ('+items.length+' items)</h4>';
+    html+='<div style="display:flex;gap:6px;"><button onclick="window.pembPrint()" style="background:#0f172a;color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px;">🖨️ Print Log</button><button onclick="window.pembCopy()" style="background:#0f172a;color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px;">📋 Copy</button></div></div>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:10px;">';
+    html+='<tr style="background:#0f172a;"><th style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:left;">Mark</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:left;">Type</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Bolts</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:left;">Zone</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:left;">Grout</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Status</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:left;">Notes</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;"></th></tr>';
+    items.forEach(function(it,i){
+      var si=STATUS.indexOf(it.status);if(si<0)si=0;var sc=STATUS_COLORS[si]||'#94a3b8';
+      html+='<tr style="'+(it.status!=='GC Accepted'?'':'background:#0a1a0a')+'">';
+      html+='<td style="padding:4px;border:1px solid #334155;color:#e2e8f0;font-weight:600;">'+esc(it.mark||'—')+'</td>';
+      html+='<td style="padding:4px;border:1px solid #334155;color:#94a3b8;font-size:9px;">'+esc(it.type)+'</td>';
+      html+='<td style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:center;">'+(it.boltCount||'?')+' × '+esc(it.boltSize||'—')+'</td>';
+      html+='<td style="padding:4px;border:1px solid #334155;color:#94a3b8;font-size:9px;">'+esc(it.zone||'—')+'</td>';
+      html+='<td style="padding:4px;border:1px solid #334155;color:'+(it.grout==='Yes — Structural Non-Shrink'?'#fbbf24':'#94a3b8')+';font-size:9px;">'+esc(it.grout||'—')+'</td>';
+      html+='<td style="padding:4px;border:1px solid #334155;text-align:center;"><span onclick="window.pembNextStatus('+i+')" style="background:#1e293b;color:'+sc+';border:1px solid '+sc+';border-radius:4px;padding:2px 5px;font-size:9px;cursor:pointer;white-space:nowrap;">'+esc(it.status)+'</span></td>';
+      html+='<td style="padding:4px;border:1px solid #334155;color:#475569;font-size:9px;">'+esc(it.notes||'—')+'</td>';
+      html+='<td style="padding:4px;border:1px solid #334155;text-align:center;"><button onclick="window.pembDel('+i+')" style="background:#7f1d1d;color:#f87171;border:none;border-radius:4px;padding:2px 5px;cursor:pointer;font-size:10px;">✕</button></td>';
+      html+='</tr>';
+    });
+    html+='</table></div>';
+  }
+
+  // ACI/AISC tolerance reference
+  html+='<details style="margin-bottom:12px;"><summary style="color:#60a5fa;font-size:11px;cursor:pointer;">AISC Design Guide 1 / ACI 318-19 Anchor Bolt Tolerance Reference</summary>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:10px;margin-top:6px;font-size:10px;">';
+  html+='<table style="width:100%;border-collapse:collapse;"><tr style="background:#1e293b;"><th style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:left;">Tolerance Item</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Allowed</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:left;">Action if Exceeded</th></tr>';
+  var rows=[
+    ['Bolt location from design (horizontal)','±1/4" (AISC DG1 §3.2)','EOR written authorization to proceed; may require oversize base plate holes'],
+    ['Bolt group offset (all bolts shift same direction)','±1" (AISC DG1 §3.2)','EOR review; typically acceptable if entire group shifts uniformly'],
+    ['Bolt elevation (top of bolt above slab)','±3/8" (AISC DG1)','Adjust shim plates; EOR sign-off for significant deviations'],
+    ['Bolt plumb','L/1000 per AISC COSP','Field straightening if within elastic range; replace if kinked'],
+    ['Bolt projection (for leveling nuts)','±1/2"','Adjust leveling nut height; verify thread engagement'],
+    ['Base plate grout clearance','1.5"–2" min (AISC DG1 §5)','Install shim stacks to achieve clearance; dry-pack or non-shrink grout'],
+    ['Min embed depth (ACI 318-19 §17)','8–12 bolt dia. typical','EOR verify pullout; may require additional anchor or epoxy anchor'],
+    ['Survey timing','Before base plate erection','Use total station; record in field log with as-built coordinates']
+  ];
+  rows.forEach(function(r){html+='<tr><td style="padding:4px;border:1px solid #334155;color:#e2e8f0;">'+r[0]+'</td><td style="padding:4px;border:1px solid #334155;color:#fbbf24;font-weight:bold;text-align:center;">'+r[1]+'</td><td style="padding:4px;border:1px solid #334155;color:#94a3b8;font-size:9px;">'+r[2]+'</td></tr>';});
+  html+='</table></div></details>';
+  html+='</div>';
+  document.getElementById(INNER).innerHTML=html;
+}
+
+window.pembSaveProj=function(){var d=load();d.proj=document.getElementById('pembProj').value;save(d);};
+window.pembNextStatus=function(i){var d=load();var it=d.items[i];it.status=STATUS[nextStatus(STATUS.indexOf(it.status))];save(d);render();};
+window.pembDel=function(i){var d=load();if(confirm('Remove this embed item?')){d.items.splice(i,1);save(d);render();}};
+window.pembAdd=function(){
+  var type=document.getElementById('pembType').value;
+  var mark=document.getElementById('pembMark').value.trim();
+  var boltSize=document.getElementById('pembBoltSize').value.trim();
+  var boltCount=parseInt(document.getElementById('pembBoltCount').value)||0;
+  var drawing=document.getElementById('pembDrawing').value.trim();
+  var zone=document.getElementById('pembZone').value.trim();
+  var grout=document.getElementById('pembGrout').value;
+  var notes=document.getElementById('pembNotes').value.trim();
+  if(!mark){alert('Enter a column line / mark.');return;}
+  var d=load();d.items=d.items||[];
+  d.items.push({type:type,mark:mark,boltSize:boltSize,boltCount:boltCount,drawing:drawing,zone:zone,grout:grout,notes:notes,status:'Pending Drawing',addedDate:new Date().toISOString().slice(0,10)});
+  save(d);render();
+};
+window.pembPrint=function(){
+  var d=load();if(!d.items||!d.items.length){alert('No embed items to print.');return;}
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>PEMB Embed Log</title><style>body{font-family:Arial;font-size:9px;margin:20px;}h2{font-size:13px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:4px;}.pending{background:#fff3cd;}.ok{background:#e6f4ea;}.sig{display:flex;gap:30px;margin-top:20px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;}</style></head><body>');
+  pw.document.write('<h2>PEMB Foundation Embed Coordination Log</h2><p><strong>ACI 318-19 §26.6 / AISC Design Guide 1 / MBMA Systems Manual</strong></p>');
+  pw.document.write('<p>Project: <strong>'+esc(d.proj||'—')+'</strong> | Generated: '+new Date().toLocaleDateString()+' | Total Embeds: '+d.items.length+'</p>');
+  pw.document.write('<table><tr><th>Mark</th><th>Type</th><th>Bolt Spec</th><th>Count</th><th>Drawing</th><th>Zone</th><th>Grout Req.</th><th>Status</th><th>Notes / As-Built</th></tr>');
+  d.items.forEach(function(it){var ok=it.status==='GC Accepted';pw.document.write('<tr class="'+(ok?'ok':'pending')+'"><td><strong>'+esc(it.mark||'—')+'</strong></td><td>'+esc(it.type)+'</td><td style="font-size:8px;">'+esc(it.boltSize||'—')+'</td><td style="text-align:center;">'+it.boltCount+'</td><td style="font-size:8px;">'+esc(it.drawing||'—')+'</td><td>'+esc(it.zone||'—')+'</td><td>'+esc(it.grout||'—')+'</td><td>'+esc(it.status)+'</td><td style="font-size:8px;">'+esc(it.notes||'—')+'</td></tr>');});
+  pw.document.write('</table><p style="font-size:8px;margin-top:10px;"><strong>AISC Design Guide 1 §3.2:</strong> Horizontal anchor bolt location tolerance ±1/4"; group offset ±1". Survey all bolts with total station before steel erection. Non-conforming bolt locations require written EOR authorization. <strong>Grout:</strong> Non-shrink grout per ASTM C1107, 1.5"–2" clearance from base plate to concrete. Grout prior to final bolting. <strong>ACI 318-19 §17:</strong> Anchor bolt design verified by Engineer of Record.</p><div class="sig"><div>Field Inspector / Date</div><div>Foreman / Date</div><div>Structural Engineer / Date</div><div>GC Superintendent / Date</div></div></body></html>');
+  pw.document.close();pw.print();
+};
+window.pembCopy=function(){
+  var d=load();if(!d.items||!d.items.length){alert('No items to copy.');return;}
+  var txt='PEMB EMBED LOG — '+esc(d.proj||'[Project]')+'\n';
+  txt+='Mark\tType\tBolt Spec\tCount\tZone\tGrout\tStatus\tNotes\n';
+  d.items.forEach(function(it){txt+=esc(it.mark||'—')+'\t'+esc(it.type)+'\t'+esc(it.boltSize||'—')+'\t'+it.boltCount+'\t'+esc(it.zone||'—')+'\t'+esc(it.grout||'—')+'\t'+esc(it.status)+'\t'+esc(it.notes||'—')+'\n';});
+  navigator.clipboard.writeText(txt).then(function(){alert('Copied!');});
+};
+
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN;btn.textContent='⚙️ PEMB Embeds';
+  btn.style.cssText='position:fixed;bottom:6650px;right:16px;background:#1e293b;color:#fbbf24;border:1px solid #b45309;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9094;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ PEMB Embeds':'⚙️ PEMB Embeds';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9095;';
+  var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<!-- ==================== TOOL 117: SPECIAL INSPECTION NOTIFICATION LOG ==================== -->
+<script>
+(function(){
+'use strict';
+var KEY='oncor_specInspNotify_v1',BTN='sinBtn',WRAP='sinWrap',INNER='sinInner';
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function fmt(d){return new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||{};}catch(e){return{};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+
+var INSP_TYPES=[
+  'Concrete Placement (ACI 318-19 §26.13)',
+  'Reinforcing Steel Placement (ACI 318-19 §26.13)',
+  'Pre-Pour Formwork Inspection (ACI 347R-14)',
+  'Anchor Bolt / Embed Placement (ACI 318-19 §26.6)',
+  'PT Tendon Installation (ACI 318-19 §26.10)',
+  'PT Stressing (PTI DC10.5)',
+  'Cylinder Pickup / Field Testing (ASTM C31)',
+  'Slump / Air / Temp Tests (ASTM C143/C231/C1064)',
+  'SCC Slump Flow Test (ASTM C1611)',
+  'Tilt-Up Panel Erection (ACI 551.1R)',
+  'Shotcrete / Gunite (ACI 506R)',
+  'Soil Bearing / Subgrade Verification (ACI 360R-10)',
+  'Compaction / Field Density (ASTM D1557)',
+  'High-Strength Bolt Pretensioning (AISC Spec)',
+  'Welding / Weld Inspection (AWS D1.1)',
+  'Fire Stop Inspection (IBC §714)',
+  'Structural Steel Erection (AISC COSP)',
+  'Other — See Notes'
+];
+var NOTICE_REQ=[24,24,24,24,24,24,4,0,0,48,24,8,8,8,8,24,24,24];
+var METHODS=['Email','Phone Call','Text Message','Project Management Software','RFI','Certified Mail','In Person'];
+var STATUSES=['Sent — Pending Confirmation','Confirmed','Inspector Declined — Reschedule','Inspector Present','Waived by GC','Complete — Records Filed'];
+var STA_COLORS=['#ca8a04','#16a34a','#dc2626','#2563eb','#7c3aed','#4ade80'];
+
+function render(){
+  var d=load();var items=d.items||[];
+  var proj=d.proj||'';var firm=d.firm||'';var contact=d.contact||'';
+  var total=items.length;
+  var confirmed=items.filter(function(it){return it.status==='Confirmed'||it.status==='Inspector Present'||it.status==='Complete — Records Filed';}).length;
+  var pending=items.filter(function(it){return it.status==='Sent — Pending Confirmation';}).length;
+  var declined=items.filter(function(it){return it.status==='Inspector Declined — Reschedule';}).length;
+
+  var html='<div style="max-width:750px;margin:0 auto;padding:16px;font-family:Arial,sans-serif;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+  html+='<h2 style="color:#f1f5f9;font-size:16px;margin:0;">📋 Tool 117 — Special Inspection Notification Log</h2>';
+  html+='<button onclick="document.getElementById(\''+WRAP+'\').style.display=\'none\';document.getElementById(\''+BTN+'\').textContent=\'📋 Insp Notify\';" style="background:#334155;color:#94a3b8;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">✕ Close</button></div>';
+  html+='<p style="color:#94a3b8;font-size:11px;margin-bottom:12px;">ACI 301-16 §1.6 / IBC Chapter 17 / ACI 318-19 §26.13 — Formal log of all special inspection advance notifications. Most GC and Owner-required special inspection programs require 24–48 hr advance notice before concrete placement, reinforcement placement, and structural work. Without this log, GC can claim you bypassed inspection — creating grounds to reject work.</p>';
+
+  html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:12px;">';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;text-align:center;">';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:8px;"><div style="color:#94a3b8;font-size:9px;">TOTAL NOTICES</div><div style="color:#e2e8f0;font-size:20px;font-weight:700;">'+total+'</div></div>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:8px;"><div style="color:#94a3b8;font-size:9px;">CONFIRMED</div><div style="color:#4ade80;font-size:20px;font-weight:700;">'+confirmed+'</div></div>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:8px;"><div style="color:#94a3b8;font-size:9px;">PENDING</div><div style="color:#fbbf24;font-size:20px;font-weight:700;">'+pending+'</div></div>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:8px;"><div style="color:#94a3b8;font-size:9px;">RESCHEDULE</div><div style="color:#f87171;font-size:20px;font-weight:700;">'+declined+'</div></div>';
+  html+='</div></div>';
+
+  if(declined>0){html+='<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;padding:10px;margin-bottom:12px;color:#fca5a5;font-size:12px;font-weight:600;">⛔ '+declined+' inspection(s) declined/reschedule required — do not proceed with those work activities until inspection is confirmed. Per ACI 318-19 §26.13.3: contractor must notify inspector not less than 24 hours before placing concrete.</div>';}
+  if(pending>0){html+='<div style="background:#78350f;border:1px solid #f59e0b;border-radius:8px;padding:8px;margin-bottom:12px;color:#fef3c7;font-size:11px;">⚠️ '+pending+' notice(s) sent but not yet confirmed. Follow up before pour day.</div>';}
+
+  // Project / firm header
+  html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:12px;">';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Project Name</label><input id="sinProj" type="text" value="'+esc(proj)+'" onchange="window.sinSaveHeader()" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Testing / Inspection Firm</label><input id="sinFirm" type="text" value="'+esc(firm)+'" onchange="window.sinSaveHeader()" placeholder="e.g. SW Testing Lab" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Inspector Contact</label><input id="sinContact" type="text" value="'+esc(contact)+'" onchange="window.sinSaveHeader()" placeholder="Name / Phone" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;"></div>';
+  html+='</div></div>';
+
+  // Add notice form
+  html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:12px;">';
+  html+='<h4 style="color:#e2e8f0;font-size:12px;margin:0 0 10px 0;">Log Notification</h4>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Inspection Type</label><select id="sinType" onchange="window.sinTypeChange()" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;">';
+  INSP_TYPES.forEach(function(t,i){html+='<option value="'+i+'">'+t+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Work / Pour Date</label><input id="sinWorkDate" type="date" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;"></div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Notification Date</label><input id="sinNotifDate" type="date" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Notification Method</label><select id="sinMethod" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;">';
+  METHODS.forEach(function(m){html+='<option>'+m+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Element / Area</label><input id="sinElement" type="text" placeholder="e.g. Grid A Footings, Elev. Deck Lvl 2" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;"></div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Notified By (initials)</label><input id="sinBy" type="text" placeholder="PM initials" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:10px;">Required Notice (hrs)</label><input id="sinReqHrs" type="number" value="24" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;"></div>';
+  html+='</div>';
+  html+='<div style="margin-bottom:8px;"><label style="color:#94a3b8;font-size:10px;">Notes / Confirmation Reference</label><textarea id="sinNotes" rows="2" placeholder="e.g. Emailed J. Smith 9:14 AM; confirmed reply 11:22 AM | Phone: confirmed pour for 6 AM, inspector arrives by 5:45 AM" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px;margin-top:2px;resize:vertical;"></textarea></div>';
+  html+='<button onclick="window.sinAdd()" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;font-weight:600;">+ Log Notification</button></div>';
+
+  // Notice log
+  if(items.length){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:12px;">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+    html+='<h4 style="color:#e2e8f0;font-size:12px;margin:0;">Notification Log ('+items.length+' entries)</h4>';
+    html+='<div style="display:flex;gap:6px;"><button onclick="window.sinPrint()" style="background:#0f172a;color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px;">🖨️ Print Log</button><button onclick="window.sinCopy()" style="background:#0f172a;color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px;">📋 Copy</button></div></div>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:10px;">';
+    html+='<tr style="background:#0f172a;"><th style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:left;">Inspection Type</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Work Date</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Notified</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Lead (hrs)</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:left;">Method</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Status</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:left;">Notes</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;"></th></tr>';
+    var sliceItems=items.slice().reverse();
+    sliceItems.forEach(function(it,ri){
+      var i=items.length-1-ri;
+      var si=STATUSES.indexOf(it.status);if(si<0)si=0;var sc=STA_COLORS[si]||'#94a3b8';
+      var leadHrs='?';
+      if(it.notifDate&&it.workDate){var diff=(new Date(it.workDate)-new Date(it.notifDate))/(1000*3600);leadHrs=diff.toFixed(0);}
+      var reqHrs=it.reqHrs||24;var leadColor=parseFloat(leadHrs)>=reqHrs?'#4ade80':'#f87171';
+      html+='<tr style="'+(it.status==='Inspector Declined — Reschedule'?'background:#1a0505;':it.status==='Complete — Records Filed'?'background:#0a1a0a;':'')+'">';
+      html+='<td style="padding:4px;border:1px solid #334155;color:#e2e8f0;font-size:9px;">'+esc(it.type)+'</td>';
+      html+='<td style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:center;">'+esc(it.workDate||'—')+'</td>';
+      html+='<td style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:center;">'+esc(it.notifDate||'—')+'</td>';
+      html+='<td style="padding:4px;border:1px solid #334155;color:'+leadColor+';font-weight:bold;text-align:center;">'+leadHrs+' / '+reqHrs+' req</td>';
+      html+='<td style="padding:4px;border:1px solid #334155;color:#94a3b8;font-size:9px;">'+esc(it.method||'—')+'</td>';
+      html+='<td style="padding:4px;border:1px solid #334155;text-align:center;"><span onclick="window.sinNextStatus('+i+')" style="background:#0f172a;color:'+sc+';border:1px solid '+sc+';border-radius:4px;padding:2px 4px;font-size:8px;cursor:pointer;white-space:nowrap;">'+esc(it.status)+'</span></td>';
+      html+='<td style="padding:4px;border:1px solid #334155;color:#475569;font-size:9px;">'+esc(it.notes||'—')+'</td>';
+      html+='<td style="padding:4px;border:1px solid #334155;text-align:center;"><button onclick="window.sinDel('+i+')" style="background:#7f1d1d;color:#f87171;border:none;border-radius:4px;padding:2px 5px;cursor:pointer;font-size:10px;">✕</button></td>';
+      html+='</tr>';
+    });
+    html+='</table></div>';
+  }
+
+  // IBC Ch 17 reference
+  html+='<details style="margin-bottom:12px;"><summary style="color:#60a5fa;font-size:11px;cursor:pointer;">IBC Chapter 17 / ACI 301 Special Inspection Reference</summary>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:10px;margin-top:6px;font-size:10px;">';
+  html+='<p style="color:#94a3b8;">IBC Chapter 17 requires a Statement of Special Inspections (SSI) prepared by the Registered Design Professional (RDP) before permit issuance. The owner employs the Special Inspector (SI) — not the contractor — but the contractor is responsible for advance notification of all inspectable activities.</p>';
+  html+='<table style="width:100%;border-collapse:collapse;"><tr style="background:#1e293b;"><th style="padding:4px;border:1px solid #334155;color:#94a3b8;text-align:left;">IBC §1705 Inspection Item</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Code</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Notice Required</th></tr>';
+  var rows=[
+    ['Concrete placement (high-strength >5,000 PSI)','IBC §1705.3','24 hr per ACI 318-19 §26.13.3'],
+    ['PT tendon installation and stressing','IBC §1705.3','24 hr per PTI DC10.5'],
+    ['Reinforcement placement (SDC C+)','IBC §1705.12','24 hr'],
+    ['Anchor bolt installation','IBC §1705.3.6','24 hr'],
+    ['Shotcrete (structural)','IBC §1705.3.5','24 hr'],
+    ['Structural welding','IBC §1705.2','8 hr'],
+    ['High-strength bolting','IBC §1705.2.2','8 hr'],
+    ['Compaction of structural fill','IBC §1705.6','8 hr'],
+    ['Tilt-up panel erection','IBC §1705.12','48 hr'],
+    ['Fire-resistive penetrations','IBC §1705.16','24 hr']
+  ];
+  rows.forEach(function(r){html+='<tr><td style="padding:4px;border:1px solid #334155;color:#e2e8f0;">'+r[0]+'</td><td style="padding:4px;border:1px solid #334155;color:#60a5fa;text-align:center;">'+r[1]+'</td><td style="padding:4px;border:1px solid #334155;color:#fbbf24;font-weight:bold;text-align:center;">'+r[2]+'</td></tr>';});
+  html+='</table></div></details>';
+  html+='</div>';
+  document.getElementById(INNER).innerHTML=html;
+  // Set today as default
+  var today=new Date().toISOString().slice(0,10);
+  if(document.getElementById('sinNotifDate')&&!document.getElementById('sinNotifDate').value)document.getElementById('sinNotifDate').value=today;
+}
+
+window.sinSaveHeader=function(){var d=load();d.proj=document.getElementById('sinProj').value;d.firm=document.getElementById('sinFirm').value;d.contact=document.getElementById('sinContact').value;save(d);};
+window.sinTypeChange=function(){var i=parseInt(document.getElementById('sinType').value);if(document.getElementById('sinReqHrs'))document.getElementById('sinReqHrs').value=NOTICE_REQ[i]||24;};
+window.sinNextStatus=function(i){var d=load();var it=d.items[i];var si=STATUSES.indexOf(it.status);it.status=STATUSES[(si+1)%STATUSES.length];save(d);render();};
+window.sinDel=function(i){var d=load();if(confirm('Remove this entry?')){d.items.splice(i,1);save(d);render();}};
+window.sinAdd=function(){
+  var typeIdx=parseInt(document.getElementById('sinType').value);
+  var type=INSP_TYPES[typeIdx];
+  var workDate=document.getElementById('sinWorkDate').value;
+  var notifDate=document.getElementById('sinNotifDate').value;
+  var method=document.getElementById('sinMethod').value;
+  var element=document.getElementById('sinElement').value.trim();
+  var by=document.getElementById('sinBy').value.trim();
+  var reqHrs=parseInt(document.getElementById('sinReqHrs').value)||24;
+  var notes=document.getElementById('sinNotes').value.trim();
+  if(!workDate||!notifDate){alert('Enter both work date and notification date.');return;}
+  var d=load();d.items=d.items||[];
+  d.items.push({type:type,workDate:workDate,notifDate:notifDate,method:method,element:element,by:by,reqHrs:reqHrs,notes:notes,status:'Sent — Pending Confirmation',ts:Date.now()});
+  save(d);render();
+};
+window.sinPrint=function(){
+  var d=load();if(!d.items||!d.items.length){alert('No entries to print.');return;}
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>Special Inspection Notification Log</title><style>body{font-family:Arial;font-size:9px;margin:20px;}h2{font-size:13px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:4px;}.declined{background:#fce8e8;}.complete{background:#e6f4ea;}.pending{background:#fff3cd;}.sig{display:flex;gap:30px;margin-top:20px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;}</style></head><body>');
+  pw.document.write('<h2>Special Inspection Advance Notification Log</h2>');
+  pw.document.write('<p><strong>ACI 301-16 §1.6 / IBC Chapter 17 / ACI 318-19 §26.13.3</strong></p>');
+  pw.document.write('<p>Project: <strong>'+esc(d.proj||'—')+'</strong> | Testing Firm: <strong>'+esc(d.firm||'—')+'</strong> | Contact: '+esc(d.contact||'—')+'</p>');
+  pw.document.write('<p>Generated: '+new Date().toLocaleDateString()+' | Total Notifications: '+d.items.length+'</p>');
+  pw.document.write('<table><tr><th>Inspection Type</th><th>Work Date</th><th>Notified Date</th><th>Lead (hrs)</th><th>Req. (hrs)</th><th>Method</th><th>Element</th><th>By</th><th>Status</th><th>Notes</th></tr>');
+  d.items.slice().sort(function(a,b){return a.workDate>b.workDate?1:-1;}).forEach(function(it){
+    var lead='?';if(it.notifDate&&it.workDate){lead=((new Date(it.workDate)-new Date(it.notifDate))/(1000*3600)).toFixed(0);}
+    var ok=parseFloat(lead)>=(it.reqHrs||24);
+    var cls=it.status==='Inspector Declined — Reschedule'?'declined':it.status==='Complete — Records Filed'?'complete':it.status==='Sent — Pending Confirmation'?'pending':'';
+    pw.document.write('<tr class="'+cls+'"><td style="font-size:8px;">'+esc(it.type)+'</td><td>'+esc(it.workDate)+'</td><td>'+esc(it.notifDate)+'</td><td style="text-align:center;font-weight:bold;color:'+(ok?'green':'red')+';">'+lead+'</td><td style="text-align:center;">'+esc(it.reqHrs||24)+'</td><td>'+esc(it.method||'—')+'</td><td>'+esc(it.element||'—')+'</td><td>'+esc(it.by||'—')+'</td><td>'+esc(it.status)+'</td><td style="font-size:8px;">'+esc(it.notes||'—')+'</td></tr>');
+  });
+  pw.document.write('</table>');
+  pw.document.write('<p style="font-size:8px;margin-top:10px;"><strong>ACI 318-19 §26.13.3:</strong> Contractor shall notify the special inspector not less than 24 hours prior to placing concrete. <strong>IBC §1705:</strong> The contractor is responsible for notifying the special inspector in time to allow inspection of each element. Failure to notify constitutes a violation of the Statement of Special Inspections and may result in work rejection or required exposure of covered work at contractor cost. Retain records for project duration + minimum 7 years per IBC §1704.5.</p>');
+  pw.document.write('<div class="sig"><div>Contractor PM / Date</div><div>Special Inspector / Date</div><div>GC Superintendent / Date</div></div></body></html>');
+  pw.document.close();pw.print();
+};
+window.sinCopy=function(){
+  var d=load();if(!d.items||!d.items.length){alert('Nothing to copy.');return;}
+  var txt='SPECIAL INSPECTION NOTIFICATION LOG — '+esc(d.proj||'[Project]')+'\nFirm: '+esc(d.firm||'—')+' | Contact: '+esc(d.contact||'—')+'\n\n';
+  txt+='Inspection Type\tWork Date\tNotified Date\tLead (hrs)\tRequired\tMethod\tElement\tStatus\n';
+  d.items.forEach(function(it){
+    var lead='?';if(it.notifDate&&it.workDate){lead=((new Date(it.workDate)-new Date(it.notifDate))/(1000*3600)).toFixed(0);}
+    txt+=esc(it.type)+'\t'+esc(it.workDate)+'\t'+esc(it.notifDate)+'\t'+lead+'\t'+(it.reqHrs||24)+'\t'+esc(it.method||'—')+'\t'+esc(it.element||'—')+'\t'+esc(it.status)+'\n';
+  });
+  navigator.clipboard.writeText(txt).then(function(){alert('Copied!');});
+};
+
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN;btn.textContent='📋 Insp Notify';
+  btn.style.cssText='position:fixed;bottom:6700px;right:16px;background:#1e293b;color:#86efac;border:1px solid #16a34a;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9096;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Insp Notify':'📋 Insp Notify';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9097;';
+  var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
