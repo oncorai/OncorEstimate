@@ -56703,3 +56703,635 @@ function createBtn(){var btn=document.createElement('button');btn.id=BTN_ID;btn.
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
 })();
 </script>
+
+<!-- TOOL 85: FORM TIE & HARDWARE CALCULATOR -->
+<script>
+(function(){
+'use strict';
+var LS_KEY='oncor_form_tie';
+var BTN_ID='ft_btn';
+var WRAP_ID='ft_wrap';
+
+function loadData(){try{return JSON.parse(localStorage.getItem(LS_KEY))||{history:[]};}catch(e){return {history:[]};}}
+function saveData(d){localStorage.setItem(LS_KEY,JSON.stringify(d));}
+
+var state={
+  project:'',element:'Wall',wallHeight:10,wallLength:20,
+  formSystem:'Symons',tieType:'1250# Snap Tie',
+  pressure:0,pressureMode:'compute',
+  tieCapacity:1250,hSpacing:18,vSpacing:18,
+  snapCost:0.38,sheBoltCost:3.25,coilRodCost:8.50
+};
+
+function computePressure(h){
+  // ACI 347R-14: p = Cw*Cc*(150+9000*R/T) for standard rate
+  // Simplified: p = 150*h (lateral pressure) capped at 2000 psf
+  var p=150*h;
+  return Math.min(p,2000);
+}
+
+function calcResults(){
+  var p=state.pressureMode==='manual'?state.pressure:computePressure(state.wallHeight);
+  var hFt=state.hSpacing/12;
+  var vFt=state.vSpacing/12;
+  var tieLoad=p*hFt*vFt;
+  var cap=state.tieCapacity;
+  var ok=tieLoad<=cap;
+  var cols=Math.ceil((state.wallLength*12)/state.hSpacing)+1;
+  var rows=Math.ceil((state.wallHeight*12)/state.vSpacing)+1;
+  var tieCount=cols*rows;
+  // 2'x8' panels: panels per row of wall = wallLength/2 (horiz), rows of panels = wallHeight/8
+  var panelCols=Math.ceil(state.wallLength/2);
+  var panelRows=Math.ceil(state.wallHeight/8);
+  var panels=panelCols*panelRows*2; // both sides
+  var unitCost=state.tieType==='1250# Snap Tie'?state.snapCost:state.tieType==='2500# She-Bolt'?state.sheBoltCost:state.tieType==='3500# Coil Rod'?state.coilRodCost:state.tieCapacity>2500?state.coilRodCost:state.snapCost;
+  var baseCost=tieCount*unitCost;
+  var accessories=baseCost*0.15;
+  var totalCost=baseCost+accessories;
+  return {p:p,tieLoad:tieLoad,ok:ok,cols:cols,rows:rows,tieCount:tieCount,panels:panels,baseCost:baseCost,accessories:accessories,totalCost:totalCost,cap:cap};
+}
+
+function render(){
+  var inner=document.getElementById('ft_inner');
+  if(!inner)return;
+  var r=calcResults();
+  var data=loadData();
+  var html='<div style="max-width:900px;margin:0 auto;padding:16px;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+  html+='<h2 style="color:#e2e8f0;font-size:18px;margin:0;">🔩 Form Tie &amp; Hardware Calculator</h2>';
+  html+='<button onclick="document.getElementById(\'ft_wrap\').style.display=\'none\';document.getElementById(\'ft_btn\').textContent=\'🔩 Form Ties\';" style="background:#334155;color:#e2e8f0;border:none;border-radius:6px;padding:8px 12px;cursor:pointer;font-size:13px;">✕ Close</button>';
+  html+='</div>';
+  html+='<p style="color:#64748b;font-size:11px;margin-bottom:12px;">ACI 347R-14 / EFCO / Symons tie schedule calculator. Lateral pressure per ACI 347R-14 Table 2.1.</p>';
+  // Header inputs
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Project Name</label><input id="ft_proj" value="'+escHtml(state.project)+'" onchange="ftState(\'project\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;" placeholder="Project..."/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Element</label><select id="ft_elem" onchange="ftState(\'element\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;"><option'+(state.element==='Wall'?' selected':'')+'>Wall</option><option'+(state.element==='Column'?' selected':'')+'>Column</option><option'+(state.element==='Grade Beam'?' selected':'')+'>Grade Beam</option><option'+(state.element==='Pier Cap'?' selected':'')+'>Pier Cap</option></select></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Wall Height (ft)</label><input id="ft_ht" type="number" value="'+state.wallHeight+'" onchange="ftState(\'wallHeight\',parseFloat(this.value)||10)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;"/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Wall Length (ft)</label><input id="ft_len" type="number" value="'+state.wallLength+'" onchange="ftState(\'wallLength\',parseFloat(this.value)||20)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;"/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Form System</label><select onchange="ftState(\'formSystem\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;"><option'+(state.formSystem==='Symons'?' selected':'')+'>Symons</option><option'+(state.formSystem==='EFCO'?' selected':'')+'>EFCO</option><option'+(state.formSystem==='Custom'?' selected':'')+'>Custom</option></select></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Tie Type</label><select onchange="ftChangeTie(this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;"><option'+(state.tieType==='1250# Snap Tie'?' selected':'')+'>1250# Snap Tie</option><option'+(state.tieType==='2500# She-Bolt'?' selected':'')+'>2500# She-Bolt</option><option'+(state.tieType==='3500# Coil Rod'?' selected':'')+'>3500# Coil Rod</option><option'+(state.tieType==='Custom'?' selected':'')+'>Custom</option></select></div>';
+  html+='</div>';
+  // Pressure & spacing
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:12px;">';
+  html+='<h3 style="color:#60a5fa;font-size:13px;margin:0 0 10px 0;">Design Inputs</h3>';
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Pressure Mode</label><select onchange="ftState(\'pressureMode\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;"><option value="compute"'+(state.pressureMode==='compute'?' selected':'')+'>Compute (ACI 347R)</option><option value="manual"'+(state.pressureMode==='manual'?' selected':'')+'>Manual Entry</option></select>';
+  if(state.pressureMode==='compute'){html+='<span style="color:#64748b;font-size:10px;">Auto: '+r.p.toFixed(0)+' psf (150×h, max 2000)</span>';}
+  html+='</div>';
+  if(state.pressureMode==='manual'){html+='<div><label style="color:#94a3b8;font-size:11px;">Form Pressure (psf) <span style="color:#64748b;">Pull from Formwork Pressure Calc</span></label><input type="number" value="'+state.pressure+'" onchange="ftState(\'pressure\',parseFloat(this.value)||0)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;"/></div>';}
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Tie Capacity (lbs)</label><input type="number" value="'+state.tieCapacity+'" onchange="ftState(\'tieCapacity\',parseFloat(this.value)||1250)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;"/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Horiz Spacing (in)</label><input type="number" value="'+state.hSpacing+'" onchange="ftState(\'hSpacing\',parseFloat(this.value)||18)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;"/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Vert Spacing (in)</label><input type="number" value="'+state.vSpacing+'" onchange="ftState(\'vSpacing\',parseFloat(this.value)||18)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;"/></div>';
+  html+='</div></div>';
+  // Costs
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:12px;">';
+  html+='<h3 style="color:#60a5fa;font-size:13px;margin:0 0 10px 0;">Unit Costs</h3>';
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;">';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Snap Tie $/ea</label><input type="number" step="0.01" value="'+state.snapCost+'" onchange="ftState(\'snapCost\',parseFloat(this.value)||0.38)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;"/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">She-Bolt $/ea</label><input type="number" step="0.01" value="'+state.sheBoltCost+'" onchange="ftState(\'sheBoltCost\',parseFloat(this.value)||3.25)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;"/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Coil Rod $/set</label><input type="number" step="0.01" value="'+state.coilRodCost+'" onchange="ftState(\'coilRodCost\',parseFloat(this.value)||8.50)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;"/></div>';
+  html+='</div></div>';
+  // Results
+  var capColor=r.ok?'#22c55e':'#ef4444';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:12px;">';
+  html+='<h3 style="color:#60a5fa;font-size:13px;margin:0 0 10px 0;">Results</h3>';
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:10px;"><div style="color:#94a3b8;font-size:10px;">Design Pressure</div><div style="color:#e2e8f0;font-size:20px;font-weight:700;">'+r.p.toFixed(0)+' psf</div></div>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:10px;"><div style="color:#94a3b8;font-size:10px;">Tie Load / Tie</div><div style="color:'+capColor+';font-size:20px;font-weight:700;">'+r.tieLoad.toFixed(0)+' lbs</div><div style="color:'+capColor+';font-size:10px;">'+(r.ok?'✓ OK — within capacity':'⚠ EXCEEDS capacity of '+r.cap+' lbs!')+'</div></div>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:10px;"><div style="color:#94a3b8;font-size:10px;">Tie Count (rows × cols)</div><div style="color:#e2e8f0;font-size:20px;font-weight:700;">'+r.tieCount+'</div><div style="color:#64748b;font-size:10px;">'+r.rows+' rows × '+r.cols+' cols</div></div>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:10px;"><div style="color:#94a3b8;font-size:10px;">Form Panels (2\'×8\') Both Sides</div><div style="color:#e2e8f0;font-size:20px;font-weight:700;">'+r.panels+'</div></div>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:10px;"><div style="color:#94a3b8;font-size:10px;">Hardware Base Cost</div><div style="color:#e2e8f0;font-size:20px;font-weight:700;">$'+r.baseCost.toFixed(2)+'</div></div>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:10px;"><div style="color:#94a3b8;font-size:10px;">Accessories +15%</div><div style="color:#e2e8f0;font-size:16px;font-weight:700;">$'+r.accessories.toFixed(2)+'</div></div>';
+  html+='<div style="background:#0f172a;border:2px solid #60a5fa;border-radius:6px;padding:10px;"><div style="color:#94a3b8;font-size:10px;">TOTAL HARDWARE COST</div><div style="color:#60a5fa;font-size:22px;font-weight:700;">$'+r.totalCost.toFixed(2)+'</div></div>';
+  html+='</div></div>';
+  // ACI 347R Quick Reference
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:12px;">';
+  html+='<h3 style="color:#f59e0b;font-size:13px;margin:0 0 8px 0;">ACI 347R Quick Reference — Max Lateral Pressure</h3>';
+  html+='<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+  html+='<tr style="background:#0f172a;"><th style="padding:6px;text-align:left;color:#94a3b8;border:1px solid #334155;">Wall Ht (ft)</th><th style="padding:6px;color:#94a3b8;border:1px solid #334155;">12" spacing → max psf</th><th style="padding:6px;color:#94a3b8;border:1px solid #334155;">18" spacing → max psf</th><th style="padding:6px;color:#94a3b8;border:1px solid #334155;">24" spacing → max psf</th></tr>';
+  [[8,600,267,150],[10,750,333,188],[12,900,400,225],[16,1200,533,300],[20,1500,667,375]].forEach(function(row){
+    html+='<tr><td style="padding:5px;color:#e2e8f0;border:1px solid #334155;">'+row[0]+'</td><td style="padding:5px;color:#e2e8f0;border:1px solid #334155;text-align:center;">'+row[1]+'</td><td style="padding:5px;color:#e2e8f0;border:1px solid #334155;text-align:center;">'+row[2]+'</td><td style="padding:5px;color:#e2e8f0;border:1px solid #334155;text-align:center;">'+row[3]+'</td></tr>';
+  });
+  html+='</table><p style="color:#64748b;font-size:10px;margin:6px 0 0 0;">Tie load (lbs) = Pressure (psf) × Spacing² (ft²). Capacity must exceed tie load with appropriate SF.</p>';
+  html+='</div>';
+  // Actions
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">';
+  html+='<button onclick="ftSave()" style="background:#0369a1;color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:12px;">💾 Save to History</button>';
+  html+='<button onclick="ftPrint()" style="background:#1e3a5f;color:#93c5fd;border:1px solid #1d4ed8;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:12px;">🖨️ Print Tie Schedule</button>';
+  html+='<button onclick="ftCopy()" style="background:#334155;color:#e2e8f0;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:12px;">📋 Copy Text</button>';
+  html+='</div>';
+  // History
+  if(data.history&&data.history.length>0){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;">';
+    html+='<h3 style="color:#60a5fa;font-size:13px;margin:0 0 8px 0;">Saved History ('+data.history.length+')</h3>';
+    data.history.slice().reverse().forEach(function(h,i){
+      html+='<div style="background:#0f172a;border-radius:6px;padding:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">';
+      html+='<div><span style="color:#e2e8f0;font-size:12px;">'+escHtml(h.name)+'</span> <span style="color:#64748b;font-size:10px;">'+h.date+'</span></div>';
+      html+='<div style="color:#60a5fa;font-size:12px;">'+h.tieCount+' ties · $'+h.totalCost+'</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+  html+='</div>';
+  inner.innerHTML=html;
+}
+
+function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+window.ftState=function(k,v){state[k]=v;render();};
+window.ftChangeTie=function(v){
+  state.tieType=v;
+  if(v==='1250# Snap Tie')state.tieCapacity=1250;
+  else if(v==='2500# She-Bolt')state.tieCapacity=2500;
+  else if(v==='3500# Coil Rod')state.tieCapacity=3500;
+  render();
+};
+window.ftSave=function(){
+  var name=prompt('Save as:',state.project+' - '+state.element);
+  if(!name)return;
+  var r=calcResults();
+  var data=loadData();
+  if(!data.history)data.history=[];
+  data.history.push({name:name,date:new Date().toLocaleDateString(),tieCount:r.tieCount,totalCost:r.totalCost.toFixed(2),pressure:r.p,element:state.element,height:state.wallHeight,length:state.wallLength});
+  if(data.history.length>20)data.history.shift();
+  saveData(data);render();
+};
+window.ftCopy=function(){
+  var r=calcResults();
+  var txt='FORM TIE & HARDWARE CALCULATOR\nProject: '+state.project+'\nElement: '+state.element+' '+state.wallHeight+'ft H x '+state.wallLength+'ft L\nForm System: '+state.formSystem+' | Tie: '+state.tieType+'\nDesign Pressure: '+r.p.toFixed(0)+' psf\nTie Load/Tie: '+r.tieLoad.toFixed(0)+' lbs (Capacity: '+r.cap+' lbs - '+(r.ok?'OK':'EXCEEDS')+')\nTie Count: '+r.tieCount+' ('+r.rows+'R x '+r.cols+'C)\nForm Panels (2x8): '+r.panels+'\nHardware Cost: $'+r.baseCost.toFixed(2)+' + $'+r.accessories.toFixed(2)+' accessories = $'+r.totalCost.toFixed(2);
+  navigator.clipboard.writeText(txt).catch(function(){});alert('Copied!');
+};
+window.ftPrint=function(){
+  var r=calcResults();
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>ACI 347R Tie Schedule</title><style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}h2{font-size:14px;}table{border-collapse:collapse;width:100%;margin-bottom:12px;}th,td{border:1px solid #ccc;padding:5px;text-align:left;}th{background:#f3f4f6;}.warn{background:#fee2e2;color:red;font-weight:bold;}.ok{background:#f0fdf4;color:green;}.sig{display:flex;gap:40px;margin-top:30px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;font-size:10px;}</style></head><body>');
+  pw.document.write('<h2>ACI 347R-14 Form Tie Schedule</h2>');
+  pw.document.write('<p><strong>Project:</strong> '+(state.project||'—')+' | <strong>Element:</strong> '+state.element+' | <strong>Size:</strong> '+state.wallHeight+'ft H × '+state.wallLength+'ft L | <strong>System:</strong> '+state.formSystem+' | <strong>Date:</strong> '+new Date().toLocaleDateString()+'</p>');
+  pw.document.write('<table><tr><th>Parameter</th><th>Value</th></tr>');
+  pw.document.write('<tr><td>Design Lateral Pressure</td><td>'+r.p.toFixed(0)+' psf (ACI 347R-14 §2.1)</td></tr>');
+  pw.document.write('<tr><td>Tie Type / Capacity</td><td>'+state.tieType+' — '+state.tieCapacity+' lbs allowable</td></tr>');
+  pw.document.write('<tr><td>Tie Spacing (H × V)</td><td>'+state.hSpacing+'" × '+state.vSpacing+'"</td></tr>');
+  pw.document.write('<tr><td>Tie Load per Tie</td><td class="'+(r.ok?'ok':'warn')+'">'+r.tieLoad.toFixed(0)+' lbs — '+(r.ok?'WITHIN capacity':'EXCEEDS capacity — reduce spacing or upgrade tie!')+'</td></tr>');
+  pw.document.write('<tr><td>Layout (Rows × Cols)</td><td>'+r.rows+' rows × '+r.cols+' cols = '+r.tieCount+' ties total</td></tr>');
+  pw.document.write('<tr><td>Form Panels (2\'×8\') Both Faces</td><td>'+r.panels+' panels</td></tr>');
+  pw.document.write('<tr><td>Hardware Base Cost</td><td>$'+r.baseCost.toFixed(2)+'</td></tr>');
+  pw.document.write('<tr><td>Accessories (wedges, plates +15%)</td><td>$'+r.accessories.toFixed(2)+'</td></tr>');
+  pw.document.write('<tr><td><strong>TOTAL HARDWARE COST</strong></td><td><strong>$'+r.totalCost.toFixed(2)+'</strong></td></tr>');
+  pw.document.write('</table>');
+  // Layout grid
+  pw.document.write('<h3>Tie Layout Grid (Row / Col)</h3><table><tr><th>Row (Bot→Top)</th>');
+  for(var c=1;c<=Math.min(r.cols,20);c++){pw.document.write('<th>C'+c+'</th>');}
+  if(r.cols>20){pw.document.write('<th>...</th>');}
+  pw.document.write('</tr>');
+  for(var rr=1;rr<=r.rows;rr++){pw.document.write('<tr><td>R'+rr+'</td>');for(var cc=1;cc<=Math.min(r.cols,20);cc++){pw.document.write('<td style="text-align:center;">✕</td>');}if(r.cols>20){pw.document.write('<td>...</td>');}pw.document.write('</tr>');}
+  pw.document.write('</table>');
+  pw.document.write('<div class="sig"><div>Foreman<br/><br/>___________________________</div><div>Carpenter Lead<br/><br/>___________________________</div><div>GC Inspector<br/><br/>___________________________</div></div>');
+  pw.document.write('<p style="font-size:8px;margin-top:12px;">ACI 347R-14: Guide to Formwork for Concrete. Tie loads based on maximum lateral pressure. SF per engineer of record. Verify tie spacing does not exceed allowable per manufacturer and ACI 347R Table 2.1. Formwork engineer of record responsible for final design.</p>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+
+function createBtn(){
+  var btn=document.createElement('button');
+  btn.id=BTN_ID;btn.textContent='🔩 Form Ties';
+  btn.style.cssText='position:fixed;bottom:4580px;right:16px;background:#1e3a5f;color:#bae6fd;border:1px solid #0369a1;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9030;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Form Ties':'🔩 Form Ties';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;
+  wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9031;';
+  var inner=document.createElement('div');inner.id='ft_inner';
+  wrap.appendChild(inner);document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<!-- TOOL 86: INCIDENT INVESTIGATION REPORT GENERATOR -->
+<script>
+(function(){
+'use strict';
+var LS_KEY='oncor_incidents';
+var BTN_ID='inc_btn';
+var WRAP_ID='inc_wrap';
+
+var ROLES=['Foreman','Carpenter','Ironworker','Laborer','Operator','Electrician','Pipefitter','Mason','Superintendent','Safety Officer','Other'];
+var INC_TYPES=['Near Miss','First Aid','Medical Treatment','Restricted Work','Lost Time','Property Damage','Environmental'];
+var RECORDABLE_TYPES=['Medical Treatment','Restricted Work','Lost Time'];
+var BODY_PARTS=['Head','Neck','Shoulder','Arm','Elbow','Wrist','Hand/Finger','Chest/Torso','Back/Spine','Hip','Knee','Ankle','Foot/Toe','Multiple'];
+var INJ_TYPES=['Cut/Laceration','Bruise/Contusion','Fracture','Sprain/Strain','Burn','Eye Injury','Hearing Loss','Heat Illness','Chemical Exposure','Puncture','Amputation','Crush','Electrical Shock','Inhalation','Other'];
+var ROOT_CATS=['Equipment failure','Procedure not followed','Inadequate training','Environmental condition','Human error','Management system gap','Communication failure','Other'];
+var CA_STATUS=['Open','In Progress','Closed'];
+
+function loadData(){try{return JSON.parse(localStorage.getItem(LS_KEY))||{incidents:[]};}catch(e){return {incidents:[]};}}
+function saveData(d){localStorage.setItem(LS_KEY,JSON.stringify(d));}
+
+var form={
+  incNum:'',date:new Date().toISOString().slice(0,10),time:'',location:'',
+  empName:'',empRole:'Laborer',incType:'Near Miss',
+  description:'',witnesses:'',bodyPart:'Back/Spine',injType:'Sprain/Strain',
+  why1:'',why2:'',why3:'',why4:'',why5:'',
+  rootCat:'Human error',
+  actions:[{desc:'',assignTo:'',dueDate:'',status:'Open'}]
+};
+
+function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fv(id){var el=document.getElementById(id);return el?el.value:'';}
+
+function getRootWhy(){
+  var whys=[form.why1,form.why2,form.why3,form.why4,form.why5];
+  var last='';for(var i=0;i<whys.length;i++){if(whys[i].trim())last=whys[i];}
+  return last;
+}
+
+function getOpenCAs(){
+  return form.actions.filter(function(a){return a.status==='Open'||a.status==='In Progress';}).length;
+}
+
+function isRecordable(){return RECORDABLE_TYPES.indexOf(form.incType)>=0;}
+
+function render(){
+  var inner=document.getElementById('inc_inner');
+  if(!inner)return;
+  var data=loadData();
+  var totalInc=data.incidents.length;
+  var recordable=data.incidents.filter(function(x){return x.recordable;}).length;
+  var allOpenCAs=data.incidents.reduce(function(sum,x){return sum+(x.openCAs||0);},0)+getOpenCAs();
+  var html='<div style="max-width:960px;margin:0 auto;padding:16px;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">';
+  html+='<h2 style="color:#ef4444;font-size:18px;margin:0;">🚨 Incident Investigation Report Generator</h2>';
+  html+='<button onclick="document.getElementById(\'inc_wrap\').style.display=\'none\';document.getElementById(\'inc_btn\').textContent=\'🚨 Incidents\';" style="background:#334155;color:#e2e8f0;border:none;border-radius:6px;padding:8px 12px;cursor:pointer;font-size:13px;">✕ Close</button>';
+  html+='</div>';
+  // Dashboard
+  html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="color:#94a3b8;font-size:10px;">Total Incidents</div><div style="color:#e2e8f0;font-size:24px;font-weight:700;">'+totalInc+'</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="color:#94a3b8;font-size:10px;">Recordable</div><div style="color:#f59e0b;font-size:24px;font-weight:700;">'+recordable+'</div></div>';
+  html+='<div style="background:'+(allOpenCAs>0?'#7f1d1d':'#1e293b')+';border-radius:8px;padding:10px;text-align:center;border:'+(allOpenCAs>0?'2px solid #ef4444':'2px solid transparent')+';"><div style="color:#94a3b8;font-size:10px;">Open Corrective Actions</div><div style="color:'+(allOpenCAs>0?'#ef4444':'#22c55e')+';font-size:24px;font-weight:700;">'+allOpenCAs+'</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="color:#94a3b8;font-size:10px;">OSHA Hotline</div><div style="color:#60a5fa;font-size:14px;font-weight:700;">1-800-321-OSHA</div></div>';
+  html+='</div>';
+  if(allOpenCAs>0){html+='<div style="background:#7f1d1d;border:2px solid #ef4444;border-radius:8px;padding:10px;margin-bottom:12px;color:#fca5a5;font-size:12px;font-weight:600;">⚠ RED ALERT: '+allOpenCAs+' open corrective action(s) require immediate attention. Review and close before next inspection.</div>';}
+  // Form
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:12px;">';
+  html+='<h3 style="color:#ef4444;font-size:13px;margin:0 0 10px 0;">Incident Header — OSHA 29 CFR §1904.35 / ANSI Z16.2</h3>';
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;">';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Incident #</label><input id="inc_num" value="'+escHtml(form.incNum)+'" oninput="incF(\'incNum\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;"/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Date</label><input type="date" id="inc_date" value="'+form.date+'" oninput="incF(\'date\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;"/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Time</label><input type="time" id="inc_time" value="'+form.time+'" oninput="incF(\'time\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;"/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Project / Location</label><input id="inc_loc" value="'+escHtml(form.location)+'" oninput="incF(\'location\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;"/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Employee Name</label><input id="inc_emp" value="'+escHtml(form.empName)+'" oninput="incF(\'empName\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;"/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Role</label><select oninput="incF(\'empRole\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;">';
+  ROLES.forEach(function(r){html+='<option'+(form.empRole===r?' selected':'')+'>'+r+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Incident Type</label><select oninput="incF(\'incType\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;">';
+  INC_TYPES.forEach(function(r){html+='<option'+(form.incType===r?' selected':'')+'>'+r+'</option>';});
+  html+='</select>';
+  if(isRecordable()){html+='<span style="color:#f59e0b;font-size:10px;font-weight:600;">★ OSHA RECORDABLE</span>';}
+  html+='</div>';
+  html+='</div></div>';
+  // Description & witnesses
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:12px;">';
+  html+='<h3 style="color:#60a5fa;font-size:13px;margin:0 0 8px 0;">Description &amp; Witnesses</h3>';
+  html+='<div style="margin-bottom:8px;"><label style="color:#94a3b8;font-size:11px;">Description of Incident</label><textarea id="inc_desc" oninput="incF(\'description\',this.value)" rows="4" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:8px;font-size:12px;box-sizing:border-box;resize:vertical;">'+escHtml(form.description)+'</textarea></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Witnesses</label><textarea id="inc_wit" oninput="incF(\'witnesses\',this.value)" rows="2" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:8px;font-size:12px;box-sizing:border-box;resize:vertical;">'+escHtml(form.witnesses)+'</textarea></div>';
+  html+='</div>';
+  // Injury
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Body Part Injured</label><select oninput="incF(\'bodyPart\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;">';
+  BODY_PARTS.forEach(function(r){html+='<option'+(form.bodyPart===r?' selected':'')+'>'+r+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Injury Type</label><select oninput="incF(\'injType\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;">';
+  INJ_TYPES.forEach(function(r){html+='<option'+(form.injType===r?' selected':'')+'>'+r+'</option>';});
+  html+='</select></div>';
+  html+='</div>';
+  // 5 Whys
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:12px;">';
+  html+='<h3 style="color:#f59e0b;font-size:13px;margin:0 0 8px 0;">5-Why Root Cause Analysis</h3>';
+  ['why1','why2','why3','why4','why5'].forEach(function(k,i){
+    var label='Why '+(i+1);
+    var isRoot=(form[k].trim()&&(i===4||(i<4&&!form['why'+(i+2)].trim())));
+    html+='<div style="margin-bottom:8px;"><label style="color:'+(isRoot?'#ef4444':'#94a3b8')+';font-size:11px;">'+label+(isRoot?' ← ROOT CAUSE':'')+' </label><input id="inc_'+k+'" value="'+escHtml(form[k])+'" oninput="incF(\''+k+'\',this.value)" placeholder="Why did this happen..." style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid '+(isRoot?'#ef4444':'#334155')+';border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;"/></div>';
+  });
+  html+='<div style="margin-top:8px;"><label style="color:#94a3b8;font-size:11px;">Root Cause Category</label><select oninput="incF(\'rootCat\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;">';
+  ROOT_CATS.forEach(function(r){html+='<option'+(form.rootCat===r?' selected':'')+'>'+r+'</option>';});
+  html+='</select></div></div>';
+  // Corrective Actions
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:12px;">';
+  html+='<h3 style="color:#22c55e;font-size:13px;margin:0 0 8px 0;">Corrective Actions</h3>';
+  form.actions.forEach(function(a,i){
+    html+='<div style="background:#0f172a;border-radius:6px;padding:10px;margin-bottom:8px;">';
+    html+='<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+    html+='<input placeholder="Action description..." value="'+escHtml(a.desc)+'" oninput="incCA('+i+',\'desc\',this.value)" style="flex:2;min-width:150px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;font-size:11px;"/>';
+    html+='<input placeholder="Assigned to..." value="'+escHtml(a.assignTo)+'" oninput="incCA('+i+',\'assignTo\',this.value)" style="flex:1;min-width:100px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;font-size:11px;"/>';
+    html+='<input type="date" value="'+a.dueDate+'" oninput="incCA('+i+',\'dueDate\',this.value)" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;font-size:11px;"/>';
+    html+='<select onchange="incCA('+i+',\'status\',this.value)" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;font-size:11px;">';
+    CA_STATUS.forEach(function(s){html+='<option'+(a.status===s?' selected':'')+'>'+s+'</option>';});
+    html+='</select>';
+    if(form.actions.length>1){html+='<button onclick="incRemCA('+i+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:5px 8px;cursor:pointer;font-size:11px;">✕</button>';}
+    html+='</div></div>';
+  });
+  if(form.actions.length<5){html+='<button onclick="incAddCA()" style="background:#0369a1;color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:11px;margin-top:4px;">+ Add Action</button>';}
+  html+='</div>';
+  // Actions
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">';
+  html+='<button onclick="incSave()" style="background:#7f1d1d;color:#fca5a5;border:1px solid #ef4444;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:12px;">💾 Save Incident</button>';
+  html+='<button onclick="incPrint()" style="background:#1e3a5f;color:#93c5fd;border:1px solid #1d4ed8;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:12px;">🖨️ Print OSHA Report</button>';
+  html+='<button onclick="incCopy()" style="background:#334155;color:#e2e8f0;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:12px;">📋 Copy Text</button>';
+  html+='<button onclick="incClear()" style="background:#334155;color:#94a3b8;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:12px;">↺ New Form</button>';
+  html+='</div>';
+  // Log
+  if(data.incidents&&data.incidents.length>0){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;">';
+    html+='<h3 style="color:#60a5fa;font-size:13px;margin:0 0 8px 0;">Investigation Log ('+data.incidents.length+')</h3>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+    html+='<tr style="background:#0f172a;"><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Inc #</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Date</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Employee</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Type</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Open CAs</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Del</th></tr>';
+    data.incidents.slice().reverse().forEach(function(inc,ri){
+      var idx=data.incidents.length-1-ri;
+      var recColor=RECORDABLE_TYPES.indexOf(inc.incType)>=0?'#f59e0b':'#e2e8f0';
+      var caColor=(inc.openCAs||0)>0?'#ef4444':'#22c55e';
+      html+='<tr><td style="padding:5px;border:1px solid #334155;color:#e2e8f0;">'+escHtml(inc.incNum||'—')+'</td><td style="padding:5px;border:1px solid #334155;color:#94a3b8;">'+inc.date+'</td><td style="padding:5px;border:1px solid #334155;color:#e2e8f0;">'+escHtml(inc.empName||'—')+'</td><td style="padding:5px;border:1px solid #334155;color:'+recColor+';">'+inc.incType+'</td><td style="padding:5px;border:1px solid #334155;color:'+caColor+';font-weight:600;">'+(inc.openCAs||0)+'</td><td style="padding:5px;border:1px solid #334155;"><button onclick="incDel('+idx+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:10px;">✕</button></td></tr>';
+    });
+    html+='</table></div>';
+  }
+  html+='</div>';
+  inner.innerHTML=html;
+}
+
+window.incF=function(k,v){form[k]=v;render();};
+window.incCA=function(i,k,v){form.actions[i][k]=v;render();};
+window.incAddCA=function(){if(form.actions.length<5){form.actions.push({desc:'',assignTo:'',dueDate:'',status:'Open'});render();}};
+window.incRemCA=function(i){form.actions.splice(i,1);render();};
+window.incClear=function(){form={incNum:'',date:new Date().toISOString().slice(0,10),time:'',location:'',empName:'',empRole:'Laborer',incType:'Near Miss',description:'',witnesses:'',bodyPart:'Back/Spine',injType:'Sprain/Strain',why1:'',why2:'',why3:'',why4:'',why5:'',rootCat:'Human error',actions:[{desc:'',assignTo:'',dueDate:'',status:'Open'}]};render();};
+window.incDel=function(i){var d=loadData();d.incidents.splice(i,1);saveData(d);render();};
+window.incSave=function(){
+  var d=loadData();
+  d.incidents.push({incNum:form.incNum,date:form.date,time:form.time,location:form.location,empName:form.empName,empRole:form.empRole,incType:form.incType,description:form.description,witnesses:form.witnesses,bodyPart:form.bodyPart,injType:form.injType,why1:form.why1,why2:form.why2,why3:form.why3,why4:form.why4,why5:form.why5,rootCat:form.rootCat,actions:JSON.parse(JSON.stringify(form.actions)),recordable:RECORDABLE_TYPES.indexOf(form.incType)>=0,openCAs:getOpenCAs()});
+  if(d.incidents.length>30)d.incidents.shift();
+  saveData(d);render();alert('Incident saved to log.');
+};
+window.incCopy=function(){
+  var txt='INCIDENT INVESTIGATION REPORT\nInc #: '+form.incNum+' | Date: '+form.date+' '+form.time+'\nLocation: '+form.location+'\nEmployee: '+form.empName+' ('+form.empRole+')\nType: '+form.incType+(isRecordable()?' [OSHA RECORDABLE]':'')+'\n\nDESCRIPTION:\n'+form.description+'\n\nWITNESSES: '+form.witnesses+'\n\nINJURY: '+form.bodyPart+' — '+form.injType+'\n\n5-WHY ANALYSIS:\n1. '+form.why1+'\n2. '+form.why2+'\n3. '+form.why3+'\n4. '+form.why4+'\n5. '+form.why5+'\nRoot Cause Category: '+form.rootCat+'\nRoot Cause: '+getRootWhy()+'\n\nCORRECTIVE ACTIONS:\n'+form.actions.map(function(a,i){return (i+1)+'. '+a.desc+' | '+a.assignTo+' | Due: '+a.dueDate+' | '+a.status;}).join('\n');
+  navigator.clipboard.writeText(txt).catch(function(){});alert('Copied!');
+};
+function isRecordable(){return RECORDABLE_TYPES.indexOf(form.incType)>=0;}
+window.incPrint=function(){
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>Incident Investigation Report</title><style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}h2{font-size:14px;}h3{font-size:12px;margin-top:14px;}table{border-collapse:collapse;width:100%;margin-bottom:10px;}th,td{border:1px solid #ccc;padding:5px;text-align:left;}th{background:#f3f4f6;}.root{background:#fee2e2;font-weight:bold;color:#dc2626;}.warn{background:#fef3c7;}.sig{display:flex;gap:40px;margin-top:30px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;}</style></head><body>');
+  pw.document.write('<h2>INCIDENT INVESTIGATION REPORT — OSHA 29 CFR §1904.35 / ANSI Z16.2</h2>');
+  pw.document.write('<table><tr><th>Field</th><th>Value</th></tr>');
+  pw.document.write('<tr><td>Incident #</td><td>'+(form.incNum||'—')+'</td></tr>');
+  pw.document.write('<tr><td>Date / Time</td><td>'+form.date+' '+form.time+'</td></tr>');
+  pw.document.write('<tr><td>Project / Location</td><td>'+(form.location||'—')+'</td></tr>');
+  pw.document.write('<tr><td>Employee</td><td>'+(form.empName||'—')+' — '+form.empRole+'</td></tr>');
+  pw.document.write('<tr><td>Incident Type</td><td>'+form.incType+(isRecordable()?' ★ OSHA RECORDABLE':'')+' </td></tr>');
+  pw.document.write('<tr><td>Body Part / Injury</td><td>'+form.bodyPart+' — '+form.injType+'</td></tr>');
+  pw.document.write('<tr><td>Witnesses</td><td>'+(form.witnesses||'None')+'</td></tr>');
+  pw.document.write('</table>');
+  pw.document.write('<h3>Description of Incident</h3><p style="border:1px solid #ccc;padding:8px;">'+(form.description||'—')+'</p>');
+  pw.document.write('<h3>5-Why Root Cause Analysis</h3><table><tr><th>#</th><th>Why</th></tr>');
+  var whys=[form.why1,form.why2,form.why3,form.why4,form.why5];
+  var rootIdx=-1;for(var i=whys.length-1;i>=0;i--){if(whys[i].trim()){rootIdx=i;break;}}
+  whys.forEach(function(w,i){if(w.trim()){pw.document.write('<tr class="'+(i===rootIdx?'root':'')+'"><td>Why '+(i+1)+(i===rootIdx?' ← ROOT CAUSE':'')+'</td><td>'+w+'</td></tr>');}});
+  pw.document.write('</table>');
+  pw.document.write('<p><strong>Root Cause Category:</strong> '+form.rootCat+'</p>');
+  pw.document.write('<h3>Corrective Actions</h3><table><tr><th>Description</th><th>Assigned To</th><th>Due Date</th><th>Status</th></tr>');
+  form.actions.forEach(function(a){if(a.desc){pw.document.write('<tr><td>'+a.desc+'</td><td>'+(a.assignTo||'—')+'</td><td>'+(a.dueDate||'—')+'</td><td style="color:'+(a.status==='Closed'?'green':a.status==='In Progress'?'orange':'red')+'">'+a.status+'</td></tr>');}});
+  pw.document.write('</table>');
+  pw.document.write('<div class="warn" style="padding:8px;border:1px solid #f59e0b;margin:12px 0;"><strong>OSHA Reporting Deadlines:</strong><br/>• Fatality: Report within 8 hours to OSHA<br/>• Inpatient hospitalization, amputation, or eye loss: Report within 24 hours to OSHA<br/>• Call: <strong>1-800-321-OSHA (6742)</strong> or online: osha.gov/report</div>');
+  pw.document.write('<div class="sig"><div>Safety Officer<br/><br/>___________________________</div><div>Project Manager<br/><br/>___________________________</div><div>Superintendent<br/><br/>___________________________</div></div>');
+  pw.document.write('<p style="font-size:8px;margin-top:12px;">Per OSHA 29 CFR §1904.35, employers must inform employees how to report work-related injuries and illnesses. Records retained 5 years per 29 CFR §1904.33. ANSI/ASSE Z16.2-2012: Criteria for recordability. This report does not constitute legal advice.</p>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='🚨 Incidents';
+  btn.style.cssText='position:fixed;bottom:4660px;right:16px;background:#7f1d1d;color:#fca5a5;border:1px solid #ef4444;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9032;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Incidents':'🚨 Incidents';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;
+  wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9033;';
+  var inner=document.createElement('div');inner.id='inc_inner';wrap.appendChild(inner);document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<!-- TOOL 87: SUBCONTRACTOR REFERENCE CHECK LOG -->
+<script>
+(function(){
+'use strict';
+var LS_KEY='oncor_ref_checks';
+var BTN_ID='ref_btn';
+var WRAP_ID='ref_wrap';
+
+var QUESTIONS=[
+  'How would you rate their overall performance?',
+  'Did they maintain schedule and provide adequate manpower?',
+  'Was workmanship quality consistent and defect-free?',
+  'How was their communication and responsiveness?',
+  'Were there any safety incidents or violations?',
+  'Were change orders and billing accurate and fair?',
+  'Did they submit required documentation (lien waivers, certs, daily reports)?',
+  'Was cleanup and site management acceptable?',
+  'Would you use them again on future projects?',
+  'How does their pricing compare to market for the quality delivered?'
+];
+var REC_OPTIONS=['Highly Recommend','Recommend','Recommend with Conditions','Do Not Recommend'];
+var REC_COLORS={'Highly Recommend':'#22c55e','Recommend':'#60a5fa','Recommend with Conditions':'#f59e0b','Do Not Recommend':'#ef4444'};
+
+function loadData(){try{return JSON.parse(localStorage.getItem(LS_KEY))||{checks:[]};}catch(e){return {checks:[]};}}
+function saveData(d){localStorage.setItem(LS_KEY,JSON.stringify(d));}
+function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+var form={
+  subCompany:'',refCompany:'',refContact:'',refPhone:'',date:new Date().toISOString().slice(0,10),
+  projectRef:'',contractValue:'',
+  scores:[0,0,0,0,0,0,0,0,0,0],
+  comments:'',recommendation:'Recommend'
+};
+
+function avgScore(scores){var rated=scores.filter(function(s){return s>0;});return rated.length?rated.reduce(function(a,b){return a+b;},0)/rated.length:0;}
+
+function render(){
+  var inner=document.getElementById('ref_inner');
+  if(!inner)return;
+  var data=loadData();
+  var totalChecks=data.checks.length;
+  var allScores=data.checks.map(function(c){return avgScore(c.scores);}).filter(function(s){return s>0;});
+  var globalAvg=allScores.length?allScores.reduce(function(a,b){return a+b;},0)/allScores.length:0;
+  var recCount=data.checks.filter(function(c){return c.recommendation==='Highly Recommend'||c.recommendation==='Recommend';}).length;
+  var dntCount=data.checks.filter(function(c){return c.recommendation==='Do Not Recommend';}).length;
+  var currentAvg=avgScore(form.scores);
+
+  var html='<div style="max-width:960px;margin:0 auto;padding:16px;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">';
+  html+='<h2 style="color:#e2e8f0;font-size:18px;margin:0;">📞 Subcontractor Reference Check Log</h2>';
+  html+='<button onclick="document.getElementById(\'ref_wrap\').style.display=\'none\';document.getElementById(\'ref_btn\').textContent=\'📞 Ref Checks\';" style="background:#334155;color:#e2e8f0;border:none;border-radius:6px;padding:8px 12px;cursor:pointer;font-size:13px;">✕ Close</button>';
+  html+='</div>';
+  // Dashboard
+  html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="color:#94a3b8;font-size:10px;">Total Checks</div><div style="color:#e2e8f0;font-size:24px;font-weight:700;">'+totalChecks+'</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="color:#94a3b8;font-size:10px;">Avg Score</div><div style="color:#60a5fa;font-size:24px;font-weight:700;">'+(globalAvg?globalAvg.toFixed(1):'—')+'</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="color:#94a3b8;font-size:10px;">Recommend</div><div style="color:#22c55e;font-size:24px;font-weight:700;">'+recCount+'</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="color:#94a3b8;font-size:10px;">Do Not Rec.</div><div style="color:#ef4444;font-size:24px;font-weight:700;">'+dntCount+'</div></div>';
+  html+='</div>';
+  // Form header
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:12px;">';
+  html+='<h3 style="color:#60a5fa;font-size:13px;margin:0 0 10px 0;">New Reference Check</h3>';
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Sub Company Being Checked</label><input value="'+escHtml(form.subCompany)+'" oninput="refF(\'subCompany\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;" placeholder="Sub name..."/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Reference Company</label><input value="'+escHtml(form.refCompany)+'" oninput="refF(\'refCompany\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;" placeholder="Who you called..."/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Reference Contact</label><input value="'+escHtml(form.refContact)+'" oninput="refF(\'refContact\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;" placeholder="Name..."/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Phone</label><input value="'+escHtml(form.refPhone)+'" oninput="refF(\'refPhone\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;" placeholder="(xxx) xxx-xxxx"/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Date</label><input type="date" value="'+form.date+'" oninput="refF(\'date\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;"/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Project Referenced</label><input value="'+escHtml(form.projectRef)+'" oninput="refF(\'projectRef\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;" placeholder="Project name..."/></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Sub Contract Value on That Project</label><input value="'+escHtml(form.contractValue)+'" oninput="refF(\'contractValue\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:6px;font-size:12px;box-sizing:border-box;" placeholder="$0.00"/></div>';
+  html+='</div>';
+  // Questions & stars
+  html+='<h4 style="color:#94a3b8;font-size:12px;margin:10px 0 8px 0;">Scoring Questions (1-5 Stars)</h4>';
+  QUESTIONS.forEach(function(q,i){
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px;background:#0f172a;border-radius:6px;">';
+    html+='<span style="color:#e2e8f0;font-size:11px;flex:1;">'+(i+1)+'. '+q+'</span>';
+    html+='<div style="display:flex;gap:3px;">';
+    for(var s=1;s<=5;s++){
+      var selected=form.scores[i]>=s;
+      html+='<button onclick="refScore('+i+','+s+')" style="background:none;border:none;cursor:pointer;font-size:18px;color:'+(selected?'#f59e0b':'#334155')+';padding:0 1px;line-height:1;">★</button>';
+    }
+    html+='</div>';
+    html+='<span style="color:#94a3b8;font-size:11px;min-width:20px;text-align:right;">'+(form.scores[i]>0?form.scores[i]:' ')+'</span>';
+    html+='</div>';
+  });
+  // Average
+  if(currentAvg>0){
+    html+='<div style="background:#0f172a;border-radius:6px;padding:8px;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+    html+='<span style="color:#94a3b8;font-size:12px;">Average Score</span>';
+    html+='<span style="color:#60a5fa;font-size:20px;font-weight:700;">'+currentAvg.toFixed(1)+' / 5.0</span>';
+    html+='</div>';
+  }
+  // Comments & recommendation
+  html+='<div style="margin-bottom:8px;"><label style="color:#94a3b8;font-size:11px;">Comments / Notes</label><textarea oninput="refF(\'comments\',this.value)" rows="3" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:8px;font-size:12px;box-sizing:border-box;resize:vertical;">'+escHtml(form.comments)+'</textarea></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Overall Recommendation</label>';
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">';
+  REC_OPTIONS.forEach(function(r){
+    var sel=form.recommendation===r;
+    html+='<button onclick="refF(\'recommendation\',\''+r+'\')" style="background:'+(sel?REC_COLORS[r]+'33':'#0f172a')+';color:'+REC_COLORS[r]+';border:2px solid '+(sel?REC_COLORS[r]:'#334155')+';border-radius:6px;padding:6px 12px;cursor:pointer;font-size:11px;font-weight:600;">'+r+'</button>';
+  });
+  html+='</div></div></div>';
+  // Actions
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">';
+  html+='<button onclick="refSave()" style="background:#0369a1;color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:12px;">💾 Save Check</button>';
+  html+='<button onclick="refPrint()" style="background:#1e3a5f;color:#93c5fd;border:1px solid #1d4ed8;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:12px;">🖨️ Print Report</button>';
+  html+='<button onclick="refCopy()" style="background:#334155;color:#e2e8f0;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:12px;">📋 Copy Text</button>';
+  html+='<button onclick="refClear()" style="background:#334155;color:#94a3b8;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:12px;">↺ New Form</button>';
+  html+='</div>';
+  // Per-sub aggregate
+  var subAgg={};
+  data.checks.forEach(function(c){
+    var k=(c.subCompany||'Unknown').toLowerCase().trim();
+    if(!subAgg[k]){subAgg[k]={name:c.subCompany,checks:[]};}
+    subAgg[k].checks.push(c);
+  });
+  var subKeys=Object.keys(subAgg);
+  if(subKeys.length>0){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:12px;">';
+    html+='<h3 style="color:#f59e0b;font-size:13px;margin:0 0 8px 0;">Per-Sub Aggregate Summary</h3>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+    html+='<tr style="background:#0f172a;"><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Sub</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;"># Refs</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Avg Score</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Rec Distribution</th></tr>';
+    subKeys.forEach(function(k){
+      var agg=subAgg[k];
+      var scores=agg.checks.map(function(c){return avgScore(c.scores);}).filter(function(s){return s>0;});
+      var avg=scores.length?scores.reduce(function(a,b){return a+b;},0)/scores.length:0;
+      var dist={};REC_OPTIONS.forEach(function(r){dist[r]=agg.checks.filter(function(c){return c.recommendation===r;}).length;});
+      var distStr=REC_OPTIONS.filter(function(r){return dist[r]>0;}).map(function(r){return '<span style="color:'+REC_COLORS[r]+'">'+r+': '+dist[r]+'</span>';}).join(', ');
+      html+='<tr><td style="padding:5px;border:1px solid #334155;color:#e2e8f0;">'+escHtml(agg.name)+'</td><td style="padding:5px;border:1px solid #334155;color:#94a3b8;text-align:center;">'+agg.checks.length+'</td><td style="padding:5px;border:1px solid #334155;color:#60a5fa;text-align:center;">'+(avg?avg.toFixed(1):'—')+'</td><td style="padding:5px;border:1px solid #334155;">'+distStr+'</td></tr>';
+    });
+    html+='</table></div>';
+  }
+  // Check log
+  if(data.checks&&data.checks.length>0){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;">';
+    html+='<h3 style="color:#60a5fa;font-size:13px;margin:0 0 8px 0;">Reference Log (Newest First)</h3>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+    html+='<tr style="background:#0f172a;"><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Sub</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Reference</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Date</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Avg</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Recommendation</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Del</th></tr>';
+    data.checks.slice().reverse().forEach(function(c,ri){
+      var idx=data.checks.length-1-ri;
+      var avg=avgScore(c.scores);
+      var rc=REC_COLORS[c.recommendation]||'#e2e8f0';
+      html+='<tr style="background:'+rc+'11;"><td style="padding:5px;border:1px solid #334155;color:#e2e8f0;">'+escHtml(c.subCompany||'—')+'</td><td style="padding:5px;border:1px solid #334155;color:#94a3b8;">'+escHtml(c.refCompany||'—')+'</td><td style="padding:5px;border:1px solid #334155;color:#64748b;">'+c.date+'</td><td style="padding:5px;border:1px solid #334155;color:#60a5fa;text-align:center;">'+(avg?avg.toFixed(1):'—')+'</td><td style="padding:5px;border:1px solid #334155;color:'+rc+';font-weight:600;">'+c.recommendation+'</td><td style="padding:5px;border:1px solid #334155;"><button onclick="refDel('+idx+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:10px;">✕</button></td></tr>';
+    });
+    html+='</table></div>';
+  }
+  html+='</div>';
+  inner.innerHTML=html;
+}
+
+window.refF=function(k,v){form[k]=v;render();};
+window.refScore=function(i,v){form.scores[i]=(form.scores[i]===v?0:v);render();};
+window.refClear=function(){form={subCompany:'',refCompany:'',refContact:'',refPhone:'',date:new Date().toISOString().slice(0,10),projectRef:'',contractValue:'',scores:[0,0,0,0,0,0,0,0,0,0],comments:'',recommendation:'Recommend'};render();};
+window.refDel=function(i){var d=loadData();d.checks.splice(i,1);saveData(d);render();};
+window.refSave=function(){
+  if(!form.subCompany.trim()){alert('Enter sub company name.');return;}
+  var d=loadData();
+  d.checks.push({subCompany:form.subCompany,refCompany:form.refCompany,refContact:form.refContact,refPhone:form.refPhone,date:form.date,projectRef:form.projectRef,contractValue:form.contractValue,scores:form.scores.slice(),comments:form.comments,recommendation:form.recommendation});
+  saveData(d);render();alert('Reference check saved!');
+};
+window.refCopy=function(){
+  var avg=avgScore(form.scores);
+  var lines=['SUBCONTRACTOR REFERENCE CHECK','Sub: '+form.subCompany,'Reference: '+form.refCompany+' | Contact: '+form.refContact+' | Phone: '+form.refPhone,'Date: '+form.date+' | Project: '+form.projectRef+' | Contract Value: '+form.contractValue,''];
+  QUESTIONS.forEach(function(q,i){lines.push((i+1)+'. '+q+' → '+(form.scores[i]>0?form.scores[i]+'/5':'Not rated'));});
+  lines.push('');lines.push('Average Score: '+(avg?avg.toFixed(1)+'/5.0':'—'));
+  lines.push('Recommendation: '+form.recommendation);
+  lines.push('');lines.push('Comments: '+form.comments);
+  navigator.clipboard.writeText(lines.join('\n')).catch(function(){});alert('Copied!');
+};
+window.refPrint=function(){
+  var avg=avgScore(form.scores);
+  var data=loadData();
+  // Check if multiple references for same sub
+  var subLower=(form.subCompany||'').toLowerCase().trim();
+  var prevChecks=data.checks.filter(function(c){return (c.subCompany||'').toLowerCase().trim()===subLower;});
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>Reference Check Report</title><style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}h2{font-size:14px;}h3{font-size:12px;margin-top:14px;}table{border-collapse:collapse;width:100%;margin-bottom:10px;}th,td{border:1px solid #ccc;padding:5px;text-align:left;}th{background:#f3f4f6;}.sig{display:flex;gap:40px;margin-top:30px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;}</style></head><body>');
+  pw.document.write('<h2>Subcontractor Reference Check Report</h2>');
+  pw.document.write('<table><tr><th>Field</th><th>Value</th></tr>');
+  pw.document.write('<tr><td>Sub Company</td><td>'+(form.subCompany||'—')+'</td></tr>');
+  pw.document.write('<tr><td>Reference Company</td><td>'+(form.refCompany||'—')+'</td></tr>');
+  pw.document.write('<tr><td>Reference Contact</td><td>'+(form.refContact||'—')+' — '+(form.refPhone||'—')+'</td></tr>');
+  pw.document.write('<tr><td>Date</td><td>'+form.date+'</td></tr>');
+  pw.document.write('<tr><td>Project Referenced</td><td>'+(form.projectRef||'—')+'</td></tr>');
+  pw.document.write('<tr><td>Sub Contract Value</td><td>'+(form.contractValue||'—')+'</td></tr>');
+  pw.document.write('</table>');
+  // Aggregate if multiple
+  if(prevChecks.length>0){
+    var allC=prevChecks.concat([{scores:form.scores.slice(),recommendation:form.recommendation}]);
+    var allAvgs=allC.map(function(c){return avgScore(c.scores);}).filter(function(s){return s>0;});
+    var aggAvg=allAvgs.length?allAvgs.reduce(function(a,b){return a+b;},0)/allAvgs.length:0;
+    var dist={};REC_OPTIONS.forEach(function(r){dist[r]=allC.filter(function(c){return c.recommendation===r;}).length;});
+    pw.document.write('<h3>Aggregate Summary ('+allC.length+' References for '+form.subCompany+')</h3>');
+    pw.document.write('<table><tr><th>Metric</th><th>Value</th></tr>');
+    pw.document.write('<tr><td>References Collected</td><td>'+allC.length+'</td></tr>');
+    pw.document.write('<tr><td>Aggregate Avg Score</td><td>'+(aggAvg?aggAvg.toFixed(2):'—')+' / 5.0</td></tr>');
+    REC_OPTIONS.forEach(function(r){if(dist[r]>0){pw.document.write('<tr><td>'+r+'</td><td>'+dist[r]+'</td></tr>');}});
+    pw.document.write('</table>');
+  }
+  pw.document.write('<h3>Question-by-Question Scores</h3>');
+  pw.document.write('<table><tr><th>#</th><th>Question</th><th>Score</th></tr>');
+  QUESTIONS.forEach(function(q,i){pw.document.write('<tr><td>'+(i+1)+'</td><td>'+q+'</td><td>'+(form.scores[i]>0?form.scores[i]+' / 5':'Not rated')+'</td></tr>');});
+  pw.document.write('<tr><td colspan="2"><strong>Average Score</strong></td><td><strong>'+(avg?avg.toFixed(2):'—')+' / 5.0</strong></td></tr>');
+  pw.document.write('</table>');
+  pw.document.write('<p><strong>Overall Recommendation: </strong>'+form.recommendation+'</p>');
+  pw.document.write('<p><strong>Comments:</strong> '+(form.comments||'None')+'</p>');
+  pw.document.write('<div class="sig"><div>Reference Verifier<br/><br/>___________________________</div><div>Estimator / PM<br/><br/>___________________________</div><div>Date<br/><br/>___________________________</div></div>');
+  pw.document.write('<p style="font-size:8px;margin-top:12px;">Confidential reference check conducted per standard pre-qualification procedures. Scores reflect reference\'s subjective assessment. Verify independently before award. Retain as part of pre-qual file.</p>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='📞 Ref Checks';
+  btn.style.cssText='position:fixed;bottom:4740px;right:16px;background:#1e293b;color:#a5f3fc;border:1px solid #0891b2;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9034;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Ref Checks':'📞 Ref Checks';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;
+  wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9035;';
+  var inner=document.createElement('div');inner.id='ref_inner';wrap.appendChild(inner);document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
