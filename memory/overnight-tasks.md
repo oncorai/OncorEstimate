@@ -1,5 +1,65 @@
 # Overnight Build Tasks - 2026-02-14
 
+## Session: Mar 26, 2026 - 04:11 UTC
+**Status:** Added 6 proactive features (970 lines total this session)
+
+### New Features Added:
+1. ✅ **Pump Prime & Washout Waste Estimator (🚰)** - ACI 304.2R §6.2
+   - 7 pump type presets (line, boom 36m-52m+) with prime/wash volumes
+   - Auto-calc total order qty (pour + prime + washout waste)
+   - Waste cost display with % of pour
+   - Pull yd³ from takeoff button
+   - Saves estimates to history
+   - Print formal ACI-cited estimate with plant order summary
+   - Prevents false over-delivery disputes and scope gaps
+
+2. ✅ **Slab Curl & Edge Drop Inspection Log (📐)** - ACI 302.1R-15 §5.6 / ACI 360R-10 §8.4
+   - 6 slab use presets with curl/edge limits (residential→superflat)
+   - Log: location, date, age, measured curl/edge, cause, disposition
+   - Auto-verdict: PASS / MARGINAL / FAIL based on limits
+   - Engineer evaluation flagging
+   - Print ACI 302.1R formal log with EOR sign-off block
+   - Documents curl measurements before GC acceptance disputes
+
+3. ✅ **Concrete Strength Gain Projection (📈)** - ACI 209R-92 hyperbolic model
+   - 7 cement type presets with α/β constants (Type I/II/III, fly ash, slag, SF)
+   - 6 curing method factors (standard, membrane, steam, air cure, cold, hot)
+   - Calculates PSI at any age using ACI 209R equation
+   - 7 milestone projections (form strip, PT stress, live load, 28d) with dates
+   - Saved pours show real-time current strength vs. age
+   - Print formal strength projection with milestone table
+   - Answers "when can I strip forms" accurately, not the 7-day guess
+
+4. ✅ **Concrete Consolidation Record (🔊)** - ACI 309R-05 §4.3
+   - 5 vibrator type presets with radius of action and lift
+   - Log: zone, vibrator, spacing, lift height, duration, operator, QC
+   - Issue tracking: over-vibration, under-vibration, malfunction
+   - Print formal ACI 309R compliance log with sign-off
+   - Creates honeycombing defense documentation
+
+5. ✅ **Curing Protection Log (🧊)** - ACI 308R-16 / ACI 306R-16
+   - 11 curing method presets with minimum duration requirements
+   - 5 weather condition options (normal, hot, cold, windy, low RH)
+   - Start/end time tracking with auto duration calc
+   - Active curing indicator, short duration warnings
+   - "End" button for completing active events
+   - Print formal curing log with ACI 308R citations
+   - Documents curing compliance for strength reduction disputes
+
+6. ✅ **Punch Completion Certificate (✅)** - AIA G704 style
+   - Project info, contract amount, COs, retainage held
+   - Substantial completion date, punch completion date
+   - Outstanding items / warranty exceptions field
+   - TX Property Code §53.101 retainage release language
+   - 3-way signature block (Sub, GC, Owner)
+   - Saved certificates with reprint capability
+   - Triggers retainage release clock formally
+
+**Commits:** cdda62e, 2e6c8db → GitHub pushed
+**Total Lines:** 52,698 | **Total Tools:** 57
+
+---
+
 ## Session: Mar 26, 2026 - 01:50 UTC
 **Status:** Added 3 proactive features (549 lines)
 
