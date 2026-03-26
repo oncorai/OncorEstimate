@@ -58362,3 +58362,322 @@ function createBtn(){var btn=document.createElement('button');btn.id=BTN;btn.tex
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
 })();
 </script>
+
+<script>
+// ============================================================
+// TOOL 97: EARLY-ENTRY SAW CUT TIMING ADVISOR ✂️
+// ACI 360R-10 §9.4.2 / ACI 302.1R-15 §4.4 / CSDA
+// ============================================================
+(function(){
+var BTN='esSawBtn',WRAP='esSawWrap',INNER='esSawInner';
+var KEY='oncor_esSaw';
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||{pours:[],form:{}};}catch(e){return{pours:[],form:{}};}
+}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// ACI 302.1R / CSDA saw timing model
+// Base set time (min) from cement type and conditions
+function calcSawWindow(f){
+  var T=parseFloat(f.concTemp)||70;
+  var Ta=parseFloat(f.ambTemp)||75;
+  var thick=parseFloat(f.thick)||4;
+  var cem=f.cemType||'TypeI';
+  var curing=f.curing||'membrane';
+  var rh=parseFloat(f.rh)||50;
+  var wind=parseFloat(f.wind)||5;
+  // Base initial set time in minutes at 70°F (ACI 305R, ~3–5 hrs for Type I)
+  var baseMins={TypeI:240,TypeII:270,TypeIII:120,TypeIV:360,PozzolanBlend:300};
+  var base=baseMins[cem]||240;
+  // Temperature correction: Arrhenius approx — each 10°F above 70°F cuts set ~15%
+  var tempDelta=T-70;
+  var tempFactor=Math.pow(0.87,tempDelta/10);
+  base=base*tempFactor;
+  // Wind/RH evap rate: fast evap accelerates surface set but not full slab
+  var evapFactor=1.0;
+  if(rh<40&&wind>10)evapFactor=0.80;
+  else if(rh<30)evapFactor=0.85;
+  else if(wind>15)evapFactor=0.90;
+  base=base*evapFactor;
+  // Thick slab retains heat — deeper slab sets slower
+  var thickFactor=1.0+(thick-4)*0.012;
+  base=base*thickFactor;
+  // Min and max saw window (CSDA: 1–4 hrs after initial set)
+  var minSaw=Math.round(base/60*10)/10; // hours until initial set
+  var optSaw=Math.round((base+60)/60*10)/10; // set +1 hr (safe opening)
+  var lateSaw=Math.round((base+180)/60*10)/10; // latest before random cracking risk rises
+  return{minSaw:minSaw,optSaw:optSaw,lateSaw:lateSaw,
+    ravel:minSaw<1.5,random:false,
+    earlyNote:minSaw<1.5?'⚠️ RAVELING RISK: Surface set too early — verify stiffness test before sawing.':'',
+    lateNote:lateSaw>8?'⚠️ CRACKING RISK: El Paso summer — if no cuts by '+lateSaw.toFixed(1)+' hrs, random cracking likely.':''
+  };
+}
+function render(){
+  var d=load();var f=d.form||{};
+  var res=null;var hasInputs=f.concTemp&&f.thick;
+  if(hasInputs)try{res=calcSawWindow(f);}catch(e){}
+  var cemOpts=[['TypeI','Type I (Standard)'],['TypeII','Type II (Moderate)'],['TypeIII','Type III (High-Early)'],['TypeIV','Type IV (Low-Heat)'],['PozzolanBlend','Pozzolan Blend (Fly Ash/Slag)']];
+  var html='<div style="background:#1e293b;min-height:100vh;padding:16px;">';
+  html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;"><button onclick="document.getElementById(\''+WRAP+'\').style.display=\'none\';document.getElementById(\''+BTN+'\').textContent=\'✂️ Saw Cut Timing\'" style="background:#334155;color:#94a3b8;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">← Back</button><h2 style="color:#e2e8f0;font-size:16px;margin:0;">✂️ Early-Entry Saw Cut Timing Advisor</h2></div>';
+  html+='<p style="color:#64748b;font-size:11px;margin:0 0 14px 0;">ACI 360R-10 §9.4.2 / ACI 302.1R-15 §4.4 / CSDA — Computes safe saw cut window to prevent random cracking without raveling. El Paso hot/dry conditions narrow the window significantly.</p>';
+  html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">';
+  [['concTemp','Concrete Temp (°F)','text','75'],['ambTemp','Ambient Temp (°F)','text','95'],['rh','Relative Humidity (%)','text','30'],['wind','Wind Speed (mph)','text','10']].forEach(function(p){
+    html+='<div><label style="color:#64748b;font-size:10px;">'+p[0].replace('Temp',' Temp').replace('rh','RH%').replace('wind','Wind mph')+'</label><input type="text" placeholder="'+p[3]+'" value="'+esc(f[p[0]]||'')+'" oninput="esF(\''+p[0]+'\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px 8px;font-size:12px;margin-top:3px;"/></div>';
+  });
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">';
+  html+='<div><label style="color:#64748b;font-size:10px;">Slab Thickness (in)</label><input type="text" placeholder="4" value="'+esc(f.thick||'')+'" oninput="esF(\'thick\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px 8px;font-size:12px;margin-top:3px;"/></div>';
+  html+='<div><label style="color:#64748b;font-size:10px;">Cement Type</label><select onchange="esF(\'cemType\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px 8px;font-size:12px;margin-top:3px;">';
+  cemOpts.forEach(function(o){html+='<option value="'+o[0]+'"'+(f.cemType===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="color:#64748b;font-size:10px;">Pour Start Time</label><input type="time" value="'+esc(f.pourTime||'')+'" oninput="esF(\'pourTime\',this.value)" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px 8px;font-size:12px;margin-top:3px;"/></div>';
+  html+='</div>';
+  if(res){
+    html+='<div style="background:#0f172a;border-radius:8px;padding:14px;margin-bottom:12px;">';
+    html+='<h3 style="color:#f59e0b;font-size:13px;margin:0 0 10px 0;">Saw Cut Window</h3>';
+    html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">';
+    html+='<div style="background:#1e293b;border-radius:6px;padding:8px;text-align:center;"><div style="color:#64748b;font-size:10px;">EARLIEST SAW</div><div style="color:#f87171;font-size:18px;font-weight:700;">'+res.minSaw.toFixed(1)+'h</div><div style="color:#64748b;font-size:10px;">after pour start</div></div>';
+    html+='<div style="background:#1e293b;border-radius:6px;padding:8px;text-align:center;"><div style="color:#64748b;font-size:10px;">OPTIMAL WINDOW</div><div style="color:#34d399;font-size:18px;font-weight:700;">'+res.optSaw.toFixed(1)+'–'+res.lateSaw.toFixed(1)+'h</div><div style="color:#64748b;font-size:10px;">CSDA recommended</div></div>';
+    html+='<div style="background:#1e293b;border-radius:6px;padding:8px;text-align:center;"><div style="color:#64748b;font-size:10px;">LATEST SAFE CUT</div><div style="color:#fbbf24;font-size:18px;font-weight:700;">'+res.lateSaw.toFixed(1)+'h</div><div style="color:#64748b;font-size:10px;">after pour start</div></div>';
+    html+='</div>';
+    if(f.pourTime){
+      function addH(t,h){var p=t.split(':');var m=parseInt(p[0])*60+parseInt(p[1])+Math.round(h*60);var hh=Math.floor(m/60)%24,mm=m%60;return (hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm;}
+      html+='<div style="background:#1e3a5f;border-radius:6px;padding:8px;margin-bottom:8px;">';
+      html+='<span style="color:#93c5fd;font-size:12px;">⏰ Pour start: '+f.pourTime+' → Earliest: <strong>'+addH(f.pourTime,res.minSaw)+'</strong> → Optimal: <strong>'+addH(f.pourTime,res.optSaw)+'</strong> → Latest: <strong>'+addH(f.pourTime,res.lateSaw)+'</strong></span>';
+      html+='</div>';
+    }
+    if(res.earlyNote)html+='<div style="background:#7f1d1d;border-radius:6px;padding:8px;color:#fca5a5;font-size:11px;margin-bottom:6px;">'+res.earlyNote+'</div>';
+    if(res.lateNote)html+='<div style="background:#422006;border-radius:6px;padding:8px;color:#fed7aa;font-size:11px;margin-bottom:6px;">'+res.lateNote+'</div>';
+    html+='</div>';
+  }
+  html+='<div style="background:#0f172a;border-radius:8px;padding:12px;margin-bottom:12px;">';
+  html+='<h3 style="color:#f59e0b;font-size:12px;margin:0 0 8px 0;">Log Saw Cuts</h3>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px;">';
+  html+='<input id="esProj" placeholder="Project/Element" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:5px;padding:5px;font-size:11px;"/>';
+  html+='<input id="esCutTime" type="time" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:5px;padding:5px;font-size:11px;"/>';
+  html+='<input id="esHrsAfter" placeholder="Hrs after pour" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:5px;padding:5px;font-size:11px;"/>';
+  html+='<input id="esNotes" placeholder="Notes / result" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:5px;padding:5px;font-size:11px;"/>';
+  html+='</div>';
+  html+='<button onclick="esLogCut()" style="background:#f59e0b;color:#000;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:600;">+ Log Saw Cut</button>';
+  html+='</div>';
+  if((d.pours||[]).length>0){
+    html+='<div style="background:#0f172a;border-radius:8px;padding:12px;margin-bottom:12px;">';
+    html+='<h3 style="color:#f59e0b;font-size:12px;margin:0 0 8px 0;">Saw Cut Log ('+d.pours.length+')</h3>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px;"><tr style="background:#1e293b;"><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Project</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Cut Time</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Hrs After Pour</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Notes</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;width:32px;">Del</th></tr>';
+    d.pours.forEach(function(p,i){
+      var hrs=parseFloat(p.hrs)||0;var warn=res&&(hrs<res.minSaw?'ravel':hrs>res.lateSaw?'late':'');
+      html+='<tr style="'+(warn==='ravel'?'background:#450a0a;':warn==='late'?'background:#422006;':'')+'"><td style="padding:4px;border:1px solid #334155;color:#e2e8f0;">'+esc(p.proj)+'</td><td style="padding:4px;border:1px solid #334155;color:#93c5fd;">'+esc(p.cutTime)+'</td><td style="padding:4px;border:1px solid #334155;color:'+(warn?'#fca5a5':'#34d399')+';">'+hrs+'h '+(warn==='ravel'?'⚠️ EARLY':warn==='late'?'⚠️ LATE':'✓')+'</td><td style="padding:4px;border:1px solid #334155;color:#94a3b8;">'+esc(p.notes)+'</td><td style="padding:4px;border:1px solid #334155;"><button onclick="esDel('+i+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:2px 5px;cursor:pointer;font-size:10px;">✕</button></td></tr>';
+    });
+    html+='</table>';
+    html+='<div style="margin-top:8px;display:flex;gap:8px;">';
+    html+='<button onclick="esPrint()" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">🖨 Print Log</button>';
+    html+='<button onclick="esCopy()" style="background:#1e3a5f;color:#93c5fd;border:1px solid #1d4ed8;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">📋 Copy</button>';
+    html+='</div></div>';
+  }
+  html+='<div style="background:#0f172a;border-radius:8px;padding:10px;"><p style="color:#64748b;font-size:10px;margin:0;"><strong>ACI 360R-10 §9.4.2:</strong> Saw cuts should penetrate ¼ slab depth (min 1" for 4" slab). CSDA STD-10: Early-entry dry cutting permitted as soon as concrete will not ravel — typically 1–4 hrs after finishing. <strong>El Paso note:</strong> 110°F ambient + 15% RH + 20 mph wind can reduce window to &lt;1 hr after finishing — always do "screwdriver test" (dragging screwdriver leaves clean groove without grain pullout) before sawing. Saw cut within optimal window to prevent random cracking that begins within 6–12 hrs on hot dry days.</p></div>';
+  html+='</div>';
+  document.getElementById(INNER).innerHTML=html;
+}
+window.esF=function(k,v){var d=load();if(!d.form)d.form={};d.form[k]=v;save(d);render();};
+window.esLogCut=function(){var d=load();if(!d.pours)d.pours=[];var proj=document.getElementById('esProj').value;var cutTime=document.getElementById('esCutTime').value;var hrs=document.getElementById('esHrsAfter').value;var notes=document.getElementById('esNotes').value;if(!proj||!hrs){alert('Enter project and hours after pour.');return;}d.pours.unshift({proj:proj,cutTime:cutTime,hrs:hrs,notes:notes,ts:Date.now()});if(d.pours.length>50)d.pours=d.pours.slice(0,50);save(d);render();};
+window.esDel=function(i){var d=load();if(confirm('Remove this entry?')){d.pours.splice(i,1);save(d);render();}};
+window.esCopy=function(){var d=load();var lines=['EARLY-ENTRY SAW CUT LOG'];(d.pours||[]).forEach(function(p){lines.push(p.proj+' | '+p.cutTime+' | '+p.hrs+'h | '+p.notes);});navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');};
+window.esPrint=function(){var d=load();var pw=window.open('','_blank');pw.document.write('<html><head><title>Saw Cut Log</title><style>body{font-family:Arial;font-size:10px;margin:20px;}h2{font-size:14px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:4px;}.sig{display:flex;gap:30px;margin-top:25px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;}</style></head><body>');pw.document.write('<h2>✂️ Early-Entry Saw Cut Timing Log</h2><p><strong>ACI 360R-10 §9.4.2 / CSDA STD-10</strong></p>');pw.document.write('<table><tr><th>Project / Element</th><th>Cut Time</th><th>Hrs After Pour</th><th>Notes</th></tr>');(d.pours||[]).forEach(function(p){pw.document.write('<tr><td>'+p.proj+'</td><td>'+p.cutTime+'</td><td>'+p.hrs+'h</td><td>'+(p.notes||'—')+'</td></tr>');});pw.document.write('</table>');pw.document.write('<p style="font-size:9px;margin-top:10px;"><strong>ACI 360R-10 §9.4.2:</strong> Saw cuts ≥¼ slab depth. CSDA: saw as soon as concrete will not ravel. El Paso: screwdriver stiffness test before sawing — blade drags groove cleanly without grain pullout. Do not delay: random cracking begins within 6–12 hrs on hot dry pours.</p>');pw.document.write('<div class="sig"><div>Foreman / Date</div><div>QC Inspector / Date</div><div>GC Superintendent / Date</div></div>');pw.document.write('</body></html>');pw.document.close();pw.print();};
+function createBtn(){var btn=document.createElement('button');btn.id=BTN;btn.textContent='✂️ Saw Cut Timing';btn.style.cssText='position:fixed;bottom:5500px;right:16px;background:#1e293b;color:#a78bfa;border:1px solid #7c3aed;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9056;box-shadow:0 2px 8px rgba(0,0,0,0.4);';btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Saw Cut Timing':'✂️ Saw Cut Timing';if(s)render();};document.body.appendChild(btn);var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9057;';var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<script>
+// ============================================================
+// TOOL 98: FORMWORK PRE-POUR INSPECTION RECORD 🔩
+// ACI 347R-14 §5 / OSHA 1926.703
+// ============================================================
+(function(){
+var BTN='fpiBtn',WRAP='fpiWrap',INNER='fpiInner';
+var KEY='oncor_fpiLog';
+var CHECKS=[
+  {cat:'Alignment & Plumb',items:['Forms plumb and in alignment (ACI 347R §5.2)','Adequate bracing against lateral loads','Haunch/keyway details match drawings','Form joints tight — no excessive gaps (>1/4")','Dimensions match plan drawings (ACI 117-10 ±1/4")']},
+  {cat:'Ties & Hardware',items:['Snap ties / she-bolts / coil rods installed per schedule','Tie spacing matches ACI 347R lateral pressure design','Waler and stringer spacing correct','Hardware tightened — no loose connections','Form-release agent applied uniformly (ACI 347R §3.5.3)']},
+  {cat:'Shoring & Bearing',items:['Shores plumb and bearing on solid footing','Mudsills installed where required (OSHA 1926.703)','Horizontal movement restrained — no walking','Reshores properly placed on elevated deck (ACI 347R)','Adequate bearing area under sill plates']},
+  {cat:'Blockouts & Embeds',items:['All sleeve penetrations secured in place','Blockouts braced — cannot float up during pour','Rebar chairs and cover verified before closing','PT ducts/anchors fastened (if PT element)','Expansion joint foam / bond breaker in place']},
+  {cat:'Final Check',items:['All construction debris removed from form','No standing water in form cavity','Adjacent footings/slabs protected from overpour','Engineer-required pre-pour inspection complete','Safety barricade around open form edges (OSHA 1926.703)']}
+];
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||{items:{},form:{},history:[]};}catch(e){return{items:{},form:{},history:[]};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function allItems(){var a=[];CHECKS.forEach(function(c){c.items.forEach(function(it){a.push(it);});});return a;}
+function calcStatus(d){var items=d.items||{};var all=allItems();var open=0,ok=0,nr=0,na=0;all.forEach(function(it){var s=items[it]||'Open';if(s==='Open')open++;else if(s==='OK')ok++;else if(s==='Needs Repair')nr++;else na++;});return{open:open,ok:ok,nr:nr,na:na,total:all.length};}
+function cycleStatus(s){return s==='Open'?'OK':s==='OK'?'Needs Repair':s==='Needs Repair'?'N/A':'Open';}
+window.fpToggle=function(item){var d=load();if(!d.items)d.items={};var cur=d.items[item]||'Open';d.items[item]=cycleStatus(cur);save(d);render();};
+window.fpF=function(k,v){var d=load();if(!d.form)d.form={};d.form[k]=v;save(d);};
+function render(){
+  var d=load();var f=d.form||{};var st=calcStatus(d);
+  var cleared=st.open===0&&st.nr===0;
+  var html='<div style="background:#1e293b;min-height:100vh;padding:16px;">';
+  html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;"><button onclick="document.getElementById(\''+WRAP+'\').style.display=\'none\';document.getElementById(\''+BTN+'\').textContent=\'🔩 Formwork Inspection\'" style="background:#334155;color:#94a3b8;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">← Back</button><h2 style="color:#e2e8f0;font-size:16px;margin:0;">🔩 Formwork Pre-Pour Inspection Record</h2></div>';
+  html+='<p style="color:#64748b;font-size:11px;margin:0 0 10px 0;">ACI 347R-14 §5 / OSHA 1926.703 — Systematic pre-pour inspection. OSHA 1926.703(a)(1) requires formwork be inspected before and during concrete placement. Do not pour until all items cleared.</p>';
+  html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">';
+  [['proj','Project'],['element','Element'],['date','Pour Date'],['inspector','Inspector']].forEach(function(p){var ty=p[0]==='date'?'date':'text';html+='<input type="'+ty+'" placeholder="'+p[1]+'" value="'+esc(f[p[0]]||'')+'" oninput="fpF(\''+p[0]+'\',this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px 8px;font-size:12px;"/>';});
+  html+='</div>';
+  if(cleared){html+='<div style="background:#14532d;border-radius:8px;padding:10px;margin-bottom:10px;text-align:center;"><span style="color:#86efac;font-size:14px;font-weight:700;">✅ FORMWORK CLEARED — AUTHORIZED TO POUR</span></div>';}
+  else{html+='<div style="background:#7f1d1d;border-radius:8px;padding:10px;margin-bottom:10px;"><span style="color:#fca5a5;font-size:13px;font-weight:700;">⛔ DO NOT POUR — '+st.open+' Open / '+st.nr+' Needs Repair</span></div>';}
+  html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">';
+  [['Total Items',st.total,'#e2e8f0'],['OK ✓',st.ok,'#34d399'],['Needs Repair ⚠️',st.nr,'#f87171'],['N/A',st.na,'#94a3b8']].forEach(function(s){html+='<div style="background:#0f172a;border-radius:6px;padding:8px;text-align:center;"><div style="color:#64748b;font-size:10px;">'+s[0]+'</div><div style="color:'+s[2]+';font-size:18px;font-weight:700;">'+s[1]+'</div></div>';});
+  html+='</div>';
+  CHECKS.forEach(function(cat){
+    html+='<div style="background:#0f172a;border-radius:8px;padding:12px;margin-bottom:8px;">';
+    html+='<h3 style="color:#f59e0b;font-size:12px;margin:0 0 8px 0;">'+cat.cat+'</h3>';
+    cat.items.forEach(function(item){
+      var s=(d.items&&d.items[item])||'Open';
+      var col=s==='OK'?'#34d399':s==='Needs Repair'?'#f87171':s==='N/A'?'#64748b':'#fbbf24';
+      html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;cursor:pointer;" onclick="fpToggle('+JSON.stringify(item)+')">';
+      html+='<span style="background:'+col+';color:#000;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;min-width:80px;text-align:center;">'+s+'</span>';
+      html+='<span style="color:#cbd5e1;font-size:11px;">'+esc(item)+'</span>';
+      html+='</div>';
+    });
+    html+='</div>';
+  });
+  html+='<div style="display:flex;gap:8px;margin-top:8px;">';
+  html+='<button onclick="fpiPrint()" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;font-weight:600;">🖨 Print Inspection Record</button>';
+  html+='<button onclick="fpiArchive()" style="background:#1e3a5f;color:#93c5fd;border:1px solid #1d4ed8;border-radius:6px;padding:8px 12px;cursor:pointer;font-size:12px;">📁 Archive & Reset</button>';
+  html+='</div>';
+  if((d.history||[]).length>0){
+    html+='<div style="background:#0f172a;border-radius:8px;padding:12px;margin-top:12px;">';
+    html+='<h3 style="color:#f59e0b;font-size:12px;margin:0 0 8px 0;">Archive ('+d.history.length+')</h3>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px;"><tr style="background:#1e293b;"><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Project</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Element</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Date</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Result</th></tr>';
+    d.history.forEach(function(h){html+='<tr><td style="padding:4px;border:1px solid #334155;color:#e2e8f0;">'+esc(h.proj)+'</td><td style="padding:4px;border:1px solid #334155;color:#94a3b8;">'+esc(h.element)+'</td><td style="padding:4px;border:1px solid #334155;color:#94a3b8;">'+(h.date||'—')+'</td><td style="padding:4px;border:1px solid #334155;color:'+(h.cleared?'#34d399':'#f87171')+'">'+(h.cleared?'✅ CLEARED':'⚠️ INCOMPLETE')+'</td></tr>';});
+    html+='</table></div>';
+  }
+  html+='<div style="background:#0f172a;border-radius:8px;padding:10px;margin-top:10px;"><p style="color:#64748b;font-size:10px;margin:0;"><strong>ACI 347R-14 §5.2:</strong> All formwork shall be inspected before concrete placement. <strong>OSHA 1926.703(a)(1):</strong> Formwork shall be designed, erected, and braced to support all loads during placement without exceeding allowable stresses. Retain records for project duration + 3 years.</p></div>';
+  html+='</div>';
+  document.getElementById(INNER).innerHTML=html;
+}
+window.fpiArchive=function(){var d=load();var f=d.form||{};var st=calcStatus(d);d.history=d.history||[];d.history.unshift({proj:f.proj||'—',element:f.element||'—',date:f.date||'—',inspector:f.inspector||'—',cleared:st.open===0&&st.nr===0,ts:Date.now()});if(d.history.length>30)d.history=d.history.slice(0,30);d.items={};d.form={};save(d);render();};
+window.fpiPrint=function(){var d=load();var f=d.form||{};var st=calcStatus(d);var cleared=st.open===0&&st.nr===0;var pw=window.open('','_blank');pw.document.write('<html><head><title>Formwork Inspection</title><style>body{font-family:Arial;font-size:10px;margin:20px;}h2{font-size:14px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:4px;}.ok{color:green;font-weight:bold;}.nr{color:red;font-weight:bold;}.open{color:orange;}.na{color:#888;}.sig{display:flex;gap:30px;margin-top:25px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;}</style></head><body>');pw.document.write('<h2>🔩 Formwork Pre-Pour Inspection Record</h2><p><strong>ACI 347R-14 §5 / OSHA 1926.703</strong></p>');pw.document.write('<table style="margin-bottom:10px;"><tr><th>Project</th><td>'+(f.proj||'—')+'</td><th>Element</th><td>'+(f.element||'—')+'</td></tr><tr><th>Pour Date</th><td>'+(f.date||'—')+'</td><th>Inspector</th><td>'+(f.inspector||'—')+'</td></tr></table>');pw.document.write('<p style="padding:6px;border:1px solid '+(cleared?'green':'red')+';color:'+(cleared?'green':'red')+';font-weight:bold;">'+(cleared?'✅ FORMWORK CLEARED — AUTHORIZED TO POUR':'⛔ DO NOT POUR — Items require correction')+'</p>');CHECKS.forEach(function(cat){pw.document.write('<h3>'+cat.cat+'</h3><table><tr><th style="width:70%;">Item</th><th>Status</th></tr>');cat.items.forEach(function(item){var s=(d.items&&d.items[item])||'Open';pw.document.write('<tr><td>'+item+'</td><td class="'+(s==='OK'?'ok':s==='Needs Repair'?'nr':s==='N/A'?'na':'open')+'">'+s+'</td></tr>');});pw.document.write('</table>');});pw.document.write('<p style="font-size:9px;margin-top:10px;">OSHA 1926.703(a)(1): Formwork shall be designed, erected, and braced to support all loads. ACI 347R-14 §5.2: Inspect all formwork before concrete placement. Retain record project duration + 3 years.</p>');pw.document.write('<div class="sig"><div>Foreman / Date</div><div>QC Inspector / Date</div><div>GC Superintendent / Date</div></div>');pw.document.write('</body></html>');pw.document.close();pw.print();};
+function createBtn(){var btn=document.createElement('button');btn.id=BTN;btn.textContent='🔩 Formwork Inspection';btn.style.cssText='position:fixed;bottom:5650px;right:16px;background:#1e293b;color:#fb923c;border:1px solid #ea580c;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9058;box-shadow:0 2px 8px rgba(0,0,0,0.4);';btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Formwork Inspection':'🔩 Formwork Inspection';if(s)render();};document.body.appendChild(btn);var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9059;';var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<script>
+// ============================================================
+// TOOL 99: VERTICAL SURFACE REPAIR METHOD SELECTOR 🏗️
+// ACI 546R-14 / ICRI 310.2R / ACI 301-16 §5.3
+// ============================================================
+(function(){
+var BTN='vrmsBtn',WRAP='vrmsWrap',INNER='vrmsInner';
+var KEY='oncor_vrmsLog';
+// ACI 546R-14 / ICRI 310.2R repair method database for vertical/overhead surfaces
+var METHODS={
+  'honeycombing_shallow':[
+    {name:'Polymer-Modified Mortar (PMM)',spec:'ACI 546R §4.2 / ASTM C928',proc:'Remove loose aggregate. Wire brush. Apply latex or epoxy bonding agent. Trowel PMM flush. Cure 3 days.',cost:'$25–$65/SF',ref:'Sika MonoTop-623 / Euclid Tamms Speed Crete'},
+    {name:'Non-Shrink Grout Pack (ASTM C1107)',spec:'ACI 546R §4.2 / ASTM C1107',proc:'Form around void. Gravity or pressure-pack C1107 grout. Strip form after initial set.',cost:'$40–$90/SF',ref:'Masterflow 928 / Five Star 100'}
+  ],
+  'honeycombing_structural':[
+    {name:'Epoxy Injection (ASTM C881)',spec:'ACI 546R §5 / ASTM C881',proc:'Clean ports, inject low-viscosity epoxy from lowest port up. Cap each port when epoxy emerges at next.',cost:'$30–$60/LF',ref:'Sika Injection-451 / Master Inject 1380'},
+    {name:'Form-and-Pump Concrete Repair',spec:'ACI 546R §6.3 / ACI 301-16 §5.3',proc:'Saw cut square perimeter. Shore adjacent structure. Form void and pump SCCII mix. Full cure before loading.',cost:'$80–$180/SF',ref:'Requires EOR review — full structural replacement scope'}
+  ],
+  'spalling_surface':[
+    {name:'Surface-Applied PMM Overlay',spec:'ACI 546R §4.2 / ICRI 310.2R',proc:'Saw cut perimeter to ½" depth. ICRI CSP 3-5 profile surface. Apply bonding slurry. Apply PMM 3/8"–¾" thick.',cost:'$18–$45/SF',ref:'Sika MonoTop-612 / Euclid Speed Crete 2'},
+    {name:'High-Build Epoxy Mortar',spec:'ACI 546R §4.3 / ASTM C881 Type VI',proc:'Saw cut perimeter. Abrasive blast to ICRI CSP 5. Apply epoxy mortar in lifts (max 2" per lift). Profile and cure.',cost:'$35–$85/SF',ref:'Sikadur 22 Lo-Mod / Master Brace ADH 1000'}
+  ],
+  'spalling_structural':[
+    {name:'Full Depth Replacement + Dowels',spec:'ACI 546R §6.4 / ACI 318-19 §26.12',proc:'Saw cut 3" beyond damage. Remove concrete to rebar plus 2" clearance. Clean rebar (SSPC SP-6). Epoxy dowels if needed. Form and cast SCC repair mix.',cost:'$65–$150/SF',ref:'Requires EOR review. Dowel epoxy: Hilti HIT-RE 500'},
+    {name:'Shotcrete Repair',spec:'ACI 546R §6.5 / ACI 506R',proc:'Prepare substrate per ICRI 310.2R. Install support mesh if over 2" deep. Shotcrete in layers, wet-mix preferred for overhead.',cost:'$40–$90/SF',ref:'ACI 506R nozzleman certification required'}
+  ],
+  'crack_nonstructural':[
+    {name:'Routing & Sealing (ASTM C920)',spec:'ACI 546R §3.2 / ASTM C920',proc:'Route crack 1/4"W × 1/4"D. Install backer rod. Apply ASTM C920 polyurethane sealant. Cure 24 hr.',cost:'$7–$12/LF',ref:'Sikaflex 1a / NP-2 Sealant'},
+    {name:'Rigid Crack Filling (Epoxy)',spec:'ACI 224R / ASTM C881 Type I',proc:'Widen crack to ¼". Gravity-fill low-viscosity epoxy. Do not use in active cracks.',cost:'$12–$25/LF',ref:'Sika Injection-451 / Euclid EucoEpoxy 452'}
+  ],
+  'crack_structural':[
+    {name:'Epoxy Pressure Injection (ASTM C881)',spec:'ACI 546R §5 / ACI 318-19 §26.12.4',proc:'Install ports every 8–12". Seal crack surface. Inject at lowest port, advance upward. Cure 7 days before loading.',cost:'$25–$55/LF',ref:'Requires EOR evaluation and authorization first. Master Inject 1380'},
+    {name:'Stitching with Anchors',spec:'ACI 546R §7 / ACI 224R',proc:'Drill angled holes across crack. Epoxy-anchor U-shaped rebar staples perpendicular to crack. Grout holes flush.',cost:'$45–$100/LF',ref:'Requires structural analysis. Hilti HIT-RE 500 epoxy anchors'}
+  ],
+  'tieholefill':[
+    {name:'Dry-Pack Mortar Plug',spec:'ACI 546R §4.1 / ACI 301-16 §5.3.2',proc:'Wire brush cavity. Dampen. Ram-pack low w/c mortar (no admixture) in 1/2" lifts. Tool flush.',cost:'$5–$12/EA',ref:'Portland cement:fine sand 1:2.5 ratio, w/c 0.40 max'},
+    {name:'Precast Tie-Hole Plug',spec:'ACI 546R §4.1',proc:'Undercut tie hole slightly. Epoxy-set precast concrete plug to match form finish.',cost:'$8–$18/EA',ref:'Snap tie plugs: US Plug / Brock White'}
+  ],
+  'bugholes':[
+    {name:'Rubbing Compound Skin Coat',spec:'ACI 546R §8 / ACI 303R',proc:'Dampen surface. Apply portland cement slurry + fine sand. Tool into voids. Cure with damp burlap.',cost:'$3–$8/SF',ref:'Portland + fine sand + latex additive. Max 1/16" thick'},
+    {name:'Epoxy Paste Fill',spec:'ACI 546R §8 / ASTM C881 Type IV',proc:'Apply epoxy paste with rubber squeegee. Force into voids. Remove excess before cure.',cost:'$6–$15/SF',ref:'Sikadur 22 Hi-Mod / Master Brace ADH 1000. Color-matching critical for exposed finish.'}
+  ]
+};
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||{log:[]};}catch(e){return{log:[]};}
+}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+var defectTypes=[
+  {val:'honeycombing_shallow',label:'Honeycombing — Shallow (<2" deep)'},
+  {val:'honeycombing_structural',label:'Honeycombing — Structural (>2" or near rebar)'},
+  {val:'spalling_surface',label:'Spalling — Surface (<1" depth, no rebar exposure)'},
+  {val:'spalling_structural',label:'Spalling — Structural (rebar exposed or deep)'},
+  {val:'crack_nonstructural',label:'Crack — Dormant/Non-structural (cosmetic)'},
+  {val:'crack_structural',label:'Crack — Structural / Active / ≥0.015" wide'},
+  {val:'tieholefill',label:'Tie Hole Fill / Snap Tie Pockets'},
+  {val:'bugholes',label:'Bug Holes / Surface Voids (architectural)'}
+];
+function render(sel){
+  sel=sel||'';
+  var d=load();
+  var methods=sel&&METHODS[sel]?METHODS[sel]:null;
+  var html='<div style="background:#1e293b;min-height:100vh;padding:16px;">';
+  html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;"><button onclick="document.getElementById(\''+WRAP+'\').style.display=\'none\';document.getElementById(\''+BTN+'\').textContent=\'🏗️ Repair Selector\'" style="background:#334155;color:#94a3b8;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">← Back</button><h2 style="color:#e2e8f0;font-size:16px;margin:0;">🏗️ Vertical Surface Repair Method Selector</h2></div>';
+  html+='<p style="color:#64748b;font-size:11px;margin:0 0 12px 0;">ACI 546R-14 / ICRI 310.2R / ACI 301-16 §5.3 — Select defect type to see ACI-recommended repair methods, materials, and cost ranges. Log repair decisions to create the formal documented specification.</p>';
+  html+='<div style="background:#0f172a;border-radius:8px;padding:14px;margin-bottom:12px;">';
+  html+='<h3 style="color:#f59e0b;font-size:13px;margin:0 0 10px 0;">Select Defect Type</h3>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">';
+  defectTypes.forEach(function(dt){
+    html+='<button onclick="vrmsSelect(\''+dt.val+'\')" style="text-align:left;background:'+(sel===dt.val?'#1e3a5f':'#1e293b')+';color:'+(sel===dt.val?'#93c5fd':'#cbd5e1')+';border:1px solid '+(sel===dt.val?'#1d4ed8':'#334155')+';border-radius:6px;padding:8px 10px;cursor:pointer;font-size:11px;">'+esc(dt.label)+'</button>';
+  });
+  html+='</div></div>';
+  if(methods){
+    var selLabel=defectTypes.find(function(d){return d.val===sel;})||{label:sel};
+    html+='<div style="background:#0f172a;border-radius:8px;padding:14px;margin-bottom:12px;">';
+    html+='<h3 style="color:#34d399;font-size:13px;margin:0 0 10px 0;">Recommended Methods: '+esc(selLabel.label)+'</h3>';
+    methods.forEach(function(m,i){
+      html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:10px;">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">';
+      html+='<span style="color:#f59e0b;font-size:12px;font-weight:700;">Option '+(i+1)+': '+esc(m.name)+'</span>';
+      html+='<span style="background:#1e3a5f;color:#93c5fd;border-radius:4px;padding:2px 8px;font-size:10px;">'+esc(m.cost)+'</span>';
+      html+='</div>';
+      html+='<p style="color:#64748b;font-size:10px;margin:0 0 4px 0;"><strong style="color:#a78bfa;">Spec:</strong> '+esc(m.spec)+'</p>';
+      html+='<p style="color:#94a3b8;font-size:11px;margin:0 0 4px 0;"><strong style="color:#fb923c;">Procedure:</strong> '+esc(m.proc)+'</p>';
+      html+='<p style="color:#64748b;font-size:10px;margin:0;"><strong>Products:</strong> '+esc(m.ref)+'</p>';
+      html+='<button onclick="vrmsLog('+JSON.stringify(sel)+','+JSON.stringify(m.name)+','+JSON.stringify(m.spec)+','+JSON.stringify(m.cost)+')" style="margin-top:8px;background:#f59e0b;color:#000;border:none;border-radius:5px;padding:5px 12px;cursor:pointer;font-size:11px;font-weight:600;">+ Log this repair decision</button>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+  if((d.log||[]).length>0){
+    html+='<div style="background:#0f172a;border-radius:8px;padding:12px;margin-bottom:12px;">';
+    html+='<h3 style="color:#f59e0b;font-size:12px;margin:0 0 8px 0;">Repair Decision Log ('+d.log.length+')</h3>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px;"><tr style="background:#1e293b;"><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Date</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Defect</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Method</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Cost Range</th><th style="padding:4px;border:1px solid #334155;color:#94a3b8;">Location/Notes</th><th style="padding:4px;border:1px solid #334155;width:32px;">Del</th></tr>';
+    d.log.forEach(function(entry,i){
+      html+='<tr><td style="padding:4px;border:1px solid #334155;color:#94a3b8;">'+esc(entry.date)+'</td><td style="padding:4px;border:1px solid #334155;color:#fbbf24;">'+esc(entry.defect)+'</td><td style="padding:4px;border:1px solid #334155;color:#e2e8f0;">'+esc(entry.method)+'</td><td style="padding:4px;border:1px solid #334155;color:#34d399;">'+esc(entry.cost)+'</td><td style="padding:4px;border:1px solid #334155;color:#94a3b8;">'+esc(entry.notes||'—')+'</td><td style="padding:4px;border:1px solid #334155;"><button onclick="vrmsDelLog('+i+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:2px 5px;cursor:pointer;font-size:10px;">✕</button></td></tr>';
+    });
+    html+='</table>';
+    html+='<div style="margin-top:8px;display:flex;gap:8px;">';
+    html+='<button onclick="vrmsPrint()" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">🖨 Print Repair Spec Sheet</button>';
+    html+='<button onclick="vrmsCopy()" style="background:#1e3a5f;color:#93c5fd;border:1px solid #1d4ed8;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">📋 Copy Log</button>';
+    html+='</div></div>';
+  }
+  html+='<div style="background:#0f172a;border-radius:8px;padding:10px;margin-top:8px;"><p style="color:#64748b;font-size:10px;margin:0;"><strong>ACI 546R-14 §1.4:</strong> Repair selection must consider defect depth, cause, substrate condition, exposure class, and structural significance. <strong>ICRI 310.2R:</strong> Surface preparation profile (CSP 3-8) is critical — bond failure is the #1 repair failure mechanism. EOR review required for structural repairs. Cost ranges El Paso 2025. Always use compatible material systems — mixed manufacturers can cause adhesion failure.</p></div>';
+  html+='</div>';
+  document.getElementById(INNER).innerHTML=html;
+}
+window.vrmsSelect=function(val){render(val);};
+window.vrmsLog=function(defect,method,spec,cost){
+  var d=load();
+  var loc=prompt('Location / description (optional):')||'';
+  d.log=d.log||[];
+  d.log.unshift({date:new Date().toLocaleDateString(),defect:defectTypes.find(function(x){return x.val===defect;}).label||defect,method:method,spec:spec,cost:cost,notes:loc,ts:Date.now()});
+  if(d.log.length>50)d.log=d.log.slice(0,50);
+  save(d);render(defect);
+};
+window.vrmsDelLog=function(i){var d=load();if(confirm('Remove?')){d.log.splice(i,1);save(d);render();}};
+window.vrmsCopy=function(){var d=load();var lines=['VERTICAL SURFACE REPAIR DECISION LOG'];(d.log||[]).forEach(function(e){lines.push(e.date+' | '+e.defect+' | '+e.method+' | '+e.cost+' | '+(e.notes||'—'));});navigator.clipboard.writeText(lines.join('\n'));alert('Copied!');};
+window.vrmsPrint=function(){var d=load();var pw=window.open('','_blank');pw.document.write('<html><head><title>Repair Spec Sheet</title><style>body{font-family:Arial;font-size:10px;margin:20px;}h2{font-size:14px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:4px;vertical-align:top;}.sig{display:flex;gap:30px;margin-top:25px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;}</style></head><body>');pw.document.write('<h2>🏗️ Vertical Surface Repair Method Log</h2><p><strong>ACI 546R-14 / ICRI 310.2R / ACI 301-16 §5.3</strong></p>');pw.document.write('<table><tr><th>Date</th><th>Defect Type</th><th>Selected Method</th><th>ACI/ICRI Spec</th><th>Cost Range</th><th>Location / Notes</th></tr>');(d.log||[]).forEach(function(e){pw.document.write('<tr><td>'+e.date+'</td><td>'+e.defect+'</td><td style="font-weight:bold;">'+e.method+'</td><td style="font-size:9px;color:#666;">'+e.spec+'</td><td>'+e.cost+'</td><td>'+(e.notes||'—')+'</td></tr>');});pw.document.write('</table>');pw.document.write('<p style="font-size:9px;margin-top:12px;"><strong>ACI 546R-14 §1.4:</strong> Repair selection based on defect type, depth, structural significance, and exposure. <strong>ICRI 310.2R:</strong> Surface preparation is critical (CSP 3-8 for bonded repairs). EOR written authorization required for structural repairs. All repair materials shall be compatible — do not mix manufacturer systems. El Paso 2025 unit costs; field conditions may vary.</p>');pw.document.write('<div class="sig"><div>QC Inspector / Date</div><div>Repair Contractor / Date</div><div>PM / EOR Review / Date</div></div>');pw.document.write('</body></html>');pw.document.close();pw.print();};
+function createBtn(){var btn=document.createElement('button');btn.id=BTN;btn.textContent='🏗️ Repair Selector';btn.style.cssText='position:fixed;bottom:5800px;right:16px;background:#1e293b;color:#6ee7b7;border:1px solid #059669;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9060;box-shadow:0 2px 8px rgba(0,0,0,0.4);';btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Repair Selector':'🏗️ Repair Selector';if(s)render();};document.body.appendChild(btn);var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9061;';var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
