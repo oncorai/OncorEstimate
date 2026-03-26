@@ -54473,3 +54473,532 @@ function createBtn(){
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
 })();
 </script>
+
+<!-- ============================================================
+     BID SCHEDULE GENERATOR — Activity-Based Construction Schedule
+     AIA A201 §3.10 / ConsensusDocs — "How long will this take?"
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+var BTN_ID='bsched_btn', WRAP_ID='bsched_wrap', STORE='bsched_v1';
+function loadData(){try{return JSON.parse(localStorage.getItem(STORE))||{activities:[],projectStart:'',projectName:'',client:'',notes:''};}catch(e){return{activities:[],projectStart:'',projectName:'',client:'',notes:''};}}
+function saveData(d){localStorage.setItem(STORE,JSON.stringify(d));}
+var DEFAULT_ACTIVITIES=[
+  {id:'1',name:'Site Mobilization & Layout',duration:1,crew:2,category:'Mobilization',predecessors:'',notes:'Survey & grade stakes'},
+  {id:'2',name:'Excavation & Subgrade Prep',duration:3,crew:3,category:'Excavation',predecessors:'1',notes:'ACI 360R-10 §5 — proof roll required'},
+  {id:'3',name:'Underslab Utilities & MEP Rough-In',duration:2,crew:0,category:'Coordination',predecessors:'2',notes:'Sub scope — verify schedule'},
+  {id:'4',name:'Vapor Barrier / Base Course',duration:1,crew:3,category:'Site Prep',predecessors:'3',notes:'ACI 302.1R §4'},
+  {id:'5',name:'Rebar / Reinforcement Placement',duration:2,crew:4,category:'Rebar',predecessors:'4',notes:'ACI 315 / CRSI placement'},
+  {id:'6',name:'Form Setting',duration:2,crew:3,category:'Formwork',predecessors:'4',notes:'ACI 347R edge & screed forms'},
+  {id:'7',name:'Pre-Pour Inspection & Approvals',duration:1,crew:2,category:'QC / Inspection',predecessors:'5,6',notes:'ACI 301-16 §1.6 — hold point'},
+  {id:'8',name:'Concrete Pour',duration:1,crew:6,category:'Concrete',predecessors:'7',notes:'ACI 304R — truck/pump schedule'},
+  {id:'9',name:'Finishing & Texturing',duration:1,crew:4,category:'Finishing',predecessors:'8',notes:'ACI 302.1R §5'},
+  {id:'10',name:'Curing Application',duration:1,crew:2,category:'Curing',predecessors:'8',notes:'ACI 308R — min 7 days'},
+  {id:'11',name:'Control Joint Sawing',duration:1,crew:2,category:'Saw Cutting',predecessors:'9',notes:'ACI 302.1R §4 — within 12 hrs'},
+  {id:'12',name:'Formwork Strip & Clean',duration:1,crew:3,category:'Formwork',predecessors:'10',notes:'ACI 347R — cure period met'},
+  {id:'13',name:'Punch List & Final Inspection',duration:1,crew:2,category:'QC / Inspection',predecessors:'12',notes:'GC acceptance walk'},
+  {id:'14',name:'Site Demobilization & Cleanup',duration:1,crew:2,category:'Mobilization',predecessors:'13',notes:'Final billing trigger'},
+];
+var CAT_COLORS={'Mobilization':'#1e40af','Excavation':'#92400e','Coordination':'#5b21b6','Site Prep':'#065f46','Rebar':'#991b1b','Formwork':'#b45309','QC / Inspection':'#0e7490','Concrete':'#166534','Finishing':'#1e3a5f','Curing':'#14532d','Saw Cutting':'#7f1d1d'};
+function addWorkdays(startDate,days){
+  var d=new Date(startDate);var added=0;
+  while(added<days-1){d.setDate(d.getDate()+1);var dow=d.getDay();if(dow!==0&&dow!==6)added++;}
+  return d;
+}
+function parseDate(s){return s?new Date(s+'T00:00:00'):null;}
+function fmtDate(d){if(!d)return'';return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
+function computeSchedule(activities,startStr){
+  var startDate=parseDate(startStr)||new Date();
+  var resolved={};
+  var maxPasses=activities.length+2;
+  for(var pass=0;pass<maxPasses;pass++){
+    activities.forEach(function(a){
+      if(resolved[a.id])return;
+      var preds=(a.predecessors||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
+      var canResolve=preds.every(function(pid){return resolved[pid];});
+      if(preds.length===0||canResolve){
+        var latestEnd=new Date(startDate);
+        if(preds.length>0){
+          preds.forEach(function(pid){
+            var r=resolved[pid];
+            if(r&&r.end>latestEnd)latestEnd=r.end;
+          });
+          // next workday after latest end
+          var next=new Date(latestEnd);
+          next.setDate(next.getDate()+1);
+          while(next.getDay()===0||next.getDay()===6)next.setDate(next.getDate()+1);
+          latestEnd=next;
+        }
+        var actEnd=addWorkdays(latestEnd,a.duration||1);
+        resolved[a.id]={start:latestEnd,end:actEnd,duration:a.duration||1};
+      }
+    });
+  }
+  return resolved;
+}
+function renderBSched(){
+  var d=loadData();var innerEl=document.getElementById('bsched_inner');if(!innerEl)return;
+  var resolved=d.projectStart&&d.activities.length>0?computeSchedule(d.activities,d.projectStart):{};
+  var projectEnd=null;
+  Object.values(resolved).forEach(function(r){if(!projectEnd||r.end>projectEnd)projectEnd=r.end;});
+  var totalDays=d.activities.reduce(function(a,act){return a+(act.duration||1);},0);
+  var html='<div style="max-width:900px;margin:0 auto;padding:16px;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">';
+  html+='<h2 style="color:#e7e5e4;font-size:16px;margin:0;">📅 Bid Schedule Generator</h2>';
+  html+='<button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'📅 Bid Schedule\';" style="background:#292524;color:#a8a29e;border:1px solid #57534e;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">✕ Close</button>';
+  html+='</div>';
+  // Project header
+  html+='<div style="background:#1c1917;border:1px solid #44403c;border-radius:10px;padding:16px;margin-bottom:16px;">';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Project Name</label><input id="bsched_proj" value="'+(d.projectName||'')+'" placeholder="e.g. Main Ave Warehouse SOG" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;" oninput="window.bsched_save()"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Client / GC</label><input id="bsched_client" value="'+(d.client||'')+'" placeholder="GC or Owner name" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;" oninput="window.bsched_save()"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Mobilization / NTP Date</label><input id="bsched_start" type="date" value="'+(d.projectStart||'')+'" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;" oninput="window.bsched_save()"></div>';
+  html+='</div>';
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;">';
+  html+='<button onclick="window.bsched_loadDefaults()" style="background:#1e3a5f;color:#bae6fd;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">↺ Load Default Activities</button>';
+  html+='<button onclick="window.bsched_addRow()" style="background:#14532d;color:#bbf7d0;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">+ Add Activity</button>';
+  html+='<button onclick="window.bsched_print()" style="background:#1c1917;color:#d6d3d1;border:1px solid #57534e;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨 Print Schedule</button>';
+  html+='<button onclick="window.bsched_copy()" style="background:#1c1917;color:#d6d3d1;border:1px solid #57534e;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">📋 Copy Summary</button>';
+  html+='</div></div>';
+  // Summary strip
+  if(d.projectStart&&d.activities.length>0){
+    html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">';
+    [
+      ['Activities',d.activities.length,''],
+      ['Total Workdays',totalDays,''],
+      ['Start',fmtDate(parseDate(d.projectStart)),''],
+      ['Est. Completion',fmtDate(projectEnd),''],
+    ].forEach(function(item){
+      html+='<div style="background:#1c1917;border:1px solid #44403c;border-radius:8px;padding:12px;text-align:center;"><div style="color:#e7e5e4;font-size:18px;font-weight:700;">'+item[0]+'</div><div style="color:#a8a29e;font-size:11px;">'+item[1]+'</div></div>';
+    });
+    html+='</div>';
+  }
+  // Activities table
+  if(d.activities.length>0){
+    html+='<div style="background:#1c1917;border:1px solid #44403c;border-radius:10px;overflow:hidden;margin-bottom:16px;">';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+    html+='<thead><tr style="background:#292524;">';
+    ['#','Activity','Cat.','Days','Crew','Predecessors','Start','End','Notes',''].forEach(function(h){
+      html+='<th style="padding:8px;color:#a8a29e;text-align:left;white-space:nowrap;">'+h+'</th>';
+    });
+    html+='</tr></thead><tbody>';
+    d.activities.forEach(function(a,idx){
+      var r=resolved[a.id];
+      var catColor=CAT_COLORS[a.category]||'#44403c';
+      html+='<tr style="border-top:1px solid #292524;">';
+      html+='<td style="padding:6px;color:#a8a29e;">'+a.id+'</td>';
+      html+='<td style="padding:6px;"><input value="'+a.name.replace(/"/g,'&quot;')+'" onchange="window.bsched_updateField('+idx+',\'name\',this.value)" style="background:transparent;color:#e7e5e4;border:none;font-size:11px;width:160px;"></td>';
+      html+='<td style="padding:6px;"><span style="background:'+catColor+';color:#fff;border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap;">'+a.category+'</span></td>';
+      html+='<td style="padding:6px;"><input type="number" min="1" value="'+a.duration+'" onchange="window.bsched_updateField('+idx+',\'duration\',+this.value)" style="background:#292524;color:#e7e5e4;border:1px solid #44403c;border-radius:4px;padding:3px;font-size:11px;width:45px;"></td>';
+      html+='<td style="padding:6px;"><input type="number" min="0" value="'+a.crew+'" onchange="window.bsched_updateField('+idx+',\'crew\',+this.value)" style="background:#292524;color:#e7e5e4;border:1px solid #44403c;border-radius:4px;padding:3px;font-size:11px;width:40px;"></td>';
+      html+='<td style="padding:6px;"><input value="'+(a.predecessors||'')+'" placeholder="e.g. 1,2" onchange="window.bsched_updateField('+idx+',\'predecessors\',this.value)" style="background:#292524;color:#e7e5e4;border:1px solid #44403c;border-radius:4px;padding:3px;font-size:11px;width:55px;"></td>';
+      html+='<td style="padding:6px;color:#86efac;white-space:nowrap;">'+(r?fmtDate(r.start):'—')+'</td>';
+      html+='<td style="padding:6px;color:#fbbf24;white-space:nowrap;">'+(r?fmtDate(r.end):'—')+'</td>';
+      html+='<td style="padding:6px;"><input value="'+(a.notes||'').replace(/"/g,'&quot;')+'" onchange="window.bsched_updateField('+idx+',\'notes\',this.value)" style="background:transparent;color:#a8a29e;border:none;font-size:11px;width:140px;"></td>';
+      html+='<td style="padding:6px;"><button onclick="window.bsched_del('+idx+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:11px;">🗑</button></td>';
+      html+='</tr>';
+    });
+    html+='</tbody></table></div>';
+  }
+  // Notes
+  html+='<div style="background:#1c1917;border:1px solid #44403c;border-radius:8px;padding:12px;margin-bottom:12px;">';
+  html+='<label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Schedule Notes / Assumptions</label>';
+  html+='<textarea id="bsched_notes" rows="3" placeholder="Note: schedule based on standard weather conditions. Rain days, permit delays, and owner-furnished items not included." style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;" oninput="window.bsched_save()">'+((d.notes)||'')+'</textarea>';
+  html+='</div>';
+  html+='<p style="color:#6b7280;font-size:10px;">Schedule computed from NTP date using predecessor logic (Mon–Fri workdays). Crew counts are for bidding reference only. AIA A201 §3.10 — contractor required to update schedule per contract. ConsensusDocs §6.3 — schedule delays require written notice within 3 days to preserve time extension rights.</p>';
+  html+='</div>';
+  innerEl.innerHTML=html;
+}
+window.bsched_save=function(){
+  var d=loadData();
+  d.projectName=(document.getElementById('bsched_proj')||{}).value||d.projectName;
+  d.client=(document.getElementById('bsched_client')||{}).value||d.client;
+  d.projectStart=(document.getElementById('bsched_start')||{}).value||d.projectStart;
+  d.notes=(document.getElementById('bsched_notes')||{}).value||d.notes;
+  saveData(d);renderBSched();
+};
+window.bsched_loadDefaults=function(){
+  var d=loadData();d.activities=DEFAULT_ACTIVITIES.map(function(a){return Object.assign({},a);});saveData(d);renderBSched();
+};
+window.bsched_addRow=function(){
+  var d=loadData();var nextId=String((d.activities.length>0?Math.max.apply(null,d.activities.map(function(a){return parseInt(a.id)||0;})):0)+1);
+  d.activities.push({id:nextId,name:'New Activity',duration:1,crew:2,category:'Concrete',predecessors:'',notes:''});
+  saveData(d);renderBSched();
+};
+window.bsched_del=function(idx){var d=loadData();d.activities.splice(idx,1);saveData(d);renderBSched();};
+window.bsched_updateField=function(idx,field,val){var d=loadData();if(d.activities[idx])d.activities[idx][field]=val;saveData(d);renderBSched();};
+window.bsched_copy=function(){
+  var d=loadData();var resolved=computeSchedule(d.activities,d.projectStart);
+  var lines=['BID SCHEDULE — '+(d.projectName||'Project'),'Client: '+(d.client||'—'),'Start: '+(d.projectStart||'—'),'','ID | Activity | Days | Start | End'];
+  d.activities.forEach(function(a){var r=resolved[a.id];lines.push(a.id+' | '+a.name+' | '+a.duration+'d | '+(r?fmtDate(r.start):'—')+' | '+(r?fmtDate(r.end):'—'));});
+  navigator.clipboard&&navigator.clipboard.writeText(lines.join('\n'));
+  alert('Schedule copied to clipboard.');
+};
+window.bsched_print=function(){
+  var d=loadData();var resolved=computeSchedule(d.activities,d.projectStart);
+  var projectEnd=null;Object.values(resolved).forEach(function(r){if(!projectEnd||r.end>projectEnd)projectEnd=r.end;});
+  var totalDays=d.activities.reduce(function(a,act){return a+(act.duration||1);},0);
+  var company=(document.getElementById('companyName')&&document.getElementById('companyName').value)||'Your Company';
+  var pw=window.open('','_blank');
+  pw.document.write('<!DOCTYPE html><html><head><title>Bid Schedule</title><style>body{font-family:Arial,sans-serif;padding:28px;font-size:11px;max-width:1000px;margin:0 auto;}h2{text-align:center;font-size:15px;}table{width:100%;border-collapse:collapse;margin:10px 0;}th,td{border:1px solid #999;padding:4px 6px;font-size:10px;}th{background:#eee;}.sig{display:flex;gap:20px;margin-top:24px;}.sig div{flex:1;border-top:1px solid #333;padding-top:4px;font-size:10px;}</style></head><body>');
+  pw.document.write('<h2>PRELIMINARY CONSTRUCTION SCHEDULE</h2>');
+  pw.document.write('<p style="text-align:center;">'+company+' &nbsp;|&nbsp; '+(d.projectName||'')+(d.client?' &nbsp;|&nbsp; GC/Owner: '+d.client:'')+' &nbsp;|&nbsp; Issued: '+new Date().toLocaleDateString()+'</p>');
+  pw.document.write('<table><tr><th>ID</th><th>Activity</th><th>Category</th><th>Dur (days)</th><th>Crew</th><th>Predecessors</th><th>Start</th><th>End</th><th>Notes</th></tr>');
+  d.activities.forEach(function(a){var r=resolved[a.id];pw.document.write('<tr><td>'+a.id+'</td><td>'+a.name+'</td><td>'+a.category+'</td><td>'+a.duration+'</td><td>'+a.crew+'</td><td>'+(a.predecessors||'—')+'</td><td>'+(r?fmtDate(r.start):'—')+'</td><td>'+(r?fmtDate(r.end):'—')+'</td><td>'+(a.notes||'')+'</td></tr>');});
+  pw.document.write('</table>');
+  pw.document.write('<table style="margin-top:10px;width:50%;"><tr><th>Total Workday Duration</th><td>'+totalDays+' days</td></tr><tr><th>Mobilization / NTP Date</th><td>'+(d.projectStart||'Per NTP')+'</td></tr><tr><th>Estimated Completion</th><td>'+(projectEnd?fmtDate(projectEnd):'TBD')+'</td></tr></table>');
+  if(d.notes)pw.document.write('<p><strong>Schedule Notes:</strong> '+d.notes+'</p>');
+  pw.document.write('<p style="font-size:9px;margin-top:10px;">PRELIMINARY SCHEDULE — For Bid Purposes Only. This schedule is based on standard weather and site conditions. It does not include holidays, rain delays, permit wait periods, owner-furnished material delays, or other events beyond contractor control. AIA A201 §3.10: Contractor shall update schedule per contract requirements. ConsensusDocs §6.3: Written notice of delay required within 3 days to preserve time extension rights. This schedule constitutes Contractor\'s preliminary baseline — actual schedule subject to contract execution and NTP.</p>');
+  pw.document.write('<div class="sig"><div>Contractor / Estimator</div><div>GC Review / Acceptance</div><div>Date</div></div>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='📅 Bid Schedule';
+  btn.style.cssText='position:fixed;bottom:3720px;right:16px;background:#1e1b4b;color:#a5b4fc;border:1px solid #4338ca;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8896;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Bid Schedule':'📅 Bid Schedule';if(s)renderBSched();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8897;';
+  var inner=document.createElement('div');inner.id='bsched_inner';wrap.appendChild(inner);
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<!-- ============================================================
+     MASS CONCRETE THERMAL GRADIENT MONITOR
+     ACI 231R-10 — Temperature differential crack risk tracking
+     for large footings, mat slabs, and grade beams
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+var BTN_ID='mctm_btn', WRAP_ID='mctm_wrap', STORE='mctm_v1';
+var ACI_LIMIT=35; // °F max differential per ACI 231R
+function loadData(){try{return JSON.parse(localStorage.getItem(STORE))||{pours:[]};}catch(e){return{pours:[]};};}
+function saveData(d){localStorage.setItem(STORE,JSON.stringify(d));}
+function fmtDt(ts){if(!ts)return'—';var d=new Date(ts);return d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});}
+function renderMCTM(){
+  var d=loadData();var el=document.getElementById('mctm_inner');if(!el)return;
+  var totalPours=d.pours.length;
+  var totalReadings=d.pours.reduce(function(a,p){return a+(p.readings||[]).length;},0);
+  var violationCount=d.pours.reduce(function(a,p){return a+(p.readings||[]).filter(function(r){return Math.abs(r.core-r.surface)>=ACI_LIMIT;}).length;},0);
+  var html='<div style="max-width:900px;margin:0 auto;padding:16px;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">';
+  html+='<h2 style="color:#e7e5e4;font-size:16px;margin:0;">🌡️ Mass Concrete Thermal Gradient Monitor</h2>';
+  html+='<button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'🌡️ Mass Concrete\';" style="background:#292524;color:#a8a29e;border:1px solid #57534e;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">✕ Close</button>';
+  html+='</div>';
+  html+='<p style="color:#a8a29e;font-size:12px;margin-bottom:12px;">ACI 231R-10 §3.4 — Maximum allowable temperature differential between concrete core and surface: <strong style="color:#fef9c3;">35°F (19°C)</strong>. Exceeding this limit causes thermal gradient cracking in mass elements (footings &gt;3\' thick, mat slabs &gt;2\', large grade beams). Monitor at 6-hour intervals for first 72 hours. Apply insulating blankets when differential approaches 25°F. El Paso January pours: ambient −10 to 25°F nights; El Paso July pours: core can reach 160°F+ without precautions.</p>';
+  if(violationCount>0){
+    html+='<div style="background:#7f1d1d;border:1px solid #dc2626;border-radius:8px;padding:12px;margin-bottom:12px;">';
+    html+='<div style="color:#fca5a5;font-weight:700;font-size:13px;">⛔ ACI 231R-10 TEMPERATURE DIFFERENTIAL VIOLATION — '+violationCount+' reading(s) exceed 35°F</div>';
+    html+='<div style="color:#fca5a5;font-size:11px;margin-top:4px;">Required actions: Apply insulating blankets immediately. Notify Engineer of Record. Do not strip forms until differential returns to &lt;25°F. Document corrective action.</div>';
+    html+='</div>';
+  }
+  // Dashboard
+  html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">';
+  [['Pour Events',totalPours],['Total Readings',totalReadings],['Violations',violationCount]].forEach(function(item,i){
+    var c=i===2&&item[1]>0?'#fca5a5':'#e7e5e4';
+    html+='<div style="background:#1c1917;border:1px solid #44403c;border-radius:8px;padding:12px;text-align:center;"><div style="color:'+c+';font-size:22px;font-weight:700;">'+item[1]+'</div><div style="color:#a8a29e;font-size:11px;">'+item[0]+'</div></div>';
+  });
+  html+='</div>';
+  // Add new pour
+  html+='<div style="background:#1c1917;border:1px solid #44403c;border-radius:10px;padding:16px;margin-bottom:16px;">';
+  html+='<h3 style="color:#e7e5e4;font-size:14px;margin-bottom:12px;">Register New Mass Concrete Pour</h3>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Element / Description</label><input id="mctm_el" placeholder="South Mat Slab — 4\' thick" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Pour Date</label><input id="mctm_pourdate" type="date" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Design f\'c (PSI)</label><input id="mctm_fc" type="number" value="4000" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Element Thickness (ft)</label><input id="mctm_thick" type="number" step="0.5" value="3" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Sensor Placement</label><input id="mctm_sensor" placeholder="North face — 12\' from corner" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Curing Plan</label><select id="mctm_cure" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"><option>Insulating blankets</option><option>Wet burlap + poly</option><option>Curing compound only</option><option>Custom — see notes</option></select></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Notes</label><input id="mctm_note" placeholder="Fly ash %, mix design notes" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<button onclick="window.mctm_addPour()" style="background:#14532d;color:#bbf7d0;border:none;border-radius:6px;padding:9px 20px;cursor:pointer;font-size:13px;font-weight:600;">+ Register Pour Event</button>';
+  html+='</div>';
+  // Pour events
+  if(d.pours.length>0){
+    d.pours.forEach(function(pour,pi){
+      var readings=pour.readings||[];
+      var maxDiff=readings.length>0?Math.max.apply(null,readings.map(function(r){return Math.abs(r.core-r.surface);})):0;
+      var hasViolation=maxDiff>=ACI_LIMIT;
+      var borderColor=hasViolation?'#dc2626':maxDiff>=25?'#f59e0b':'#16a34a';
+      html+='<div style="background:#1c1917;border:1px solid #44403c;border-left:4px solid '+borderColor+';border-radius:10px;padding:16px;margin-bottom:12px;">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">';
+      html+='<div><div style="color:#e7e5e4;font-size:14px;font-weight:600;">'+pour.element+'</div>';
+      html+='<div style="color:#a8a29e;font-size:12px;">Pour: '+(pour.pourDate||'—')+' | '+pour.fc+' PSI | '+pour.thickness+'ft thick | '+pour.curing+'</div>';
+      if(pour.sensor)html+='<div style="color:#78716c;font-size:11px;">Sensor: '+pour.sensor+'</div>';
+      html+='</div>';
+      html+='<div style="display:flex;gap:6px;align-items:center;">';
+      html+='<span style="background:'+(hasViolation?'#7f1d1d':maxDiff>=25?'#78350f':'#14532d')+';color:'+(hasViolation?'#fca5a5':maxDiff>=25?'#fde68a':'#86efac')+';border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;">'+(readings.length>0?'Max ΔT: '+maxDiff+'°F':'No readings yet')+'</span>';
+      html+='<button onclick="window.mctm_delPour('+pi+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;">🗑</button>';
+      html+='</div></div>';
+      // Add reading row
+      html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;margin-bottom:10px;align-items:end;">';
+      html+='<div><label style="color:#a8a29e;font-size:10px;display:block;margin-bottom:2px;">Core Temp (°F)</label><input id="mctm_core_'+pi+'" type="number" placeholder="125" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:6px;font-size:12px;box-sizing:border-box;"></div>';
+      html+='<div><label style="color:#a8a29e;font-size:10px;display:block;margin-bottom:2px;">Surface Temp (°F)</label><input id="mctm_surf_'+pi+'" type="number" placeholder="90" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:6px;font-size:12px;box-sizing:border-box;"></div>';
+      html+='<div><label style="color:#a8a29e;font-size:10px;display:block;margin-bottom:2px;">Ambient Temp (°F)</label><input id="mctm_amb_'+pi+'" type="number" placeholder="70" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:6px;font-size:12px;box-sizing:border-box;"></div>';
+      html+='<div><label style="color:#a8a29e;font-size:10px;display:block;margin-bottom:2px;">Technician</label><input id="mctm_tech_'+pi+'" placeholder="initials" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:6px;font-size:12px;box-sizing:border-box;"></div>';
+      html+='<button onclick="window.mctm_addReading('+pi+')" style="background:#1e3a5f;color:#bae6fd;border:none;border-radius:6px;padding:8px 12px;cursor:pointer;font-size:12px;white-space:nowrap;">+ Log Reading</button>';
+      html+='</div>';
+      // Readings table
+      if(readings.length>0){
+        html+='<table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px;">';
+        html+='<thead><tr style="background:#292524;"><th style="padding:5px;color:#a8a29e;text-align:left;">#</th><th style="padding:5px;color:#a8a29e;">Date/Time</th><th style="padding:5px;color:#a8a29e;">Core (°F)</th><th style="padding:5px;color:#a8a29e;">Surface (°F)</th><th style="padding:5px;color:#a8a29e;">Ambient (°F)</th><th style="padding:5px;color:#a8a29e;">ΔT</th><th style="padding:5px;color:#a8a29e;">Status</th><th style="padding:5px;color:#a8a29e;">Tech</th><th style="padding:5px;"></th></tr></thead><tbody>';
+        readings.forEach(function(r,ri){
+          var dt=Math.abs(r.core-r.surface);
+          var statusColor=dt>=ACI_LIMIT?'#fca5a5':dt>=25?'#fde68a':'#86efac';
+          var statusBg=dt>=ACI_LIMIT?'#7f1d1d':dt>=25?'#78350f':'#14532d';
+          var statusText=dt>=ACI_LIMIT?'⛔ VIOLATION':dt>=25?'⚠️ WARNING':'✓ OK';
+          html+='<tr style="border-top:1px solid #292524;">';
+          html+='<td style="padding:4px;color:#78716c;">'+(ri+1)+'</td>';
+          html+='<td style="padding:4px;color:#e7e5e4;white-space:nowrap;">'+fmtDt(r.ts)+'</td>';
+          html+='<td style="padding:4px;color:#fb923c;font-weight:600;">'+r.core+'</td>';
+          html+='<td style="padding:4px;color:#60a5fa;font-weight:600;">'+r.surface+'</td>';
+          html+='<td style="padding:4px;color:#a8a29e;">'+r.ambient+'</td>';
+          html+='<td style="padding:4px;color:'+statusColor+';font-weight:700;">'+dt+'°F</td>';
+          html+='<td style="padding:4px;"><span style="background:'+statusBg+';color:'+statusColor+';border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;">'+statusText+'</span></td>';
+          html+='<td style="padding:4px;color:#a8a29e;">'+(r.tech||'')+'</td>';
+          html+='<td style="padding:4px;"><button onclick="window.mctm_delReading('+pi+','+ri+')" style="background:#57534e;color:#d6d3d1;border:none;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:10px;">✕</button></td>';
+          html+='</tr>';
+        });
+        html+='</tbody></table>';
+      }
+      html+='<div style="display:flex;gap:8px;flex-wrap:wrap;">';
+      html+='<button onclick="window.mctm_print('+pi+')" style="background:#1c1917;color:#d6d3d1;border:1px solid #57534e;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:11px;">🖨 Print ACI 231R Log</button>';
+      html+='<button onclick="window.mctm_copy('+pi+')" style="background:#1c1917;color:#d6d3d1;border:1px solid #57534e;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:11px;">📋 Copy</button>';
+      html+='</div></div>';
+    });
+  }
+  html+='<details style="margin-top:16px;"><summary style="color:#fef9c3;font-size:13px;cursor:pointer;padding:8px;background:#1c1917;border-radius:6px;">📖 ACI 231R-10 Mass Concrete Reference</summary>';
+  html+='<div style="background:#1c1917;padding:12px;border-radius:0 0 6px 6px;font-size:11px;color:#d6d3d1;">';
+  html+='<p><strong>ACI 231R-10 Definition of Mass Concrete:</strong> Any large volume of cast-in-place concrete where the combination of dimensions, material properties, and ambient conditions requires measures to cope with the generation of heat from hydration of cement to minimize cracking.</p>';
+  html+='<p><strong>Common El Paso mass concrete elements:</strong> Foundation mat slabs (>2\'), large grade beams (>18" × 24"), retaining wall footings (>36" wide), bridge abutments, large column bases, grade-level equipment pads (>3\' thick).</p>';
+  html+='<table style="width:100%;border-collapse:collapse;margin:8px 0;"><tr><th style="border:1px solid #44403c;padding:5px;background:#292524;">Max ΔT</th><th style="border:1px solid #44403c;padding:5px;background:#292524;">Status</th><th style="border:1px solid #44403c;padding:5px;background:#292524;">Required Action</th></tr>';
+  html+='<tr><td style="border:1px solid #44403c;padding:5px;">&lt; 25°F</td><td style="border:1px solid #44403c;padding:5px;color:#86efac;">LOW RISK</td><td style="border:1px solid #44403c;padding:5px;">Continue standard monitoring</td></tr>';
+  html+='<tr><td style="border:1px solid #44403c;padding:5px;">25–35°F</td><td style="border:1px solid #44403c;padding:5px;color:#fde68a;">WARNING</td><td style="border:1px solid #44403c;padding:5px;">Apply insulating blankets, increase reading frequency to every 4 hours</td></tr>';
+  html+='<tr><td style="border:1px solid #44403c;padding:5px;">≥ 35°F</td><td style="border:1px solid #44403c;padding:5px;color:#fca5a5;">VIOLATION</td><td style="border:1px solid #44403c;padding:5px;">Immediately increase insulation. Notify EOR. Do not remove blankets. Document corrective action.</td></tr></table>';
+  html+='<p><strong>Fly ash & SCM effect:</strong> 20–30% Class F fly ash reduces peak heat generation by 15–25% (slower hydration). ACI 207.2R recommends fly ash for mass concrete in warm climates. El Paso summer ambient further increases risk — specify Type II low-heat cement + fly ash for thick elements poured June–September.</p>';
+  html+='</div></details>';
+  html+='</div>';
+  el.innerHTML=html;
+}
+window.mctm_addPour=function(){
+  var d=loadData();
+  d.pours.push({element:(document.getElementById('mctm_el')||{}).value||'Mass Element',pourDate:(document.getElementById('mctm_pourdate')||{}).value||'',fc:+(document.getElementById('mctm_fc')||{value:4000}).value,thickness:+(document.getElementById('mctm_thick')||{value:3}).value,sensor:(document.getElementById('mctm_sensor')||{}).value||'',curing:(document.getElementById('mctm_cure')||{}).value||'Insulating blankets',note:(document.getElementById('mctm_note')||{}).value||'',readings:[]});
+  saveData(d);renderMCTM();
+};
+window.mctm_delPour=function(i){var d=loadData();d.pours.splice(i,1);saveData(d);renderMCTM();};
+window.mctm_addReading=function(pi){
+  var d=loadData();if(!d.pours[pi])return;
+  var core=+(document.getElementById('mctm_core_'+pi)||{value:0}).value;
+  var surf=+(document.getElementById('mctm_surf_'+pi)||{value:0}).value;
+  var amb=+(document.getElementById('mctm_amb_'+pi)||{value:70}).value;
+  var tech=(document.getElementById('mctm_tech_'+pi)||{}).value||'';
+  if(!core&&!surf){alert('Enter core and surface temperatures.');return;}
+  d.pours[pi].readings.push({core:core,surface:surf,ambient:amb,tech:tech,ts:Date.now()});
+  saveData(d);renderMCTM();
+};
+window.mctm_delReading=function(pi,ri){var d=loadData();if(d.pours[pi])d.pours[pi].readings.splice(ri,1);saveData(d);renderMCTM();};
+window.mctm_copy=function(pi){
+  var d=loadData();var pour=d.pours[pi];if(!pour)return;
+  var lines=['MASS CONCRETE THERMAL LOG — ACI 231R-10','Element: '+pour.element,'Pour Date: '+(pour.pourDate||'—'),'Limit: 35°F differential','','#|Core°F|Surface°F|Ambient°F|ΔT|Status|DateTime'];
+  (pour.readings||[]).forEach(function(r,i){var dt=Math.abs(r.core-r.surface);lines.push((i+1)+'|'+r.core+'|'+r.surface+'|'+r.ambient+'|'+dt+'°F|'+(dt>=35?'VIOLATION':dt>=25?'WARNING':'OK')+'|'+new Date(r.ts).toLocaleString());});
+  navigator.clipboard&&navigator.clipboard.writeText(lines.join('\n'));
+  alert('Log copied to clipboard.');
+};
+window.mctm_print=function(pi){
+  var d=loadData();var pour=d.pours[pi];if(!pour)return;
+  var maxDiff=(pour.readings||[]).length>0?Math.max.apply(null,pour.readings.map(function(r){return Math.abs(r.core-r.surface);})):0;
+  var hasViolation=maxDiff>=35;
+  var company=(document.getElementById('companyName')&&document.getElementById('companyName').value)||'Your Company';
+  var pw=window.open('','_blank');
+  pw.document.write('<!DOCTYPE html><html><head><title>Mass Concrete Thermal Log</title><style>body{font-family:Arial,sans-serif;padding:28px;font-size:11px;max-width:900px;margin:0 auto;}h2{text-align:center;font-size:15px;}table{width:100%;border-collapse:collapse;margin:10px 0;}th,td{border:1px solid #999;padding:4px 6px;font-size:10px;}th{background:#eee;}.viol{background:#fee2e2;}.warn{background:#fef9c3;}.ok{background:#f0fdf4;}.sig{display:flex;gap:20px;margin-top:24px;}.sig div{flex:1;border-top:1px solid #333;padding-top:4px;font-size:10px;}</style></head><body>');
+  pw.document.write('<h2>MASS CONCRETE TEMPERATURE MONITORING LOG</h2>');
+  pw.document.write('<p style="text-align:center;">ACI 231R-10 §3.4 | '+company+' | '+new Date().toLocaleDateString()+'</p>');
+  if(hasViolation)pw.document.write('<p style="background:#fee2e2;border:1px solid #dc2626;padding:8px;font-weight:bold;">⛔ ACI 231R-10 VIOLATION: Temperature differential exceeded 35°F on '+pour.readings.filter(function(r){return Math.abs(r.core-r.surface)>=35;}).length+' reading(s). EOR notification required. Do not strip insulating blankets until differential &lt;25°F.</p>');
+  pw.document.write('<table style="width:60%;"><tr><th>Element</th><td>'+pour.element+'</td></tr><tr><th>Pour Date</th><td>'+(pour.pourDate||'—')+'</td></tr><tr><th>f\'c</th><td>'+pour.fc+' PSI</td></tr><tr><th>Thickness</th><td>'+pour.thickness+' ft</td></tr><tr><th>Curing Plan</th><td>'+pour.curing+'</td></tr><tr><th>Sensor Location</th><td>'+(pour.sensor||'—')+'</td></tr><tr><th>ACI 231R-10 Max ΔT</th><td>35°F</td></tr><tr><th>Recorded Max ΔT</th><td>'+maxDiff+'°F '+(hasViolation?'⛔ EXCEEDED':'✓ Within limit')+'</td></tr></table>');
+  pw.document.write('<h3>Temperature Readings</h3>');
+  pw.document.write('<table><tr><th>#</th><th>Date / Time</th><th>Core Temp (°F)</th><th>Surface Temp (°F)</th><th>Ambient Temp (°F)</th><th>ΔT (°F)</th><th>Status</th><th>Technician</th></tr>');
+  (pour.readings||[]).forEach(function(r,i){var dt=Math.abs(r.core-r.surface);var cls=dt>=35?'viol':dt>=25?'warn':'ok';pw.document.write('<tr class="'+cls+'"><td>'+(i+1)+'</td><td>'+new Date(r.ts).toLocaleString()+'</td><td>'+r.core+'</td><td>'+r.surface+'</td><td>'+r.ambient+'</td><td>'+dt+'</td><td>'+(dt>=35?'⛔ VIOLATION':dt>=25?'⚠ WARNING':'✓ OK')+'</td><td>'+(r.tech||'—')+'</td></tr>');});
+  pw.document.write('</table>');
+  pw.document.write('<p style="font-size:10px;margin-top:10px;">ACI 231R-10 §3.4 — Maximum allowable temperature differential between core and surface of mass concrete elements: 35°F (19°C). Differential monitoring shall be conducted at minimum 6-hour intervals for the first 72 hours after placement. Insulating blankets or forms shall remain until the temperature differential is ≤25°F for at least 24 consecutive hours. ACI 207.2R — Engineer of Record to review all thermal control plans before placement. All readings by qualified QC technician or Special Inspector per ACI 311.4R.</p>');
+  pw.document.write('<div class="sig"><div>QC Technician / Special Inspector</div><div>Project Engineer / PM</div><div>Engineer of Record</div></div>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='🌡️ Mass Concrete';
+  btn.style.cssText='position:fixed;bottom:3660px;right:16px;background:#1c1917;color:#fde68a;border:1px solid #92400e;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8898;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Mass Concrete':'🌡️ Mass Concrete';if(s)renderMCTM();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8899;';
+  var inner=document.createElement('div');inner.id='mctm_inner';wrap.appendChild(inner);
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<!-- ============================================================
+     DRAW REQUEST SUPPORT PACKAGE BUILDER
+     AIA G702 / AIA G703 — Professional pay application package
+     assembles all supporting docs checklist before sending to GC
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+var BTN_ID='drpkg_btn', WRAP_ID='drpkg_wrap', STORE='drpkg_v1';
+var DEFAULT_ITEMS=[
+  {cat:'Pay Application',name:'Signed AIA G702 Pay Application',required:true,status:'pending',notes:''},
+  {cat:'Pay Application',name:'Schedule of Values (AIA G703)',required:true,status:'pending',notes:''},
+  {cat:'Pay Application',name:'Stored Materials Documentation (if applicable)',required:false,status:'na',notes:''},
+  {cat:'Lien Waivers',name:'Conditional Partial Lien Waiver (Contractor)',required:true,status:'pending',notes:'TX Property Code §53.284'},
+  {cat:'Lien Waivers',name:'Conditional Partial Lien Waiver — Ready-Mix Supplier',required:true,status:'pending',notes:'TX §53 — material supplier ≥$500'},
+  {cat:'Lien Waivers',name:'Conditional Partial Lien Waiver — Rebar Supplier',required:false,status:'pending',notes:''},
+  {cat:'Lien Waivers',name:'Sub/Lower-Tier Lien Waivers (pump, forming, etc.)',required:false,status:'pending',notes:''},
+  {cat:'QC & Testing',name:'Concrete Cylinder Break Reports (7-day, 28-day)',required:true,status:'pending',notes:'ACI 301-16 §1.6.8'},
+  {cat:'QC & Testing',name:'Field Inspection Reports (Special Inspector)',required:false,status:'pending',notes:'Per contract — IBC §1705'},
+  {cat:'QC & Testing',name:'Batch Plant QC Visit Log (if first draw)',required:false,status:'pending',notes:'ACI 301-16 §4.2.2'},
+  {cat:'Schedule & RFIs',name:'Updated 3-Week Look-Ahead Schedule',required:false,status:'pending',notes:'Most GC OAC meetings require this'},
+  {cat:'Schedule & RFIs',name:'Outstanding RFI Log (open items summary)',required:false,status:'pending',notes:''},
+  {cat:'Schedule & RFIs',name:'Open Submittal Log (pending approvals)',required:false,status:'pending',notes:''},
+  {cat:'Compliance',name:'Certified Payroll (if prevailing wage project)',required:false,status:'na',notes:'DOL WH-347 / TxDOT requirement'},
+  {cat:'Compliance',name:'SWPPP Inspection Report (if earthwork active)',required:false,status:'na',notes:'TCEQ CGP TXR150000'},
+  {cat:'Compliance',name:'OSHA 300 Log (if requested by GC)',required:false,status:'na',notes:'29 CFR §1904'},
+  {cat:'Financial',name:'Contractor Retainage Reduction Request (if applicable)',required:false,status:'na',notes:'Per contract — TX §53.101'},
+  {cat:'Financial',name:'Approved Change Order Log & CO Backup',required:false,status:'pending',notes:'All CO pricing included in draw'},
+  {cat:'Final Draw Only',name:'Completed Punch List (all items closed)',required:false,status:'na',notes:'Pre-condition for final pay'},
+  {cat:'Final Draw Only',name:'Unconditional Final Lien Waiver (all parties)',required:false,status:'na',notes:'TX §53 — triggers retainage release'},
+  {cat:'Final Draw Only',name:'As-Built / Record Drawings (if required)',required:false,status:'na',notes:'Per contract specification'},
+  {cat:'Final Draw Only',name:'Closeout Documents: warranties, O&M manuals',required:false,status:'na',notes:'AIA G704 / Division 01'},
+];
+function loadData(){try{return JSON.parse(localStorage.getItem(STORE))||{items:DEFAULT_ITEMS.map(function(i){return Object.assign({},i);}),drawNo:1,drawDate:'',project:'',gc:'',reqAmount:'',notes:''};}catch(e){return{items:DEFAULT_ITEMS.map(function(i){return Object.assign({},i);}),drawNo:1,drawDate:'',project:'',gc:'',reqAmount:'',notes:''};}}
+function saveData(d){localStorage.setItem(STORE,JSON.stringify(d));}
+var STATUSES=['pending','ready','na','waived'];
+var STATUS_LABELS={pending:'⬜ Pending',ready:'✅ Ready',na:'— N/A',waived:'~ Waived'};
+var STATUS_COLORS={pending:'#f59e0b',ready:'#16a34a',na:'#57534e',waived:'#3b82f6'};
+function renderDRPKG(){
+  var d=loadData();var el=document.getElementById('drpkg_inner');if(!el)return;
+  var requiredItems=d.items.filter(function(i){return i.required;});
+  var readyRequired=requiredItems.filter(function(i){return i.status==='ready';}).length;
+  var allReady=readyRequired===requiredItems.length&&requiredItems.length>0;
+  var pendingRequired=requiredItems.filter(function(i){return i.status==='pending';}).length;
+  var html='<div style="max-width:900px;margin:0 auto;padding:16px;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">';
+  html+='<h2 style="color:#e7e5e4;font-size:16px;margin:0;">📦 Draw Request Support Package Builder</h2>';
+  html+='<button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'📦 Draw Package\';" style="background:#292524;color:#a8a29e;border:1px solid #57534e;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">✕ Close</button>';
+  html+='</div>';
+  html+='<p style="color:#a8a29e;font-size:12px;margin-bottom:12px;">AIA A201 §9.3 / TX Property Code §53 — Assemble all required supporting documents before submitting pay applications. GCs reject incomplete packages, delaying payment by a full cycle (30–45 days). This checklist ensures professional, complete submissions every draw.</p>';
+  if(allReady){
+    html+='<div style="background:#14532d;border:1px solid #16a34a;border-radius:8px;padding:12px;margin-bottom:12px;color:#86efac;font-weight:700;font-size:13px;text-align:center;">✅ ALL REQUIRED ITEMS READY — Package complete, safe to submit</div>';
+  } else if(pendingRequired>0){
+    html+='<div style="background:#78350f;border:1px solid #f59e0b;border-radius:8px;padding:10px;margin-bottom:12px;color:#fde68a;font-weight:700;font-size:13px;">⚠️ '+pendingRequired+' REQUIRED ITEM(S) STILL PENDING — Do not submit until all required items marked Ready</div>';
+  }
+  // Draw header
+  html+='<div style="background:#1c1917;border:1px solid #44403c;border-radius:10px;padding:16px;margin-bottom:16px;">';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Project</label><input id="drpkg_proj" value="'+(d.project||'')+'" placeholder="Project Name" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;" oninput="window.drpkg_saveHeader()"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">GC / Owner</label><input id="drpkg_gc" value="'+(d.gc||'')+'" placeholder="GC Name" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;" oninput="window.drpkg_saveHeader()"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Draw #</label><input id="drpkg_drawno" type="number" value="'+d.drawNo+'" min="1" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;" oninput="window.drpkg_saveHeader()"></div>';
+  html+='<div><label style="color:#a8a29e;font-size:11px;display:block;margin-bottom:4px;">Requested Amount</label><input id="drpkg_amount" value="'+(d.reqAmount||'')+'" placeholder="$42,500.00" style="width:100%;background:#292524;color:#e7e5e4;border:1px solid #57534e;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box;" oninput="window.drpkg_saveHeader()"></div>';
+  html+='</div></div>';
+  // Checklist by category
+  var cats={};
+  d.items.forEach(function(item,i){if(!cats[item.cat])cats[item.cat]=[];cats[item.cat].push({item:item,i:i});});
+  Object.keys(cats).forEach(function(cat){
+    html+='<div style="background:#1c1917;border:1px solid #44403c;border-radius:8px;margin-bottom:10px;overflow:hidden;">';
+    html+='<div style="background:#292524;padding:8px 14px;display:flex;justify-content:space-between;align-items:center;">';
+    html+='<span style="color:#d6d3d1;font-size:13px;font-weight:600;">'+cat+'</span>';
+    var catReady=cats[cat].filter(function(x){return x.item.status==='ready';}).length;
+    html+='<span style="color:#a8a29e;font-size:11px;">'+catReady+'/'+cats[cat].length+' ready</span>';
+    html+='</div>';
+    cats[cat].forEach(function(x){
+      var item=x.item;var i=x.i;
+      var sColor=STATUS_COLORS[item.status]||'#57534e';
+      html+='<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid #292524;">';
+      html+='<button onclick="window.drpkg_cycleStatus('+i+')" style="background:'+sColor+';color:#fff;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:11px;min-width:90px;font-weight:600;">'+STATUS_LABELS[item.status]+'</button>';
+      html+='<span style="color:#e7e5e4;font-size:12px;flex:1;">'+item.name+(item.required?' <span style="color:#f87171;font-size:10px;">*REQUIRED</span>':'')+'</span>';
+      if(item.notes)html+='<span style="color:#6b7280;font-size:10px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+item.notes+'</span>';
+      html+='</div>';
+    });
+    html+='</div>';
+  });
+  // Actions
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">';
+  html+='<button onclick="window.drpkg_resetItems()" style="background:#1c1917;color:#a8a29e;border:1px solid #57534e;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">↺ Reset Checklist</button>';
+  html+='<button onclick="window.drpkg_markAllNA()" style="background:#1c1917;color:#a8a29e;border:1px solid #57534e;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">Clear All Optional → N/A</button>';
+  html+='<button onclick="window.drpkg_print()" style="background:#1c1917;color:#d6d3d1;border:1px solid #57534e;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨 Print Package Cover Sheet</button>';
+  html+='<button onclick="window.drpkg_copy()" style="background:#1c1917;color:#d6d3d1;border:1px solid #57534e;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">📋 Copy Checklist</button>';
+  html+='</div>';
+  html+='</div>';
+  el.innerHTML=html;
+}
+window.drpkg_saveHeader=function(){
+  var d=loadData();
+  d.project=(document.getElementById('drpkg_proj')||{}).value||d.project;
+  d.gc=(document.getElementById('drpkg_gc')||{}).value||d.gc;
+  d.drawNo=+(document.getElementById('drpkg_drawno')||{value:d.drawNo}).value;
+  d.reqAmount=(document.getElementById('drpkg_amount')||{}).value||d.reqAmount;
+  saveData(d);
+};
+window.drpkg_cycleStatus=function(i){
+  var d=loadData();if(!d.items[i])return;
+  var cur=STATUSES.indexOf(d.items[i].status);d.items[i].status=STATUSES[(cur+1)%STATUSES.length];
+  saveData(d);renderDRPKG();
+};
+window.drpkg_resetItems=function(){
+  var d=loadData();d.items=DEFAULT_ITEMS.map(function(i){return Object.assign({},i);});saveData(d);renderDRPKG();
+};
+window.drpkg_markAllNA=function(){
+  var d=loadData();d.items.forEach(function(item){if(!item.required)item.status='na';});saveData(d);renderDRPKG();
+};
+window.drpkg_copy=function(){
+  var d=loadData();var lines=['DRAW REQUEST SUPPORT PACKAGE','Project: '+(d.project||'—')+' | GC: '+(d.gc||'—')+' | Draw #'+d.drawNo+' | Requested: '+(d.reqAmount||'—'),''];
+  d.items.forEach(function(item){lines.push((item.status==='ready'?'[✓]':item.status==='na'?'[–]':item.status==='waived'?'[~]':'[ ]')+' '+(item.required?'*':'')+'['+item.cat+'] '+item.name);});
+  navigator.clipboard&&navigator.clipboard.writeText(lines.join('\n'));
+  alert('Checklist copied to clipboard.');
+};
+window.drpkg_print=function(){
+  var d=loadData();
+  var company=(document.getElementById('companyName')&&document.getElementById('companyName').value)||'Your Company';
+  var readyItems=d.items.filter(function(i){return i.status==='ready';}).length;
+  var requiredItems=d.items.filter(function(i){return i.required;});
+  var pendingRequired=requiredItems.filter(function(i){return i.status==='pending';}).length;
+  var pw=window.open('','_blank');
+  pw.document.write('<!DOCTYPE html><html><head><title>Draw Package Cover Sheet</title><style>body{font-family:Arial,sans-serif;padding:28px;font-size:11px;max-width:800px;margin:0 auto;}h2{text-align:center;font-size:15px;}h3{font-size:12px;margin-top:14px;}table{width:100%;border-collapse:collapse;margin:8px 0;}th,td{border:1px solid #999;padding:4px 6px;font-size:10px;}th{background:#eee;}.ready{background:#f0fdf4;}.pending{background:#fff3cd;}.na{background:#f8f8f8;}.sig{display:flex;gap:20px;margin-top:24px;}.sig div{flex:1;border-top:1px solid #333;padding-top:4px;font-size:10px;}</style></head><body>');
+  pw.document.write('<h2>PAY APPLICATION SUPPORT PACKAGE</h2>');
+  pw.document.write('<p style="text-align:center;">'+company+' &nbsp;|&nbsp; '+(d.project||'Project')+' &nbsp;|&nbsp; GC: '+(d.gc||'—')+' &nbsp;|&nbsp; Draw #'+d.drawNo+' &nbsp;|&nbsp; '+new Date().toLocaleDateString()+'</p>');
+  if(d.reqAmount)pw.document.write('<p style="text-align:center;font-size:14px;font-weight:bold;">Requested Draw Amount: '+d.reqAmount+'</p>');
+  if(pendingRequired>0)pw.document.write('<p style="background:#fff3cd;border:1px solid #f59e0b;padding:8px;font-weight:bold;">⚠️ WARNING: '+pendingRequired+' required item(s) still pending. Do not submit until resolved.</p>');
+  else pw.document.write('<p style="background:#f0fdf4;border:1px solid #16a34a;padding:8px;font-weight:bold;">✅ All required items ready. Package is complete.</p>');
+  // Group by category
+  var cats={};d.items.forEach(function(item){if(!cats[item.cat])cats[item.cat]=[];cats[item.cat].push(item);});
+  Object.keys(cats).forEach(function(cat){
+    pw.document.write('<h3>'+cat+'</h3>');
+    pw.document.write('<table><tr><th>Status</th><th>Document</th><th>Req?</th><th>Notes</th></tr>');
+    cats[cat].forEach(function(item){
+      var cls=item.status==='ready'?'ready':item.status==='na'?'na':'pending';
+      var statusLabel=item.status==='ready'?'✅ Ready':item.status==='na'?'— N/A':item.status==='waived'?'~ Waived':'⬜ Pending';
+      pw.document.write('<tr class="'+cls+'"><td>'+statusLabel+'</td><td>'+item.name+'</td><td>'+(item.required?'YES *':'')+'</td><td>'+(item.notes||'')+'</td></tr>');
+    });
+    pw.document.write('</table>');
+  });
+  pw.document.write('<p style="font-size:10px;margin-top:10px;">AIA A201 §9.3 — Applications for payment shall be supported by data substantiating the contractor\'s right to payment. TX Property Code §53.284 — conditional lien waiver required from contractor and all first-tier subs with amounts ≥$500 before GC is obligated to pay. TX §28.001 Prompt Payment Act — GC must pay approved draw within 35 days or interest accrues at 1.5%/month. Retainage: TX §53.101 — GC must release retainage within 30 days of substantial completion. Failure to submit complete package allows GC to reject without starting payment clock.</p>');
+  pw.document.write('<div class="sig"><div>Contractor / AP</div><div>GC Received By</div><div>Date Submitted / Date Received</div></div>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='📦 Draw Package';
+  btn.style.cssText='position:fixed;bottom:3600px;right:16px;background:#1e3a5f;color:#bae6fd;border:1px solid #0369a1;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8900;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Draw Package':'📦 Draw Package';if(s)renderDRPKG();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8901;';
+  var inner=document.createElement('div');inner.id='drpkg_inner';wrap.appendChild(inner);
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
