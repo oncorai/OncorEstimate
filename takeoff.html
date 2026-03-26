@@ -57335,3 +57335,550 @@ function createBtn(){
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
 })();
 </script>
+
+<!-- ============================================================
+  TOOL 88: FIELD MATERIAL INVENTORY TRACKER
+  On-site consumable stock log with low-stock alerts
+  ============================================================ -->
+<script>
+(function(){
+'use strict';
+var SK='oc_field_inv_v1';var BTN='fi_btn';var WRAP='fi_wrap';var INNER='fi_inner';
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+var CATS=['Concrete / Cement','Rebar & Mesh','Formwork & Hardware','Curing & Moisture','Admixtures','PPE & Safety','Misc / Other'];
+var PRESETS=[
+  {name:'Rebar #4 (LF)',unit:'LF',cat:'Rebar & Mesh',reorder:200},
+  {name:'Rebar #5 (LF)',unit:'LF',cat:'Rebar & Mesh',reorder:200},
+  {name:'WWF Mesh 6x6 W2.9 (SF)',unit:'SF',cat:'Rebar & Mesh',reorder:500},
+  {name:'Snap Ties (ea)',unit:'ea',cat:'Formwork & Hardware',reorder:100},
+  {name:'She-Bolts (ea)',unit:'ea',cat:'Formwork & Hardware',reorder:50},
+  {name:'Form Lumber 2x4 (LF)',unit:'LF',cat:'Formwork & Hardware',reorder:100},
+  {name:'3/4" Plywood Sheets (ea)',unit:'ea',cat:'Formwork & Hardware',reorder:10},
+  {name:'Curing Compound (gal)',unit:'gal',cat:'Curing & Moisture',reorder:10},
+  {name:'Burlap (SF)',unit:'SF',cat:'Curing & Moisture',reorder:200},
+  {name:'Vapor Barrier 10-mil (SF)',unit:'SF',cat:'Curing & Moisture',reorder:500},
+  {name:'Water Reducer (gal)',unit:'gal',cat:'Admixtures',reorder:5},
+  {name:'Retarder (gal)',unit:'gal',cat:'Admixtures',reorder:5},
+  {name:'Accelerator (gal)',unit:'gal',cat:'Admixtures',reorder:5},
+  {name:'Concrete Bags 80lb (ea)',unit:'bags',cat:'Concrete / Cement',reorder:20},
+  {name:'Non-Shrink Grout Bags (ea)',unit:'bags',cat:'Concrete / Cement',reorder:10},
+  {name:'Safety Vests (ea)',unit:'ea',cat:'PPE & Safety',reorder:5},
+  {name:'Hard Hats (ea)',unit:'ea',cat:'PPE & Safety',reorder:5},
+  {name:'Tie Wire Coils (ea)',unit:'coils',cat:'Rebar & Mesh',reorder:3},
+  {name:'Bar Chairs (ea)',unit:'ea',cat:'Rebar & Mesh',reorder:50},
+];
+function load(){try{return JSON.parse(localStorage.getItem(SK))||{items:[],txns:[]};}catch(e){return {items:[],txns:[]};}}
+function save(d){localStorage.setItem(SK,JSON.stringify(d));}
+var form={name:'',unit:'',cat:CATS[0],reorder:50,onHand:0};
+var addTxn={itemIdx:-1,type:'receive',qty:0,date:new Date().toISOString().slice(0,10),ref:'',by:''};
+function render(){
+  var d=load();
+  var html='<div style="padding:16px;max-width:900px;margin:0 auto;">';
+  html+='<h2 style="color:#60a5fa;margin:0 0 4px 0;font-size:18px;">📦 Field Material Inventory Tracker</h2>';
+  html+='<p style="color:#64748b;font-size:11px;margin:0 0 14px 0;">Track consumable stock on-site — receive, consume, and flag low-stock before pour day</p>';
+  // Alert
+  var low=d.items.filter(function(it){return it.onHand<=it.reorder;});
+  if(low.length){html+='<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;padding:10px 14px;margin-bottom:12px;"><strong style="color:#fca5a5;">⚠️ LOW STOCK ALERT — '+low.length+' item(s) at or below reorder point:</strong><ul style="color:#fca5a5;margin:6px 0 0 0;padding-left:20px;">';low.forEach(function(it){html+='<li>'+esc(it.name)+': '+it.onHand+' '+esc(it.unit)+' (reorder at '+it.reorder+')</li>';});html+='</ul></div>';}
+  // Dashboard
+  html+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">';
+  var statBoxStyle='background:#1e293b;border-radius:8px;padding:10px 14px;min-width:110px;';
+  html+='<div style="'+statBoxStyle+'"><div style="color:#94a3b8;font-size:10px;">Items Tracked</div><div style="color:#e2e8f0;font-size:22px;font-weight:700;">'+d.items.length+'</div></div>';
+  html+='<div style="'+statBoxStyle+'background:'+(low.length?'#7f1d1d':'#1e293b')+';"><div style="color:#94a3b8;font-size:10px;">Low Stock</div><div style="color:'+(low.length?'#ef4444':'#4ade80')+';font-size:22px;font-weight:700;">'+low.length+'</div></div>';
+  html+='<div style="'+statBoxStyle+'"><div style="color:#94a3b8;font-size:10px;">Recent Txns</div><div style="color:#e2e8f0;font-size:22px;font-weight:700;">'+d.txns.length+'</div></div>';
+  html+='</div>';
+  // Add item
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:12px;">';
+  html+='<h3 style="color:#93c5fd;font-size:13px;margin:0 0 8px 0;">Add Item to Inventory</h3>';
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">';
+  html+='<div><label style="color:#64748b;font-size:10px;">Name</label><br/><input id="fi_name" value="'+esc(form.name)+'" oninput="fiF(\'name\',this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:160px;" placeholder="Snap Ties"/></div>';
+  html+='<div><label style="color:#64748b;font-size:10px;">Unit</label><br/><input id="fi_unit" value="'+esc(form.unit)+'" oninput="fiF(\'unit\',this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:70px;" placeholder="ea"/></div>';
+  html+='<div><label style="color:#64748b;font-size:10px;">Category</label><br/><select onchange="fiF(\'cat\',this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;">';
+  CATS.forEach(function(c){html+='<option value="'+esc(c)+'"'+(c===form.cat?' selected':'')+'>'+esc(c)+'</option>';});
+  html+='</select></div>';
+  html+='<div><label style="color:#64748b;font-size:10px;">On Hand</label><br/><input id="fi_oh" type="number" value="'+form.onHand+'" oninput="fiF(\'onHand\',+this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:80px;"/></div>';
+  html+='<div><label style="color:#64748b;font-size:10px;">Reorder At</label><br/><input type="number" value="'+form.reorder+'" oninput="fiF(\'reorder\',+this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:80px;"/></div>';
+  html+='<button onclick="fiSaveItem()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">+ Add Item</button>';
+  html+='</div>';
+  html+='<div style="margin-top:8px;"><span style="color:#64748b;font-size:10px;">Quick Add: </span>';
+  PRESETS.forEach(function(p){html+='<button onclick="fiPreset(\''+esc(p.name)+'\',\''+esc(p.unit)+'\',\''+esc(p.cat)+'\','+p.reorder+')" style="background:#0f172a;color:#94a3b8;border:1px solid #334155;border-radius:4px;padding:2px 7px;font-size:10px;cursor:pointer;margin:2px;">'+esc(p.name.replace(' ('+p.unit+')',''))+'</button>';});
+  html+='</div>';
+  html+='</div>';
+  // Transaction
+  if(d.items.length>0){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:12px;">';
+    html+='<h3 style="color:#93c5fd;font-size:13px;margin:0 0 8px 0;">Log Receive / Consume</h3>';
+    html+='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">';
+    html+='<div><label style="color:#64748b;font-size:10px;">Item</label><br/><select onchange="fiTF(\'itemIdx\',+this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;max-width:180px;">';
+    html+='<option value="-1">-- pick item --</option>';
+    d.items.forEach(function(it,i){html+='<option value="'+i+'"'+(i===addTxn.itemIdx?' selected':'')+'>'+esc(it.name)+'</option>';});
+    html+='</select></div>';
+    html+='<div><label style="color:#64748b;font-size:10px;">Type</label><br/><select onchange="fiTF(\'type\',this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;">';
+    ['receive','consume','adjust','return','waste'].forEach(function(t){html+='<option'+(t===addTxn.type?' selected':'')+'>'+t+'</option>';});
+    html+='</select></div>';
+    html+='<div><label style="color:#64748b;font-size:10px;">Qty</label><br/><input type="number" value="'+addTxn.qty+'" oninput="fiTF(\'qty\',+this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:80px;"/></div>';
+    html+='<div><label style="color:#64748b;font-size:10px;">Date</label><br/><input type="date" value="'+addTxn.date+'" onchange="fiTF(\'date\',this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;"/></div>';
+    html+='<div><label style="color:#64748b;font-size:10px;">Ref/Ticket</label><br/><input value="'+esc(addTxn.ref)+'" oninput="fiTF(\'ref\',this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:100px;" placeholder="Delivery tkt"/></div>';
+    html+='<div><label style="color:#64748b;font-size:10px;">By</label><br/><input value="'+esc(addTxn.by)+'" oninput="fiTF(\'by\',this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:70px;" placeholder="Initials"/></div>';
+    html+='<button onclick="fiLogTxn()" style="background:#0f766e;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:600;">Log</button>';
+    html+='</div></div>';
+  }
+  // Inventory table
+  if(d.items.length>0){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:12px;">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+    html+='<h3 style="color:#93c5fd;font-size:13px;margin:0;">Current Inventory</h3>';
+    html+='<div><button onclick="fiPrint()" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:11px;font-weight:600;margin-right:6px;">🖨 Print</button><button onclick="fiCopy()" style="background:#1e3a5f;color:#93c5fd;border:1px solid #1d4ed8;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:11px;font-weight:600;">📋 Copy</button></div>';
+    html+='</div>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+    html+='<tr style="background:#0f172a;"><th style="padding:5px;border:1px solid #334155;color:#94a3b8;text-align:left;">Item</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Cat</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">On Hand</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Unit</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Reorder At</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Status</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Del</th></tr>';
+    d.items.forEach(function(it,i){
+      var isLow=it.onHand<=it.reorder;
+      var bg=isLow?'background:#7f1d1d22;':'';
+      var statusTxt=isLow?'<span style="color:#ef4444;font-weight:700;">⚠ LOW</span>':'<span style="color:#4ade80;">✓ OK</span>';
+      html+='<tr style="'+bg+'"><td style="padding:5px;border:1px solid #334155;color:#e2e8f0;">'+esc(it.name)+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;color:#94a3b8;">'+esc(it.cat||'')+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;color:'+(isLow?'#ef4444':'#4ade80')+';text-align:center;font-weight:700;">'+it.onHand+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;color:#64748b;text-align:center;">'+esc(it.unit)+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;color:#94a3b8;text-align:center;">'+it.reorder+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;text-align:center;">'+statusTxt+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;text-align:center;"><button onclick="fiDelItem('+i+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:10px;">✕</button></td></tr>';
+    });
+    html+='</table></div>';
+  }
+  // Transaction log
+  if(d.txns.length>0){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;">';
+    html+='<h3 style="color:#93c5fd;font-size:13px;margin:0 0 8px 0;">Transaction Log (Last 30)</h3>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+    html+='<tr style="background:#0f172a;"><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Date</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Item</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Type</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Qty</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Ref</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">By</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Del</th></tr>';
+    d.txns.slice().reverse().slice(0,30).forEach(function(t,ri){
+      var idx=d.txns.length-1-ri;
+      var typeColor={'receive':'#4ade80','consume':'#f87171','adjust':'#fbbf24','return':'#a78bfa','waste':'#fb923c'}[t.type]||'#94a3b8';
+      html+='<tr><td style="padding:5px;border:1px solid #334155;color:#64748b;">'+t.date+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;color:#e2e8f0;">'+esc(t.itemName)+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;color:'+typeColor+';text-align:center;">'+t.type+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;color:'+typeColor+';text-align:center;font-weight:700;">'+(t.type==='consume'||t.type==='waste'?'-':'+')+''+t.qty+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;color:#94a3b8;">'+esc(t.ref||'—')+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;color:#64748b;">'+esc(t.by||'—')+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;text-align:center;"><button onclick="fiDelTxn('+idx+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:10px;">✕</button></td></tr>';
+    });
+    html+='</table></div>';
+  }
+  html+='</div>';
+  document.getElementById(INNER).innerHTML=html;
+}
+window.fiF=function(k,v){form[k]=v;};
+window.fiTF=function(k,v){addTxn[k]=v;};
+window.fiPreset=function(name,unit,cat,reorder){form.name=name;form.unit=unit;form.cat=cat;form.reorder=reorder;render();setTimeout(function(){var el=document.getElementById('fi_name');if(el)el.value=name;var eu=document.getElementById('fi_unit');if(eu)eu.value=unit;},50);};
+window.fiSaveItem=function(){
+  if(!form.name.trim()){alert('Enter item name.');return;}
+  if(!form.unit.trim()){alert('Enter unit.');return;}
+  var d=load();
+  d.items.push({name:form.name.trim(),unit:form.unit.trim(),cat:form.cat,reorder:form.reorder||0,onHand:form.onHand||0});
+  save(d);form={name:'',unit:'',cat:CATS[0],reorder:50,onHand:0};render();
+};
+window.fiDelItem=function(i){var d=load();d.items.splice(i,1);save(d);render();};
+window.fiDelTxn=function(i){var d=load();d.txns.splice(i,1);save(d);render();};
+window.fiLogTxn=function(){
+  if(addTxn.itemIdx<0){alert('Pick an item.');return;}
+  if(!addTxn.qty||addTxn.qty<=0){alert('Enter a quantity > 0.');return;}
+  var d=load();
+  var it=d.items[addTxn.itemIdx];
+  if(!it){alert('Item not found.');return;}
+  var delta=(addTxn.type==='consume'||addTxn.type==='waste')?-addTxn.qty:addTxn.qty;
+  it.onHand=Math.max(0,it.onHand+delta);
+  d.txns.push({date:addTxn.date,itemName:it.name,type:addTxn.type,qty:addTxn.qty,ref:addTxn.ref,by:addTxn.by});
+  save(d);addTxn={itemIdx:-1,type:'receive',qty:0,date:new Date().toISOString().slice(0,10),ref:'',by:''};render();
+};
+window.fiCopy=function(){
+  var d=load();
+  var lines=['FIELD MATERIAL INVENTORY — '+new Date().toLocaleDateString(),''];
+  d.items.forEach(function(it){lines.push(it.name+': '+it.onHand+' '+it.unit+(it.onHand<=it.reorder?' [LOW STOCK]':''));});
+  navigator.clipboard.writeText(lines.join('\n')).catch(function(){});alert('Copied!');
+};
+window.fiPrint=function(){
+  var d=load();
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>Field Material Inventory</title><style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}h2{font-size:14px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:5px;}th{background:#f3f4f6;}.low{background:#fee2e2;}.sig{display:flex;gap:40px;margin-top:30px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;}</style></head><body>');
+  pw.document.write('<h2>📦 Field Material Inventory — '+new Date().toLocaleDateString()+'</h2>');
+  pw.document.write('<table><tr><th>Item</th><th>Category</th><th>On Hand</th><th>Unit</th><th>Reorder At</th><th>Status</th></tr>');
+  d.items.forEach(function(it){
+    var low=it.onHand<=it.reorder;
+    pw.document.write('<tr class="'+(low?'low':'')+'"><td>'+it.name+'</td><td>'+(it.cat||'')+'</td><td><strong>'+it.onHand+'</strong></td><td>'+it.unit+'</td><td>'+it.reorder+'</td><td>'+(low?'⚠ LOW STOCK':'OK')+'</td></tr>');
+  });
+  pw.document.write('</table>');
+  if(d.txns.length>0){
+    pw.document.write('<h3 style="margin-top:20px;">Transaction Log (Last 20)</h3>');
+    pw.document.write('<table><tr><th>Date</th><th>Item</th><th>Type</th><th>Qty</th><th>Ref</th><th>By</th></tr>');
+    d.txns.slice(-20).reverse().forEach(function(t){pw.document.write('<tr><td>'+t.date+'</td><td>'+t.itemName+'</td><td>'+t.type+'</td><td>'+t.qty+'</td><td>'+(t.ref||'—')+'</td><td>'+(t.by||'—')+'</td></tr>');});
+    pw.document.write('</table>');
+  }
+  pw.document.write('<div class="sig"><div>Foreman<br/><br/>___________________________</div><div>PM<br/><br/>___________________________</div><div>Date<br/><br/>___________________________</div></div>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN;btn.textContent='📦 Inventory';
+  btn.style.cssText='position:fixed;bottom:4800px;right:16px;background:#1e293b;color:#a5f3fc;border:1px solid #0891b2;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9036;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Inventory':'📦 Inventory';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9037;';
+  var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<!-- ============================================================
+  TOOL 89: CONCRETE CYLINDER CHAIN OF CUSTODY LOG
+  ASTM C31 / C1077 field-to-lab tracking
+  ============================================================ -->
+<script>
+(function(){
+'use strict';
+var SK='oc_cylinder_coc_v1';var BTN='coc_btn';var WRAP='coc_wrap';var INNER='coc_inner';
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+var STATUSES=['Cast — Field Curing','Picked Up — In Transit','Delivered to Lab','Break 7d Scheduled','Break 7d Complete','Break 28d Scheduled','Break 28d Complete','Chain Complete'];
+var SCOLORS=['#94a3b8','#fbbf24','#60a5fa','#a78bfa','#f9a8d4','#34d399','#4ade80','#64748b'];
+var REASONS=['Standard QC','Failed 7d','Owner Request','Spec Requirement','Pre-pour Mockup','Core Supplement','Other'];
+var form={pour:'',element:'',psi:'4000',date:new Date().toISOString().slice(0,10),sets:1,cyls:4,castBy:'',cureLocation:'',pickupBy:'',pickupDate:'',lab:'',labTicket:'',labContact:'',reason:'Standard QC',notes:'',status:'Cast — Field Curing'};
+function load(){try{return JSON.parse(localStorage.getItem(SK))||{sets:[]};}catch(e){return {sets:[]};}}
+function save(d){localStorage.setItem(SK,JSON.stringify(d));}
+function daysBetween(a,b){try{return Math.round((new Date(b)-new Date(a))/86400000);}catch(e){return null;}}
+function render(){
+  var d=load();
+  var html='<div style="padding:16px;max-width:900px;margin:0 auto;">';
+  html+='<h2 style="color:#60a5fa;margin:0 0 4px 0;font-size:18px;">🔐 Concrete Cylinder Chain of Custody</h2>';
+  html+='<p style="color:#64748b;font-size:11px;margin:0 0 14px 0;">ASTM C31 / ASTM C1077 — Track every cylinder set from casting through lab receipt and break dates</p>';
+  // Alert for sets still in field cure
+  var inField=d.sets.filter(function(s){return s.status==='Cast — Field Curing';});
+  var inTransit=d.sets.filter(function(s){return s.status==='Picked Up — In Transit';});
+  if(inField.length||inTransit.length){
+    html+='<div style="background:#78350f;border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;margin-bottom:12px;">';
+    if(inField.length)html+='<div style="color:#fde68a;">⚠️ ASTM C31 §10.1: '+inField.length+' set(s) still in field cure — must be transported to lab within 48 hrs of casting.</div>';
+    if(inTransit.length)html+='<div style="color:#fbbf24;margin-top:4px;">🚚 '+inTransit.length+' set(s) in transit — confirm lab receipt.</div>';
+    html+='</div>';
+  }
+  // Dashboard
+  html+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">';
+  var sb='background:#1e293b;border-radius:8px;padding:10px 14px;min-width:110px;';
+  html+='<div style="'+sb+'"><div style="color:#94a3b8;font-size:10px;">Sets Logged</div><div style="color:#e2e8f0;font-size:22px;font-weight:700;">'+d.sets.length+'</div></div>';
+  var breaks28Pending=d.sets.filter(function(s){return s.status==='Break 28d Scheduled'||s.status==='Delivered to Lab'||s.status==='Break 7d Complete';}).length;
+  var complete=d.sets.filter(function(s){return s.status==='Chain Complete';}).length;
+  html+='<div style="'+sb+'"><div style="color:#94a3b8;font-size:10px;">Awaiting 28d Break</div><div style="color:#a78bfa;font-size:22px;font-weight:700;">'+breaks28Pending+'</div></div>';
+  html+='<div style="'+sb+'"><div style="color:#94a3b8;font-size:10px;">Chain Complete</div><div style="color:#4ade80;font-size:22px;font-weight:700;">'+complete+'</div></div>';
+  html+='<div style="'+sb+'"><div style="color:#94a3b8;font-size:10px;">Field Cure</div><div style="color:'+(inField.length?'#f87171':'#4ade80')+';font-size:22px;font-weight:700;">'+inField.length+'</div></div>';
+  html+='</div>';
+  // Add form
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:12px;">';
+  html+='<h3 style="color:#93c5fd;font-size:13px;margin:0 0 8px 0;">Log New Cylinder Set</h3>';
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;">';
+  html+='<div><label style="color:#64748b;font-size:10px;">Project / Pour</label><br/><input value="'+esc(form.pour)+'" oninput="cocF(\'pour\',this.value)" placeholder="Slab Grid A Pour 1" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:180px;"/></div>';
+  html+='<div><label style="color:#64748b;font-size:10px;">Element</label><br/><input value="'+esc(form.element)+'" oninput="cocF(\'element\',this.value)" placeholder="Footing F-14" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:140px;"/></div>';
+  html+='<div><label style="color:#64748b;font-size:10px;">Design f\'c (PSI)</label><br/><input value="'+esc(form.psi)+'" oninput="cocF(\'psi\',this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:80px;"/></div>';
+  html+='<div><label style="color:#64748b;font-size:10px;">Cast Date</label><br/><input type="date" value="'+form.date+'" onchange="cocF(\'date\',this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;"/></div>';
+  html+='<div><label style="color:#64748b;font-size:10px;">Sets</label><br/><input type="number" value="'+form.sets+'" oninput="cocF(\'sets\',+this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:60px;"/></div>';
+  html+='<div><label style="color:#64748b;font-size:10px;">Cyls/Set</label><br/><input type="number" value="'+form.cyls+'" oninput="cocF(\'cyls\',+this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:60px;"/></div>';
+  html+='<div><label style="color:#64748b;font-size:10px;">Cast By</label><br/><input value="'+esc(form.castBy)+'" oninput="cocF(\'castBy\',this.value)" placeholder="ACI Field Technician" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:140px;"/></div>';
+  html+='<div><label style="color:#64748b;font-size:10px;">Field Cure Location</label><br/><input value="'+esc(form.cureLocation)+'" oninput="cocF(\'cureLocation\',this.value)" placeholder="Job trailer shaded area" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:170px;"/></div>';
+  html+='<div><label style="color:#64748b;font-size:10px;">Testing Lab</label><br/><input value="'+esc(form.lab)+'" oninput="cocF(\'lab\',this.value)" placeholder="EP Testing Labs" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:150px;"/></div>';
+  html+='<div><label style="color:#64748b;font-size:10px;">Reason</label><br/><select onchange="cocF(\'reason\',this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;">';
+  REASONS.forEach(function(r){html+='<option'+(r===form.reason?' selected':'')+'>'+r+'</option>';});html+='</select></div>';
+  html+='<div><label style="color:#64748b;font-size:10px;">Notes</label><br/><input value="'+esc(form.notes)+'" oninput="cocF(\'notes\',this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:170px;"/></div>';
+  html+='</div>';
+  html+='<div style="margin-top:10px;">';
+  html+='<button onclick="cocSave()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:6px 16px;cursor:pointer;font-size:12px;font-weight:600;margin-right:8px;">+ Log Set</button>';
+  html+='<button onclick="cocClear()" style="background:#374151;color:#d1d5db;border:1px solid #4b5563;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">Clear</button>';
+  html+='</div></div>';
+  // Set log
+  if(d.sets.length>0){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+    html+='<h3 style="color:#93c5fd;font-size:13px;margin:0;">Cylinder Set Log (Newest First)</h3>';
+    html+='<button onclick="cocPrint()" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:11px;font-weight:600;">🖨 Print CoC Log</button>';
+    html+='</div>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+    html+='<tr style="background:#0f172a;"><th style="padding:5px;border:1px solid #334155;color:#94a3b8;text-align:left;">Pour / Element</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">PSI</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Cast</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Sets×Cyls</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Cast By</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Lab</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Days in Field</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Status</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Advance</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Del</th></tr>';
+    d.sets.slice().reverse().forEach(function(s,ri){
+      var idx=d.sets.length-1-ri;
+      var si=STATUSES.indexOf(s.status);
+      var sc=SCOLORS[si]||'#94a3b8';
+      var daysField=(s.pickupDate&&s.date)?daysBetween(s.date,s.pickupDate):'—';
+      var fieldWarn=(typeof daysField==='number'&&daysField>2);
+      html+='<tr style="background:'+(fieldWarn?'#78350f22':'')+';">';
+      html+='<td style="padding:5px;border:1px solid #334155;color:#e2e8f0;"><div>'+esc(s.pour||'—')+'</div><div style="color:#64748b;font-size:10px;">'+esc(s.element||'')+'</div></td>';
+      html+='<td style="padding:5px;border:1px solid #334155;color:#93c5fd;text-align:center;">'+esc(s.psi||'—')+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;color:#64748b;">'+s.date+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;color:#94a3b8;text-align:center;">'+(s.sets||1)+'×'+(s.cyls||4)+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;color:#94a3b8;">'+esc(s.castBy||'—')+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;color:#94a3b8;">'+esc(s.lab||'—')+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;color:'+(fieldWarn?'#ef4444':'#64748b')+';text-align:center;">'+(typeof daysField==='number'?daysField+'d'+(fieldWarn?' ⚠️':''):'—')+'</td>';
+      html+='<td style="padding:5px;border:1px solid #334155;"><span style="color:'+sc+';font-weight:600;font-size:10px;">'+esc(s.status)+'</span></td>';
+      var nextStatus=STATUSES[si+1];
+      if(nextStatus){html+='<td style="padding:5px;border:1px solid #334155;text-align:center;"><button onclick="cocAdvance('+idx+')" style="background:#1e3a5f;color:#93c5fd;border:1px solid #1d4ed8;border-radius:4px;padding:2px 7px;cursor:pointer;font-size:9px;">→ Next</button></td>';}
+      else{html+='<td style="padding:5px;border:1px solid #334155;text-align:center;color:#64748b;font-size:10px;">—</td>';}
+      html+='<td style="padding:5px;border:1px solid #334155;text-align:center;"><button onclick="cocDel('+idx+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:10px;">✕</button></td></tr>';
+    });
+    html+='</table>';
+    html+='<p style="color:#64748b;font-size:10px;margin-top:8px;">ASTM C31 §10.1: Initial (field) cure must not exceed 48 hrs. ASTM C1077: Chain of custody record required for accredited testing programs. 5-year records retention recommended.</p>';
+    html+='</div>';
+  }
+  html+='</div>';
+  document.getElementById(INNER).innerHTML=html;
+}
+window.cocF=function(k,v){form[k]=v;};
+window.cocClear=function(){form={pour:'',element:'',psi:'4000',date:new Date().toISOString().slice(0,10),sets:1,cyls:4,castBy:'',cureLocation:'',pickupBy:'',pickupDate:'',lab:'',labTicket:'',labContact:'',reason:'Standard QC',notes:'',status:'Cast — Field Curing'};render();};
+window.cocSave=function(){
+  if(!form.pour.trim()){alert('Enter pour/project name.');return;}
+  if(!form.castBy.trim()){alert('Enter cast by name.');return;}
+  var d=load();
+  d.sets.push({pour:form.pour,element:form.element,psi:form.psi,date:form.date,sets:form.sets,cyls:form.cyls,castBy:form.castBy,cureLocation:form.cureLocation,pickupBy:form.pickupBy,pickupDate:form.pickupDate,lab:form.lab,labTicket:form.labTicket,labContact:form.labContact,reason:form.reason,notes:form.notes,status:'Cast — Field Curing'});
+  save(d);render();alert('Cylinder set logged!');
+};
+window.cocAdvance=function(i){
+  var d=load();var s=d.sets[i];
+  var si=STATUSES.indexOf(s.status);
+  if(si<STATUSES.length-1){s.status=STATUSES[si+1];}
+  if(s.status==='Picked Up — In Transit'&&!s.pickupDate){s.pickupDate=new Date().toISOString().slice(0,10);}
+  save(d);render();
+};
+window.cocDel=function(i){var d=load();d.sets.splice(i,1);save(d);render();};
+window.cocPrint=function(){
+  var d=load();
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>Cylinder Chain of Custody Log</title><style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}h2{font-size:14px;}h3{font-size:12px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:5px;text-align:left;}th{background:#f3f4f6;}.warn{background:#fef3c7;}.sig{display:flex;gap:40px;margin-top:30px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;}</style></head><body>');
+  pw.document.write('<h2>🔐 Concrete Cylinder Chain of Custody Log</h2>');
+  pw.document.write('<p><strong>Reference:</strong> ASTM C31 (Cylinder Casting) | ASTM C1077 (Laboratory Testing) | ACI 301-16 §1.6.8</p>');
+  pw.document.write('<table><tr><th>Pour / Element</th><th>f\'c PSI</th><th>Cast Date</th><th>Sets×Cyls</th><th>Cast By</th><th>Field Cure Location</th><th>Pickup Date</th><th>Lab</th><th>Status</th><th>Notes</th></tr>');
+  d.sets.forEach(function(s){
+    var daysField=(s.pickupDate&&s.date)?Math.round((new Date(s.pickupDate)-new Date(s.date))/86400000):null;
+    var warn=typeof daysField==='number'&&daysField>2;
+    pw.document.write('<tr class="'+(warn?'warn':'')+'"><td>'+(s.pour||'—')+(s.element?' / '+s.element:'')+'</td><td>'+s.psi+'</td><td>'+s.date+'</td><td>'+(s.sets||1)+'×'+(s.cyls||4)+'</td><td>'+(s.castBy||'—')+'</td><td>'+(s.cureLocation||'—')+'</td><td>'+(s.pickupDate||'—')+(warn?' ⚠ >48hr':'')+'</td><td>'+(s.lab||'—')+'</td><td>'+s.status+'</td><td>'+(s.notes||'')+'</td></tr>');
+  });
+  pw.document.write('</table>');
+  pw.document.write('<h3 style="margin-top:16px;">ASTM C31 Field Cure Requirements</h3>');
+  pw.document.write('<ul><li><strong>§10.1 Initial Cure:</strong> Must be kept at 60–80°F for 24±8 hrs; do not move. Transport to lab within 48 hrs of casting.</li><li><strong>§10.2 Cylinders transported:</strong> Handle carefully — no vibration, no shock. Cylinders must not be subjected to vibration during transport.</li><li><strong>ASTM C1077:</strong> Accredited labs require chain of custody documentation from casting through break date.</li></ul>');
+  pw.document.write('<div class="sig"><div>QC Field Technician<br/><br/>___________________________</div><div>PM / Foreman<br/><br/>___________________________</div><div>Testing Lab Rep<br/><br/>___________________________</div><div>Date<br/><br/>___________________________</div></div>');
+  pw.document.write('<p style="font-size:8px;margin-top:12px;">Retain records minimum 5 years or per contract requirements. Chain of custody gaps may invalidate test results per ASTM C1077.</p>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN;btn.textContent='🔐 Cyl CoC';
+  btn.style.cssText='position:fixed;bottom:4860px;right:16px;background:#1e293b;color:#a5f3fc;border:1px solid #0891b2;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9038;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Cyl CoC':'🔐 Cyl CoC';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9039;';
+  var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<!-- ============================================================
+  TOOL 90: RETAINING WALL CONCRETE ESTIMATOR
+  ACI 318-19 / ACI 332R cantilever retaining wall quantity calc
+  ============================================================ -->
+<script>
+(function(){
+'use strict';
+var SK='oc_ret_wall_v1';var BTN='rw_btn';var WRAP='rw_wrap';var INNER='rw_inner';
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+var form={wallName:'',psi:'4000',wallLF:'50',stemH:'8',stemTBase:'12',stemTTop:'10',ftgL:'72',ftgW:'60',ftgT:'12',keyD:'12',keyW:'8',wallCnt:1,ohPct:'10',profitPct:'12',concrPx:'185',formRate:'18',rebarRate:'0.75',labor:'',notes:''};
+var hist=[];
+function loadH(){try{return JSON.parse(localStorage.getItem(SK))||[];}catch(e){return [];}}
+function saveH(a){localStorage.setItem(SK,JSON.stringify(a));}
+function calc(){
+  var lf=+form.wallLF||0;
+  var stemH=+form.stemH||0;
+  var stemTBase=(+form.stemTBase||12)/12; // convert in to ft
+  var stemTTop=(+form.stemTTop||10)/12;
+  var ftgL=(+form.ftgL||72)/12;
+  var ftgW=(+form.ftgW||60)/12;
+  var ftgT=(+form.ftgT||12)/12;
+  var keyD=(+form.keyD||0)/12;
+  var keyW=(+form.keyW||0)/12;
+  var cnt=+form.wallCnt||1;
+  // Volumes per LF
+  var stemTAvg=(stemTBase+stemTTop)/2;
+  var stemVol=stemH*stemTAvg*lf*cnt; // CF
+  var ftgVol=ftgL*ftgT*lf*cnt;
+  var keyVol=keyD*keyW*lf*cnt;
+  var totalCF=stemVol+ftgVol+keyVol;
+  var totalYD3=totalCF/27;
+  var orderYD3=totalYD3*1.05; // 5% waste
+  // Forming: both faces of stem + footing edges
+  var stemFormSF=(stemH*lf*2)*cnt; // two faces
+  var ftgFormSF=(ftgT*lf*2+ftgL*2*cnt); // front/back + ends
+  var totalFormSF=stemFormSF+ftgFormSF;
+  // Rebar estimate: ~100 lb/yd3 typical for retaining walls
+  var rebarLbs=totalYD3*100;
+  var rebarTons=rebarLbs/2000;
+  // Costs
+  var concrPx=+form.concrPx||185;
+  var formRate=+form.formRate||18;
+  var rebarRate=+form.rebarRate||0.75; // $/lb
+  var laborEstimate=+form.labor||0;
+  var concrCost=orderYD3*concrPx;
+  var formCost=totalFormSF*formRate;
+  var rebarCost=rebarLbs*rebarRate;
+  var subtotal=concrCost+formCost+rebarCost+laborEstimate;
+  var oh=subtotal*(+form.ohPct||0)/100;
+  var profit=(subtotal+oh)*((+form.profitPct||0)/100);
+  var total=subtotal+oh+profit;
+  return {stemVol,ftgVol,keyVol,totalCF,totalYD3,orderYD3,stemFormSF,ftgFormSF,totalFormSF,rebarLbs,rebarTons,concrCost,formCost,rebarCost,laborEstimate,subtotal,oh,profit,total,lf,cnt};
+}
+function fmtN(n,dec){return n.toFixed(dec!==undefined?dec:2);}
+function fmtD(n){return '$'+(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});}
+function render(){
+  var r=calc();
+  var html='<div style="padding:16px;max-width:900px;margin:0 auto;">';
+  html+='<h2 style="color:#60a5fa;margin:0 0 4px 0;font-size:18px;">🏔️ Retaining Wall Concrete Estimator</h2>';
+  html+='<p style="color:#64748b;font-size:11px;margin:0 0 14px 0;">ACI 318-19 / ACI 332R — Cantilever retaining wall: stem + footing + key concrete quantities and cost estimate</p>';
+  // Inputs
+  html+='<div style="display:flex;gap:12px;flex-wrap:wrap;">';
+  // Left: Wall geometry
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;flex:1;min-width:280px;">';
+  html+='<h3 style="color:#93c5fd;font-size:13px;margin:0 0 10px 0;">Wall Geometry</h3>';
+  function fInput(label,key,unit,w){return '<div style="margin-bottom:8px;"><label style="color:#64748b;font-size:10px;">'+label+'</label><div style="display:flex;align-items:center;gap:4px;"><input type="number" value="'+esc(form[key])+'" oninput="rwF(\''+key+'\',this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:'+(w||80)+'px;"/><span style="color:#64748b;font-size:11px;">'+esc(unit)+'</span></div></div>';}
+  html+=fInput('Wall Length (LF)','wallLF','LF',90);
+  html+=fInput('Wall Count','wallCnt','walls',60);
+  html+=fInput('Stem Height','stemH','ft',80);
+  html+=fInput('Stem Thickness — Base','stemTBase','in',80);
+  html+=fInput('Stem Thickness — Top','stemTTop','in',80);
+  html+='</div>';
+  // Middle: Footing + key
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;flex:1;min-width:280px;">';
+  html+='<h3 style="color:#93c5fd;font-size:13px;margin:0 0 10px 0;">Footing + Key</h3>';
+  html+=fInput('Footing Length (toe+heel)','ftgL','in',80);
+  html+=fInput('Footing Width (longitudinal)','ftgW','in',80);
+  html+=fInput('Footing Thickness','ftgT','in',80);
+  html+=fInput('Key Depth (0 if none)','keyD','in',80);
+  html+=fInput('Key Width','keyW','in',80);
+  html+='<div style="margin-top:8px;padding:8px;background:#0f172a;border-radius:6px;font-size:10px;color:#94a3b8;">';
+  html+='<strong style="color:#60a5fa;">ACI 332R Guide:</strong> Footing width typically 40–60% of stem height. Footing depth ≥ 12". Key per geotechnical recommendation.';
+  html+='</div></div>';
+  // Right: Pricing + markup
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;flex:1;min-width:220px;">';
+  html+='<h3 style="color:#93c5fd;font-size:13px;margin:0 0 10px 0;">Pricing & Markup</h3>';
+  html+='<div style="margin-bottom:8px;"><label style="color:#64748b;font-size:10px;">Design f\'c (PSI)</label><br/>';
+  html+='<select onchange="rwF(\'psi\',this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:130px;">';
+  ['3000','3500','4000','5000'].forEach(function(v){html+='<option'+(v===form.psi?' selected':'')+'>'+v+'</option>';});
+  html+='</select></div>';
+  html+=fInput('Concrete ($/yd³)','concrPx','$/yd³',90);
+  html+=fInput('Forms ($/SF both faces)','formRate','$/SF',90);
+  html+=fInput('Rebar ($/lb est.)','rebarRate','$/lb',90);
+  html+=fInput('Labor Add-on $','labor','$',90);
+  html+=fInput('Overhead %','ohPct','%',60);
+  html+=fInput('Profit %','profitPct','%',60);
+  html+='</div></div>';
+  // Results
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-top:0;">';
+  html+='<h3 style="color:#93c5fd;font-size:13px;margin:0 0 10px 0;">Quantity & Cost Results</h3>';
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:12px;">';
+  function statCard(lbl,val,sub){return '<div style="background:#0f172a;border-radius:6px;padding:10px;"><div style="color:#94a3b8;font-size:10px;">'+lbl+'</div><div style="color:#e2e8f0;font-size:18px;font-weight:700;">'+val+'</div>'+(sub?'<div style="color:#64748b;font-size:10px;">'+sub+'</div>':'')+'</div>';}
+  html+=statCard('Stem yd³',fmtN(r.stemVol/27,1),'('+fmtN(r.stemVol,0)+' CF)');
+  html+=statCard('Footing yd³',fmtN(r.ftgVol/27,1),'('+fmtN(r.ftgVol,0)+' CF)');
+  html+=statCard('Key yd³',fmtN(r.keyVol/27,1),'('+fmtN(r.keyVol,0)+' CF)');
+  html+=statCard('Total (net) yd³',fmtN(r.totalYD3,1),'~'+fmtN(r.orderYD3,1)+' order w/5%');
+  html+=statCard('Form SF',fmtN(r.totalFormSF,0),'stem+ftg both faces');
+  html+=statCard('Rebar Est.',fmtN(r.rebarLbs,0)+' lb',fmtN(r.rebarTons,2)+' tons');
+  html+='</div>';
+  // Cost table
+  html+='<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  html+='<tr style="background:#0f172a;"><th style="padding:6px 10px;border:1px solid #334155;color:#94a3b8;text-align:left;">Item</th><th style="padding:6px 10px;border:1px solid #334155;color:#94a3b8;text-align:right;">Qty</th><th style="padding:6px 10px;border:1px solid #334155;color:#94a3b8;text-align:right;">Rate</th><th style="padding:6px 10px;border:1px solid #334155;color:#94a3b8;text-align:right;">Cost</th></tr>';
+  html+='<tr><td style="padding:6px 10px;border:1px solid #334155;color:#e2e8f0;">Concrete (order qty)</td><td style="padding:6px 10px;border:1px solid #334155;color:#94a3b8;text-align:right;">'+fmtN(r.orderYD3,1)+' yd³</td><td style="padding:6px 10px;border:1px solid #334155;color:#94a3b8;text-align:right;">'+fmtD(+form.concrPx||0)+'/yd³</td><td style="padding:6px 10px;border:1px solid #334155;color:#60a5fa;text-align:right;font-weight:700;">'+fmtD(r.concrCost)+'</td></tr>';
+  html+='<tr><td style="padding:6px 10px;border:1px solid #334155;color:#e2e8f0;">Formwork</td><td style="padding:6px 10px;border:1px solid #334155;color:#94a3b8;text-align:right;">'+fmtN(r.totalFormSF,0)+' SF</td><td style="padding:6px 10px;border:1px solid #334155;color:#94a3b8;text-align:right;">'+fmtD(+form.formRate||0)+'/SF</td><td style="padding:6px 10px;border:1px solid #334155;color:#60a5fa;text-align:right;font-weight:700;">'+fmtD(r.formCost)+'</td></tr>';
+  html+='<tr><td style="padding:6px 10px;border:1px solid #334155;color:#e2e8f0;">Rebar (estimate)</td><td style="padding:6px 10px;border:1px solid #334155;color:#94a3b8;text-align:right;">'+fmtN(r.rebarLbs,0)+' lb</td><td style="padding:6px 10px;border:1px solid #334155;color:#94a3b8;text-align:right;">'+fmtD(+form.rebarRate||0)+'/lb</td><td style="padding:6px 10px;border:1px solid #334155;color:#60a5fa;text-align:right;font-weight:700;">'+fmtD(r.rebarCost)+'</td></tr>';
+  if(r.laborEstimate>0){html+='<tr><td style="padding:6px 10px;border:1px solid #334155;color:#e2e8f0;">Labor Add-on</td><td style="padding:6px 10px;border:1px solid #334155;color:#94a3b8;text-align:right;">—</td><td style="padding:6px 10px;border:1px solid #334155;color:#94a3b8;text-align:right;">—</td><td style="padding:6px 10px;border:1px solid #334155;color:#60a5fa;text-align:right;font-weight:700;">'+fmtD(r.laborEstimate)+'</td></tr>';}
+  html+='<tr style="background:#0f172a22;"><td style="padding:6px 10px;border:1px solid #334155;color:#e2e8f0;font-weight:600;">Subtotal</td><td colspan="2" style="padding:6px 10px;border:1px solid #334155;"></td><td style="padding:6px 10px;border:1px solid #334155;color:#e2e8f0;text-align:right;font-weight:700;">'+fmtD(r.subtotal)+'</td></tr>';
+  html+='<tr><td style="padding:6px 10px;border:1px solid #334155;color:#94a3b8;">Overhead ('+form.ohPct+'%)</td><td colspan="2" style="padding:6px 10px;border:1px solid #334155;"></td><td style="padding:6px 10px;border:1px solid #334155;color:#94a3b8;text-align:right;">'+fmtD(r.oh)+'</td></tr>';
+  html+='<tr><td style="padding:6px 10px;border:1px solid #334155;color:#94a3b8;">Profit ('+form.profitPct+'%)</td><td colspan="2" style="padding:6px 10px;border:1px solid #334155;"></td><td style="padding:6px 10px;border:1px solid #334155;color:#94a3b8;text-align:right;">'+fmtD(r.profit)+'</td></tr>';
+  html+='<tr style="background:#1e3a5f;"><td style="padding:8px 10px;border:1px solid #334155;color:#fff;font-weight:700;font-size:13px;">TOTAL BID</td><td colspan="2" style="padding:8px 10px;border:1px solid #334155;"></td><td style="padding:8px 10px;border:1px solid #334155;color:#60a5fa;text-align:right;font-weight:700;font-size:15px;">'+fmtD(r.total)+'</td></tr>';
+  html+='</table>';
+  html+='<div style="margin-top:10px;color:#64748b;font-size:10px;">Per yd³ all-in: '+fmtD(r.totalYD3>0?r.total/r.totalYD3:0)+'/yd³ | Per LF wall: '+fmtD(r.lf*r.cnt>0?r.total/(r.lf*r.cnt):0)+'/LF</div>';
+  html+='<div style="margin-top:10px;display:flex;gap:8px;">';
+  html+='<button onclick="rwSave()" style="background:#0f766e;color:#fff;border:none;border-radius:6px;padding:7px 16px;cursor:pointer;font-size:12px;font-weight:600;">💾 Save Estimate</button>';
+  html+='<button onclick="rwPrint()" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:7px 16px;cursor:pointer;font-size:12px;font-weight:600;">🖨 Print</button>';
+  html+='<button onclick="rwCopy()" style="background:#1e3a5f;color:#93c5fd;border:1px solid #1d4ed8;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:12px;font-weight:600;">📋 Copy</button>';
+  html+='</div>';
+  html+='<div style="margin-top:8px;"><label style="color:#64748b;font-size:10px;">Wall Name / Notes</label><br/><input value="'+esc(form.wallName)+'" oninput="rwF(\'wallName\',this.value)" placeholder="Wall A — North Perimeter" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:5px 8px;font-size:12px;width:260px;"/></div>';
+  html+='</div>';
+  // History
+  var h=loadH();
+  if(h.length>0){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-top:12px;">';
+    html+='<h3 style="color:#93c5fd;font-size:13px;margin:0 0 8px 0;">Saved Estimates</h3>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+    html+='<tr style="background:#0f172a;"><th style="padding:5px;border:1px solid #334155;color:#94a3b8;text-align:left;">Name</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">LF</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">yd³</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Total</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Saved</th><th style="padding:5px;border:1px solid #334155;color:#94a3b8;">Del</th></tr>';
+    h.slice().reverse().forEach(function(e,ri){
+      var idx=h.length-1-ri;
+      html+='<tr><td style="padding:5px;border:1px solid #334155;color:#e2e8f0;">'+esc(e.name||'(no name)')+'</td><td style="padding:5px;border:1px solid #334155;color:#94a3b8;text-align:center;">'+e.lf+'</td><td style="padding:5px;border:1px solid #334155;color:#94a3b8;text-align:center;">'+fmtN(+e.yd3,1)+'</td><td style="padding:5px;border:1px solid #334155;color:#4ade80;text-align:right;">'+fmtD(+e.total)+'</td><td style="padding:5px;border:1px solid #334155;color:#64748b;">'+e.saved+'</td><td style="padding:5px;border:1px solid #334155;text-align:center;"><button onclick="rwDelH('+idx+')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:10px;">✕</button></td></tr>';
+    });
+    html+='</table></div>';
+  }
+  html+='</div>';
+  document.getElementById(INNER).innerHTML=html;
+}
+window.rwF=function(k,v){form[k]=v;render();};
+window.rwSave=function(){
+  var r=calc();
+  var h=loadH();
+  h.push({name:form.wallName||('Wall '+new Date().toLocaleDateString()),lf:form.wallLF,yd3:r.totalYD3.toFixed(1),total:r.total.toFixed(0),saved:new Date().toLocaleDateString()});
+  saveH(h);render();alert('Saved!');
+};
+window.rwDelH=function(i){var h=loadH();h.splice(i,1);saveH(h);render();};
+window.rwCopy=function(){
+  var r=calc();
+  var lines=['RETAINING WALL ESTIMATE — '+(form.wallName||'—'),'','Length: '+form.wallLF+' LF × '+form.wallCnt+' wall(s)','Stem: '+form.stemH+'ft H × '+form.stemTBase+'"–'+form.stemTTop+'" thick','Footing: '+form.ftgL+'" wide × '+form.ftgT+'" deep','','Concrete (net): '+r.totalYD3.toFixed(1)+' yd³ | Order: '+r.orderYD3.toFixed(1)+' yd³','Formwork: '+r.totalFormSF.toFixed(0)+' SF','Rebar Est.: '+r.rebarLbs.toFixed(0)+' lb','','Subtotal: $'+r.subtotal.toLocaleString('en-US',{maximumFractionDigits:0}),'OH ('+form.ohPct+'%): $'+r.oh.toLocaleString('en-US',{maximumFractionDigits:0}),'Profit ('+form.profitPct+'%): $'+r.profit.toLocaleString('en-US',{maximumFractionDigits:0}),'TOTAL: $'+r.total.toLocaleString('en-US',{maximumFractionDigits:0})];
+  navigator.clipboard.writeText(lines.join('\n')).catch(function(){});alert('Copied!');
+};
+window.rwPrint=function(){
+  var r=calc();
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>Retaining Wall Estimate</title><style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}h2{font-size:14px;}h3{font-size:12px;margin-top:14px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:5px;text-align:left;}th{background:#f3f4f6;}.tot{background:#e0f2fe;font-weight:bold;}.sig{display:flex;gap:40px;margin-top:30px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;}</style></head><body>');
+  pw.document.write('<h2>🏔️ Retaining Wall Concrete Estimate</h2>');
+  pw.document.write('<p><strong>Reference:</strong> ACI 318-19 | ACI 332R Guide for Residential and Light Commercial Concrete Construction</p>');
+  pw.document.write('<h3>Wall Parameters</h3>');
+  pw.document.write('<table><tr><th>Parameter</th><th>Value</th><th>Parameter</th><th>Value</th></tr>');
+  pw.document.write('<tr><td>Wall Name / Description</td><td colspan="3">'+(form.wallName||'—')+'</td></tr>');
+  pw.document.write('<tr><td>Wall Length</td><td>'+form.wallLF+' LF</td><td>Wall Count</td><td>'+form.wallCnt+'</td></tr>');
+  pw.document.write('<tr><td>Stem Height</td><td>'+form.stemH+' ft</td><td>Design f\'c</td><td>'+form.psi+' PSI</td></tr>');
+  pw.document.write('<tr><td>Stem Thickness (base)</td><td>'+form.stemTBase+'"</td><td>Stem Thickness (top)</td><td>'+form.stemTTop+'"</td></tr>');
+  pw.document.write('<tr><td>Footing Width</td><td>'+form.ftgL+'" (toe+heel)</td><td>Footing Thickness</td><td>'+form.ftgT+'"</td></tr>');
+  pw.document.write('<tr><td>Key Depth</td><td>'+form.keyD+'"</td><td>Key Width</td><td>'+form.keyW+'"</td></tr>');
+  pw.document.write('</table>');
+  pw.document.write('<h3>Quantity Summary</h3>');
+  pw.document.write('<table><tr><th>Component</th><th>Volume (CF)</th><th>Volume (yd³)</th></tr>');
+  pw.document.write('<tr><td>Stem</td><td>'+r.stemVol.toFixed(1)+' CF</td><td>'+( r.stemVol/27).toFixed(2)+' yd³</td></tr>');
+  pw.document.write('<tr><td>Footing</td><td>'+r.ftgVol.toFixed(1)+' CF</td><td>'+(r.ftgVol/27).toFixed(2)+' yd³</td></tr>');
+  pw.document.write('<tr><td>Key</td><td>'+r.keyVol.toFixed(1)+' CF</td><td>'+(r.keyVol/27).toFixed(2)+' yd³</td></tr>');
+  pw.document.write('<tr class="tot"><td><strong>Total (net)</strong></td><td>'+r.totalCF.toFixed(1)+' CF</td><td>'+r.totalYD3.toFixed(2)+' yd³</td></tr>');
+  pw.document.write('<tr><td>Order Qty (+5% waste)</td><td>—</td><td>'+r.orderYD3.toFixed(2)+' yd³</td></tr>');
+  pw.document.write('<tr><td>Formwork (both faces)</td><td colspan="2">'+r.totalFormSF.toFixed(0)+' SF</td></tr>');
+  pw.document.write('<tr><td>Rebar Estimate (~100 lb/yd³)</td><td colspan="2">'+r.rebarLbs.toFixed(0)+' lbs ('+r.rebarTons.toFixed(2)+' tons)</td></tr>');
+  pw.document.write('</table>');
+  pw.document.write('<h3>Cost Estimate</h3>');
+  pw.document.write('<table><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>');
+  pw.document.write('<tr><td>Concrete</td><td>'+r.orderYD3.toFixed(1)+' yd³</td><td>$'+(+form.concrPx||0)+'/yd³</td><td>$'+Math.round(r.concrCost).toLocaleString()+'</td></tr>');
+  pw.document.write('<tr><td>Formwork</td><td>'+r.totalFormSF.toFixed(0)+' SF</td><td>$'+(+form.formRate||0)+'/SF</td><td>$'+Math.round(r.formCost).toLocaleString()+'</td></tr>');
+  pw.document.write('<tr><td>Rebar</td><td>'+r.rebarLbs.toFixed(0)+' lb</td><td>$'+(+form.rebarRate||0)+'/lb</td><td>$'+Math.round(r.rebarCost).toLocaleString()+'</td></tr>');
+  if(r.laborEstimate>0)pw.document.write('<tr><td>Labor Add-on</td><td>—</td><td>—</td><td>$'+Math.round(r.laborEstimate).toLocaleString()+'</td></tr>');
+  pw.document.write('<tr><td><strong>Subtotal</strong></td><td colspan="2"></td><td>$'+Math.round(r.subtotal).toLocaleString()+'</td></tr>');
+  pw.document.write('<tr><td>Overhead ('+form.ohPct+'%)</td><td colspan="2"></td><td>$'+Math.round(r.oh).toLocaleString()+'</td></tr>');
+  pw.document.write('<tr><td>Profit ('+form.profitPct+'%)</td><td colspan="2"></td><td>$'+Math.round(r.profit).toLocaleString()+'</td></tr>');
+  pw.document.write('<tr class="tot"><td><strong>TOTAL BID</strong></td><td colspan="2"></td><td><strong>$'+Math.round(r.total).toLocaleString()+'</strong></td></tr>');
+  pw.document.write('</table>');
+  pw.document.write('<p style="font-size:9px;margin-top:8px;"><strong>Notes:</strong> Rebar estimate of ~100 lb/yd³ is typical for cantilever retaining walls; verify against structural engineer\'s design. Footing width rule of thumb: 40–60% of stem height. Min footing depth per ACI 332R: ≥ 12". EOR structural design required before construction. This estimate is for bidding purposes only.</p>');
+  pw.document.write('<div class="sig"><div>Estimator<br/><br/>___________________________</div><div>PM / Engineer of Record<br/><br/>___________________________</div><div>GC Acceptance<br/><br/>___________________________</div><div>Date<br/><br/>___________________________</div></div>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN;btn.textContent='🏔️ Ret. Wall';
+  btn.style.cssText='position:fixed;bottom:4920px;right:16px;background:#1e293b;color:#a5f3fc;border:1px solid #0891b2;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9040;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Ret. Wall':'🏔️ Ret. Wall';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9041;';
+  var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
