@@ -53295,3 +53295,478 @@ function createBtn(){
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
 })();
 </script>
+
+<script>
+// S-CURVE / MONTHLY BILLING FORECAST
+(function(){
+var BTN_ID='scbf_btn',WRAP_ID='scbf_wrap',KEY='scbf_data';
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||{projects:[]};}catch(e){return{projects:[]};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+function renderForm(){
+  var d=load();
+  var html='<div style="max-width:1000px;margin:0 auto;padding:20px;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #6366f1;padding-bottom:8px;margin-bottom:14px;">';
+  html+='<h2 style="color:#c7d2fe;margin:0;">📈 S-Curve Monthly Billing Forecast</h2>';
+  html+='<button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'📈 S-Curve\';" style="background:#312e81;color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;">✕ Close</button></div>';
+  html+='<p style="color:#a5b4fc;font-size:12px;margin-bottom:14px;">AIA G702 schedule-of-values billing projection by month. Surety bond underwriters and banks require monthly billing schedules for bonded work over $500k. S-curve models: slow start → acceleration → slow finish. Pairs with Pay Application Generator for actual billings.</p>';
+
+  // Add project
+  html+='<div style="background:#1e1b4b;border:1px solid #6366f1;border-radius:8px;padding:14px;margin-bottom:14px;">';
+  html+='<h3 style="color:#c7d2fe;margin:0 0 10px;">Add Billing Forecast</h3>';
+  html+='<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="color:#a5b4fc;font-size:11px;">Project Name</label><br><input id="scbf_proj" placeholder="e.g. Camelback Warehouse SOG" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #6366f1;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a5b4fc;font-size:11px;">Contract Value ($)</label><br><input id="scbf_val" type="number" placeholder="850000" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #6366f1;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a5b4fc;font-size:11px;">Start Month</label><br><input id="scbf_start" type="month" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #6366f1;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a5b4fc;font-size:11px;">Duration (months)</label><br><input id="scbf_dur" type="number" value="6" min="1" max="36" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #6366f1;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="color:#a5b4fc;font-size:11px;">S-Curve Profile</label><br><select id="scbf_curve" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #6366f1;border-radius:4px;padding:6px;box-sizing:border-box;"><option value="typical">Typical (slow-fast-slow)</option><option value="front">Front-loaded</option><option value="back">Back-loaded</option><option value="linear">Linear (even)</option><option value="step">Step (milestones)</option></select></div>';
+  html+='<div><label style="color:#a5b4fc;font-size:11px;">Retainage %</label><br><input id="scbf_ret" type="number" value="10" min="0" max="20" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #6366f1;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#a5b4fc;font-size:11px;">GC / Client</label><br><input id="scbf_gc" placeholder="e.g. Austin Industries" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #6366f1;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<button onclick="window.scbf_add()" style="background:#4f46e5;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;">+ Add Forecast</button></div>';
+
+  // Projects
+  if(d.projects.length>0){
+    d.projects.forEach(function(p,pi){
+      var months=window.scbf_genMonths(p);
+      var totBilled=months.reduce(function(s,m){return s+m.gross;},0);
+      var totNet=months.reduce(function(s,m){return s+m.net;},0);
+      html+='<div style="background:#1e1b4b;border:1px solid #6366f1;border-radius:8px;padding:14px;margin-bottom:14px;">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+      html+='<div><div style="color:#c7d2fe;font-weight:700;font-size:15px;">'+p.proj+'</div><div style="color:#a5b4fc;font-size:12px;">'+p.gc+' | Contract: $'+p.val.toLocaleString()+' | '+p.dur+' months | '+p.curveLabel+'</div></div>';
+      html+='<div style="display:flex;gap:8px;">';
+      html+='<button onclick="window.scbf_print('+pi+')" style="background:#312e81;color:#c7d2fe;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">🖨 Print</button>';
+      html+='<button onclick="window.scbf_del('+pi+')" style="background:#450a0a;color:#fca5a5;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">🗑</button></div></div>';
+
+      // Summary strip
+      var retHeld=(totBilled*p.ret/100);
+      html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">';
+      html+='<div style="background:#0f172a;border-radius:6px;padding:8px;text-align:center;"><div style="color:#a5b4fc;font-size:10px;">Contract Value</div><div style="color:#c7d2fe;font-weight:700;">$'+p.val.toLocaleString()+'</div></div>';
+      html+='<div style="background:#0f172a;border-radius:6px;padding:8px;text-align:center;"><div style="color:#a5b4fc;font-size:10px;">Total Projected Billings</div><div style="color:#86efac;font-weight:700;">$'+Math.round(totBilled).toLocaleString()+'</div></div>';
+      html+='<div style="background:#0f172a;border-radius:6px;padding:8px;text-align:center;"><div style="color:#a5b4fc;font-size:10px;">Retainage Held</div><div style="color:#fca5a5;font-weight:700;">$'+Math.round(retHeld).toLocaleString()+'</div></div>';
+      html+='<div style="background:#0f172a;border-radius:6px;padding:8px;text-align:center;"><div style="color:#a5b4fc;font-size:10px;">Net Cash Collected</div><div style="color:#6ee7b7;font-weight:700;">$'+Math.round(totNet).toLocaleString()+'</div></div>';
+      html+='</div>';
+
+      // S-curve bar chart (text-based)
+      html+='<div style="background:#0f172a;border-radius:6px;padding:10px;margin-bottom:10px;">';
+      html+='<div style="color:#a5b4fc;font-size:11px;margin-bottom:6px;">Monthly Billing Schedule (S-Curve)</div>';
+      var maxGross=Math.max.apply(null,months.map(function(m){return m.gross;}));
+      months.forEach(function(m){
+        var pct=maxGross>0?m.gross/maxGross:0;
+        var barW=Math.round(pct*300);
+        html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">';
+        html+='<div style="color:#94a3b8;font-size:10px;width:70px;text-align:right;">'+m.label+'</div>';
+        html+='<div style="background:#4f46e5;height:14px;width:'+barW+'px;border-radius:2px;min-width:2px;"></div>';
+        html+='<div style="color:#c7d2fe;font-size:10px;">$'+Math.round(m.gross).toLocaleString()+' gross / $'+Math.round(m.net).toLocaleString()+' net</div>';
+        html+='<div style="color:#818cf8;font-size:10px;">(cum. '+Math.round(m.cumPct)+'%)</div>';
+        html+='</div>';
+      });
+      html+='</div>';
+      html+='</div>';
+    });
+  }
+  html+='<p style="color:#6b7280;font-size:10px;text-align:center;margin-top:10px;">S-Curve projections are estimates only. Actual billing depends on project progress, GC approval, and contract milestones. Coordinate with Pay Application Generator for actual billing tracking. For surety/bonding use: present alongside WIP Schedule.</p>';
+  html+='</div>';
+  document.getElementById('scbf_inner').innerHTML=html;
+  // Set default start to next month
+  var now=new Date();var ny=now.getFullYear();var nm=now.getMonth()+2;if(nm>12){nm=1;ny++;}
+  var el=document.getElementById('scbf_start');if(el&&!el.value)el.value=ny+'-'+(nm<10?'0':'')+nm;
+}
+window.scbf_genMonths=function(p){
+  var dur=p.dur||6;
+  var val=p.val||0;
+  var ret=p.ret||10;
+  var curve=p.curve||'typical';
+  // Generate weight array by curve type
+  var weights=[];
+  for(var i=0;i<dur;i++){
+    var x=(i+0.5)/dur; // 0..1
+    var w;
+    if(curve==='linear') w=1;
+    else if(curve==='front') w=Math.max(0,1.5-x*2);
+    else if(curve==='back') w=Math.max(0,x*2-0.5);
+    else if(curve==='step') w=(i===Math.floor(dur*0.25)||i===Math.floor(dur*0.5)||i===dur-1)?3:0.5;
+    else { // typical S-curve: sin^2 scaled
+      w=Math.sin(x*Math.PI);
+    }
+    weights.push(Math.max(0.1,w));
+  }
+  var sumW=weights.reduce(function(s,w){return s+w;},0);
+  var cum=0;
+  var months=[];
+  // Parse start
+  var startParts=(p.start||'2026-01').split('-');
+  var sy=parseInt(startParts[0]);var sm=parseInt(startParts[1])-1;
+  var MNAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  weights.forEach(function(w,i){
+    var gross=val*(w/sumW);
+    cum+=gross;
+    var retH=gross*ret/100;
+    var net=gross-retH;
+    var my=sy+Math.floor((sm+i)/12);var mm=(sm+i)%12;
+    months.push({label:MNAMES[mm]+' '+my,gross:gross,retH:retH,net:net,cumPct:cum/val*100});
+  });
+  return months;
+};
+window.scbf_add=function(){
+  var proj=document.getElementById('scbf_proj').value.trim();
+  var val=parseFloat(document.getElementById('scbf_val').value)||0;
+  var start=document.getElementById('scbf_start').value||'2026-01';
+  var dur=parseInt(document.getElementById('scbf_dur').value)||6;
+  var curve=document.getElementById('scbf_curve').value||'typical';
+  var curveLabels={'typical':'Typical S-Curve','front':'Front-loaded','back':'Back-loaded','linear':'Linear','step':'Step (milestones)'};
+  var ret=parseFloat(document.getElementById('scbf_ret').value)||10;
+  var gc=document.getElementById('scbf_gc').value.trim();
+  if(!proj||!val){alert('Enter project name and contract value');return;}
+  var d=load();
+  d.projects.push({proj:proj,val:val,start:start,dur:dur,curve:curve,curveLabel:curveLabels[curve]||curve,ret:ret,gc:gc});
+  save(d);renderForm();
+};
+window.scbf_del=function(i){if(!confirm('Delete this forecast?'))return;var d=load();d.projects.splice(i,1);save(d);renderForm();};
+window.scbf_print=function(pi){
+  var d=load();var p=d.projects[pi];if(!p)return;
+  var months=window.scbf_genMonths(p);
+  var company=(document.getElementById('companyName')&&document.getElementById('companyName').value)||'Company';
+  var pw=window.open('','_blank');
+  pw.document.write('<!DOCTYPE html><html><head><title>Billing Forecast</title><style>body{font-family:Arial,sans-serif;padding:24px;font-size:11px;max-width:900px;margin:0 auto;}table{width:100%;border-collapse:collapse;margin:10px 0;}td,th{border:1px solid #555;padding:6px;}th{background:#312e81;color:#fff;}.sig{display:flex;gap:20px;margin-top:20px;}.sig div{flex:1;border-top:1px solid #333;padding-top:4px;}</style></head><body>');
+  pw.document.write('<h2>S-CURVE MONTHLY BILLING FORECAST</h2>');
+  pw.document.write('<p>'+company+' | Project: '+p.proj+' | GC/Client: '+(p.gc||'—')+'</p>');
+  pw.document.write('<p>Contract Value: $'+p.val.toLocaleString()+' | Duration: '+p.dur+' months | Start: '+p.start+' | Curve: '+p.curveLabel+' | Retainage: '+p.ret+'%</p>');
+  pw.document.write('<table><tr><th>Month</th><th>Gross Billing</th><th>Retainage Held</th><th>Net Payable</th><th>Cum. Billing</th><th>% Complete</th></tr>');
+  var cumG=0;
+  months.forEach(function(m){
+    cumG+=m.gross;
+    pw.document.write('<tr><td>'+m.label+'</td><td>$'+Math.round(m.gross).toLocaleString()+'</td><td>$'+Math.round(m.retH).toLocaleString()+'</td><td>$'+Math.round(m.net).toLocaleString()+'</td><td>$'+Math.round(cumG).toLocaleString()+'</td><td>'+m.cumPct.toFixed(1)+'%</td></tr>');
+  });
+  var totG=months.reduce(function(s,m){return s+m.gross;},0);
+  var totR=months.reduce(function(s,m){return s+m.retH;},0);
+  var totN=months.reduce(function(s,m){return s+m.net;},0);
+  pw.document.write('<tr style="font-weight:bold;background:#f8f8f8;"><td>TOTAL</td><td>$'+Math.round(totG).toLocaleString()+'</td><td>$'+Math.round(totR).toLocaleString()+'</td><td>$'+Math.round(totN).toLocaleString()+'</td><td></td><td>100.0%</td></tr>');
+  pw.document.write('</table>');
+  pw.document.write('<p style="font-size:9px;margin-top:8px;"><strong>Note:</strong> This billing forecast is a projection based on the selected S-curve profile. Actual billings depend on project progress, GC approval of pay applications, and contract milestone completion. Present alongside WIP Schedule for surety bonding and lender reporting. Retainage release timing per AIA A401 §5.3 / TX Property Code §53.101 (30 days after Substantial Completion). Consult contract for specific retainage release conditions.</p>');
+  pw.document.write('<div class="sig"><div>Contractor PM / Date</div><div>GC / Owner / Date</div><div>Controller / Date</div></div>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='📈 S-Curve';
+  btn.style.cssText='position:fixed;bottom:3520px;right:16px;background:#1e1b4b;color:#c7d2fe;border:1px solid #6366f1;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8876;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ S-Curve':'📈 S-Curve';if(s)renderForm();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8877;';
+  var inner=document.createElement('div');inner.id='scbf_inner';wrap.appendChild(inner);
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<script>
+// THERMAL EXPANSION JOINT CALCULATOR
+(function(){
+var BTN_ID='tejc_btn',WRAP_ID='tejc_wrap',KEY='tejc_data';
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||{calcs:[]};}catch(e){return{calcs:[]};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+function renderForm(){
+  var d=load();
+  var html='<div style="max-width:900px;margin:0 auto;padding:20px;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #f59e0b;padding-bottom:8px;margin-bottom:14px;">';
+  html+='<h2 style="color:#fde68a;margin:0;">🌡️ Thermal Expansion Joint Calculator</h2>';
+  html+='<button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'🌡️ Thermal Joints\';" style="background:#78350f;color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;">✕ Close</button></div>';
+  html+='<p style="color:#fcd34d;font-size:12px;margin-bottom:14px;">ACI 224.3R-95 / ACI 318-19 §24.4.4 — Expansion joint spacing for structures exposed to temperature change. Prevents uncontrolled cracking from thermal movement in large slabs, walls, parking structures, exterior foundations. El Paso: ΔT up to 120°F (20°F Jan → 115°F Aug ambient). <strong>Separate from control joints</strong> — expansion joints go all the way through the slab with compressible filler.</p>';
+
+  // Reference table
+  html+='<div style="background:#1c1917;border:1px solid #f59e0b;border-radius:8px;padding:12px;margin-bottom:14px;">';
+  html+='<div style="color:#fde68a;font-weight:600;margin-bottom:8px;">ACI 224.3R Typical Coefficients of Thermal Expansion</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">';
+  var cteMats=[['Normal Weight Concrete','5.5 με/°F (9.9 με/°C)','ACI 224.3R Table 2.1'],['Lightweight Concrete','4.0 με/°F','ACI 224.3R'],['Plain Cement Paste','10.0 με/°F','ACI 224.3R'],['Steel','6.5 με/°F','AISC'],['Masonry (brick)','3.6 με/°F','ACI 530'],['Sand-LW Concrete','4.8 με/°F','ACI 224.3R']];
+  cteMats.forEach(function(r){html+='<div style="background:#292524;border-radius:4px;padding:6px;"><div style="color:#fde68a;font-size:11px;font-weight:600;">'+r[0]+'</div><div style="color:#d6d3d1;font-size:11px;">α = '+r[1]+'</div><div style="color:#78716c;font-size:10px;">'+r[2]+'</div></div>';});
+  html+='</div></div>';
+
+  // Calculator
+  html+='<div style="background:#1c1917;border:1px solid #f59e0b;border-radius:8px;padding:14px;margin-bottom:14px;">';
+  html+='<h3 style="color:#fde68a;margin:0 0 10px;">Calculate Expansion Joint Spacing</h3>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="color:#fcd34d;font-size:11px;">Element Name / Location</label><br><input id="tejc_name" placeholder="e.g. West Exterior SOG" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #f59e0b;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#fcd34d;font-size:11px;">Concrete Type</label><br><select id="tejc_type" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #f59e0b;border-radius:4px;padding:6px;box-sizing:border-box;"><option value="5.5">Normal Weight Concrete (5.5 με/°F)</option><option value="4.0">Lightweight Concrete (4.0 με/°F)</option><option value="4.8">Sand-LW Concrete (4.8 με/°F)</option><option value="custom">Custom α (με/°F)</option></select></div>';
+  html+='<div><label style="color:#fcd34d;font-size:11px;">Custom α (if custom above)</label><br><input id="tejc_alpha" type="number" value="5.5" step="0.1" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #f59e0b;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="color:#fcd34d;font-size:11px;">Min Temp °F</label><br><input id="tejc_tmin" type="number" value="20" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #f59e0b;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#fcd34d;font-size:11px;">Max Temp °F</label><br><input id="tejc_tmax" type="number" value="115" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #f59e0b;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#fcd34d;font-size:11px;">Allowable Joint Movement (in)</label><br><input id="tejc_allow" type="number" value="0.75" step="0.125" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #f59e0b;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#fcd34d;font-size:11px;">Element Length (ft, for total movement)</label><br><input id="tejc_len" type="number" value="200" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #f59e0b;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="color:#fcd34d;font-size:11px;">Joint Filler Width (in)</label><br><select id="tejc_jw" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #f59e0b;border-radius:4px;padding:6px;box-sizing:border-box;"><option value="0.5">1/2" (min per ACI 224.3R)</option><option value="0.75" selected>3/4"</option><option value="1.0">1"</option><option value="1.5">1-1/2"</option><option value="2.0">2"</option></select></div>';
+  html+='<div><label style="color:#fcd34d;font-size:11px;">Sealant Type (for cost)</label><br><select id="tejc_seal" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #f59e0b;border-radius:4px;padding:6px;box-sizing:border-box;"><option value="3.50">Polyurethane ASTM C920 ($3.50/LF)</option><option value="5.20">Silicone C920 ($5.20/LF)</option><option value="8.50">Neoprene compression seal ($8.50/LF)</option><option value="2.80">Backer rod + sealant ($2.80/LF)</option></select></div>';
+  html+='</div>';
+  html+='<button onclick="window.tejc_calc()" style="background:#d97706;color:#1c1917;font-weight:700;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;margin-right:8px;">Calculate</button>';
+  html+='<button onclick="window.tejc_save()" style="background:#92400e;color:#fde68a;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;">Save to History</button>';
+  html+='<div id="tejc_result" style="margin-top:12px;"></div>';
+  html+='</div>';
+
+  // History
+  if(d.calcs.length>0){
+    html+='<div style="background:#1c1917;border:1px solid #f59e0b;border-radius:8px;padding:14px;margin-bottom:14px;">';
+    html+='<div style="color:#fde68a;font-weight:600;margin-bottom:8px;">Saved Calculations</div>';
+    d.calcs.forEach(function(c,ci){
+      html+='<div style="background:#292524;border-radius:6px;padding:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">';
+      html+='<div><div style="color:#fde68a;font-weight:600;">'+c.name+'</div><div style="color:#d6d3d1;font-size:11px;">ΔT='+c.dT+'°F | α='+c.alpha+'με/°F | Max Spacing: '+c.spacing+' ft | Total Movement: '+c.totalMov+'" | Joints Needed: '+c.joints+'</div></div>';
+      html+='<div style="display:flex;gap:6px;">';
+      html+='<button onclick="window.tejc_print('+ci+')" style="background:#78350f;color:#fde68a;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;">🖨</button>';
+      html+='<button onclick="window.tejc_del('+ci+')" style="background:#450a0a;color:#fca5a5;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;">✕</button></div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+
+  html+='<p style="color:#6b7280;font-size:10px;text-align:center;">Reference: ACI 224.3R-95 / ACI 318-19 / PCI MNL-116. Expansion joint design should be reviewed by EOR for structural continuity and drainage implications. Expansion joints in parking structures must be coordinated with waterproofing systems.</p>';
+  html+='</div>';
+  document.getElementById('tejc_inner').innerHTML=html;
+}
+window.tejc_calc=function(){
+  var typeVal=document.getElementById('tejc_type').value;
+  var alpha=typeVal==='custom'?parseFloat(document.getElementById('tejc_alpha').value)||5.5:parseFloat(typeVal);
+  var tmin=parseFloat(document.getElementById('tejc_tmin').value)||20;
+  var tmax=parseFloat(document.getElementById('tejc_tmax').value)||115;
+  var allow=parseFloat(document.getElementById('tejc_allow').value)||0.75;
+  var len=parseFloat(document.getElementById('tejc_len').value)||200;
+  var jw=parseFloat(document.getElementById('tejc_jw').value)||0.75;
+  var sealRate=parseFloat(document.getElementById('tejc_seal').value)||3.50;
+  var dT=tmax-tmin;
+  if(dT<=0){document.getElementById('tejc_result').innerHTML='<div style="color:#fca5a5;">Max temp must be greater than min temp.</div>';return;}
+  // Spacing: ΔL = α × ΔT × L → Max L where ΔL ≤ allow
+  // Max L (ft) = allow(in) / (α(με/°F) × ΔT × 12in/ft × 1e-6)
+  // = allow / (alpha * dT * 12 * 1e-6)
+  var maxSpacing=allow/(alpha*dT*12*1e-6); // ft
+  var totalMov_in=alpha*1e-6*dT*(len*12); // total movement in inches for full length
+  var joints=Math.ceil(len/maxSpacing)-1; // number of interior joints needed
+  var jointsTotal=Math.max(0,joints);
+  var jLF=len; // assume joints run full width — LF = length of structure (one direction)
+  var sealCost=jointsTotal*jLF*sealRate;
+  var col=maxSpacing<30?'#fca5a5':maxSpacing<60?'#fcd34d':'#86efac';
+  var html='<div style="background:#292524;border-radius:8px;padding:12px;">';
+  html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:8px;text-align:center;"><div style="color:#fcd34d;font-size:10px;">Temperature Range (ΔT)</div><div style="color:#fde68a;font-weight:700;font-size:16px;">'+dT+'°F</div></div>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:8px;text-align:center;"><div style="color:#fcd34d;font-size:10px;">Max Expansion Joint Spacing</div><div style="color:'+col+';font-weight:700;font-size:18px;">'+Math.floor(maxSpacing)+' ft</div><div style="color:#78716c;font-size:10px;">= '+Math.floor(maxSpacing/12)+' panels of '+maxSpacing.toFixed(0)+' ft</div></div>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:8px;text-align:center;"><div style="color:#fcd34d;font-size:10px;">Total Movement ('+len+' ft length)</div><div style="color:#fde68a;font-weight:700;font-size:16px;">'+totalMov_in.toFixed(3)+'"</div></div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:8px;text-align:center;"><div style="color:#fcd34d;font-size:10px;">Interior Joints Needed ('+len+' ft)</div><div style="color:#c7d2fe;font-weight:700;">'+jointsTotal+'</div></div>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:8px;text-align:center;"><div style="color:#fcd34d;font-size:10px;">Joint Width per ACI 224.3R</div><div style="color:#c7d2fe;font-weight:700;">'+jw+'"</div></div>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:8px;text-align:center;"><div style="color:#fcd34d;font-size:10px;">Est. Sealant Cost</div><div style="color:#86efac;font-weight:700;">$'+Math.round(sealCost).toLocaleString()+'</div></div>';
+  html+='</div>';
+  if(maxSpacing<30) html+='<div style="background:#450a0a;border:1px solid #dc2626;border-radius:6px;padding:8px;margin-top:8px;color:#fca5a5;font-size:12px;">⚠️ Very close spacing (&lt;30 ft) — large temperature swing + sensitive material. Verify with EOR. Consider SRA admixture or prestress to reduce joint frequency.</div>';
+  if(totalMov_in>1.0) html+='<div style="background:#431407;border:1px solid #ea580c;border-radius:6px;padding:8px;margin-top:8px;color:#fed7aa;font-size:12px;">⚠️ Total movement exceeds 1.0" — coordinate with waterproofing manufacturer for compatible expansion joint cover system.</div>';
+  html+='<div style="color:#78716c;font-size:10px;margin-top:8px;">Formula: Max Spacing (ft) = Allowable Movement (in) ÷ (α × ΔT × 12 × 10⁻⁶) = '+allow+' ÷ ('+alpha+' × '+dT+' × 12 × 10⁻⁶) = '+maxSpacing.toFixed(1)+' ft | ACI 224.3R-95</div>';
+  html+='</div>';
+  document.getElementById('tejc_result').innerHTML=html;
+  // Store for save
+  window._tejc_last={name:document.getElementById('tejc_name').value||'Unnamed',alpha:alpha,dT:dT,allow:allow,len:len,spacing:Math.floor(maxSpacing),totalMov:totalMov_in.toFixed(3),joints:jointsTotal,jw:jw,sealRate:sealRate,sealCost:Math.round(sealCost),tmin:tmin,tmax:tmax};
+};
+window.tejc_save=function(){
+  if(!window._tejc_last){alert('Run Calculate first');return;}
+  var d=load();d.calcs.push(window._tejc_last);save(d);renderForm();
+};
+window.tejc_del=function(i){if(!confirm('Delete?'))return;var d=load();d.calcs.splice(i,1);save(d);renderForm();};
+window.tejc_print=function(ci){
+  var d=load();var c=d.calcs[ci];if(!c)return;
+  var company=(document.getElementById('companyName')&&document.getElementById('companyName').value)||'Company';
+  var pw=window.open('','_blank');
+  pw.document.write('<!DOCTYPE html><html><head><title>Thermal EJ Calc</title><style>body{font-family:Arial,sans-serif;padding:24px;font-size:11px;max-width:700px;margin:0 auto;}table{width:100%;border-collapse:collapse;margin:8px 0;}td,th{border:1px solid #555;padding:6px;}th{background:#78350f;color:#fff;}.sig{display:flex;gap:20px;margin-top:20px;}.sig div{flex:1;border-top:1px solid #333;padding-top:4px;}</style></head><body>');
+  pw.document.write('<h2>THERMAL EXPANSION JOINT CALCULATION</h2>');
+  pw.document.write('<p>'+company+' | Element: '+c.name+' | Date: '+new Date().toLocaleDateString()+'</p>');
+  pw.document.write('<table><tr><th>Parameter</th><th>Value</th><th>Reference</th></tr>');
+  pw.document.write('<tr><td>Coeff. of Thermal Expansion (α)</td><td>'+c.alpha+' με/°F</td><td>ACI 224.3R Table 2.1</td></tr>');
+  pw.document.write('<tr><td>Minimum Temperature</td><td>'+c.tmin+'°F</td><td>Site conditions</td></tr>');
+  pw.document.write('<tr><td>Maximum Temperature</td><td>'+c.tmax+'°F</td><td>Site conditions</td></tr>');
+  pw.document.write('<tr><td>Temperature Range (ΔT)</td><td>'+c.dT+'°F</td><td>Tmax − Tmin</td></tr>');
+  pw.document.write('<tr><td>Allowable Joint Movement</td><td>'+c.allow+'"</td><td>Joint filler capacity</td></tr>');
+  pw.document.write('<tr><td><strong>Maximum Expansion Joint Spacing</strong></td><td><strong>'+c.spacing+' ft</strong></td><td>ACI 224.3R-95 §4.2</td></tr>');
+  pw.document.write('<tr><td>Total Movement ('+c.len+' ft element)</td><td>'+c.totalMov+'"</td><td>ΔL = α × ΔT × L</td></tr>');
+  pw.document.write('<tr><td>Interior Joints Required</td><td>'+c.joints+'</td><td>⌈Length ÷ Spacing⌉ − 1</td></tr>');
+  pw.document.write('<tr><td>Joint Filler Width</td><td>'+c.jw+'"</td><td>ACI 224.3R min 1/2"</td></tr>');
+  pw.document.write('<tr><td>Est. Sealant Cost</td><td>$'+c.sealCost.toLocaleString()+'</td><td>Based on '+c.len+' LF per joint</td></tr>');
+  pw.document.write('</table>');
+  pw.document.write('<p style="font-size:9px;"><strong>Formula:</strong> Max Spacing = Allowable Movement ÷ (α × ΔT × 12 × 10⁻⁶) per ACI 224.3R-95. <strong>Note:</strong> This calculation determines maximum joint spacing to control thermal movement within the allowable filler compression range. Structural continuity, drainage, and waterproofing coordination must be reviewed by Engineer of Record. El Paso ΔT reference: ASHRAE 2021 Fundamentals Chapter 14.</p>');
+  pw.document.write('<div class="sig"><div>Estimator / Date</div><div>PM / Date</div><div>Engineer of Record (verify) / Date</div></div>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='🌡️ Thermal Joints';
+  btn.style.cssText='position:fixed;bottom:3572px;right:16px;background:#1c1917;color:#fde68a;border:1px solid #f59e0b;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8878;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Thermal Joints':'🌡️ Thermal Joints';if(s)renderForm();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8879;';
+  var inner=document.createElement('div');inner.id='tejc_inner';wrap.appendChild(inner);
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<script>
+// MULTI-PROJECT PRELIMINARY LIEN NOTICE DASHBOARD
+(function(){
+var BTN_ID='mpln_btn',WRAP_ID='mpln_wrap',KEY='mpln_data';
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||{projects:[]};}catch(e){return{projects:[]};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+function daysBetween(a,b){return Math.round((b-a)/(1000*60*60*24));}
+function addMonths(dateStr,months){var d=new Date(dateStr+'T12:00:00');d.setMonth(d.getMonth()+months);return d;}
+function fmt(d){var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return mo[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();}
+function renderForm(){
+  var d=load();var now=new Date();
+  var html='<div style="max-width:1000px;margin:0 auto;padding:20px;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #e11d48;padding-bottom:8px;margin-bottom:14px;">';
+  html+='<h2 style="color:#fecdd3;margin:0;">📬 TX §53 Preliminary Lien Notice Dashboard</h2>';
+  html+='<button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'📬 Lien Notices\';" style="background:#881337;color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;">✕ Close</button></div>';
+  html+='<div style="background:#1c0a0d;border:2px solid #dc2626;border-radius:8px;padding:12px;margin-bottom:14px;">';
+  html+='<div style="color:#fca5a5;font-weight:700;margin-bottom:6px;">⚖️ Texas Property Code Chapter 53 — Lien Rights Overview</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:11px;">';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:8px;"><div style="color:#fca5a5;font-weight:600;">Preliminary Notice (§53.056)</div><div style="color:#d6d3d1;">Must be sent by the <strong>15th day of the 3rd calendar month</strong> after the month first labor/materials were provided. Send via certified mail to both GC and Owner.</div></div>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:8px;"><div style="color:#fca5a5;font-weight:600;">Lien Filing Deadline (§53.052)</div><div style="color:#d6d3d1;">File in county where property located by the <strong>15th day of the 4th calendar month</strong> after the month of last labor/materials (commercial). For residential, deadlines differ.</div></div>';
+  html+='<div style="background:#0f172a;border-radius:6px;padding:8px;"><div style="color:#fca5a5;font-weight:600;">Lien Foreclosure (§53.158)</div><div style="color:#d6d3d1;">File suit to foreclose lien within <strong>2 years</strong> of filing deadline. Missing this date = lien is unenforceable. Bond claim (§53.201) may also apply.</div></div>';
+  html+='</div></div>';
+
+  // Add project
+  html+='<div style="background:#1c1917;border:1px solid #e11d48;border-radius:8px;padding:14px;margin-bottom:14px;">';
+  html+='<h3 style="color:#fecdd3;margin:0 0 10px;">Add Project</h3>';
+  html+='<div style="display:grid;grid-template-columns:2fr 2fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="color:#fca5a5;font-size:11px;">Project Name</label><br><input id="mpln_proj" placeholder="e.g. Mesa Vista Warehouse" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #e11d48;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#fca5a5;font-size:11px;">GC / Owner Name</label><br><input id="mpln_gc" placeholder="e.g. Austin Industries / ABC LLC" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #e11d48;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#fca5a5;font-size:11px;">County (TX)</label><br><input id="mpln_county" placeholder="El Paso" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #e11d48;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="color:#fca5a5;font-size:11px;">First Day of Work</label><br><input id="mpln_start" type="date" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #e11d48;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#fca5a5;font-size:11px;">Contract Amount</label><br><input id="mpln_amt" type="number" placeholder="185000" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #e11d48;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#fca5a5;font-size:11px;">Owner Name (for notice)</label><br><input id="mpln_owner" placeholder="Property Owner LLC" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #e11d48;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='<div><label style="color:#fca5a5;font-size:11px;">Owner/GC Address</label><br><input id="mpln_addr" placeholder="123 Main St, El Paso TX 79901" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #e11d48;border-radius:4px;padding:6px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<button onclick="window.mpln_add()" style="background:#e11d48;color:#fff;font-weight:700;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;">+ Add Project</button></div>';
+
+  // Dashboard
+  if(d.projects.length>0){
+    // Summary strip
+    var urgent=0,overdue=0;
+    d.projects.forEach(function(p){
+      var dueDate=window.mpln_noticeDeadline(p.start);
+      var days=daysBetween(now,dueDate);
+      if(days<0&&p.noticeStatus!=='Sent')overdue++;
+      else if(days<=7&&p.noticeStatus!=='Sent')urgent++;
+    });
+    if(overdue>0){
+      html+='<div style="background:#450a0a;border:2px solid #dc2626;border-radius:8px;padding:10px;margin-bottom:10px;color:#fca5a5;font-weight:700;">⛔ '+overdue+' project(s) have OVERDUE preliminary notice deadlines — lien rights may be compromised. Send immediately and consult a TX construction attorney.</div>';
+    }
+    if(urgent>0){
+      html+='<div style="background:#431407;border:1px solid #ea580c;border-radius:8px;padding:10px;margin-bottom:10px;color:#fed7aa;font-weight:700;">⚠️ '+urgent+' project(s) have notice deadlines within 7 days — send certified mail TODAY.</div>';
+    }
+    html+='<div style="background:#1c1917;border:1px solid #e11d48;border-radius:8px;padding:14px;margin-bottom:14px;">';
+    html+='<div style="color:#fecdd3;font-weight:600;margin-bottom:10px;">Active Projects ('+d.projects.length+')</div>';
+    d.projects.forEach(function(p,pi){
+      var noticeDeadline=window.mpln_noticeDeadline(p.start);
+      var lienDeadline=window.mpln_lienDeadline(p.lastWork||p.start);
+      var noticeDays=daysBetween(now,noticeDeadline);
+      var lienDays=daysBetween(now,lienDeadline);
+      var nd_col=noticeDays<0?'#fca5a5':noticeDays<=7?'#fbbf24':noticeDays<=30?'#fb923c':'#86efac';
+      var nd_label=noticeDays<0?'OVERDUE '+Math.abs(noticeDays)+'d':noticeDays===0?'DUE TODAY':noticeDays+' days';
+      html+='<div style="background:#292524;border-radius:8px;padding:12px;margin-bottom:10px;">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">';
+      html+='<div><div style="color:#fecdd3;font-weight:700;font-size:14px;">'+p.proj+'</div><div style="color:#78716c;font-size:11px;">'+p.gc+' | '+p.county+' County | $'+(p.amt||0).toLocaleString()+'</div></div>';
+      html+='<div style="display:flex;gap:6px;align-items:center;">';
+      html+='<button onclick="window.mpln_cycleStatus('+pi+')" style="background:#881337;color:#fecdd3;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:11px;">Status: '+(p.noticeStatus||'Pending')+'</button>';
+      html+='<button onclick="window.mpln_printNotice('+pi+')" style="background:#881337;color:#fecdd3;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;">🖨 Notice</button>';
+      html+='<button onclick="window.mpln_del('+pi+')" style="background:#450a0a;color:#fca5a5;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:11px;">✕</button></div></div>';
+      html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">';
+      html+='<div style="background:#0f172a;border-radius:6px;padding:8px;"><div style="color:#fca5a5;font-size:10px;">Prelim Notice Deadline</div><div style="color:'+nd_col+';font-weight:700;">'+fmt(noticeDeadline)+'</div><div style="color:'+nd_col+';font-size:11px;">'+nd_label+'</div></div>';
+      html+='<div style="background:#0f172a;border-radius:6px;padding:8px;"><div style="color:#fca5a5;font-size:10px;">Lien Filing Deadline</div><div style="color:'+(lienDays<0?'#fca5a5':lienDays<=30?'#fbbf24':'#d6d3d1')+';font-weight:700;">'+fmt(lienDeadline)+'</div><div style="color:#78716c;font-size:10px;">Based on first work date (update if last work differs)</div></div>';
+      html+='<div style="background:#0f172a;border-radius:6px;padding:8px;"><div style="color:#fca5a5;font-size:10px;">Notice Status</div><div style="color:'+(p.noticeStatus==='Sent'?'#86efac':'#fbbf24')+';font-weight:700;">'+(p.noticeStatus||'Pending')+'</div>';
+      if(p.noticeSentDate)html+='<div style="color:#78716c;font-size:10px;">Sent: '+p.noticeSentDate+'</div>';
+      html+='</div>';
+      html+='</div>';
+      html+='<div style="margin-top:8px;display:flex;gap:8px;align-items:center;">';
+      html+='<label style="color:#fca5a5;font-size:11px;">Last Day of Work:</label><input type="date" value="'+(p.lastWork||'')+'" onchange="window.mpln_setLastWork('+pi+',this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #e11d48;border-radius:4px;padding:4px;font-size:11px;">';
+      html+='<label style="color:#fca5a5;font-size:11px;margin-left:10px;">Notice Sent Date:</label><input type="date" value="'+(p.noticeSentDate||'')+'" onchange="window.mpln_setSentDate('+pi+',this.value)" style="background:#0f172a;color:#e2e8f0;border:1px solid #e11d48;border-radius:4px;padding:4px;font-size:11px;">';
+      html+='</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+    html+='<div style="text-align:right;margin-bottom:10px;"><button onclick="window.mpln_printAll()" style="background:#881337;color:#fecdd3;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-weight:600;">🖨 Print All Notices</button></div>';
+  }
+  html+='<p style="color:#6b7280;font-size:10px;text-align:center;">Deadline calculations are based on TX Property Code Chapter 53. This tool is for tracking and reminder purposes only. Consult a licensed Texas construction attorney for lien rights advice. Always send notices via certified mail, return receipt requested, and retain confirmation as evidence.</p>';
+  html+='</div>';
+  document.getElementById('mpln_inner').innerHTML=html;
+}
+window.mpln_noticeDeadline=function(startStr){
+  // 15th day of 3rd calendar month after the month work first furnished
+  var d=new Date(startStr+'T12:00:00');
+  var m=d.getMonth(); // 0-indexed
+  var y=d.getFullYear();
+  // 3rd calendar month after work month
+  m+=3;if(m>11){y+=Math.floor(m/12);m=m%12;}
+  return new Date(y,m,15);
+};
+window.mpln_lienDeadline=function(lastStr){
+  // 15th day of 4th month after month of last labor/materials (commercial sub)
+  var d=new Date(lastStr+'T12:00:00');
+  var m=d.getMonth();var y=d.getFullYear();
+  m+=4;if(m>11){y+=Math.floor(m/12);m=m%12;}
+  return new Date(y,m,15);
+};
+window.mpln_add=function(){
+  var proj=document.getElementById('mpln_proj').value.trim();
+  var gc=document.getElementById('mpln_gc').value.trim();
+  var start=document.getElementById('mpln_start').value;
+  if(!proj||!start){alert('Enter project name and first day of work');return;}
+  var d=load();
+  d.projects.push({proj:proj,gc:gc,county:document.getElementById('mpln_county').value.trim()||'El Paso',start:start,amt:parseFloat(document.getElementById('mpln_amt').value)||0,owner:document.getElementById('mpln_owner').value.trim(),addr:document.getElementById('mpln_addr').value.trim(),noticeStatus:'Pending',noticeSentDate:'',lastWork:''});
+  save(d);renderForm();
+};
+window.mpln_del=function(i){if(!confirm('Remove this project?'))return;var d=load();d.projects.splice(i,1);save(d);renderForm();};
+window.mpln_cycleStatus=function(i){
+  var d=load();var p=d.projects[i];
+  var cycle=['Pending','Notice Drafted','Sent','Certified Mail Confirmed','On File'];
+  var ci=cycle.indexOf(p.noticeStatus||'Pending');
+  p.noticeStatus=cycle[(ci+1)%cycle.length];
+  if(p.noticeStatus==='Sent'&&!p.noticeSentDate)p.noticeSentDate=new Date().toISOString().split('T')[0];
+  save(d);renderForm();
+};
+window.mpln_setLastWork=function(i,v){var d=load();d.projects[i].lastWork=v;save(d);};
+window.mpln_setSentDate=function(i,v){var d=load();d.projects[i].noticeSentDate=v;save(d);};
+window.mpln_printNotice=function(pi){
+  var d=load();var p=d.projects[pi];if(!p)return;
+  var company=(document.getElementById('companyName')&&document.getElementById('companyName').value)||'Your Company';
+  var companyPhone=(document.getElementById('companyPhone')&&document.getElementById('companyPhone').value)||'';
+  var companyAddr=(document.getElementById('companyAddress')&&document.getElementById('companyAddress').value)||'';
+  var noticeDate=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  var pw=window.open('','_blank');
+  pw.document.write('<!DOCTYPE html><html><head><title>TX Preliminary Notice</title><style>body{font-family:Arial,sans-serif;padding:40px;font-size:12px;max-width:700px;margin:0 auto;line-height:1.6;}h2{text-align:center;font-size:16px;}.hdr{text-align:center;margin-bottom:24px;}.sig{display:flex;gap:20px;margin-top:30px;}.sig div{flex:1;border-top:1px solid #333;padding-top:4px;}.warn{border:2px solid #333;padding:10px;margin:16px 0;font-size:11px;}</style></head><body>');
+  pw.document.write('<div class="hdr"><h2>NOTICE TO OWNER/GENERAL CONTRACTOR</h2><p>Texas Property Code Chapter 53 §§53.056 / 53.057<br>SEND VIA CERTIFIED MAIL, RETURN RECEIPT REQUESTED</p></div>');
+  pw.document.write('<p>Date: '+noticeDate+'</p>');
+  pw.document.write('<p><strong>FROM (Claimant):</strong><br>'+company+'<br>'+companyAddr+(companyPhone?'<br>'+companyPhone:'')+'</p>');
+  pw.document.write('<p><strong>TO (Owner):</strong><br>'+(p.owner||'[OWNER NAME]')+'<br>'+(p.addr||'[OWNER ADDRESS]')+'</p>');
+  pw.document.write('<p><strong>AND TO (General Contractor):</strong><br>'+(p.gc||'[GC NAME]')+'<br>'+(p.addr||'[GC ADDRESS]')+'</p>');
+  pw.document.write('<p><strong>RE: Project: '+p.proj+(p.county?' | '+p.county+' County, Texas':'')+'</strong></p>');
+  pw.document.write('<div class="warn"><p>NOTICE IS HEREBY GIVEN pursuant to the Texas Property Code, Chapter 53, §§53.056 and 53.057, that the undersigned claimant has or will furnish labor, services, and/or materials for construction improvements to the above-referenced project.</p><p>Claimant claims and reserves all rights to a mechanic\'s and materialman\'s lien under Texas Property Code Chapter 53 and all applicable provisions of Texas law on account of unpaid labor and/or materials furnished or to be furnished in connection with the above-referenced project.</p><p><strong>Owner Notice:</strong> Under Texas law, if a person who provides labor or materials to improve your property is not paid, the owner may be required to pay twice — first to the contractor and then to the unpaid person, unless the owner obtains a lien waiver from the unpaid person. <strong>Do not pay the contractor until you obtain a lien waiver from this claimant for the amount paid.</strong></p><p>Contract Amount: $'+(p.amt||0).toLocaleString()+' | First Day Furnishing: '+p.start+'</p></div>');
+  pw.document.write('<p>This Notice is provided in compliance with Texas Property Code Chapter 53 to preserve claimant\'s lien rights. Claimant reserves the right to file and foreclose a mechanic\'s lien if payment is not received pursuant to contract terms. Nothing in this notice waives or releases any lien rights, claims, or remedies available under Texas law.</p>');
+  pw.document.write('<p style="font-size:10px;margin-top:16px;"><em>Legal Disclaimer: This notice is prepared for informational purposes. Consult a licensed Texas construction attorney to ensure compliance with all applicable notice requirements and deadlines. Failure to timely send required statutory notices may result in loss of lien rights.</em></p>');
+  pw.document.write('<div class="sig"><div>Authorized Signature / Title</div><div>Company / Date</div></div>');
+  pw.document.write('<p style="margin-top:20px;font-size:10px;"><strong>Mailing Checklist:</strong><br>□ Send certified mail, return receipt requested<br>□ Address to both GC AND property owner<br>□ Retain certified mail tracking numbers and green card<br>□ Update Notice Status in TX §53 Dashboard to "Sent" with date<br>□ File copy in project document control index</p>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+window.mpln_printAll=function(){
+  var d=load();
+  d.projects.forEach(function(p,pi){window.mpln_printNotice(pi);});
+};
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='📬 Lien Notices';
+  btn.style.cssText='position:fixed;bottom:3624px;right:16px;background:#1c0a0d;color:#fecdd3;border:1px solid #e11d48;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8880;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Lien Notices':'📬 Lien Notices';if(s)renderForm();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP_ID;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8881;';
+  var inner=document.createElement('div');inner.id='mpln_inner';wrap.appendChild(inner);
+  document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
