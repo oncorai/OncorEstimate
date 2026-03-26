@@ -55886,3 +55886,208 @@ function createBtn(){
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
 })();
 </script>
+
+<!-- TOOL 76: WEEKLY KPI DASHBOARD (📊) -->
+<script>
+(function(){
+var BTN_ID='weeklyKpiBtn',WRAP_ID='weeklyKpiWrap';
+var STORAGE_KEY='oncor_kpi_history';
+function loadKPIHistory(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||[];}catch(e){return[];}}
+function saveKPIHistory(d){localStorage.setItem(STORAGE_KEY,JSON.stringify(d));}
+function getWeekStart(dt){var d=new Date(dt);var day=d.getDay();var diff=d.getDate()-day+(day===0?-6:1);return new Date(d.setDate(diff)).toISOString().slice(0,10);}
+function gatherCurrentMetrics(){
+  var m={date:new Date().toISOString().slice(0,10),weekOf:getWeekStart(new Date())};
+  try{var bg=JSON.parse(localStorage.getItem('oncor_bidGoal')||'{}');m.bidsSent=bg.bidsThisWeek||0;m.bidGoal=bg.weeklyGoal||10;m.bidPipeline=bg.pipelineValue||0;}catch(e){m.bidsSent=0;m.bidGoal=10;m.bidPipeline=0;}
+  try{var pp=JSON.parse(localStorage.getItem('oncor_proposals')||'[]');m.proposalsOpen=pp.filter(function(p){return p.status==='Sent'||p.status==='Follow-Up Due'||p.status==='In Review';}).length;m.proposalsAwarded=pp.filter(function(p){return p.status==='Awarded';}).length;m.proposalsLost=pp.filter(function(p){return p.status==='Lost';}).length;}catch(e){m.proposalsOpen=0;m.proposalsAwarded=0;m.proposalsLost=0;}
+  try{var ar=JSON.parse(localStorage.getItem('oncorARInvoices')||'[]');m.arTotal=ar.reduce(function(s,i){return s+(i.paid?0:(parseFloat(i.amount)||0));},0);m.arOverdue=ar.filter(function(i){if(i.paid)return false;var due=new Date(i.dueDate);return due<new Date();}).reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);}catch(e){m.arTotal=0;m.arOverdue=0;}
+  try{var sm=JSON.parse(localStorage.getItem('oncor_safety_meetings')||'[]');var thisWeek=m.weekOf;m.safetyMeetings=sm.filter(function(s){return getWeekStart(s.date)===thisWeek;}).length;}catch(e){m.safetyMeetings=0;}
+  try{var pl=JSON.parse(localStorage.getItem('oncorPunchList')||'[]');m.punchOpen=pl.filter(function(p){return p.status==='Open'||p.status==='In Progress';}).length;}catch(e){m.punchOpen=0;}
+  try{var rf=JSON.parse(localStorage.getItem('oncorRFIItems')||'[]');m.rfisOpen=rf.filter(function(r){return r.status!=='Closed';}).length;}catch(e){m.rfisOpen=0;}
+  try{var sb=JSON.parse(localStorage.getItem('oncorSubmittalItems')||'[]');m.submittalsPending=sb.filter(function(s){return s.status==='Pending';}).length;}catch(e){m.submittalsPending=0;}
+  try{var bi=JSON.parse(localStorage.getItem('oncor_bond_items')||'[]');var now=new Date();m.insuranceExpiring=bi.filter(function(b){if(!b.expiry)return false;var exp=new Date(b.expiry);var diff=(exp-now)/(1000*60*60*24);return diff>0&&diff<=30;}).length;}catch(e){m.insuranceExpiring=0;}
+  try{var ct=JSON.parse(localStorage.getItem('oncor_contacts')||'[]');var weekAgo=new Date();weekAgo.setDate(weekAgo.getDate()-7);m.contactsTouched=ct.filter(function(c){if(!c.lastContact)return false;return new Date(c.lastContact)>=weekAgo;}).length;}catch(e){m.contactsTouched=0;}
+  return m;
+}
+function calcWinRate(hist){var won=0,total=0;hist.forEach(function(h){won+=(h.proposalsAwarded||0);total+=(h.proposalsAwarded||0)+(h.proposalsLost||0);});return total>0?(won/total*100).toFixed(1):0;}
+function renderKPI(){
+  var inner=document.getElementById('kpi_inner');if(!inner)return;
+  var hist=loadKPIHistory();var cur=gatherCurrentMetrics();var winRate=calcWinRate(hist);
+  var html='<div style="padding:20px;max-width:900px;margin:0 auto;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;"><h2 style="color:#e2e8f0;margin:0;">📊 Weekly KPI Dashboard</h2><button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'📊 Weekly KPIs\';" style="background:#334155;color:#f1f5f9;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;">✕ Close</button></div>';
+  html+='<p style="color:#94a3b8;font-size:12px;margin-bottom:16px;">Week of: <strong>'+cur.weekOf+'</strong> | Auto-reads from all localStorage panels. Snap snapshot to track week-over-week trends.</p>';
+  html+='<h3 style="color:#e2e8f0;font-size:14px;margin-top:20px;">Current Period Metrics</h3>';
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">';
+  var bidPct=cur.bidGoal>0?Math.round(cur.bidsSent/cur.bidGoal*100):0;var bidColor=bidPct>=100?'#22c55e':bidPct>=50?'#eab308':'#ef4444';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="color:#94a3b8;font-size:11px;">Bids Sent</div><div style="font-size:24px;font-weight:700;color:'+bidColor+';">'+cur.bidsSent+'/'+cur.bidGoal+'</div><div style="color:#64748b;font-size:10px;">'+bidPct+'% of goal</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="color:#94a3b8;font-size:11px;">Pipeline Value</div><div style="font-size:24px;font-weight:700;color:#60a5fa;">$'+Math.round(cur.bidPipeline/1000)+'k</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="color:#94a3b8;font-size:11px;">Win Rate (All-Time)</div><div style="font-size:24px;font-weight:700;color:'+(winRate>=25?'#22c55e':'#eab308')+';">'+winRate+'%</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="color:#94a3b8;font-size:11px;">Proposals Open</div><div style="font-size:24px;font-weight:700;color:#a78bfa;">'+cur.proposalsOpen+'</div></div>';
+  var arColor=cur.arOverdue>0?'#ef4444':'#22c55e';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="color:#94a3b8;font-size:11px;">AR Outstanding</div><div style="font-size:24px;font-weight:700;color:#f59e0b;">$'+Math.round(cur.arTotal/1000)+'k</div><div style="color:'+arColor+';font-size:10px;">$'+Math.round(cur.arOverdue/1000)+'k overdue</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="color:#94a3b8;font-size:11px;">RFIs Open</div><div style="font-size:24px;font-weight:700;color:'+(cur.rfisOpen>5?'#ef4444':'#60a5fa')+';">'+cur.rfisOpen+'</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="color:#94a3b8;font-size:11px;">Submittals Pending</div><div style="font-size:24px;font-weight:700;color:'+(cur.submittalsPending>3?'#eab308':'#60a5fa')+';">'+cur.submittalsPending+'</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="color:#94a3b8;font-size:11px;">Punch Items Open</div><div style="font-size:24px;font-weight:700;color:'+(cur.punchOpen>10?'#ef4444':'#22c55e')+';">'+cur.punchOpen+'</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="color:#94a3b8;font-size:11px;">Safety Meetings (Week)</div><div style="font-size:24px;font-weight:700;color:'+(cur.safetyMeetings>=5?'#22c55e':cur.safetyMeetings>=3?'#eab308':'#ef4444')+';">'+cur.safetyMeetings+'</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="color:#94a3b8;font-size:11px;">Insurance Expiring ≤30d</div><div style="font-size:24px;font-weight:700;color:'+(cur.insuranceExpiring>0?'#ef4444':'#22c55e')+';">'+cur.insuranceExpiring+'</div></div>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:14px;text-align:center;"><div style="color:#94a3b8;font-size:11px;">Contacts Touched (7d)</div><div style="font-size:24px;font-weight:700;color:'+(cur.contactsTouched>=5?'#22c55e':'#eab308')+';">'+cur.contactsTouched+'</div></div>';
+  html+='</div>';
+  html+='<button onclick="snapKPI()" style="background:#0369a1;color:#fff;border:none;border-radius:6px;padding:10px 20px;cursor:pointer;font-size:13px;margin-bottom:20px;">📸 Snap Weekly Snapshot</button>';
+  html+='<button onclick="printKPI()" style="background:#1e3a5f;color:#93c5fd;border:1px solid #1d4ed8;border-radius:6px;padding:10px 20px;cursor:pointer;font-size:13px;margin-left:8px;">🖨️ Print Report</button>';
+  html+='<button onclick="copyKPI()" style="background:#1e3a5f;color:#93c5fd;border:1px solid #1d4ed8;border-radius:6px;padding:10px 20px;cursor:pointer;font-size:13px;margin-left:8px;">📋 Copy</button>';
+  if(hist.length>0){
+    html+='<h3 style="color:#e2e8f0;font-size:14px;margin-top:24px;">Snapshot History (Last 12 Weeks)</h3>';
+    html+='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;color:#e2e8f0;">';
+    html+='<tr style="background:#334155;"><th style="padding:6px;border:1px solid #475569;">Week</th><th style="padding:6px;border:1px solid #475569;">Bids</th><th style="padding:6px;border:1px solid #475569;">Pipeline</th><th style="padding:6px;border:1px solid #475569;">Awarded</th><th style="padding:6px;border:1px solid #475569;">Lost</th><th style="padding:6px;border:1px solid #475569;">AR Total</th><th style="padding:6px;border:1px solid #475569;">RFIs</th><th style="padding:6px;border:1px solid #475569;">Safety</th><th style="padding:6px;border:1px solid #475569;">✕</th></tr>';
+    hist.slice(-12).reverse().forEach(function(h,ri){var i=hist.length-1-ri;
+      html+='<tr><td style="padding:5px;border:1px solid #475569;">'+h.weekOf+'</td><td style="padding:5px;border:1px solid #475569;">'+h.bidsSent+'/'+h.bidGoal+'</td><td style="padding:5px;border:1px solid #475569;">$'+Math.round((h.bidPipeline||0)/1000)+'k</td><td style="padding:5px;border:1px solid #475569;color:#22c55e;">'+h.proposalsAwarded+'</td><td style="padding:5px;border:1px solid #475569;color:#ef4444;">'+h.proposalsLost+'</td><td style="padding:5px;border:1px solid #475569;">$'+Math.round((h.arTotal||0)/1000)+'k</td><td style="padding:5px;border:1px solid #475569;">'+h.rfisOpen+'</td><td style="padding:5px;border:1px solid #475569;">'+h.safetyMeetings+'</td><td style="padding:5px;border:1px solid #475569;"><button onclick="deleteKPISnap('+i+')" style="background:#450a0a;color:#fca5a5;border:1px solid #7f1d1d;border-radius:4px;padding:2px 6px;font-size:10px;cursor:pointer;">✕</button></td></tr>';
+    });
+    html+='</table></div>';
+  }
+  html+='<p style="color:#475569;font-size:10px;margin-top:16px;">KPI benchmarks: Bid rate ≥10/week to sustain growth; Win rate ≥20% competitive, ≥35% indicates under-pricing; AR >30d overdue = cash flow risk; Safety meetings ≥5/week per OSHA 29 CFR §1926.21; Contact touches ≥5/week to maintain GC relationships.</p>';
+  html+='</div>';inner.innerHTML=html;
+}
+window.snapKPI=function(){var cur=gatherCurrentMetrics();var hist=loadKPIHistory();var existing=hist.findIndex(function(h){return h.weekOf===cur.weekOf;});if(existing>=0){hist[existing]=cur;}else{hist.push(cur);}if(hist.length>52)hist=hist.slice(-52);saveKPIHistory(hist);renderKPI();alert('Snapshot saved for week of '+cur.weekOf);};
+window.deleteKPISnap=function(i){if(!confirm('Delete this snapshot?'))return;var h=loadKPIHistory();h.splice(i,1);saveKPIHistory(h);renderKPI();};
+window.printKPI=function(){var cur=gatherCurrentMetrics();var hist=loadKPIHistory();var winRate=calcWinRate(hist);var co=document.getElementById('settings_company')?document.getElementById('settings_company').value.trim():'[Your Company]';var pw=window.open('','_blank');pw.document.write('<html><head><title>Weekly KPI Report</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:30px;}h1{font-size:15px;}h2{font-size:12px;border-bottom:1px solid #000;padding-bottom:4px;margin-top:16px;}table{width:100%;border-collapse:collapse;margin-bottom:10px;}th,td{border:1px solid #aaa;padding:5px;text-align:left;}th{background:#f0f9ff;}.sig{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:24px;}.sig div{border-top:1px solid #000;padding-top:4px;font-size:10px;}</style></head><body>');pw.document.write('<h1>WEEKLY KPI REPORT</h1><p>Company: <strong>'+co+'</strong> | Week of: <strong>'+cur.weekOf+'</strong></p>');pw.document.write('<h2>METRICS</h2><table><tr><th>Metric</th><th>Value</th><th>Status</th></tr>');pw.document.write('<tr><td>Bids Sent</td><td>'+cur.bidsSent+'/'+cur.bidGoal+'</td><td>'+(cur.bidsSent>=cur.bidGoal?'✓ ON TRACK':'⚠️ BELOW')+'</td></tr>');pw.document.write('<tr><td>Pipeline</td><td>$'+Math.round(cur.bidPipeline/1000)+'k</td><td>—</td></tr>');pw.document.write('<tr><td>Win Rate</td><td>'+winRate+'%</td><td>'+(winRate>=20?'✓ HEALTHY':'⚠️ REVIEW')+'</td></tr>');pw.document.write('<tr><td>AR Overdue</td><td>$'+Math.round(cur.arOverdue/1000)+'k</td><td>'+(cur.arOverdue>0?'⚠️ COLLECT':'✓ OK')+'</td></tr>');pw.document.write('<tr><td>Open RFIs</td><td>'+cur.rfisOpen+'</td><td>'+(cur.rfisOpen>5?'⚠️ HIGH':'✓ OK')+'</td></tr>');pw.document.write('<tr><td>Safety Meetings</td><td>'+cur.safetyMeetings+'</td><td>'+(cur.safetyMeetings>=5?'✓ COMPLIANT':'⚠️ INCREASE')+'</td></tr>');pw.document.write('</table>');pw.document.write('<div class="sig"><div>Operations Manager</div><div>Principal</div><div>Date</div></div>');pw.document.write('</body></html>');pw.document.close();pw.print();};
+window.copyKPI=function(){var cur=gatherCurrentMetrics();var hist=loadKPIHistory();var winRate=calcWinRate(hist);var txt='WEEKLY KPI - Week of '+cur.weekOf+'\nBids: '+cur.bidsSent+'/'+cur.bidGoal+' | Pipeline: $'+Math.round(cur.bidPipeline/1000)+'k | Win Rate: '+winRate+'%\nAR: $'+Math.round(cur.arTotal/1000)+'k ($'+Math.round(cur.arOverdue/1000)+'k overdue) | RFIs: '+cur.rfisOpen+' | Safety: '+cur.safetyMeetings;navigator.clipboard.writeText(txt).then(function(){alert('Copied!');});};
+function createBtn(){var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='📊 Weekly KPIs';btn.style.cssText='position:fixed;bottom:4180px;right:16px;background:#1e3a5f;color:#bae6fd;border:1px solid #0369a1;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8940;box-shadow:0 2px 8px rgba(0,0,0,0.4);';btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Weekly KPIs':'📊 Weekly KPIs';if(s)renderKPI();};document.body.appendChild(btn);var wrap=document.createElement('div');wrap.id=WRAP_ID;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8941;';var inner=document.createElement('div');inner.id='kpi_inner';wrap.appendChild(inner);document.body.appendChild(wrap);}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<!-- TOOL 77: ACI 318-19 EXPOSURE COMPLIANCE CHECKER (🧪) -->
+<script>
+(function(){
+var BTN_ID='permCheckBtn',WRAP_ID='permCheckWrap';
+var STORAGE_KEY='oncor_perm_checks';
+function loadData(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||[];}catch(e){return[];}}
+function saveData(d){localStorage.setItem(STORAGE_KEY,JSON.stringify(d));}
+var EXPOSURE_CATS=[
+  {code:'F0',name:'Not applicable',desc:'Non-freeze',minPSI:2500,maxWC:null,minAir:null},
+  {code:'F1',name:'Moderate',desc:'Freeze/thaw, occasional moisture',minPSI:3000,maxWC:0.55,minAir:4.5},
+  {code:'F2',name:'Severe',desc:'Freeze/thaw, continuous moisture',minPSI:4000,maxWC:0.45,minAir:5.5},
+  {code:'F3',name:'Very Severe',desc:'Freeze/thaw + deicers',minPSI:4500,maxWC:0.40,minAir:6.0},
+  {code:'S0',name:'Not applicable',desc:'No sulfate',minPSI:2500,maxWC:null,cement:null},
+  {code:'S1',name:'Moderate',desc:'SO₄ 150-1500 ppm',minPSI:3000,maxWC:0.50,cement:'Type II (MS)'},
+  {code:'S2',name:'Severe',desc:'SO₄ 1500-10000 ppm',minPSI:4000,maxWC:0.45,cement:'Type V (HS)'},
+  {code:'S3',name:'Very Severe',desc:'SO₄ >10000 ppm',minPSI:4500,maxWC:0.40,cement:'Type V + pozzolan'},
+  {code:'C0',name:'Not applicable',desc:'Dry/protected',minPSI:2500,maxWC:null,cover:0.75},
+  {code:'C1',name:'Moderate',desc:'Moisture, no Cl',minPSI:3000,maxWC:0.45,cover:1.0},
+  {code:'C2',name:'Severe',desc:'Deicers/salt/seawater',minPSI:4000,maxWC:0.40,cover:1.75},
+  {code:'W0',name:'Dry',desc:'Dry in service',minPSI:2500,maxWC:null},
+  {code:'W1',name:'Wet',desc:'Water contact',minPSI:3000,maxWC:0.50},
+  {code:'W2',name:'Wet + Aggressive',desc:'Aggressive chemicals',minPSI:4000,maxWC:0.45}
+];
+function renderPerm(){
+  var inner=document.getElementById('perm_inner');if(!inner)return;var data=loadData();
+  var html='<div style="padding:20px;max-width:900px;margin:0 auto;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;"><h2 style="color:#e2e8f0;margin:0;">🧪 ACI 318-19 Exposure Check</h2><button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'🧪 Exposure Check\';" style="background:#334155;color:#f1f5f9;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;">✕ Close</button></div>';
+  html+='<p style="color:#94a3b8;font-size:12px;margin-bottom:16px;">ACI 318-19 Table 19.3.1.1 / 19.3.2.1 / 19.3.3.1 exposure requirements. Check mix design against durability requirements.</p>';
+  html+='<details style="margin-bottom:16px;"><summary style="color:#60a5fa;cursor:pointer;font-size:13px;">📖 Exposure Category Reference</summary><div style="background:#1e293b;border-radius:8px;padding:12px;margin-top:8px;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:10px;color:#e2e8f0;"><tr style="background:#334155;"><th style="padding:4px;border:1px solid #475569;">Code</th><th style="padding:4px;border:1px solid #475569;">Name</th><th style="padding:4px;border:1px solid #475569;">Description</th><th style="padding:4px;border:1px solid #475569;">Min f\'c</th><th style="padding:4px;border:1px solid #475569;">Max w/c</th></tr>';
+  EXPOSURE_CATS.forEach(function(e){html+='<tr><td style="padding:4px;border:1px solid #475569;font-weight:600;">'+e.code+'</td><td style="padding:4px;border:1px solid #475569;">'+e.name+'</td><td style="padding:4px;border:1px solid #475569;">'+e.desc+'</td><td style="padding:4px;border:1px solid #475569;">'+(e.minPSI||'—')+' PSI</td><td style="padding:4px;border:1px solid #475569;">'+(e.maxWC||'—')+'</td></tr>';});
+  html+='</table></div></details>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:16px;">';
+  html+='<h3 style="color:#e2e8f0;font-size:13px;margin-top:0;">Check Mix Design</h3>';
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Project / Element</label><input id="perm_proj" placeholder="e.g. Warehouse SOG" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:13px;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Your f\'c (PSI)</label><input type="number" id="perm_psi" placeholder="4000" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:13px;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Your w/c Ratio</label><input type="number" id="perm_wc" step="0.01" placeholder="0.45" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:13px;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Air Content (%)</label><input type="number" id="perm_air" step="0.1" placeholder="5.5" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:13px;"></div>';
+  html+='</div>';
+  html+='<div style="margin-top:12px;"><label style="color:#94a3b8;font-size:11px;">Exposure Categories (check all that apply)</label></div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px;margin-top:8px;">';
+  EXPOSURE_CATS.forEach(function(e){html+='<label style="color:#e2e8f0;font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="perm_exp" value="'+e.code+'"> <strong>'+e.code+'</strong> '+e.name+'</label>';});
+  html+='</div>';
+  html+='<button onclick="checkPerm()" style="margin-top:12px;background:#0369a1;color:#fff;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:13px;">🔍 Check Compliance</button>';
+  html+='<div id="perm_result" style="margin-top:12px;"></div></div>';
+  if(data.length>0){html+='<h3 style="color:#e2e8f0;font-size:14px;">Check History</h3>';data.slice().reverse().slice(0,10).forEach(function(d,ri){var i=data.length-1-ri;var bc=d.pass?'#166534':'#7f1d1d';html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:8px;border-left:3px solid '+bc+';"><div style="display:flex;justify-content:space-between;align-items:center;"><div><strong style="color:#e2e8f0;">'+d.proj+'</strong> <span style="color:#94a3b8;font-size:11px;">— '+d.date+'</span></div><div style="display:flex;gap:6px;"><span style="background:'+(d.pass?'#166534':'#7f1d1d')+';color:#fff;border-radius:4px;padding:2px 8px;font-size:11px;">'+(d.pass?'✓ PASS':'✗ FAIL')+'</span><button onclick="deletePermCheck('+i+')" style="background:#450a0a;color:#fca5a5;border:1px solid #7f1d1d;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;">✕</button></div></div><div style="color:#94a3b8;font-size:11px;margin-top:4px;">'+d.exposures.join(', ')+' | f\'c: '+d.psi+' | w/c: '+d.wc+'</div>';if(d.failures&&d.failures.length>0){html+='<div style="color:#f87171;font-size:11px;margin-top:4px;">⚠️ '+d.failures.join('; ')+'</div>';}html+='</div>';});}
+  html+='<p style="color:#475569;font-size:10px;margin-top:16px;">ACI 318-19 Chapter 19: Durability for freeze/thaw (F), sulfates (S), corrosion (C), water contact (W). Most restrictive governs. El Paso: sulfate soils common — verify geotech SO₄ levels.</p></div>';
+  inner.innerHTML=html;
+}
+window.checkPerm=function(){
+  var proj=document.getElementById('perm_proj').value.trim()||'Unnamed';var psi=parseFloat(document.getElementById('perm_psi').value)||0;var wc=parseFloat(document.getElementById('perm_wc').value)||0;var air=parseFloat(document.getElementById('perm_air').value)||0;
+  var expBoxes=document.querySelectorAll('.perm_exp:checked');var exps=[];expBoxes.forEach(function(b){exps.push(b.value);});
+  if(exps.length===0){alert('Select at least one exposure category.');return;}
+  var failures=[];var reqPSI=0,reqWC=1,reqAir=0;
+  exps.forEach(function(code){var e=EXPOSURE_CATS.find(function(x){return x.code===code;});if(!e)return;if(e.minPSI&&e.minPSI>reqPSI)reqPSI=e.minPSI;if(e.maxWC&&e.maxWC<reqWC)reqWC=e.maxWC;if(e.minAir&&e.minAir>reqAir)reqAir=e.minAir;});
+  if(psi<reqPSI)failures.push('f\'c '+psi+' < required '+reqPSI);
+  if(reqWC<1&&wc>reqWC)failures.push('w/c '+wc+' > max '+reqWC);
+  if(reqAir>0&&air<reqAir)failures.push('Air '+air+'% < required '+reqAir+'%');
+  var pass=failures.length===0;
+  var res='';if(pass){res='<div style="background:#166534;border:1px solid #22c55e;border-radius:8px;padding:12px;color:#fff;"><strong>✓ COMPLIANT</strong> — Mix meets ACI 318-19 for '+exps.join(', ')+'.<br>Required: f\'c ≥'+reqPSI+(reqWC<1?', w/c ≤'+reqWC:'')+(reqAir>0?', Air ≥'+reqAir+'%':'')+'</div>';}else{res='<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;padding:12px;color:#fff;"><strong>✗ FAIL</strong><ul style="margin:4px 0 0 16px;padding:0;">';failures.forEach(function(f){res+='<li>'+f+'</li>';});res+='</ul></div>';}
+  document.getElementById('perm_result').innerHTML=res;
+  var data=loadData();data.push({proj:proj,date:new Date().toISOString().slice(0,10),psi:psi,wc:wc,air:air,exposures:exps,pass:pass,failures:failures});if(data.length>30)data=data.slice(-30);saveData(data);
+};
+window.deletePermCheck=function(i){if(!confirm('Delete?'))return;var d=loadData();d.splice(i,1);saveData(d);renderPerm();};
+function createBtn(){var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='🧪 Exposure Check';btn.style.cssText='position:fixed;bottom:4220px;right:16px;background:#1e3a5f;color:#bae6fd;border:1px solid #0369a1;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8950;box-shadow:0 2px 8px rgba(0,0,0,0.4);';btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Exposure Check':'🧪 Exposure Check';if(s)renderPerm();};document.body.appendChild(btn);var wrap=document.createElement('div');wrap.id=WRAP_ID;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8951;';var inner=document.createElement('div');inner.id='perm_inner';wrap.appendChild(inner);document.body.appendChild(wrap);}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<!-- TOOL 78: FORM RELEASE AGENT CALCULATOR (🧴) -->
+<script>
+(function(){
+var BTN_ID='formReleaseBtn',WRAP_ID='formReleaseWrap';
+var STORAGE_KEY='oncor_form_release';
+function loadData(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||[];}catch(e){return[];}}
+function saveData(d){localStorage.setItem(STORAGE_KEY,JSON.stringify(d));}
+var RELEASE_TYPES=[
+  {name:'Petroleum-Based Oil',coverage:350,rate:0.08,notes:'Standard steel/wood forms'},
+  {name:'Vegetable-Based Bio Oil',coverage:400,rate:0.12,notes:'Eco-friendly, good release'},
+  {name:'Water-Based Emulsion',coverage:500,rate:0.06,notes:'Minimal staining, architectural'},
+  {name:'Reactive Release (Chem)',coverage:300,rate:0.15,notes:'Best for tall walls, prevents bugholes'},
+  {name:'Wax-Based Emulsion',coverage:450,rate:0.10,notes:'GFRC/precast, build-up risk'},
+  {name:'Form Oil + Retarder',coverage:300,rate:0.20,notes:'Exposed aggregate'},
+  {name:'Silicone Release',coverage:600,rate:0.25,notes:'Premium, plastic/fiberglass forms'},
+  {name:'Custom',coverage:400,rate:0.10,notes:'Enter custom values'}
+];
+var FORM_TYPES=[{name:'Steel Forms',factor:1.0},{name:'Plywood HDO',factor:1.1},{name:'Plywood MDO',factor:1.15},{name:'Plywood Standard',factor:1.2},{name:'Aluminum Forms',factor:0.95},{name:'Plastic Forms',factor:0.85},{name:'Fiberglass Forms',factor:0.90},{name:'Foam Forms (ICF)',factor:0.0}];
+function renderFR(){
+  var inner=document.getElementById('formrel_inner');if(!inner)return;var data=loadData();
+  var html='<div style="padding:20px;max-width:900px;margin:0 auto;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;"><h2 style="color:#e2e8f0;margin:0;">🧴 Form Release Calculator</h2><button onclick="document.getElementById(\''+WRAP_ID+'\').style.display=\'none\';document.getElementById(\''+BTN_ID+'\').textContent=\'🧴 Form Release\';" style="background:#334155;color:#f1f5f9;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;">✕ Close</button></div>';
+  html+='<p style="color:#94a3b8;font-size:12px;margin-bottom:16px;">ACI 303R / ACI 347R form release agent quantity estimator. Calculate gallons, cost, and application notes.</p>';
+  html+='<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:16px;">';
+  html+='<h3 style="color:#e2e8f0;font-size:13px;margin-top:0;">Calculate Quantity</h3>';
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Project / Element</label><input id="fr_proj" placeholder="e.g. Wall forms" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:13px;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Contact Surface (SF)</label><input type="number" id="fr_sf" placeholder="5000" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:13px;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Reuses</label><input type="number" id="fr_reuses" value="1" min="1" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:13px;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Form Material</label><select id="fr_formtype" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:13px;">';FORM_TYPES.forEach(function(f){html+='<option value="'+f.factor+'">'+f.name+'</option>';});html+='</select></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Release Agent</label><select id="fr_type" onchange="updateFRDefaults()" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:13px;">';RELEASE_TYPES.forEach(function(r,i){html+='<option value="'+i+'">'+r.name+'</option>';});html+='</select></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">Coverage (SF/gal)</label><input type="number" id="fr_coverage" value="350" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:13px;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">$/SF Applied</label><input type="number" id="fr_rate" step="0.01" value="0.08" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:13px;"></div>';
+  html+='<div><label style="color:#94a3b8;font-size:11px;">$/Gallon</label><input type="number" id="fr_galprice" value="28" style="width:100%;box-sizing:border-box;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:13px;"></div>';
+  html+='</div>';
+  html+='<button onclick="calcFR()" style="margin-top:12px;background:#0369a1;color:#fff;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:13px;">🧮 Calculate</button>';
+  html+='<div id="fr_result" style="margin-top:12px;"></div></div>';
+  html+='<details style="margin-bottom:16px;"><summary style="color:#60a5fa;cursor:pointer;font-size:13px;">📖 Release Agent Reference</summary><div style="background:#1e293b;border-radius:8px;padding:12px;margin-top:8px;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:10px;color:#e2e8f0;"><tr style="background:#334155;"><th style="padding:4px;border:1px solid #475569;">Type</th><th style="padding:4px;border:1px solid #475569;">Coverage</th><th style="padding:4px;border:1px solid #475569;">$/SF</th><th style="padding:4px;border:1px solid #475569;">Notes</th></tr>';RELEASE_TYPES.forEach(function(r){html+='<tr><td style="padding:4px;border:1px solid #475569;">'+r.name+'</td><td style="padding:4px;border:1px solid #475569;">'+r.coverage+' SF/gal</td><td style="padding:4px;border:1px solid #475569;">$'+r.rate.toFixed(2)+'</td><td style="padding:4px;border:1px solid #475569;">'+r.notes+'</td></tr>';});html+='</table></div></details>';
+  if(data.length>0){html+='<h3 style="color:#e2e8f0;font-size:14px;">Estimate History</h3>';data.slice().reverse().slice(0,10).forEach(function(d,ri){var i=data.length-1-ri;html+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:8px;border-left:3px solid #0369a1;"><div style="display:flex;justify-content:space-between;align-items:center;"><div><strong style="color:#e2e8f0;">'+d.proj+'</strong> <span style="color:#94a3b8;font-size:11px;">— '+d.date+'</span></div><div style="display:flex;gap:6px;"><span style="background:#0369a122;color:#38bdf8;border:1px solid #0369a1;border-radius:4px;padding:2px 8px;font-size:11px;">'+d.gallons.toFixed(1)+' gal</span><span style="background:#16a34a22;color:#4ade80;border:1px solid #16a34a;border-radius:4px;padding:2px 8px;font-size:11px;">$'+d.totalCost.toFixed(0)+'</span><button onclick="deleteFR('+i+')" style="background:#450a0a;color:#fca5a5;border:1px solid #7f1d1d;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;">✕</button></div></div><div style="color:#94a3b8;font-size:11px;margin-top:4px;">'+d.sf.toLocaleString()+' SF × '+d.reuses+' uses | '+d.type+'</div></div>';});}
+  html+='<p style="color:#475569;font-size:10px;margin-top:16px;">ACI 303R §5.5: Apply uniformly without puddling. Over-application causes bugholes/discoloration. First use on new wood absorbs more than subsequent uses.</p></div>';
+  inner.innerHTML=html;
+}
+window.updateFRDefaults=function(){var idx=parseInt(document.getElementById('fr_type').value);var r=RELEASE_TYPES[idx];document.getElementById('fr_coverage').value=r.coverage;document.getElementById('fr_rate').value=r.rate;};
+window.calcFR=function(){
+  var proj=document.getElementById('fr_proj').value.trim()||'Unnamed';var sf=parseFloat(document.getElementById('fr_sf').value)||0;var reuses=parseInt(document.getElementById('fr_reuses').value)||1;var formFactor=parseFloat(document.getElementById('fr_formtype').value)||1;var typeIdx=parseInt(document.getElementById('fr_type').value);var typeName=RELEASE_TYPES[typeIdx].name;var coverage=parseFloat(document.getElementById('fr_coverage').value)||350;var rate=parseFloat(document.getElementById('fr_rate').value)||0.08;var galPrice=parseFloat(document.getElementById('fr_galprice').value)||28;
+  if(sf<=0){alert('Enter surface area.');return;}
+  if(formFactor===0){document.getElementById('fr_result').innerHTML='<div style="background:#334155;border:1px solid #475569;border-radius:8px;padding:12px;color:#94a3b8;">Foam forms do not require release agent.</div>';return;}
+  var adjustedSF=sf*reuses*formFactor;var gallons=adjustedSF/coverage;var materialCost=gallons*galPrice;var laborCost=adjustedSF*rate;var totalCost=materialCost+laborCost;var pails=Math.ceil(gallons/5);
+  var res='<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;">';
+  res+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:12px;">';
+  res+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center;"><div style="color:#94a3b8;font-size:10px;">Apply SF</div><div style="font-size:18px;font-weight:700;color:#60a5fa;">'+adjustedSF.toLocaleString()+'</div></div>';
+  res+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center;"><div style="color:#94a3b8;font-size:10px;">Gallons</div><div style="font-size:18px;font-weight:700;color:#f59e0b;">'+gallons.toFixed(1)+'</div></div>';
+  res+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center;"><div style="color:#94a3b8;font-size:10px;">5-Gal Pails</div><div style="font-size:18px;font-weight:700;color:#a78bfa;">'+pails+'</div></div>';
+  res+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center;"><div style="color:#94a3b8;font-size:10px;">Material</div><div style="font-size:18px;font-weight:700;color:#4ade80;">$'+materialCost.toFixed(0)+'</div></div>';
+  res+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center;"><div style="color:#94a3b8;font-size:10px;">Labor</div><div style="font-size:18px;font-weight:700;color:#fb923c;">$'+laborCost.toFixed(0)+'</div></div>';
+  res+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center;"><div style="color:#94a3b8;font-size:10px;">Total</div><div style="font-size:18px;font-weight:700;color:#22c55e;">$'+totalCost.toFixed(0)+'</div></div>';
+  res+='</div>';
+  res+='<button onclick="saveFR()" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;">💾 Save</button></div>';
+  document.getElementById('fr_result').innerHTML=res;
+  window._frTemp={proj:proj,date:new Date().toISOString().slice(0,10),sf:sf,reuses:reuses,formFactor:formFactor,type:typeName,coverage:coverage,rate:rate,galPrice:galPrice,adjustedSF:adjustedSF,gallons:gallons,materialCost:materialCost,laborCost:laborCost,totalCost:totalCost,pails:pails};
+};
+window.saveFR=function(){if(!window._frTemp){alert('Calculate first.');return;}var data=loadData();data.push(window._frTemp);if(data.length>30)data=data.slice(-30);saveData(data);renderFR();alert('Saved!');};
+window.deleteFR=function(i){if(!confirm('Delete?'))return;var d=loadData();d.splice(i,1);saveData(d);renderFR();};
+function createBtn(){var btn=document.createElement('button');btn.id=BTN_ID;btn.textContent='🧴 Form Release';btn.style.cssText='position:fixed;bottom:4260px;right:16px;background:#1e3a5f;color:#bae6fd;border:1px solid #0369a1;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:8960;box-shadow:0 2px 8px rgba(0,0,0,0.4);';btn.onclick=function(){var w=document.getElementById(WRAP_ID);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Form Release':'🧴 Form Release';if(s)renderFR();};document.body.appendChild(btn);var wrap=document.createElement('div');wrap.id=WRAP_ID;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:8961;';var inner=document.createElement('div');inner.id='formrel_inner';wrap.appendChild(inner);document.body.appendChild(wrap);}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
