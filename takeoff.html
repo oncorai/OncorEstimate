@@ -62720,3 +62720,426 @@ function createBtn(){
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
 })();
 </script>
+
+<!-- TOOL 130 — Formwork Panel Cycle Tracker (♻️) ACI 347R-14 / ACI 301-16 -->
+<script>
+(function(){
+var BTN='t130btn',WRAP='t130wrap',INNER='t130inner';
+var KEY='fwPanelCycles_v1';
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||{panels:[]};}catch(e){return{panels:[]};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+var TYPES=['1/2" Ply 4×8','3/4" Ply 4×8','HDO/MDO Ply 4×8','Steel Form 2×4','Steel Form 2×8','Alum Form 4×8','Custom'];
+var MAX_CYCLES={0:10,1:12,2:22,3:80,4:80,5:100,6:20};
+var CONDS=['Like New','Good','Fair','Needs Repair','Retire'];
+var COND_COLORS=['#22c55e','#86efac','#fbbf24','#f97316','#ef4444'];
+function render(){
+  var d=load();var p=d.panels||[];
+  var total=p.length,avail=p.filter(x=>!x.job&&x.cond<4).length,deployed=p.filter(x=>x.job&&x.cond<4).length;
+  var nearMax=p.filter(x=>{var maxC=MAX_CYCLES[x.type]||20;return x.cycles>=(maxC*0.8)&&x.cond<4;}).length;
+  var retired=p.filter(x=>x.cond===4).length;
+  var h='<div style="padding:16px;max-width:900px;margin:0 auto;">';
+  h+='<h2 style="color:#f97316;font-size:18px;margin-bottom:4px;">♻️ Formwork Panel Cycle Tracker</h2>';
+  h+='<p style="color:#64748b;font-size:12px;margin-bottom:16px;">ACI 347R-14 / ACI 301-16 — Track panel cycles, condition, and retirement to manage amortized form costs</p>';
+  // Add form
+  h+='<div style="background:#1e293b;border-radius:10px;padding:16px;margin-bottom:16px;">';
+  h+='<h3 style="color:#f97316;font-size:14px;margin-bottom:12px;">Add Form Panel</h3>';
+  h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;">';
+  h+='<div><label style="color:#94a3b8;font-size:12px;">Panel Mark/ID</label><input id="t130mark" placeholder="e.g. PL-01" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px;font-size:13px;box-sizing:border-box;"></div>';
+  h+='<div><label style="color:#94a3b8;font-size:12px;">Form Type</label><select id="t130type" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px;font-size:13px;">';
+  TYPES.forEach((t,i)=>{h+='<option value="'+i+'">'+t+'</option>';});
+  h+='</select></div>';
+  h+='<div><label style="color:#94a3b8;font-size:12px;">Purchase Cost ($)</label><input id="t130cost" type="number" placeholder="e.g. 42" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px;font-size:13px;box-sizing:border-box;"></div>';
+  h+='<div><label style="color:#94a3b8;font-size:12px;">Panel Count (ea)</label><input id="t130qty" type="number" value="1" min="1" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px;font-size:13px;box-sizing:border-box;"></div>';
+  h+='<div><label style="color:#94a3b8;font-size:12px;">Current Job (if deployed)</label><input id="t130job" placeholder="Leave blank if in yard" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px;font-size:13px;box-sizing:border-box;"></div>';
+  h+='<div><label style="color:#94a3b8;font-size:12px;">Starting Cycles</label><input id="t130cyc" type="number" value="0" min="0" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px;font-size:13px;box-sizing:border-box;"></div>';
+  h+='</div>';
+  h+='<button onclick="window.t130add()" style="background:#f97316;color:#fff;border:none;border-radius:8px;padding:9px 22px;cursor:pointer;font-size:13px;font-weight:600;">+ Add Panel(s)</button>';
+  h+='</div>';
+  // Dashboard
+  h+='<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;">';
+  [{v:total,l:'Total Panels',c:'#e2e8f0'},{v:avail,l:'Available',c:'#22c55e'},{v:deployed,l:'Deployed',c:'#60a5fa'},{v:nearMax,l:'Near Max Cycles',c:'#f97316'},{v:retired,l:'Retired',c:'#ef4444'}].forEach(x=>{
+    h+='<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:22px;font-weight:700;color:'+x.c+';">'+x.v+'</div><div style="font-size:11px;color:#64748b;">'+x.l+'</div></div>';
+  });
+  h+='</div>';
+  if(!p.length){h+='<div style="text-align:center;color:#475569;padding:30px;">No panels logged yet. Add your first form panel above.</div>';h+='</div></div>';document.getElementById(INNER).innerHTML=h;return;}
+  // Table
+  h+='<div style="background:#1e293b;border-radius:10px;padding:14px;">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+  h+='<h3 style="color:#e2e8f0;font-size:14px;margin:0;">Panel Register ('+p.length+' panels)</h3>';
+  h+='<button onclick="window.t130printReg()" style="background:#0f172a;color:#f97316;border:1px solid #c2410c;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:11px;">🖨 Print Register</button>';
+  h+='</div>';
+  h+='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  h+='<tr style="color:#64748b;border-bottom:1px solid #334155;"><th style="padding:6px;text-align:left;">Mark</th><th style="padding:6px;">Type</th><th style="padding:6px;">Cycles</th><th style="padding:6px;">Max</th><th style="padding:6px;">Cost/Use</th><th style="padding:6px;">Job</th><th style="padding:6px;">Condition</th><th style="padding:6px;">Actions</th></tr>';
+  p.forEach((pn,i)=>{
+    var maxC=MAX_CYCLES[pn.type]||20;
+    var pct=Math.min(100,Math.round((pn.cycles/maxC)*100));
+    var barC=pct>=80?'#ef4444':pct>=60?'#f97316':'#22c55e';
+    var costPerUse=pn.cost&&pn.cycles>0?'$'+(pn.cost/pn.cycles).toFixed(2):pn.cost?'$'+pn.cost+'(new)':'—';
+    var condC=COND_COLORS[pn.cond]||'#94a3b8';
+    var rowBg=pn.cond===4?'rgba(239,68,68,0.08)':pn.cycles>=(maxC*0.8)&&pn.cond<4?'rgba(249,115,22,0.08)':'';
+    h+='<tr style="border-bottom:1px solid #1e293b;background:'+rowBg+';">';
+    h+='<td style="padding:6px;color:#e2e8f0;font-weight:600;">'+pn.mark+'</td>';
+    h+='<td style="padding:6px;color:#94a3b8;text-align:center;">'+TYPES[pn.type]+'</td>';
+    h+='<td style="padding:6px;text-align:center;"><div style="display:flex;align-items:center;gap:4px;justify-content:center;"><div style="width:36px;height:6px;background:#334155;border-radius:3px;"><div style="width:'+pct+'%;height:100%;background:'+barC+';border-radius:3px;"></div></div><span style="color:'+barC+';">'+pn.cycles+'</span></div></td>';
+    h+='<td style="padding:6px;color:#64748b;text-align:center;">'+maxC+'</td>';
+    h+='<td style="padding:6px;color:#86efac;text-align:center;">'+costPerUse+'</td>';
+    h+='<td style="padding:6px;color:#60a5fa;text-align:center;">'+((pn.job)||'— Yard')+'</td>';
+    h+='<td style="padding:6px;text-align:center;"><span onclick="window.t130cond('+i+')" style="background:'+condC+'22;color:'+condC+';border:1px solid '+condC+';border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;">'+CONDS[pn.cond]+'</span></td>';
+    h+='<td style="padding:6px;text-align:center;white-space:nowrap;">';
+    h+='<button onclick="window.t130cyc('+i+')" title="Log 1 cycle use" style="background:#1e293b;color:#22c55e;border:1px solid #16a34a;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;margin-right:2px;">+1 Cycle</button>';
+    h+='<button onclick="window.t130del('+i+')" style="background:#1e293b;color:#ef4444;border:1px solid #ef4444;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:11px;">🗑</button>';
+    h+='</td></tr>';
+  });
+  h+='</table></div></div>';
+  h+='<details style="margin-top:14px;"><summary style="color:#64748b;cursor:pointer;font-size:12px;">ACI 347R-14 Form Reuse Guidelines</summary>';
+  h+='<div style="background:#1e293b;border-radius:8px;padding:12px;margin-top:6px;font-size:12px;color:#94a3b8;">';
+  h+='<p><strong style="color:#e2e8f0;">Plywood (3/4"):</strong> 10–15 cycles for standard wall/column forms with proper cleaning/oiling. HDO/MDO face: 20–25 cycles. Replace when delamination, warping, or face damage affects surface finish.</p>';
+  h+='<p><strong style="color:#e2e8f0;">Steel forms:</strong> 50–100+ cycles with proper maintenance. Inspect welds and corner hardware every 25 cycles.</p>';
+  h+='<p><strong style="color:#e2e8f0;">Cost per use:</strong> Amortized form cost (purchase ÷ cycles) should be included in your formwork bid rate. A $45 panel over 12 uses = $3.75/use per SF of contact area.</p>';
+  h+='</div></details>';
+  h+='</div></div>';
+  document.getElementById(INNER).innerHTML=h;
+}
+window.t130add=function(){
+  var mark=document.getElementById('t130mark').value.trim();
+  if(!mark){alert('Panel mark/ID required.');return;}
+  var d=load();d.panels=d.panels||[];
+  var qty=parseInt(document.getElementById('t130qty').value)||1;
+  var type=parseInt(document.getElementById('t130type').value)||0;
+  var cost=parseFloat(document.getElementById('t130cost').value)||0;
+  var job=document.getElementById('t130job').value.trim();
+  var cyc=parseInt(document.getElementById('t130cyc').value)||0;
+  for(var i=0;i<qty;i++){
+    d.panels.push({mark:qty>1?(mark+'-'+(i+1)):mark,type:type,cost:cost,job:job,cycles:cyc,cond:0});
+  }
+  save(d);render();
+};
+window.t130cyc=function(i){
+  var d=load();d.panels[i].cycles=(d.panels[i].cycles||0)+1;
+  var maxC=MAX_CYCLES[d.panels[i].type]||20;
+  if(d.panels[i].cycles>=maxC&&d.panels[i].cond<4){d.panels[i].cond=4;}
+  save(d);render();
+};
+window.t130cond=function(i){
+  var d=load();d.panels[i].cond=((d.panels[i].cond||0)+1)%CONDS.length;save(d);render();
+};
+window.t130del=function(i){
+  if(!confirm('Remove panel?'))return;var d=load();d.panels.splice(i,1);save(d);render();
+};
+window.t130printReg=function(){
+  var d=load();var p=d.panels||[];if(!p.length){alert('No panels to print.');return;}
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>Formwork Panel Register</title>');
+  pw.document.write('<style>body{font-family:Arial;font-size:11px;margin:20px;}h2{font-size:14px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:4px;}th{background:#f0f0f0;}.sig{display:flex;gap:30px;margin-top:20px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;font-size:10px;}</style></head><body>');
+  pw.document.write('<h2>♻️ Formwork Panel Cycle Register — ACI 347R-14</h2>');
+  pw.document.write('<p>Date: '+new Date().toLocaleDateString()+' | Total Panels: '+p.length+'</p>');
+  pw.document.write('<table><tr><th>Mark</th><th>Type</th><th>Cycles</th><th>Max Cycles</th><th>% Used</th><th>Cost/Use</th><th>Current Job</th><th>Condition</th></tr>');
+  p.forEach(pn=>{
+    var maxC=MAX_CYCLES[pn.type]||20;
+    var pct=Math.min(100,Math.round((pn.cycles/maxC)*100));
+    var cu=pn.cost&&pn.cycles>0?'$'+(pn.cost/pn.cycles).toFixed(2):'—';
+    pw.document.write('<tr><td>'+pn.mark+'</td><td>'+TYPES[pn.type]+'</td><td>'+pn.cycles+'</td><td>'+maxC+'</td><td>'+pct+'%</td><td>'+cu+'</td><td>'+(pn.job||'Yard')+'</td><td>'+CONDS[pn.cond]+'</td></tr>');
+  });
+  pw.document.write('</table>');
+  pw.document.write('<p style="font-size:10px;margin-top:8px;">ACI 347R-14: Form materials shall be maintained in good condition. Damaged, warped, or delaminated forms shall be removed from service. Retain register for project duration.</p>');
+  pw.document.write('<div class="sig"><div>Form Manager / Date</div><div>Foreman / Date</div></div>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN;btn.textContent='♻️ Form Cycles';
+  btn.style.cssText='position:fixed;bottom:6750px;right:16px;background:#1e293b;color:#fb923c;border:1px solid #c2410c;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9122;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Form Cycles':'♻️ Form Cycles';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9123;';
+  var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<!-- TOOL 131 — Pre-Pour Subgrade Elevation Survey Log (📐) ACI 302.1R §3.5.2 / ACI 117-10 -->
+<script>
+(function(){
+var BTN='t131btn',WRAP='t131wrap',INNER='t131inner';
+var KEY='subgradeElevSurvey_v1';
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||{surveys:[]};}catch(e){return{surveys:[]};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+var ACI_TOL=0.0625; // ±3/4" = 0.0625 ft
+function render(){
+  var d=load();var surveys=d.surveys||[];
+  var h='<div style="padding:16px;max-width:900px;margin:0 auto;">';
+  h+='<h2 style="color:#38bdf8;font-size:18px;margin-bottom:4px;">📐 Pre-Pour Subgrade Elevation Survey Log</h2>';
+  h+='<p style="color:#64748b;font-size:12px;margin-bottom:4px;">ACI 302.1R §3.5.2 / ACI 117-10 — Subgrade elevation verification before slab-on-grade placement</p>';
+  h+='<p style="color:#475569;font-size:11px;margin-bottom:16px;">ACI 117-10 §4.8.1: Subgrade and subbase elevation tolerance ±¾" (0.0625 ft) from design grade.</p>';
+  // Start new survey
+  h+='<div style="background:#1e293b;border-radius:10px;padding:16px;margin-bottom:16px;">';
+  h+='<h3 style="color:#38bdf8;font-size:14px;margin-bottom:12px;">New Survey Point</h3>';
+  h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px;">';
+  h+='<div><label style="color:#94a3b8;font-size:12px;">Project</label><input id="t131proj" placeholder="Project name" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px;font-size:13px;box-sizing:border-box;"></div>';
+  h+='<div><label style="color:#94a3b8;font-size:12px;">Element / Area</label><input id="t131elem" placeholder="e.g. Bldg A SOG" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px;font-size:13px;box-sizing:border-box;"></div>';
+  h+='<div><label style="color:#94a3b8;font-size:12px;">Grid / Station Ref</label><input id="t131grid" placeholder="e.g. A1, B3, NW corner" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px;font-size:13px;box-sizing:border-box;"></div>';
+  h+='<div><label style="color:#94a3b8;font-size:12px;">Date</label><input id="t131date" type="date" value="'+new Date().toISOString().split('T')[0]+'" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px;font-size:13px;box-sizing:border-box;"></div>';
+  h+='<div><label style="color:#94a3b8;font-size:12px;">Design Elevation (ft)</label><input id="t131design" type="number" step="0.001" placeholder="e.g. 0.000" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px;font-size:13px;box-sizing:border-box;"></div>';
+  h+='<div><label style="color:#94a3b8;font-size:12px;">Measured Elevation (ft)</label><input id="t131meas" type="number" step="0.001" placeholder="e.g. -0.032" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px;font-size:13px;box-sizing:border-box;"></div>';
+  h+='<div><label style="color:#94a3b8;font-size:12px;">Survey Method</label><select id="t131method" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px;font-size:13px;">';
+  ['Rotary Laser Level','Builder\'s Level','Total Station','Grade Rod','Auto Level','Laser Screed'].forEach(m=>{h+='<option>'+m+'</option>';});
+  h+='</select></div>';
+  h+='<div><label style="color:#94a3b8;font-size:12px;">Surveyor Initials</label><input id="t131init" placeholder="e.g. JFS" maxlength="6" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px;font-size:13px;box-sizing:border-box;"></div>';
+  h+='</div>';
+  h+='<button onclick="window.t131add()" style="background:#38bdf8;color:#0f172a;border:none;border-radius:8px;padding:9px 22px;cursor:pointer;font-size:13px;font-weight:700;">+ Log Survey Point</button>';
+  h+='</div>';
+  // Results
+  if(!surveys.length){h+='<div style="text-align:center;color:#475569;padding:30px;">No survey points logged yet.</div>';h+='</div></div>';document.getElementById(INNER).innerHTML=h;return;}
+  var fails=surveys.filter(s=>Math.abs(s.meas-s.design)>ACI_TOL);
+  var passes=surveys.filter(s=>Math.abs(s.meas-s.design)<=ACI_TOL);
+  if(fails.length>0){
+    h+='<div style="background:rgba(239,68,68,0.15);border:2px solid #ef4444;border-radius:10px;padding:14px;margin-bottom:14px;">';
+    h+='<div style="color:#ef4444;font-size:16px;font-weight:700;margin-bottom:6px;">⛔ DO NOT POUR — '+fails.length+' GRADE FAILURE(S)</div>';
+    h+='<div style="color:#fca5a5;font-size:12px;">ACI 117-10 §4.8.1: Subgrade exceeds ±¾" tolerance at the following locations:</div>';
+    fails.forEach(f=>{
+      var delta=((f.meas-f.design)*12).toFixed(3);
+      h+='<div style="color:#fca5a5;font-size:12px;margin-top:4px;">• '+f.grid+' ('+f.proj+'/'+f.elem+'): Δ='+delta+'" — Regrade and re-survey required before concrete placement</div>';
+    });
+    h+='</div>';
+  } else {
+    h+='<div style="background:rgba(34,197,94,0.1);border:2px solid #22c55e;border-radius:10px;padding:12px;margin-bottom:14px;">';
+    h+='<div style="color:#22c55e;font-size:15px;font-weight:700;">✅ SUBGRADE VERIFIED — ALL '+passes.length+' POINTS WITHIN ACI 117-10 TOLERANCE</div>';
+    h+='</div>';
+  }
+  // Dashboard
+  var total=surveys.length;
+  h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">';
+  [{v:total,l:'Total Points',c:'#e2e8f0'},{v:passes.length,l:'Pass',c:'#22c55e'},{v:fails.length,l:'Fail',c:'#ef4444'},{v:'±¾"',l:'ACI 117 Tolerance',c:'#38bdf8'}].forEach(x=>{
+    h+='<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:22px;font-weight:700;color:'+x.c+';">'+x.v+'</div><div style="font-size:11px;color:#64748b;">'+x.l+'</div></div>';
+  });
+  h+='</div>';
+  h+='<div style="background:#1e293b;border-radius:10px;padding:14px;">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+  h+='<h3 style="color:#e2e8f0;font-size:14px;margin:0;">Survey Log ('+total+' points)</h3>';
+  h+='<div style="display:flex;gap:8px;">';
+  h+='<button onclick="window.t131clearAll()" style="background:#0f172a;color:#64748b;border:1px solid #334155;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px;">Clear All</button>';
+  h+='<button onclick="window.t131print()" style="background:#0f172a;color:#38bdf8;border:1px solid #0369a1;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:11px;">🖨 Print ACI 302.1R Log</button>';
+  h+='</div></div>';
+  h+='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  h+='<tr style="color:#64748b;border-bottom:1px solid #334155;"><th style="padding:6px;text-align:left;">Date</th><th style="padding:6px;">Project</th><th style="padding:6px;">Element</th><th style="padding:6px;">Grid</th><th style="padding:6px;">Design (ft)</th><th style="padding:6px;">Measured (ft)</th><th style="padding:6px;">Delta (in)</th><th style="padding:6px;">Method</th><th style="padding:6px;">By</th><th style="padding:6px;">Verdict</th><th style="padding:6px;">Del</th></tr>';
+  surveys.forEach((s,i)=>{
+    var delta=(s.meas-s.design)*12;
+    var pass=Math.abs(s.meas-s.design)<=ACI_TOL;
+    var vc=pass?'#22c55e':'#ef4444';
+    var vt=pass?'✓ PASS':'✗ FAIL';
+    h+='<tr style="border-bottom:1px solid #0f172a;background:'+(pass?'':'rgba(239,68,68,0.07)')+';">';
+    h+='<td style="padding:5px;color:#94a3b8;">'+s.date+'</td>';
+    h+='<td style="padding:5px;color:#e2e8f0;">'+s.proj+'</td>';
+    h+='<td style="padding:5px;color:#94a3b8;">'+s.elem+'</td>';
+    h+='<td style="padding:5px;color:#60a5fa;font-weight:600;">'+s.grid+'</td>';
+    h+='<td style="padding:5px;color:#94a3b8;text-align:center;">'+s.design.toFixed(3)+'</td>';
+    h+='<td style="padding:5px;color:#e2e8f0;text-align:center;">'+s.meas.toFixed(3)+'</td>';
+    h+='<td style="padding:5px;text-align:center;color:'+(delta<0?'#f97316':'#86efac')+';">'+(delta>0?'+':'')+delta.toFixed(3)+'"</td>';
+    h+='<td style="padding:5px;color:#64748b;font-size:11px;">'+s.method+'</td>';
+    h+='<td style="padding:5px;color:#64748b;">'+s.init+'</td>';
+    h+='<td style="padding:5px;text-align:center;"><span style="background:'+vc+'22;color:'+vc+';border:1px solid '+vc+';border-radius:4px;padding:2px 6px;font-size:11px;font-weight:600;">'+vt+'</span></td>';
+    h+='<td style="padding:5px;text-align:center;"><button onclick="window.t131del('+i+')" style="background:none;color:#ef4444;border:none;cursor:pointer;font-size:12px;">🗑</button></td>';
+    h+='</tr>';
+  });
+  h+='</table></div></div></div></div>';
+  document.getElementById(INNER).innerHTML=h;
+}
+window.t131add=function(){
+  var proj=document.getElementById('t131proj').value.trim();
+  var grid=document.getElementById('t131grid').value.trim();
+  var design=parseFloat(document.getElementById('t131design').value);
+  var meas=parseFloat(document.getElementById('t131meas').value);
+  if(!proj||!grid||isNaN(design)||isNaN(meas)){alert('Project, grid reference, and both elevations required.');return;}
+  var d=load();d.surveys=d.surveys||[];
+  d.surveys.push({proj:proj,elem:document.getElementById('t131elem').value.trim()||'Slab',grid:grid,date:document.getElementById('t131date').value,design:design,meas:meas,method:document.getElementById('t131method').value,init:document.getElementById('t131init').value.trim()});
+  save(d);render();
+};
+window.t131del=function(i){
+  var d=load();d.surveys.splice(i,1);save(d);render();
+};
+window.t131clearAll=function(){
+  if(!confirm('Clear all survey points?'))return;save({surveys:[]});render();
+};
+window.t131print=function(){
+  var d=load();var s=d.surveys||[];if(!s.length){alert('No survey data.');return;}
+  var fails=s.filter(x=>Math.abs(x.meas-x.design)>ACI_TOL);
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>Subgrade Elevation Survey</title>');
+  pw.document.write('<style>body{font-family:Arial;font-size:11px;margin:20px;}h2{font-size:14px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:4px;}th{background:#f0f0f0;}.fail{background:#fee2e2;}.sig{display:flex;gap:30px;margin-top:20px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;font-size:10px;}.warn{background:#fef2f2;border:1px solid #dc2626;padding:8px;margin:10px 0;font-size:10px;}</style></head><body>');
+  pw.document.write('<h2>📐 Pre-Pour Subgrade Elevation Survey Log</h2>');
+  pw.document.write('<p>ACI 302.1R §3.5.2 / ACI 117-10 | Date Printed: '+new Date().toLocaleDateString()+' | Tolerance: ±¾" (0.0625 ft)</p>');
+  if(fails.length>0){pw.document.write('<div class="warn">⛔ DO NOT POUR: '+fails.length+' point(s) exceed ACI 117-10 ±¾" tolerance. Re-grade and re-survey required at: '+fails.map(f=>f.grid).join(', ')+'</div>');}
+  else{pw.document.write('<p style="color:green;font-weight:bold;">✅ All '+s.length+' points verified within ACI 117-10 tolerance — cleared for pour.</p>');}
+  pw.document.write('<table><tr><th>Date</th><th>Project</th><th>Element</th><th>Grid/Station</th><th>Design (ft)</th><th>Measured (ft)</th><th>Delta (in)</th><th>Method</th><th>By</th><th>Verdict</th></tr>');
+  s.forEach(pt=>{
+    var delta=((pt.meas-pt.design)*12).toFixed(3);
+    var pass=Math.abs(pt.meas-pt.design)<=ACI_TOL;
+    pw.document.write('<tr class="'+(pass?'':'fail')+'"><td>'+pt.date+'</td><td>'+pt.proj+'</td><td>'+pt.elem+'</td><td>'+pt.grid+'</td><td>'+pt.design.toFixed(3)+'</td><td>'+pt.meas.toFixed(3)+'</td><td>'+(delta>0?'+':'')+delta+'"</td><td>'+pt.method+'</td><td>'+pt.init+'</td><td>'+(pass?'PASS':'FAIL')+'</td></tr>');
+  });
+  pw.document.write('</table>');
+  pw.document.write('<p style="font-size:10px;margin-top:8px;">ACI 302.1R §3.5.2: Subgrade shall be within ±¾" of design grade at any point. Depressions that would cause concrete voids shall be filled and compacted. Retain 5 years per ACI 301-16 §1.6.11.</p>');
+  pw.document.write('<div class="sig"><div>Survey Technician / Date</div><div>Foreman / Date</div><div>GC Inspector / Date</div></div>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN;btn.textContent='📐 Grade Survey';
+  btn.style.cssText='position:fixed;bottom:6850px;right:16px;background:#1e293b;color:#38bdf8;border:1px solid #0369a1;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9124;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Grade Survey':'📐 Grade Survey';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9125;';
+  var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<!-- TOOL 132 — Job Site Chemical Inventory & SDS Tracker (☣️) OSHA 1910.1200 / 1926.59 HazCom -->
+<script>
+(function(){
+var BTN='t132btn',WRAP='t132wrap',INNER='t132inner';
+var KEY='sdsBinder_v1';
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||{chemicals:[]};}catch(e){return{chemicals:[]};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+var PRESETS=[
+  {name:'Portland Cement (Dry)',ghsClass:'Irritant / Respiratory',ppe:'P100 respirator, safety glasses, nitrile gloves',carc:false,ph:'12-13 (wet)'},
+  {name:'Concrete (Fresh/Wet)',ghsClass:'Corrosive / Skin Burn',ppe:'Rubber gloves, eye protection, alkali-resistant boots',carc:false,ph:'12-13'},
+  {name:'Silica (Crystalline — RCS)',ghsClass:'Carcinogen / Resp. Hazard',ppe:'N95 or P100 respirator — OSHA 1926.1153',carc:true,ph:'N/A'},
+  {name:'Hydrochloric Acid (Muriatic)',ghsClass:'Corrosive / Toxic',ppe:'Face shield, chemical gloves, acid-resistant apron',carc:false,ph:'<1'},
+  {name:'Epoxy Resin (Part A)',ghsClass:'Skin Sensitizer / Irritant',ppe:'Chemical gloves, safety glasses, respirator',carc:false,ph:'7-9'},
+  {name:'Epoxy Hardener (Part B)',ghsClass:'Corrosive / Sensitizer',ppe:'Chemical gloves, face shield, half-mask OV/P100',carc:false,ph:'11-13'},
+  {name:'Curing Compound (Membrane)',ghsClass:'Flammable / Irritant',ppe:'Safety glasses, nitrile gloves, adequate ventilation',carc:false,ph:'7-9'},
+  {name:'Form Release Agent (Petroleum)',ghsClass:'Flammable / Irritant',ppe:'Safety glasses, nitrile gloves',carc:false,ph:'6-8'},
+  {name:'Concrete Sealer (Solvent-Based)',ghsClass:'Flammable / VOC',ppe:'Organic vapor respirator, chemical gloves, safety glasses',carc:false,ph:'N/A'},
+  {name:'Concrete Sealer (Water-Based)',ghsClass:'Irritant',ppe:'Safety glasses, gloves',carc:false,ph:'7-9'},
+  {name:'Admixture — Water Reducer (C494A)',ghsClass:'Irritant',ppe:'Safety glasses, gloves, adequate ventilation',carc:false,ph:'5-8'},
+  {name:'Admixture — Retarder (C494B)',ghsClass:'Irritant',ppe:'Safety glasses, gloves',carc:false,ph:'6-9'},
+  {name:'Admixture — Accelerator (C494C)',ghsClass:'Irritant / Corrosive',ppe:'Safety glasses, chemical gloves',carc:false,ph:'8-12'},
+  {name:'Non-Shrink Grout (Dry)',ghsClass:'Irritant / Respiratory',ppe:'P100 respirator, safety glasses, gloves',carc:false,ph:'12-13 (mixed)'},
+  {name:'Polyurethane Foam Sealant',ghsClass:'Sensitizer / Irritant',ppe:'Chemical gloves, safety glasses, NIOSH OV respirator',carc:false,ph:'N/A'},
+  {name:'Diesel Fuel (Equipment)',ghsClass:'Flammable / Irritant',ppe:'Nitrile gloves, eye protection',carc:false,ph:'N/A'},
+  {name:'Gasoline (Equipment)',ghsClass:'Highly Flammable',ppe:'Chemical gloves, eye protection — no ignition sources',carc:false,ph:'N/A'},
+  {name:'Hydraulic Fluid',ghsClass:'Irritant / Environmental',ppe:'Nitrile gloves, safety glasses',carc:false,ph:'N/A'},
+  {name:'Penetrating Concrete Hardener (Silicate)',ghsClass:'Irritant',ppe:'Safety glasses, nitrile gloves, adequate ventilation',carc:false,ph:'11-13'},
+  {name:'Concrete Dissolver / Efflorescence Cleaner',ghsClass:'Corrosive',ppe:'Face shield, acid-resistant gloves and apron',carc:false,ph:'<2'}
+];
+var SDS_STATUSES=['✅ On File','🟡 Requested','❌ Not On File'];
+var SDS_COLORS=['#22c55e','#fbbf24','#ef4444'];
+function render(){
+  var d=load();var c=d.chemicals||[];
+  var onFile=c.filter(x=>x.sds===0).length,missing=c.filter(x=>x.sds===2).length,carc=c.filter(x=>x.carc).length;
+  var h='<div style="padding:16px;max-width:960px;margin:0 auto;">';
+  h+='<h2 style="color:#f87171;font-size:18px;margin-bottom:4px;">☣️ Job Site Chemical Inventory & SDS Tracker</h2>';
+  h+='<p style="color:#64748b;font-size:12px;margin-bottom:4px;">OSHA 29 CFR §1910.1200 / 1926.59 (HazCom 2012 / GHS) — SDS binder index and chemical inventory</p>';
+  h+='<p style="color:#475569;font-size:11px;margin-bottom:14px;">OSHA §1910.1200(g)(8): SDS must be readily accessible to employees during each work shift. Maintain for 30 years post-exposure.</p>';
+  if(missing>0){
+    h+='<div style="background:rgba(239,68,68,0.15);border:2px solid #ef4444;border-radius:8px;padding:10px;margin-bottom:12px;">';
+    h+='<span style="color:#ef4444;font-weight:700;">⚠️ MISSING SDS: '+missing+' chemical(s) without SDS on file — OSHA violation risk</span>';
+    h+='</div>';
+  }
+  // Quick-add presets
+  h+='<div style="background:#1e293b;border-radius:10px;padding:14px;margin-bottom:16px;">';
+  h+='<h3 style="color:#f87171;font-size:13px;margin-bottom:10px;">Quick Add (Preset Chemicals)</h3>';
+  h+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">';
+  PRESETS.forEach((p,i)=>{
+    var exists=c.find(x=>x.name===p.name);
+    if(!exists){
+      h+='<button onclick="window.t132addPreset('+i+')" style="background:#0f172a;color:#f87171;border:1px solid #7f1d1d;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;">+ '+p.name+'</button>';
+    }
+  });
+  h+='</div>';
+  h+='<h3 style="color:#f87171;font-size:13px;margin:10px 0 8px 0;">Add Custom Chemical</h3>';
+  h+='<div style="display:grid;grid-template-columns:2fr 2fr 2fr 1fr;gap:10px;margin-bottom:8px;">';
+  h+='<input id="t132name" placeholder="Chemical name" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px;font-size:12px;">';
+  h+='<input id="t132ghs" placeholder="GHS Hazard Class" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px;font-size:12px;">';
+  h+='<input id="t132ppe" placeholder="Required PPE" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:7px;font-size:12px;">';
+  h+='<label style="display:flex;align-items:center;gap:6px;color:#f87171;font-size:12px;"><input type="checkbox" id="t132carc"> Carcinogen</label>';
+  h+='</div>';
+  h+='<button onclick="window.t132addCustom()" style="background:#f87171;color:#0f172a;border:none;border-radius:8px;padding:8px 20px;cursor:pointer;font-size:13px;font-weight:700;">+ Add Chemical</button>';
+  h+='</div>';
+  // Dashboard
+  h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">';
+  [{v:c.length,l:'Chemicals Tracked',c:'#e2e8f0'},{v:onFile,l:'SDS On File',c:'#22c55e'},{v:missing,l:'SDS Missing',c:'#ef4444'},{v:carc,l:'Carcinogens',c:'#f97316'}].forEach(x=>{
+    h+='<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:22px;font-weight:700;color:'+x.c+';">'+x.v+'</div><div style="font-size:11px;color:#64748b;">'+x.l+'</div></div>';
+  });
+  h+='</div>';
+  if(!c.length){h+='<div style="text-align:center;color:#475569;padding:30px;">No chemicals logged. Use quick-add above or add a custom chemical.</div>';h+='</div></div>';document.getElementById(INNER).innerHTML=h;return;}
+  h+='<div style="background:#1e293b;border-radius:10px;padding:14px;">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+  h+='<h3 style="color:#e2e8f0;font-size:14px;margin:0;">Chemical Inventory ('+c.length+' items)</h3>';
+  h+='<button onclick="window.t132printBinder()" style="background:#0f172a;color:#f87171;border:1px solid #7f1d1d;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:11px;">🖨 Print SDS Binder Index</button>';
+  h+='</div>';
+  h+='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  h+='<tr style="color:#64748b;border-bottom:1px solid #334155;"><th style="padding:6px;text-align:left;">Chemical</th><th style="padding:6px;">GHS Hazard Class</th><th style="padding:6px;">Required PPE</th><th style="padding:6px;">pH</th><th style="padding:6px;">Carc.</th><th style="padding:6px;">SDS Status</th><th style="padding:6px;">Del</th></tr>';
+  c.forEach((ch,i)=>{
+    var sc=SDS_COLORS[ch.sds];
+    var rowBg=ch.sds===2?'rgba(239,68,68,0.07)':ch.carc?'rgba(249,115,22,0.05)':'';
+    h+='<tr style="border-bottom:1px solid #0f172a;background:'+rowBg+';">';
+    h+='<td style="padding:6px;color:#e2e8f0;font-weight:600;">'+ch.name+(ch.carc?'  <span style="background:#fef3c722;color:#fbbf24;border:1px solid #fbbf24;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:400;">⚠ CARC</span>':'')+'</td>';
+    h+='<td style="padding:6px;color:#f87171;font-size:11px;">'+ch.ghsClass+'</td>';
+    h+='<td style="padding:6px;color:#94a3b8;font-size:11px;">'+ch.ppe+'</td>';
+    h+='<td style="padding:6px;color:#64748b;text-align:center;">'+(ch.ph||'—')+'</td>';
+    h+='<td style="padding:6px;text-align:center;color:'+(ch.carc?'#f97316':'#22c55e')+';">'+(ch.carc?'YES':'No')+'</td>';
+    h+='<td style="padding:6px;text-align:center;"><span onclick="window.t132sds('+i+')" style="background:'+sc+'22;color:'+sc+';border:1px solid '+sc+';border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;">'+SDS_STATUSES[ch.sds]+'</span></td>';
+    h+='<td style="padding:6px;text-align:center;"><button onclick="window.t132del('+i+')" style="background:none;color:#ef4444;border:none;cursor:pointer;font-size:12px;">🗑</button></td>';
+    h+='</tr>';
+  });
+  h+='</table></div>';
+  h+='<details style="margin-top:14px;"><summary style="color:#64748b;cursor:pointer;font-size:12px;">OSHA HazCom 2012 Requirements</summary>';
+  h+='<div style="background:#0f172a;border-radius:8px;padding:12px;margin-top:8px;font-size:12px;color:#94a3b8;">';
+  h+='<p><strong style="color:#e2e8f0;">§1926.59 / 1910.1200:</strong> Maintain an SDS for every hazardous chemical present on site. SDS must be readily accessible to employees during each work shift — not locked away or off-site.</p>';
+  h+='<p><strong style="color:#e2e8f0;">GC Requirements:</strong> Many GC safety programs require a chemical binder and chemical inventory list submitted before mobilization. This index generates that submittal.</p>';
+  h+='<p><strong style="color:#e2e8f0;">Carcinogens (OSHA §1910.1003):</strong> Crystalline silica (OSHA 1926.1153) and certain solvents require medical surveillance programs and documented exposure monitoring when Action Level is exceeded.</p>';
+  h+='<p><strong style="color:#e2e8f0;">Retention:</strong> Keep SDS for at least 30 years after the last date of employee exposure (OSHA §1910.1020(d)(1)).</p>';
+  h+='</div></details></div></div></div>';
+  document.getElementById(INNER).innerHTML=h;
+}
+window.t132addPreset=function(i){
+  var p=PRESETS[i];
+  var d=load();d.chemicals=d.chemicals||[];
+  d.chemicals.push({name:p.name,ghsClass:p.ghsClass,ppe:p.ppe,carc:p.carc,ph:p.ph,sds:0});
+  save(d);render();
+};
+window.t132addCustom=function(){
+  var name=document.getElementById('t132name').value.trim();
+  if(!name){alert('Chemical name required.');return;}
+  var d=load();d.chemicals=d.chemicals||[];
+  d.chemicals.push({name:name,ghsClass:document.getElementById('t132ghs').value.trim()||'Unknown',ppe:document.getElementById('t132ppe').value.trim()||'—',carc:document.getElementById('t132carc').checked,ph:'—',sds:2});
+  save(d);render();
+};
+window.t132sds=function(i){
+  var d=load();d.chemicals[i].sds=(d.chemicals[i].sds+1)%3;save(d);render();
+};
+window.t132del=function(i){
+  var d=load();d.chemicals.splice(i,1);save(d);render();
+};
+window.t132printBinder=function(){
+  var d=load();var c=d.chemicals||[];if(!c.length){alert('No chemicals to print.');return;}
+  var missing=c.filter(x=>x.sds===2);
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>SDS Binder Index</title>');
+  pw.document.write('<style>body{font-family:Arial;font-size:11px;margin:20px;}h2{font-size:14px;}h3{font-size:12px;margin:8px 0 4px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:4px;}th{background:#f0f0f0;}.miss{background:#fee2e2;}.carc{background:#fef3c7;}.sig{display:flex;gap:30px;margin-top:20px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;font-size:10px;}.warn{background:#fef2f2;border:1px solid #dc2626;padding:8px;margin:10px 0;font-size:10px;}</style></head><body>');
+  pw.document.write('<h2>☣️ Job Site Chemical Inventory & SDS Binder Index</h2>');
+  pw.document.write('<p>OSHA 29 CFR §1910.1200 / 1926.59 (HazCom 2012/GHS) | Date: '+new Date().toLocaleDateString()+' | Chemicals: '+c.length+'</p>');
+  if(missing.length>0){pw.document.write('<div class="warn">⚠️ SDS NOT ON FILE for '+missing.length+' chemical(s): '+missing.map(x=>x.name).join(', ')+'. Obtain SDS before chemical use on site.</div>');}
+  pw.document.write('<table><tr><th>#</th><th>Chemical Name</th><th>GHS Hazard Class</th><th>Required PPE</th><th>pH</th><th>Carcinogen</th><th>SDS Status</th></tr>');
+  c.forEach((ch,i)=>{
+    var cls=ch.sds===2?'miss':ch.carc?'carc':'';
+    pw.document.write('<tr class="'+cls+'"><td>'+(i+1)+'</td><td>'+ch.name+'</td><td>'+ch.ghsClass+'</td><td>'+ch.ppe+'</td><td>'+(ch.ph||'—')+'</td><td>'+(ch.carc?'YES — CARC':'No')+'</td><td>'+SDS_STATUSES[ch.sds]+'</td></tr>');
+  });
+  pw.document.write('</table>');
+  pw.document.write('<h3>OSHA §1910.1200 Compliance Notes</h3>');
+  pw.document.write('<p>SDS must be accessible to all employees during each work shift. Post SDS binder location on site safety board. For carcinogens: medical surveillance required when exposure exceeds Action Level. Retain SDS 30 years post-exposure per §1910.1020(d)(1). Shaded rows = SDS not on file (must be resolved before chemical is used on site).</p>');
+  pw.document.write('<div class="sig"><div>Safety Lead / Date</div><div>Foreman / Date</div><div>GC Safety Officer / Date</div></div>');
+  pw.document.write('</body></html>');pw.document.close();pw.print();
+};
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN;btn.textContent='☣️ SDS Binder';
+  btn.style.cssText='position:fixed;bottom:6950px;right:16px;background:#1e293b;color:#f87171;border:1px solid #7f1d1d;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9126;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ SDS Binder':'☣️ SDS Binder';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9127;';
+  var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
