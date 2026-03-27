@@ -61205,3 +61205,502 @@ function createBtn(){
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
 })();
 </script>
+
+<!-- ==================== TOOL 121: CONCRETE CORING COST ESTIMATOR ==================== -->
+<script>
+(function(){
+'use strict';
+var KEY='ocr_coring_v1';
+var BTN='btn-coring',WRAP='wrap-coring',INNER='inner-coring';
+function load(){try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){return{};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+var CORE_TYPES=[
+  {name:'Concrete Core 2"',unit:'EA',rate:85,note:'ASTM C42 test core, 2" dia'},
+  {name:'Concrete Core 4"',unit:'EA',rate:125,note:'ASTM C42 / ASCE 41 default'},
+  {name:'Concrete Core 6"',unit:'EA',rate:185,note:'Structural evaluation core'},
+  {name:'Concrete Core 8"',unit:'EA',rate:275,note:'Large structural core'},
+  {name:'PT Slab Core 4" (GPR first)',unit:'EA',rate:350,note:'ACI 318-19 §6.3 — GPR required before coring PT'},
+  {name:'PT Slab Core 6" (GPR first)',unit:'EA',rate:475,note:'ACI 318-19 §6.3 — structural evaluation'},
+  {name:'Conduit Sleeve 2"',unit:'EA',rate:95,note:'Post-pour MEP coordination'},
+  {name:'Conduit Sleeve 4"',unit:'EA',rate:145,note:'Large conduit post-pour'},
+  {name:'Anchor/Rebar Dowel Hole 3/4"',unit:'EA',rate:35,note:'Hilti/Simpson retrofit anchor'},
+  {name:'Anchor/Rebar Dowel Hole 1-1/4"',unit:'EA',rate:55,note:'Heavy retrofit anchor'},
+  {name:'Floor Drain 4"',unit:'EA',rate:175,note:'Post-pour trench/drain coring'},
+  {name:'GPR Scan (per 1,000 SF)',unit:'EA',rate:450,note:'Ground penetrating radar before coring PT/structural'},
+  {name:'Core Patching / Plug',unit:'EA',rate:45,note:'Non-shrink grout patch ASTM C1107'},
+  {name:'Fire Stop Application',unit:'EA',rate:65,note:'IBC §714 after each penetration'},
+  {name:'Mobilization',unit:'LS',rate:350,note:'Rig setup, travel, first hour'},
+];
+
+function render(){
+  var d=load();
+  var items=d.items||[];
+  var oh=d.oh||10,profit=d.profit||12,mob=d.mob||350;
+  var html='<div style="padding:20px;max-width:900px;margin:0 auto;font-family:Arial,sans-serif;color:#e2e8f0;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;"><h2 style="color:#38bdf8;margin:0;">🔵 TOOL 121 — Concrete Coring Cost Estimator</h2><button onclick="document.getElementById(\''+WRAP+'\').style.display=\'none\'" style="background:#ef4444;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;">✕ Close</button></div>';
+  html+='<p style="font-size:12px;color:#94a3b8;margin-bottom:16px;">ACI 318-19 §6.3 / ASTM C42 / IBC §1708 — Scope builder for post-pour coring, sleeving, and dowel drilling. El Paso 2025 market rates.</p>';
+
+  // Quick-add buttons
+  html+='<div style="margin-bottom:14px;"><strong style="font-size:13px;">Quick-Add Scope Items:</strong><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">';
+  CORE_TYPES.forEach(function(t,i){
+    html+='<button onclick="window.coringAdd('+i+')" style="background:#1e3a5f;color:#93c5fd;border:1px solid #1d4ed8;border-radius:5px;padding:4px 9px;cursor:pointer;font-size:11px;">'+t.name+'</button>';
+  });
+  html+='</div></div>';
+
+  // Markup
+  html+='<div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;">';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">OH %</label><br><input id="cor-oh" type="number" value="'+oh+'" style="width:70px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;font-size:12px;" onchange="window.coringSetMarkup()"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Profit %</label><br><input id="cor-profit" type="number" value="'+profit+'" style="width:70px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;font-size:12px;" onchange="window.coringSetMarkup()"></div>';
+  html+='</div>';
+
+  // Item table
+  if(items.length>0){
+    var subtotal=items.reduce(function(s,it){return s+(it.qty||0)*(it.rate||0);},0);
+    var markup=subtotal*(oh/100+profit/100);
+    var total=subtotal+markup;
+    html+='<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px;"><tr style="background:#1e3a5f;"><th style="padding:6px;text-align:left;">Description</th><th style="padding:6px;text-align:center;">Unit</th><th style="padding:6px;text-align:center;">Qty</th><th style="padding:6px;text-align:right;">Rate</th><th style="padding:6px;text-align:right;">Total</th><th style="padding:6px;text-align:center;">Del</th></tr>';
+    items.forEach(function(it,i){
+      var lineTotal=(it.qty||0)*(it.rate||0);
+      html+='<tr style="background:'+(i%2===0?'#1e293b':'#111827')+';"><td style="padding:5px;">';
+      html+='<input value="'+esc(it.name||'')+'" onchange="window.coringUpdateItem('+i+',\'name\',this.value)" style="width:220px;background:transparent;color:#e2e8f0;border:none;font-size:12px;">';
+      html+='</td><td style="padding:5px;text-align:center;color:#94a3b8;">'+esc(it.unit||'EA')+'</td>';
+      html+='<td style="padding:5px;text-align:center;"><input type="number" value="'+(it.qty||1)+'" onchange="window.coringUpdateItem('+i+',\'qty\',parseFloat(this.value))" style="width:55px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:3px;font-size:12px;"></td>';
+      html+='<td style="padding:5px;text-align:right;"><input type="number" value="'+(it.rate||0)+'" onchange="window.coringUpdateItem('+i+',\'rate\',parseFloat(this.value))" style="width:70px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:3px;font-size:12px;"></td>';
+      html+='<td style="padding:5px;text-align:right;font-weight:bold;color:#34d399;">$'+(lineTotal.toLocaleString())+'</td>';
+      html+='<td style="padding:5px;text-align:center;"><button onclick="window.coringDel('+i+')" style="background:#ef4444;color:#fff;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:11px;">✕</button></td></tr>';
+    });
+    html+='<tr style="background:#0f2340;"><td colspan="4" style="padding:6px;font-weight:bold;text-align:right;">Subtotal</td><td style="padding:6px;font-weight:bold;color:#fbbf24;text-align:right;">$'+subtotal.toLocaleString()+'</td><td></td></tr>';
+    html+='<tr style="background:#0f2340;"><td colspan="4" style="padding:6px;color:#94a3b8;text-align:right;">OH+Profit ('+oh+'%+'+profit+'%)</td><td style="padding:6px;color:#94a3b8;text-align:right;">$'+Math.round(markup).toLocaleString()+'</td><td></td></tr>';
+    html+='<tr style="background:#0f2340;"><td colspan="4" style="padding:6px;font-weight:bold;font-size:15px;color:#38bdf8;text-align:right;">TOTAL</td><td style="padding:6px;font-weight:bold;font-size:15px;color:#38bdf8;text-align:right;">$'+Math.round(total).toLocaleString()+'</td><td></td></tr>';
+    html+='</table>';
+    html+='<div style="display:flex;gap:10px;margin-bottom:16px;">';
+    html+='<button onclick="window.coringPrint()" style="background:#1e40af;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;">🖨 Print Estimate</button>';
+    html+='<button onclick="window.coringCopy()" style="background:#064e3b;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;">📋 Copy Plain-Text</button>';
+    html+='<button onclick="window.coringClear()" style="background:#7f1d1d;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;">🗑 Clear All</button>';
+    html+='</div>';
+  } else {
+    html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:20px;text-align:center;color:#94a3b8;margin-bottom:16px;">No items yet — click Quick-Add buttons above to build scope</div>';
+  }
+
+  // PT Warning
+  html+='<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;padding:12px;margin-bottom:14px;">';
+  html+='<strong style="color:#f87171;">⚠️ PT SLAB WARNING (ACI 318-19 §6.3):</strong><span style="color:#fca5a5;font-size:12px;"> Coring into post-tensioned slabs without GPR scan risks severing PT tendons — catastrophic structural failure. Always perform GPR scan first. EOR must approve all PT slab core locations in writing. Use PT Core line items above (include GPR scan).</span>';
+  html+='</div>';
+
+  // Reference table
+  html+='<details style="margin-bottom:14px;"><summary style="cursor:pointer;color:#93c5fd;font-size:13px;font-weight:600;">📖 ACI/ASTM Reference</summary>';
+  html+='<table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:8px;"><tr style="background:#1e3a5f;"><th style="padding:5px;">Reference</th><th style="padding:5px;">Requirement</th></tr>';
+  [['ACI 318-19 §6.3','Cored holes shall not pass through PT tendons without EOR approval'],['ASTM C42','Core drill and test method for compressive strength. 4" dia preferred; L/D ≥ 1.0.'],['ACI 214R','Minimum 3 cores per structural element when 28d cylinders fail'],['ASTM C803','Penetration resistance for field-cured strength (alternative to coring)'],['IBC §714','Fire stop required at every post-pour penetration through fire-rated assembly'],['OSHA 1926.1153','Silica exposure control required during concrete coring (wet drilling or HEPA vacuum)'],['ACI 546R-14 §4','Core holes in structural members require non-shrink grout patch per ASTM C1107']].forEach(function(r,i){
+    html+='<tr style="background:'+(i%2===0?'#1e293b':'#111827')+'"><td style="padding:5px;font-weight:bold;">'+r[0]+'</td><td style="padding:5px;">'+r[1]+'</td></tr>';
+  });
+  html+='</table></details>';
+
+  html+='</div>';
+  document.getElementById(INNER).innerHTML=html;
+}
+
+window.coringAdd=function(idx){
+  var d=load();var items=d.items||[];var t=CORE_TYPES[idx];
+  items.push({name:t.name,unit:t.unit,qty:1,rate:t.rate,note:t.note});
+  d.items=items;save(d);render();
+};
+window.coringUpdateItem=function(i,field,val){
+  var d=load();var items=d.items||[];items[i][field]=val;d.items=items;save(d);render();
+};
+window.coringDel=function(i){
+  var d=load();var items=d.items||[];items.splice(i,1);d.items=items;save(d);render();
+};
+window.coringSetMarkup=function(){
+  var d=load();
+  d.oh=parseFloat(document.getElementById('cor-oh').value)||10;
+  d.profit=parseFloat(document.getElementById('cor-profit').value)||12;
+  save(d);render();
+};
+window.coringClear=function(){
+  if(!confirm('Clear all coring scope items?'))return;
+  var d=load();d.items=[];save(d);render();
+};
+window.coringCopy=function(){
+  var d=load();var items=d.items||[];var oh=d.oh||10,profit=d.profit||12;
+  var lines=['CONCRETE CORING / DRILLING ESTIMATE','ACI 318-19 §6.3 / ASTM C42','Generated: '+new Date().toLocaleDateString(),''];
+  lines.push('DESCRIPTION\tUNIT\tQTY\tRATE\tTOTAL');
+  var sub=0;
+  items.forEach(function(it){
+    var lt=(it.qty||0)*(it.rate||0);sub+=lt;
+    lines.push(it.name+'\t'+(it.unit||'EA')+'\t'+(it.qty||1)+'\t$'+(it.rate||0)+'\t$'+lt.toLocaleString());
+  });
+  var markup=sub*(oh/100+profit/100);
+  lines.push('','Subtotal: $'+sub.toLocaleString());
+  lines.push('OH+Profit ('+oh+'%+'+profit+'%): $'+Math.round(markup).toLocaleString());
+  lines.push('TOTAL: $'+Math.round(sub+markup).toLocaleString());
+  navigator.clipboard.writeText(lines.join('\n')).catch(function(){});
+  alert('Copied to clipboard!');
+};
+window.coringPrint=function(){
+  var d=load();var items=d.items||[];var oh=d.oh||10,profit=d.profit||12;
+  var sub=items.reduce(function(s,it){return s+(it.qty||0)*(it.rate||0);},0);
+  var markup=sub*(oh/100+profit/100);var total=sub+markup;
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>Coring Estimate</title><style>body{font-family:Arial;font-size:10px;margin:20px;}h2{font-size:14px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:4px;}.tot{background:#e6f4ea;font-weight:bold;}.sig{display:flex;gap:30px;margin-top:20px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;}</style></head><body>');
+  pw.document.write('<h2>🔵 Concrete Coring & Drilling Estimate</h2><p><strong>ACI 318-19 §6.3 / ASTM C42 / IBC §714</strong></p><p>Generated: '+new Date().toLocaleDateString()+'</p>');
+  pw.document.write('<table><tr style="background:#e3f2fd;"><th>Description</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Total</th></tr>');
+  items.forEach(function(it){
+    var lt=(it.qty||0)*(it.rate||0);
+    pw.document.write('<tr><td>'+esc(it.name)+'</td><td style="text-align:center;">'+(it.unit||'EA')+'</td><td style="text-align:center;">'+(it.qty||1)+'</td><td style="text-align:right;">$'+(it.rate||0)+'</td><td style="text-align:right;font-weight:bold;">$'+lt.toLocaleString()+'</td></tr>');
+  });
+  pw.document.write('<tr><td colspan="4" style="text-align:right;font-weight:bold;">Subtotal</td><td style="text-align:right;font-weight:bold;">$'+sub.toLocaleString()+'</td></tr>');
+  pw.document.write('<tr><td colspan="4" style="text-align:right;">OH+Profit ('+oh+'%+'+profit+'%)</td><td style="text-align:right;">$'+Math.round(markup).toLocaleString()+'</td></tr>');
+  pw.document.write('<tr class="tot"><td colspan="4" style="text-align:right;font-size:13px;">TOTAL</td><td style="text-align:right;font-size:13px;">$'+Math.round(total).toLocaleString()+'</td></tr>');
+  pw.document.write('</table>');
+  pw.document.write('<p style="font-size:9px;margin-top:10px;background:#fff3cd;padding:6px;"><strong>⚠️ PT SLAB WARNING:</strong> ACI 318-19 §6.3 — All coring in post-tensioned slabs requires GPR scan and EOR written approval before drilling. Severing a PT tendon = catastrophic structural failure. Fire stop required at each penetration through rated assembly per IBC §714. Wet drilling or HEPA vacuum required per OSHA 1926.1153 silica control.</p>');
+  pw.document.write('<p style="font-size:9px;"><strong>EXCLUSIONS:</strong> Traffic control, permits, structural evaluation by EOR, asbestos/lead testing, areas outside documented scope above.</p>');
+  pw.document.write('<div class="sig"><div>Estimator / Date</div><div>GC/Client Acceptance / Date</div></div></body></html>');
+  pw.document.close();pw.print();
+};
+
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN;btn.textContent='🔵 Coring';
+  btn.style.cssText='position:fixed;bottom:6800px;right:16px;background:#1e293b;color:#93c5fd;border:1px solid #1d4ed8;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9104;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Coring':'🔵 Coring';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9105;';
+  var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<!-- ==================== TOOL 122: PHASE-OF-WORK TURNOVER CERTIFICATE ==================== -->
+<script>
+(function(){
+'use strict';
+var KEY='ocr_phase_turnover_v1';
+var BTN='btn-phturn',WRAP='wrap-phturn',INNER='inner-phturn';
+function load(){try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){return{};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+var STATUS_OPTIONS=['Pending','Ready for Inspection','Inspected - Pass','Inspected - Fail','GC Accepted','Owner Accepted','Disputed'];
+var STATUS_COLORS={'Pending':'#64748b','Ready for Inspection':'#3b82f6','Inspected - Pass':'#22c55e','Inspected - Fail':'#ef4444','GC Accepted':'#10b981','Owner Accepted':'#6366f1','Disputed':'#f59e0b'};
+var DEFAULT_ITEMS=['Concrete in place per approved drawings','Dimensions verified per ACI 117-10','Cover / rebar / embeds inspected pre-pour','Cylinder break records on file','Curing complete per ACI 308R','Form removal authorized by EOR','FF/FL F-number survey complete (if spec'd)','Surface defects documented and dispositioned','Lien waivers for this phase collected','As-built dimensions recorded'];
+
+function render(){
+  var d=load();
+  var certs=d.certs||[];
+  var html='<div style="padding:20px;max-width:960px;margin:0 auto;font-family:Arial,sans-serif;color:#e2e8f0;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;"><h2 style="color:#a78bfa;margin:0;">📜 TOOL 122 — Phase-of-Work Turnover Certificate</h2><button onclick="document.getElementById(\''+WRAP+'\').style.display=\'none\'" style="background:#ef4444;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;">✕ Close</button></div>';
+  html+='<p style="font-size:12px;color:#94a3b8;margin-bottom:16px;">AIA A201 §9.8 style per-phase acceptance documentation. Use for partial handovers, phased pours, and element-level QC completion records before retainage release on phase milestones.</p>';
+
+  // Create new cert
+  html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px;margin-bottom:18px;">';
+  html+='<h3 style="color:#c4b5fd;font-size:14px;margin:0 0 12px;">+ New Phase Turnover Certificate</h3>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Project Name</label><br><input id="ptc-project" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Phase / Element Description</label><br><input id="ptc-phase" placeholder="e.g. Phase 1 SOG — Building A" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">GC / Owner</label><br><input id="ptc-gc" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Contract Phase Amount ($)</label><br><input id="ptc-amount" type="number" placeholder="0" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Work Complete Date</label><br><input id="ptc-workdate" type="date" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Certificate Date</label><br><input id="ptc-certdate" type="date" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box;"></div>';
+  html+='</div>';
+  html+='<div style="margin-bottom:10px;"><label style="font-size:11px;color:#94a3b8;">Notes / Outstanding Items</label><br><textarea id="ptc-notes" rows="3" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box;"></textarea></div>';
+  html+='<div style="margin-bottom:10px;"><strong style="font-size:12px;color:#c4b5fd;">Completion Checklist (10 default items):</strong>';
+  html+='<div id="ptc-checklist" style="margin-top:8px;">';
+  DEFAULT_ITEMS.forEach(function(item,i){
+    html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><input type="checkbox" id="ptc-chk-'+i+'" style="width:14px;height:14px;"><label for="ptc-chk-'+i+'" style="font-size:12px;color:#e2e8f0;">'+item+'</label></div>';
+  });
+  html+='</div></div>';
+  html+='<button onclick="window.ptcCreate()" style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:13px;">+ Create Certificate</button>';
+  html+='</div>';
+
+  // Existing certs
+  if(certs.length>0){
+    html+='<h3 style="color:#c4b5fd;font-size:14px;">Saved Phase Certificates ('+certs.length+')</h3>';
+    certs.slice().reverse().forEach(function(c,ri){
+      var i=certs.length-1-ri;
+      var statusCol=STATUS_COLORS[c.status]||'#64748b';
+      var checkedCount=(c.checklist||[]).filter(function(x){return x;}).length;
+      var pct=Math.round(checkedCount/(DEFAULT_ITEMS.length)*100);
+      html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px;margin-bottom:12px;">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">';
+      html+='<div><strong style="color:#a78bfa;font-size:14px;">'+esc(c.phase||'(no phase)')+'</strong><br><span style="font-size:11px;color:#94a3b8;">'+esc(c.project||'')+(c.gc?' | '+esc(c.gc):'')+(c.amount?' | $'+Number(c.amount).toLocaleString():'')+(c.certdate?' | '+c.certdate:'')+'</span></div>';
+      html+='<div style="display:flex;gap:8px;align-items:center;">';
+      html+='<span style="background:'+statusCol+';color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;cursor:pointer;" onclick="window.ptcCycleStatus('+i+')">'+esc(c.status||'Pending')+'</span>';
+      html+='<button onclick="window.ptcPrint('+i+')" style="background:#1e40af;color:#fff;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:11px;">🖨 Print</button>';
+      html+='<button onclick="window.ptcDelete('+i+')" style="background:#7f1d1d;color:#fff;border:none;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:11px;">✕</button>';
+      html+='</div></div>';
+      // Progress bar
+      html+='<div style="background:#334155;border-radius:4px;height:6px;margin-bottom:6px;"><div style="background:#22c55e;border-radius:4px;height:6px;width:'+pct+'%;"></div></div>';
+      html+='<span style="font-size:11px;color:#94a3b8;">Checklist: '+checkedCount+'/'+DEFAULT_ITEMS.length+' ('+pct+'%)</span>';
+      if(c.notes) html+='<br><span style="font-size:11px;color:#fbbf24;margin-top:4px;display:block;">Notes: '+esc(c.notes)+'</span>';
+      html+='</div>';
+    });
+  } else {
+    html+='<div style="text-align:center;color:#64748b;padding:30px;">No certificates created yet</div>';
+  }
+
+  html+='</div>';
+  document.getElementById(INNER).innerHTML=html;
+  // Set defaults
+  var today=new Date().toISOString().split('T')[0];
+  if(document.getElementById('ptc-certdate')) document.getElementById('ptc-certdate').value=today;
+}
+
+window.ptcCreate=function(){
+  var proj=document.getElementById('ptc-project').value.trim();
+  var phase=document.getElementById('ptc-phase').value.trim();
+  if(!phase){alert('Phase description required');return;}
+  var chkList=DEFAULT_ITEMS.map(function(_,i){return document.getElementById('ptc-chk-'+i)?document.getElementById('ptc-chk-'+i).checked:false;});
+  var d=load();var certs=d.certs||[];
+  certs.push({project:proj,phase:phase,gc:document.getElementById('ptc-gc').value.trim(),amount:document.getElementById('ptc-amount').value||'',workdate:document.getElementById('ptc-workdate').value,certdate:document.getElementById('ptc-certdate').value,notes:document.getElementById('ptc-notes').value.trim(),status:'Pending',checklist:chkList,created:new Date().toISOString()});
+  d.certs=certs;save(d);render();
+};
+window.ptcCycleStatus=function(i){
+  var d=load();var certs=d.certs||[];
+  var idx=STATUS_OPTIONS.indexOf(certs[i].status||'Pending');
+  certs[i].status=STATUS_OPTIONS[(idx+1)%STATUS_OPTIONS.length];
+  d.certs=certs;save(d);render();
+};
+window.ptcDelete=function(i){
+  if(!confirm('Delete this certificate?'))return;
+  var d=load();var certs=d.certs||[];certs.splice(i,1);d.certs=certs;save(d);render();
+};
+window.ptcPrint=function(i){
+  var d=load();var c=(d.certs||[])[i];if(!c)return;
+  var pw=window.open('','_blank');
+  var checkedCount=(c.checklist||[]).filter(function(x){return x;}).length;
+  pw.document.write('<html><head><title>Phase Turnover Certificate</title><style>body{font-family:Arial;font-size:10px;margin:20px;}h2{font-size:14px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:5px;}.hdr{background:#e8e8ff;}.chk{color:green;font-weight:bold;}.unchk{color:#999;}.sig{display:flex;gap:30px;margin-top:20px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;}</style></head><body>');
+  pw.document.write('<h2>📜 Phase-of-Work Turnover Certificate</h2>');
+  pw.document.write('<p><strong>AIA A201 §9.8 Referenced — Per-Phase Acceptance Record</strong></p>');
+  pw.document.write('<table style="margin-bottom:12px;"><tr class="hdr"><th>Project</th><td>'+esc(c.project||'')+'</td><th>GC / Owner</th><td>'+esc(c.gc||'')+'</td></tr>');
+  pw.document.write('<tr><th>Phase / Element</th><td>'+esc(c.phase||'')+'</td><th>Phase Contract Amount</th><td>'+(c.amount?'$'+Number(c.amount).toLocaleString():'--')+'</td></tr>');
+  pw.document.write('<tr><th>Work Complete Date</th><td>'+(c.workdate||'--')+'</td><th>Certificate Date</th><td>'+(c.certdate||'--')+'</td></tr>');
+  pw.document.write('<tr><th>Status</th><td colspan="3" style="font-weight:bold;">'+esc(c.status||'Pending')+'</td></tr></table>');
+  pw.document.write('<p><strong>Completion Checklist ('+checkedCount+'/'+DEFAULT_ITEMS.length+'):</strong></p><table>');
+  DEFAULT_ITEMS.forEach(function(item,j){
+    var checked=(c.checklist||[])[j];
+    pw.document.write('<tr><td style="width:20px;text-align:center;" class="'+(checked?'chk':'unchk')+'">'+(checked?'✓':'○')+'</td><td>'+item+'</td></tr>');
+  });
+  pw.document.write('</table>');
+  if(c.notes) pw.document.write('<p><strong>Notes / Outstanding Items:</strong> '+esc(c.notes)+'</p>');
+  pw.document.write('<p style="font-size:9px;margin-top:12px;background:#fffde7;padding:6px;"><strong>AIA A201 §9.8:</strong> Phase-of-work turnover and acceptance creates the milestone record for partial retainage release negotiations. Per AIA A201 §9.8.2, Substantial Completion date per phase triggers 1-year warranty clock and risk transfer for completed elements. TX Property Code §53.101: retainage must be released within 30 days of SC date. Retain this certificate with the project file.</p>');
+  pw.document.write('<div class="sig"><div>Concrete Contractor PM / Date</div><div>GC Superintendent / Date</div><div>Owner Representative / Date</div></div></body></html>');
+  pw.document.close();pw.print();
+};
+
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN;btn.textContent='📜 Phase Cert';
+  btn.style.cssText='position:fixed;bottom:6600px;right:16px;background:#1e293b;color:#c4b5fd;border:1px solid #6366f1;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9106;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Phase Cert':'📜 Phase Cert';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9107;';
+  var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
+
+<!-- ==================== TOOL 123: SELF-PERFORMANCE CAPACITY PLANNER ==================== -->
+<script>
+(function(){
+'use strict';
+var KEY='ocr_capacity_planner_v1';
+var BTN='btn-capacity',WRAP='wrap-capacity',INNER='inner-capacity';
+function load(){try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){return{};}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function render(){
+  var d=load();
+  var crews=d.crews||[];
+  var equip=d.equip||[];
+  var jobs=d.jobs||[];
+  // Settings
+  var crewProd=d.crewProd||35;  // yd3/crew/day
+  var workdays=d.workdays||5;
+
+  var html='<div style="padding:20px;max-width:1000px;margin:0 auto;font-family:Arial,sans-serif;color:#e2e8f0;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;"><h2 style="color:#4ade80;margin:0;">📊 TOOL 123 — Contractor Capacity Planner</h2><button onclick="document.getElementById(\''+WRAP+'\').style.display=\'none\'" style="background:#ef4444;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;">✕ Close</button></div>';
+  html+='<p style="font-size:12px;color:#94a3b8;margin-bottom:16px;">Plan self-performance capacity vs. active and upcoming jobs. Prevents over-commitment and identifies crew/equipment shortfalls before mobilization.</p>';
+
+  // Capacity settings
+  html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px;margin-bottom:18px;">';
+  html+='<h3 style="color:#86efac;font-size:13px;margin:0 0 10px;">⚙️ Capacity Baseline Settings</h3>';
+  html+='<div style="display:flex;gap:14px;flex-wrap:wrap;">';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Crew Productivity (yd³/crew-day)</label><br><input id="cap-prod" type="number" value="'+crewProd+'" style="width:90px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;" onchange="window.capSetProd(this.value)"></div>';
+  html+='<div><label style="font-size:11px;color:#94a3b8;">Workdays/Week</label><br><input id="cap-wd" type="number" value="'+workdays+'" min="1" max="7" style="width:70px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;" onchange="window.capSetWD(this.value)"></div>';
+  html+='</div>';
+  html+='</div>';
+
+  // Crew roster
+  html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px;margin-bottom:18px;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h3 style="color:#86efac;font-size:13px;margin:0;">👷 Crew Roster</h3><button onclick="window.capAddCrew()" style="background:#15803d;color:#fff;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:11px;">+ Add Crew</button></div>';
+  if(crews.length===0){html+='<div style="color:#64748b;font-size:12px;">No crews defined — click Add Crew</div>';}
+  crews.forEach(function(cr,i){
+    html+='<div style="background:#0f172a;border-radius:6px;padding:8px 12px;margin-bottom:6px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">';
+    html+='<input value="'+esc(cr.name||'')+'" placeholder="Crew name (e.g. Crew A)" onchange="window.capUpdateCrew('+i+',\'name\',this.value)" style="width:160px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;font-size:12px;">';
+    html+='<input type="number" value="'+(cr.size||4)+'" min="1" placeholder="Size" onchange="window.capUpdateCrew('+i+',\'size\',parseInt(this.value))" style="width:55px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;font-size:12px;">';
+    html+='<span style="font-size:11px;color:#94a3b8;">workers</span>';
+    html+='<select onchange="window.capUpdateCrew('+i+',\'status\',this.value)" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;font-size:11px;">';
+    ['Available','Assigned','On Leave','Standby'].forEach(function(s){html+='<option value="'+s+'"'+(cr.status===s?' selected':'')+'>'+s+'</option>';});
+    html+='</select>';
+    var statusCol={'Available':'#22c55e','Assigned':'#f59e0b','On Leave':'#ef4444','Standby':'#94a3b8'}[cr.status||'Available']||'#94a3b8';
+    html+='<span style="background:'+statusCol+';color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;">'+esc(cr.status||'Available')+'</span>';
+    html+='<button onclick="window.capDelCrew('+i+')" style="background:#7f1d1d;color:#fff;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:11px;">✕</button>';
+    html+='</div>';
+  });
+  html+='</div>';
+
+  // Equipment
+  html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px;margin-bottom:18px;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h3 style="color:#86efac;font-size:13px;margin:0;">🚜 Key Equipment</h3><button onclick="window.capAddEquip()" style="background:#15803d;color:#fff;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:11px;">+ Add Equipment</button></div>';
+  if(equip.length===0){html+='<div style="color:#64748b;font-size:12px;">No equipment defined — click Add Equipment</div>';}
+  equip.forEach(function(eq,i){
+    html+='<div style="background:#0f172a;border-radius:6px;padding:8px 12px;margin-bottom:6px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">';
+    html+='<input value="'+esc(eq.name||'')+'" placeholder="Equipment (e.g. Laser Screed)" onchange="window.capUpdateEquip('+i+',\'name\',this.value)" style="width:200px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;font-size:12px;">';
+    html+='<select onchange="window.capUpdateEquip('+i+',\'status\',this.value)" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;font-size:11px;">';
+    ['Available','Deployed','In Maintenance','Rented Out','Not Owned'].forEach(function(s){html+='<option value="'+s+'"'+(eq.status===s?' selected':'')+'>'+s+'</option>';});
+    html+='</select>';
+    html+='<button onclick="window.capDelEquip('+i+')" style="background:#7f1d1d;color:#fff;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:11px;">✕</button>';
+    html+='</div>';
+  });
+  html+='</div>';
+
+  // Active / upcoming jobs
+  html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px;margin-bottom:18px;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h3 style="color:#86efac;font-size:13px;margin:0;">📋 Jobs (Active + Upcoming)</h3><button onclick="window.capAddJob()" style="background:#15803d;color:#fff;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:11px;">+ Add Job</button></div>';
+  if(jobs.length===0){html+='<div style="color:#64748b;font-size:12px;">No jobs defined — click Add Job</div>';}
+  jobs.forEach(function(j,i){
+    var crewsNeeded=crewProd>0?Math.ceil((j.yd3||0)/(crewProd*(j.days||1))):0;
+    html+='<div style="background:#0f172a;border-radius:6px;padding:10px 12px;margin-bottom:8px;">';
+    html+='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">';
+    html+='<input value="'+esc(j.name||'')+'" placeholder="Job name" onchange="window.capUpdateJob('+i+',\'name\',this.value)" style="width:200px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;font-size:12px;">';
+    html+='<input type="number" value="'+(j.yd3||0)+'" placeholder="yd³" onchange="window.capUpdateJob('+i+',\'yd3\',parseFloat(this.value))" style="width:70px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;font-size:12px;">';
+    html+='<span style="font-size:11px;color:#94a3b8;">yd³</span>';
+    html+='<input type="number" value="'+(j.days||5)+'" placeholder="days" onchange="window.capUpdateJob('+i+',\'days\',parseFloat(this.value))" style="width:60px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;font-size:12px;">';
+    html+='<span style="font-size:11px;color:#94a3b8;">workdays</span>';
+    html+='<input value="'+esc(j.startdate||'')+'" type="date" onchange="window.capUpdateJob('+i+',\'startdate\',this.value)" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;font-size:12px;">';
+    html+='<select onchange="window.capUpdateJob('+i+',\'status\',this.value)" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;font-size:11px;">';
+    ['Active','Upcoming','Bidding','On Hold','Complete'].forEach(function(s){html+='<option value="'+s+'"'+(j.status===s?' selected':'')+'>'+s+'</option>';});
+    html+='</select>';
+    html+='<button onclick="window.capDelJob('+i+')" style="background:#7f1d1d;color:#fff;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:11px;">✕</button>';
+    html+='</div>';
+    if(j.yd3>0 && j.days>0){
+      var col=crewsNeeded<=(crews.filter(function(c){return c.status==='Available';}).length)?'#22c55e':'#f59e0b';
+      html+='<span style="font-size:11px;color:'+col+';">→ Needs ~'+crewsNeeded+' crew(s) at '+crewProd+' yd³/crew-day | Rate: '+Math.round((j.yd3||0)/(j.days||1))+' yd³/day</span>';
+    }
+    html+='</div>';
+  });
+  html+='</div>';
+
+  // Capacity summary
+  var avCrews=crews.filter(function(c){return c.status==='Available';}).length;
+  var assignedCrews=crews.filter(function(c){return c.status==='Assigned';}).length;
+  var activeJobs=jobs.filter(function(j){return j.status==='Active';});
+  var activeYd3=activeJobs.reduce(function(s,j){return s+(j.yd3||0);},0);
+  var activeDaysMax=Math.max.apply(null,activeJobs.map(function(j){return j.days||1;}).concat([1]));
+  var crewsNeededNow=crewProd>0?Math.ceil(activeYd3/(crewProd*(activeDaysMax))):0;
+  var gap=crewsNeededNow-avCrews;
+  var maxYd3Week=avCrews*crewProd*workdays;
+
+  html+='<div style="background:#162032;border:1px solid #1d4ed8;border-radius:10px;padding:16px;margin-bottom:18px;">';
+  html+='<h3 style="color:#60a5fa;font-size:13px;margin:0 0 12px;">📊 Capacity Summary</h3>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;">';
+  var cards=[
+    {label:'Available Crews',val:avCrews,col:'#22c55e'},
+    {label:'Assigned Crews',val:assignedCrews,col:'#f59e0b'},
+    {label:'Crews Needed (Active Jobs)',val:crewsNeededNow,col:gap>0?'#ef4444':'#22c55e'},
+    {label:'Max yd³ / Week (avail. crews)',val:maxYd3Week,col:'#60a5fa'},
+  ];
+  cards.forEach(function(card){
+    html+='<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;">';
+    html+='<div style="font-size:22px;font-weight:bold;color:'+card.col+';">'+card.val+'</div>';
+    html+='<div style="font-size:10px;color:#94a3b8;margin-top:4px;">'+card.label+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  if(gap>0){
+    html+='<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;padding:10px;margin-top:12px;">';
+    html+='<strong style="color:#f87171;">⚠️ CREW SHORTFALL: '+gap+' crew(s) needed beyond available capacity for active jobs.</strong>';
+    html+='<br><span style="font-size:11px;color:#fca5a5;">Options: hire additional workers, subcontract finishing, extend schedule, defer a job start.</span>';
+    html+='</div>';
+  } else if(avCrews>0){
+    html+='<div style="background:#14532d;border:1px solid #22c55e;border-radius:8px;padding:10px;margin-top:12px;">';
+    html+='<strong style="color:#86efac;">✅ Sufficient capacity for active jobs. Available crews can handle '+maxYd3Week.toLocaleString()+' yd³/week.</strong>';
+    html+='</div>';
+  }
+  html+='</div>';
+
+  // Actions
+  html+='<div style="display:flex;gap:10px;">';
+  html+='<button onclick="window.capPrint()" style="background:#1e40af;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;">🖨 Print Capacity Report</button>';
+  html+='<button onclick="window.capCopy()" style="background:#064e3b;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;">📋 Copy Summary</button>';
+  html+='</div>';
+  html+='</div>';
+  document.getElementById(INNER).innerHTML=html;
+}
+
+window.capSetProd=function(v){var d=load();d.crewProd=parseFloat(v)||35;save(d);render();};
+window.capSetWD=function(v){var d=load();d.workdays=parseInt(v)||5;save(d);render();};
+window.capAddCrew=function(){var d=load();(d.crews=d.crews||[]).push({name:'Crew '+((d.crews||[]).length+1),size:4,status:'Available'});save(d);render();};
+window.capUpdateCrew=function(i,f,v){var d=load();d.crews[i][f]=v;save(d);render();};
+window.capDelCrew=function(i){var d=load();d.crews.splice(i,1);save(d);render();};
+window.capAddEquip=function(){var d=load();(d.equip=d.equip||[]).push({name:'',status:'Available'});save(d);render();};
+window.capUpdateEquip=function(i,f,v){var d=load();d.equip[i][f]=v;save(d);render();};
+window.capDelEquip=function(i){var d=load();d.equip.splice(i,1);save(d);render();};
+window.capAddJob=function(){var d=load();(d.jobs=d.jobs||[]).push({name:'',yd3:0,days:5,startdate:'',status:'Active'});save(d);render();};
+window.capUpdateJob=function(i,f,v){var d=load();d.jobs[i][f]=v;save(d);render();};
+window.capDelJob=function(i){var d=load();d.jobs.splice(i,1);save(d);render();};
+window.capCopy=function(){
+  var d=load();var crews=d.crews||[];var jobs=d.jobs||[];var crewProd=d.crewProd||35;var workdays=d.workdays||5;
+  var avCrews=crews.filter(function(c){return c.status==='Available';}).length;
+  var maxYd3=avCrews*crewProd*workdays;
+  var lines=['CONTRACTOR CAPACITY SUMMARY','Generated: '+new Date().toLocaleDateString(),''];
+  lines.push('Available Crews: '+avCrews);
+  lines.push('Max yd³/week (available crews): '+maxYd3);
+  lines.push('');lines.push('ACTIVE / UPCOMING JOBS:');
+  jobs.forEach(function(j){
+    lines.push('  '+j.name+' | '+j.yd3+' yd³ | '+j.days+' days | Status: '+j.status);
+  });
+  navigator.clipboard.writeText(lines.join('\n')).catch(function(){});
+  alert('Copied!');
+};
+window.capPrint=function(){
+  var d=load();var crews=d.crews||[];var equip=d.equip||[];var jobs=d.jobs||[];
+  var crewProd=d.crewProd||35;var workdays=d.workdays||5;
+  var avCrews=crews.filter(function(c){return c.status==='Available';}).length;
+  var maxYd3=avCrews*crewProd*workdays;
+  var pw=window.open('','_blank');
+  pw.document.write('<html><head><title>Capacity Report</title><style>body{font-family:Arial;font-size:10px;margin:20px;}h2{font-size:14px;}h3{font-size:12px;margin:10px 0 4px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:4px;}.sig{display:flex;gap:30px;margin-top:20px;}.sig div{flex:1;border-top:1px solid #000;padding-top:4px;}</style></head><body>');
+  pw.document.write('<h2>📊 Contractor Self-Performance Capacity Report</h2><p>Generated: '+new Date().toLocaleDateString()+' | Prod rate: '+crewProd+' yd³/crew/day | Workdays/week: '+workdays+'</p>');
+  pw.document.write('<h3>Crew Roster</h3><table><tr><th>Crew</th><th>Size</th><th>Status</th></tr>');
+  crews.forEach(function(c){pw.document.write('<tr><td>'+esc(c.name||'')+'</td><td style="text-align:center;">'+c.size+'</td><td>'+esc(c.status||'')+'</td></tr>');});
+  pw.document.write('</table>');
+  if(equip.length>0){
+    pw.document.write('<h3>Equipment</h3><table><tr><th>Equipment</th><th>Status</th></tr>');
+    equip.forEach(function(e){pw.document.write('<tr><td>'+esc(e.name||'')+'</td><td>'+esc(e.status||'')+'</td></tr>');});
+    pw.document.write('</table>');
+  }
+  pw.document.write('<h3>Jobs</h3><table><tr><th>Job</th><th>yd³</th><th>Days</th><th>Start</th><th>Status</th><th>Crews Needed</th></tr>');
+  jobs.forEach(function(j){
+    var cn=crewProd>0?Math.ceil((j.yd3||0)/(crewProd*(j.days||1))):0;
+    pw.document.write('<tr><td>'+esc(j.name||'')+'</td><td style="text-align:center;">'+(j.yd3||0)+'</td><td style="text-align:center;">'+(j.days||0)+'</td><td>'+(j.startdate||'--')+'</td><td>'+esc(j.status||'')+'</td><td style="text-align:center;font-weight:bold;">'+cn+'</td></tr>');
+  });
+  pw.document.write('</table>');
+  pw.document.write('<p style="font-weight:bold;margin-top:10px;">Available Crews: '+avCrews+' | Max yd³/week: '+maxYd3+'</p>');
+  pw.document.write('<p style="font-size:9px;margin-top:10px;">Capacity planning prevents over-commitment — the most common cause of missed milestones, poor finish quality, and crew burnout on small concrete operations. Update this roster weekly before accepting new work.</p>');
+  pw.document.write('<div class="sig"><div>Operations Manager / Date</div><div>PM / Date</div></div></body></html>');
+  pw.document.close();pw.print();
+};
+
+function createBtn(){
+  var btn=document.createElement('button');btn.id=BTN;btn.textContent='📊 Capacity';
+  btn.style.cssText='position:fixed;bottom:6400px;right:16px;background:#1e293b;color:#86efac;border:1px solid #16a34a;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600;z-index:9108;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+  btn.onclick=function(){var w=document.getElementById(WRAP);var s=w.style.display==='none';w.style.display=s?'block':'none';btn.textContent=s?'✕ Capacity':'📊 Capacity';if(s)render();};
+  document.body.appendChild(btn);
+  var wrap=document.createElement('div');wrap.id=WRAP;wrap.style.cssText='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;overflow-y:auto;z-index:9109;';
+  var inner=document.createElement('div');inner.id=INNER;wrap.appendChild(inner);document.body.appendChild(wrap);
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',createBtn);}else{createBtn();}
+})();
+</script>
