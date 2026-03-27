@@ -1,5 +1,27 @@
 # Overnight Build Tasks - 2026-02-14
 
+## Session: Mar 27, 2026 - 13:28 UTC
+**Status:** Added 6 new tools (151-156), 290 lines this session
+
+### New Features Added:
+
+1. ✅ **TOOL 151 — Aggregate Moisture Correction Log (💧)** — ASTM C566 / ACI 211.1 §6.3.3 field aggregate moisture test logger. Inputs: aggregate type, batch yd³, batch weight (lbs/yd³), total moisture % (from ASTM C566 test), absorption % (from mix design), mix water gal/yd³. Computes: free moisture % (total − absorption), water correction gal/yd³ per aggregate type, adjusted mix water, total correction for full batch. Color-coded: positive free moisture = reduce water (amber warning), negative = add water (green). Significant correction (>3 gal) triggers batch plant notification alert. Log table shows all tests with date/project/type/corrections. El Paso summer: stockpiles vary 2–6% total moisture — a 3% swing on FA at 1,350 lbs/yd³ = 4.9 gal/yd³ uncorrected water excess → w/c ratio compliance failure.
+
+2. ✅ **TOOL 152 — Floor Delamination Risk Assessment (⚠️)** — ACI 302.1R §5.3.6 delamination risk factor scoring. Inputs: ambient temp, concrete delivery temp, relative humidity, wind speed, air entrainment, bleed water present, carbonation potential (propane heaters), SCM content. Weighted scoring engine (max 130 pts): ambient >90°F (+25), RH <30% (+25), wind >15 mph (+20), air-entrained (+30), bleed water present (+35), propane heaters (+20), high SCM (+10–20). Risk levels: LOW (<20), MODERATE (20–34), HIGH (35–59), CRITICAL (≥60). CRITICAL outputs mandatory stop-work actions. Built-in ACI 302.1R §5.3.6 causes table (6 causes with prevention). El Paso: 110°F + 15% RH + 20 mph wind + 30% fly ash = CRITICAL delamination risk — most finishers trowel without checking.
+
+3. ✅ **TOOL 153 — Subcontractor COI Register (🛡️)** — AIA A201 §11 / OSHA multi-employer site COI tracking. Per sub: company, scope, COI expiry date, CGL ($M), auto CSL ($M), WC status, umbrella ($M), additional insured endorsement. Color-coded expiry status: expired red ⛔, expiring <30d amber, OK green. Red expired banner listing company names with stop-work language. Dashboard: total, approved, expiring, expired. Print formal register with ACI/AIA coverage minimums note (CGL $1M/$2M, WC Statutory, Auto $1M). GC primes retain liability for uninsured sub incidents — this forces the habit of tracking all COIs before mobilization.
+
+4. ✅ **TOOL 154 — GC Pre-Qual Status Tracker (📋)** — Track pre-qualification status with every GC and owner. Per entry: GC/owner name, contact, submitted date, renewal/expiry date, status (6 options: Pending/Submitted/Approved/Expired/Rejected/On Hold — click to cycle), portal/system (BuildingConnected, Procore, Manual, etc.), notes. Dashboard: total, approved, pending, expired counts. Expired alert banner. Expiring within 60 days warning banner. Print formal status list with status color-coding. Most GC bid invitations require active pre-qual — expired status = excluded from bid lists without warning.
+
+5. ✅ **TOOL 155 — Pump Line Cleaning & Prime Record (🚿)** — ACI 304.2R §6.3 pump line priming and clean-out log. Per event: project, date, pump type, event type (6 options: Start-of-Pour Prime, Line Segment Prime, Restart after >20 min pause, End-of-Pour Clean-Out, Next-Day Startup, Blockage Clearance), slurry material (5 types), approximate volume (gal), disposal method (5 options per EPA/TX CGP), operator initials, notes. Full ACI 304.2R reference table (prime mix spec, volume required, clean-out timing, contamination detection). Print ACI 304.2R formal log with 4-way sign-off. ACI 304.2R §6.3.2: first 2–3 yd³ of prime-contaminated concrete must be wasted — never placed into structure. Creates contemporaneous record for both QC compliance and EPA washout logs.
+
+6. ✅ **TOOL 156 — Expansion Joint Design Aid (📐)** — ACI 224.3R-95 / ACI 360R-10 §9.5 EJ sizing from thermal movement. Inputs: concrete type (4 presets with α values), min/max site temps, panel/bay length, restraint factor (4 levels), sealant type (5 ASTM C920 classes), joint LF, $/LF. Physics: movement = α × ΔT × bay length × restraint factor (inches). Min joint width = movement ÷ sealant allowable movement %. Depth = 0.5 × width per ACI 360R. Sealant volume (gal) and cartridge count. Total material/labor cost. El Paso ΔT = 20°F to 115°F = 95°F swing — a 60-ft bay with PU ±25% needs 0.78" min joint width. Warning if computed width <3/8" ACI minimum. ASTM C920 sealant quick reference table (5 types with movement %, typical $/LF). Save named designs. El Paso: most EJ widths are specified by feel — this computes from physics.
+
+**Commit:** 36d0f66 → GitHub pushed
+**Total Lines:** 65,347 | **Total Tools:** 156
+
+---
+
 ## Session: Mar 27, 2026 - 12:28 UTC
 **Status:** Added 6 new tools (145-150), 125 lines this session
 
