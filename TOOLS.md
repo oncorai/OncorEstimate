@@ -62,12 +62,19 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
   - https://github.com/oncorai/OncorEstimate (estimating app)
   - https://github.com/oncorai/maricopa-foreclosure-bot (foreclosure scraper)
 
+### Supabase (oncor-foreclosures)
+- **Project URL:** https://jiailsusjabqythgokcb.supabase.co
+- **Project Ref:** jiailsusjabqythgokcb
+- **Tables:** documents, scrape_log
+- **Dashboard:** https://supabase.com/dashboard/project/jiailsusjabqythgokcb
+
 ### Railway
 - **Status:** ✅ Active
 - **Token:** `065212fd-af35-4428-9652-86d46a280dc0`
 - **Workspace:** fb87202a-69bb-4b8f-8656-d6646ad117b1 (oncorai's Projects)
 - **Projects:**
-  - maricopa-foreclosure-bot (id: 3e686f79-5ec3-420e-a2f1-cc55cac3a20f)
+  - foreclosure-bot (id: 46ab8674-6d0b-44a0-8781-47a5788221b1)
+  - Services: scraper-final (5eeff28d-0cc6-425e-ad64-f6c563b8fd6e), flaresolverr (DELETE - no longer needed)
 
 ### Telegram Bot (Oncor Alerts)
 - **Bot:** @Fcproceeedsbot (t.me/Fcproceeedsbot)
@@ -77,4 +84,19 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 
 ---
 
+### Lob (Physical Mail)
+- **API Key (live):** `live_8430390f2f450c5df3e091cfdf9cbd2fe40`
+- **API Base:** `https://api.lob.com/v1`
+- **Auth:** Basic auth with API key as username, empty password
+- **Free credit:** $50 (covers ~35 letters)
+- **Use:** Send physical letters to surplus proceeds defendants
+
 Add whatever helps you do your job. This is your cheat sheet.
+
+### Twilio (Oncor Outreach)
+- **Account SID:** AC64a4c99ae637d7d0817c6b7cbce812f0
+- **Auth Token:** 7f2322eea0c07a2dfba181f7826bbfda
+- **Phone Number:** +19282676489 (928-267-6489)
+- **SMS:** ✅ enabled
+- **Voice:** ✅ enabled
+- **JFS Cell:** +18325355189
