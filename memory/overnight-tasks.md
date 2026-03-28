@@ -1,5 +1,23 @@
 # Overnight Build Tasks - 2026-02-14
 
+## Session: Mar 28, 2026 - 21:30 UTC
+**Status:** 🎉 **MILESTONE: 250 TOOLS / 80,000+ LINES!** Added 4 new tools (247-250), 761 lines this session
+
+### New Features Added:
+
+1. ✅ **TOOL 247 — Curing Compound Coverage Calculator (💧)** — ASTM C309 / ACI 308R-16 / ACI 301-16 §8.2. 8 compound type presets: Type 1 Clear ($28/gal, 200 SF/gal), Type 1-D White Pigmented ($32/gal, 180 SF/gal), Type 2 White ($35/gal, 175 SF/gal), Dissipating ASTM C1315 ($45/gal), Wax-Based ($22/gal), Acrylic Resin ($52/gal), Sodium Silicate ($38/gal), Lithium Silicate ($65/gal). 4 application method factors (airless sprayer 1.0× through brush 1.3× waste). 5 weather condition factors (normal 1.0× through hot+windy El Paso summer 1.25×). Inputs: slab SF, coat count (1-3), compound type, method, weather, labor rate, application rate. Computes: base coverage adjusted for method + weather, gallons needed, order qty (+5%), material cost, labor hours/cost, total, $/SF. Wax-based coating compatibility warning (ACI 308R-16 §10.3). Single-coat warning (ACI recommends 2 coats). ACI 308R-16 reference table (coverage rate, timing, white pigment, moisture retention, coating compatibility, El Paso hot weather). Print formal ASTM C309/ACI 308R calculation. Business case: 10,000 SF slab × 2 coats ÷ 180 SF/gal (white) = 111 gallons at $32/gal = $3,552 materials — routinely under-ordered by 30%.
+
+2. ✅ **TOOL 248 — Concrete Labor Burden Rate Calculator (👷)** — TX TWC / FICA / FUTA / WC / Benefits. Computes true fully-burdened hourly labor cost from base wage. TX 2025 burden components: FICA 6.20% ($168,600 cap), Medicare 1.45% (no cap), FUTA 0.6% ($7,000 cap), TX SUTA 2.7% typical ($9,000 cap), WC Code 5213 ~$8.50/$100 payroll (×EMR), GL 3.5%, tools 1.0%, safety/PPE 0.8%, training 0.5%. Optional: PTO/vacation %, health insurance $/mo, 401k match %. Full line-by-line annual/hourly/% breakdown table. Quick multiplier display (e.g., ×1.42 = 42% burden). Print formal TX burden analysis. TX WC Class Code 5213 reference, SUTA rate range. Business case: A $22/hr laborer actually costs $31.24/hr (42% burden) — bidding at base wage = losing $9.24/hr on every labor hour deployed.
+
+3. ✅ **TOOL 249 — Concrete Floor Joint Layout Designer (📐)** — ACI 360R-10 §9 / ACI 302.1R-15 / PCA. Complete CJ/EJ/COJ joint design and cost calculator. Inputs: slab L×W, thickness, reinforcement type (none/WWF/rebar/fiber/PT), traffic type, saw cut $/LF, sealant type (5 options: polyurethane/silicone/epoxy semi-rigid/hot-pour/polyurea with $/LF), EJ count/length, markup%. ACI 360R-10 §9.4 spacing engine: computes max spacing from thickness × reinforcement multiplier (2.5× plain, 3× rebar, 30' PT), rounds to practical grid. Calculates: CJ grid count both directions, total CJ linear footage, EJ LF, perimeter isolation, panel count, saw depth (T/4). Cost breakdown: saw cutting + sealant + EJ compressible filler + backer rod + markup. Hard-wheel forklift warning (ACI 302.1R §4.6.1 — requires semi-rigid epoxy). 4 joint type reference table with ACI codes. Print formal ACI 360R-10 joint design. Business case: 20,000 SF slab at 12' CJ spacing = 3,333 LF of saw cuts at $1.50/LF + sealant at $4.20/LF = $19,000 total — most bids either omit sealant entirely or undercount LF by 30-40%.
+
+4. ✅ **TOOL 250 — Bid/No-Bid Decision Matrix (🎯)** — 100-point risk-weighted scoring for bid selection. 10 criteria with calibrated weights: Relationship (15 pts), Scope Fit (15), Contract Terms (12), Payment History (12), Profit Potential (10), Schedule (10), Crew Availability (8), Bond/Insurance (6), Competition Level (6), Location (6). Each criterion has 5 scored options (1-5) with specific descriptive language. Click-to-select scoring interface with visual feedback. Weighted score engine: criterion weight × (score/5). 4-tier verdicts: BID (80-100), LEAN BID (60-79), LEAN NO-BID (40-59), NO-BID (<40). Per-criterion bar chart breakdown. Decision history with project/GC/score/verdict. Print formal decision matrix with dual Estimator/Principal sign-off. Business case: If you bid 10 projects/month and each takeoff costs 4-6 hours, declining 3 poor-fit bids saves 15+ hrs/month for better opportunities. The scored register also surfaces patterns — "we always score Payment History low for this GC" = stop bidding their work.
+
+**Commits:** 77d4630 (247-248), 493969c (249-250) → GitHub pushed
+**Total Lines:** 80,016 | **Total Tools:** 250 🎉
+
+---
+
 ## Session: Mar 28, 2026 - 21:00 UTC
 **Status:** Added 3 new tools (244-246), 727 lines this session
 
