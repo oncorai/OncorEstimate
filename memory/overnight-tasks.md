@@ -1,5 +1,39 @@
 # Overnight Build Tasks - 2026-02-14
 
+## Session: Mar 28, 2026 - 22:24 UTC
+**Status:** Added 9 new tools (251-259) then 3 more (260-262), ~1,340 lines this session
+
+### New Features Added:
+
+1. ✅ **TOOL 251 — Crew Overtime Cost Calculator (⏰)** — FLSA §7 / TX Payday Law. 7 role presets with El Paso 2025 base rates and burden multipliers (Finisher $28.50×1.42, Form Carpenter $31×1.42, Laborer $22×1.40, Foreman $35×1.45, Equipment Operator $32×1.43, Ironworker $34×1.44, Pump Operator $36×1.43). Per-role regular and OT hour entry. Computes: loaded regular cost, loaded OT cost (1.5× base × burden), total actual labor, bid-vs-actual variance %. Dashboard: reg hours, OT hours, OT %, actual cost, variance. Labor overrun alert when >5% over bid. Save analyses to history. Print FLSA formal OT analysis with PM/Controller sign-off. Business case: 1 hr OT costs ~1.5× reg loaded rate — a 20% OT rate on a $18k labor bid = $2,700 unplanned margin erosion.
+
+2. ✅ **TOOL 252 — Material Waste Tracking Log (♻️)** — ACI 304R / Job Costing. 10 material presets with industry budget waste factors (concrete 5%, rebar 3%, mesh 8%, form lumber 12%, plywood 10%, snap ties 5%, curing compound 8%, vapor barrier 10%, sealant 5%, admixture 3%). Per-entry: project, material, budget qty, actual used, unit cost, waste cause (9 presets). Auto-computes waste % and waste cost $. Summary by material: budget vs actual vs waste% vs target comparison. Total waste cost dashboard. Print formal waste report. Business case: after 10-20 entries, shows "we consistently waste 12% on form lumber vs 10% budget" — drives bid accuracy.
+
+3. ✅ **TOOL 253 — Concrete Placement Sequence Planner (📋)** — ACI 304R / AIA A201 §3.10. Multi-pour project scheduling with pour #, element type (11 options), location/grid, yd³, planned date, start time, crew size, pump type, dependencies/notes. 7-stage status cycle (Planned→Complete). Group by project with per-project totals and completion tracking. Print formal pour sequence schedule with Foreman/PM/GC triple sign-off. Best practices reference table (footings→grade beams→SOG→columns→deck sequencing).
+
+4. ✅ **TOOL 254 — Concrete Mix Submittal Tracker (📄)** — ACI 301-16 §4.2.3 / ACI 318-19 §26.4. Track mix design submittals through 7-stage approval cycle (Draft→Approved/Rejected). 11 mix type presets. Dashboard: total/approved/pending/action-required counts. Red alert banner when unapproved mixes exist. Print formal register with QC Manager/PM sign-off. ACI reference table (submittal contents, strength documentation, approval requirements).
+
+5. ✅ **TOOL 255 — Pre-Construction Meeting Checklist (📝)** — AIA A201 §3.2 / ConsensusDocs. 36-item structured checklist across 6 categories: Scope & Contract (6), Schedule (6), Site Logistics (6), Quality (6), Safety (6), Communication (6). Per-item checkbox toggle. Save meetings with checked items and action notes. Print formal pre-con checklist with 3-way sign-off. Past meeting archive with % covered.
+
+6. ✅ **TOOL 256 — Concrete Truck Dispatch Scheduler (🚛)** — ASTM C94 §11 / ACI 304R. Pour-day truck timing generator. Inputs: total yd³, truck size, plant distance, travel speed, first truck time, unload time, placement rate, buffer. Generates: timestamped dispatch table (plant dispatch → site arrival → depart), trucks needed, pour duration, ASTM C94 travel time warning. Save/print/copy schedule. Business case: eliminates the verbal "tell the plant to send a truck every 20 minutes" with a documented, printable schedule.
+
+7. ✅ **TOOL 257 — Weather Impact Day Tracker (🌦️)** — AIA A201 §8.3 / TX Prop Code §53. 10 impact type presets (rain full/partial day, extreme heat >105°F, cold <28°F, high wind >35mph, lightning, flooding, snow/ice, mud). Per-day: project, date, impact type, hours lost, hi/lo temp, precipitation, description. Dashboard: total impact days, full lost days, partial days. Print formal AIA §8.3 weather log with AIA notice requirements reference (21-day written notice). Business case: contemporaneous weather records are the only admissible evidence for schedule extension claims.
+
+8. ✅ **TOOL 258 — Concrete Pump Wash-Out Log (🧹)** — EPA NPDES / SWPPP. Track washout events: project, date, pump company, operator, disposal method (6 options), site location, estimated volume. 3-point compliance check: lined/contained, signage, ≥50ft from drains. Compliant/non-compliant auto-verdict. Dashboard and print SWPPP-compliant log. Business case: EPA CWA fines up to $25,000/day for unpermitted concrete washout discharge.
+
+9. ✅ **TOOL 259 — Concrete Surface Repair Cost Estimator (🔧)** — ACI 546R-14 / ICRI 310.2R. 10 repair type line items with material cost and labor hours per unit: crack routing ($1.25/LF), epoxy injection ($3.50/LF), surface spall PMM ($4/SF), deep spall ($8.50/SF), honeycombing grout ($5/SF), bug hole rubbing ($0.75/SF), tie hole patching ($2/EA), joint sealant replacement ($2.50/LF), grinding ($0.50/SF), sealer ($0.65/SF). Mobilization + OH/profit + contingency markup. Print formal ACI-referenced estimate with acceptance block.
+
+10. ✅ **TOOL 260 — Concrete Floor FF/FL Survey Log (📐)** — ASTM E1155 / ACI 117-10. 9 floor spec presets (residential FF25/FL20 through superflat FF100/FL50). Per-zone: measured FF and FL vs spec with auto PASS/FAIL. Dashboard: total zones, pass, fail counts. Red alert for failed zones with remediation requirement. Print formal ASTM E1155 survey report with 3-way sign-off. ASTM quick reference (72h survey timing, exclusion zones, min sample size).
+
+11. ✅ **TOOL 261 — Material Price Lock Tracker (🔒)** — Track locked vs floating material prices. 17 material presets. Per-lock: supplier, quoted price, unit, lock expiry date, status (Locked/Floating/Verbal). Auto-detects expired locks. Dashboard: locked/floating/expired/exposure counts. Print price lock register. Business case: submitting a bid with expired concrete or rebar pricing = locked-in exposure if awarded.
+
+12. ✅ **TOOL 262 — Rebar Lap Splice Quick Calculator (📏)** — ACI 318-19 §25.4/§25.5. Full development length calculation from bar size (#3-#11), f'c (3-6k), fy (Grade 40/60/80), position (ψt), coating (ψe), size factor (ψs), cover, spacing. Class A/B splice multiplier. Results: ld (inches), splice length (inches), field measurement (ft-in). Quick reference table for common cases (Grade 60, 4000 PSI, bottom, uncoated). Save/print formal ACI 318-19 calc sheet with EOR verification sign-off. Business case: splice length is the single most field-verified dimension by GC special inspectors.
+
+**Commits:** 7885f59 (251-253), df8fd71 (254-256), 0b5ac89 (257-259), 98836a9 (260-262) → GitHub pushed
+**Total Lines:** 81,745 | **Total Tools:** 262
+
+---
+
 ## Session: Mar 28, 2026 - 21:30 UTC
 **Status:** 🎉 **MILESTONE: 250 TOOLS / 80,000+ LINES!** Added 4 new tools (247-250), 761 lines this session
 
