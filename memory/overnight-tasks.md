@@ -1,5 +1,21 @@
 # Overnight Build Tasks - 2026-02-14
 
+## Session: Mar 28, 2026 - 06:24 UTC
+**Status:** Added 3 new tools (205-207), 604 lines this session
+
+### New Features Added:
+
+1. ✅ **TOOL 205 — Concrete Core Drill Bit & Equipment Selector (🔩)** — ASTM C42 / ACI 318-19 §6.3 / OSHA 1926.302. 12 bit size presets from 3/4" anchor holes ($35/core) to 12" large bore ($375/core) with ASTM use descriptions, typical RPM ranges, wet/dry requirements, and El Paso 2025 pricing. 5 drilling rig type reference cards (hand drill SDS max → hydraulic core → wire saw). PT slab enforcement: any core in a PT slab triggers ⛔ ASTM C42/ACI 318-19 §6.3 warning — GPR scan by ASNT Level II required + EOR written authorization + $200 GPR premium added to cost. Fire-rated assembly tracking: IBC §714 fire stop requirement flagged per core. Job log with per-entry cost calculation, project, bit size, depth, PT/fire flags. Dashboard with total cores, total cost, PT/fire count banners. Printable ACI 318-19/ASTM C42 formal log: PT cores highlighted yellow, IBC §714 fire stop alert, triple sign-off. ASTM C42 quick reference table (min 2" dia, L/D ≥ 1.75, no coring within 1 diameter of edges, water required for wet cores, ACI 318-19 §26.12.4 core-based strength evaluation criteria). Severing a PT tendon = immediate structural emergency — this tool enforces the GPR scan requirement at the point of bit selection.
+
+2. ✅ **TOOL 206 — Rebar Mechanical Splice Detail Selector (🔧)** — ACI 318-19 §25.5 / ACI 439.3R / AWS D1.4. 7 splice type reference cards with ACI code citations: Class A Tension Lap Splice (×1.0 ld), Class B Tension Lap Splice (×1.3 ld — field default), Compression Lap Splice (ACI §25.5.5), Mechanical Splice Type 1 (≥1.25 Fy, ACI §26.6.3), Mechanical Splice Type 2 (seismic SDC C-F, bidirectional), Welded Splice CJP (AWS D1.4, E7018 low-hydrogen), End-Bearing Compression Splice (bars cut square — compression only). ACI 318-19 §25.4.2.4 lap length calculator: inputs for bar size (#3–#11), f'c (3k–6k PSI), fy (Grade 40/60/80), clear cover, clear spacing, bar position (ψt top bar=1.3), coating (ψe uncoated/epoxy), size factor (ψs #6 and smaller=0.8), lightweight (λ 0.75–1.0), splice class (A/B). Computes: development length ld, lap length, and converts to field ft-in measurement automatically. Saves to splice log. Printable ACI 318-19 splice schedule with all parameters, Class designation, lap in inches, field measurement in ft-in, and EOR sign-off block. ψ factor quick reference table (ψt, ψe, ψs, λ all conditions). Lap splice length is the single most field-verified dimension by GC special inspectors — having a documented ACI-cited calculation prevents "you spliced short" disputes.
+
+3. ✅ **TOOL 207 — Concrete Pricing Escalation Clause Generator (📈)** — AIA A201 §7.2 / ConsensusDocs §9 / FAR 52.216-2. 5 escalation clause types with formal contractual language: (1) Standard Material Escalation — triggers price adjustment when concrete/rebar prices exceed bid-day prices by threshold%; (2) Index-Linked Escalation (ENR CCI / PPI) — quarterly price adjustments proportional to published ENR or BLS index with de minimis band; (3) One-Way Escalation — contractor-protective validity window with right to revise prices after expiry, no GC/Owner downside demand; (4) Shared-Risk 50/50 — above-threshold increases split equally; (5) Fuel Surcharge Clause — EIA diesel index pass-through for equipment-heavy jobs. Per-clause variable fill-in fields: bid price, PSI, rebar price, trigger threshold, index value, validity days, de minimis band, fuel trigger price, etc. Generate button fills all variables into complete formal contract language. Save/copy/print per generated clause. Printable formal clause exhibit with AIA A201/ConsensusDocs/FAR references and contractor/GC dual sign-off block. Why it matters: El Paso concrete increased 18% in 2021–2022; rebar 40%+. A contractor who bid a 6-month public job without escalation protection absorbed $35k–$80k in uncompensated increases. This generates the specific clause language in 60 seconds — attach it to every bid with a pour date > 60 days out.
+
+**Commit:** 5490a2f → GitHub pushed
+**Total Lines:** 72,952 | **Total Tools:** 207
+
+---
+
 ## Session: Mar 28, 2026 - 05:17 UTC
 **Status:** Added 3 new tools (202-204), 480 lines this session
 
