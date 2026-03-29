@@ -1,5 +1,67 @@
 # Overnight Build Tasks - 2026-02-14
 
+## 🎉 SESSION: Mar 29, 2026 - 02:20 UTC — MILESTONE 300 TOOLS!
+**Status:** Added tools 279-300 this session (+2,209 lines) | **REACHED 300 TOOLS!**
+
+### New Features Added (This Session):
+
+1. ✅ **TOOL 279 — Sump/Elevator Pit Estimator (🕳️)** — ACI 318-19 §11 / ACI 332R. Full pit concrete estimate: wall + floor volumes, inner/outer formwork SF, rebar estimate, labor, waterproofing option. 9 pit type presets (elevator pit, sump, equipment, grease interceptor, wet well, etc.). Cost breakdown with OH+profit markup. Print formal estimate.
+
+2. ✅ **TOOL 280 — Material Certification Expiry Tracker (📜)** — ACI 301-16 §4.2 / ACI 318-19 §26.3. Track TDS/cert expiry for mix design materials. 21 material type presets. Color-coded expiry countdown (expired/7d/30d/active). Red alert banner when any certs expired. Business case: out-of-date certs = basis for GC rejection of mix design submittal.
+
+3. ✅ **TOOL 281 — Payment Demand Letter Generator (💸)** — AIA A401-2017 §9 / TX Prompt Payment Act / TX Property Code §53. Generate formal written payment demand with correct statutory citations per contract type. 4 contract type presets with appropriate legal references. Print/copy certified-mail-ready letter. Creates the paper trail for dispute and lien purposes.
+
+4. ✅ **TOOL 282 — Concrete Washout Ticket Generator (🧹)** — TX CGP TXR150000 / EPA 40 CFR §122.26 / CWA §402. Per-event washout ticket with auto-numbering. 7 event types, 6 disposal methods. SWPPP compliance tracking. Print formal ticket with driver/foreman signatures. Creates TCEQ and GC environmental audit paper trail.
+
+5. ✅ **TOOL 283 — Daily Cost Flash Report (⚡)** — Quick field cost entry with budget burn tracking. 8 cost categories. Running total vs daily budget. Print 1-page flash report. Save daily snapshots for trend tracking. Pairs with Production Cost Ledger.
+
+6. ✅ **TOOL 284 — Surface Preparation CSP Log (🔲)** — ICRI 310.2R / SSPC-SP 13. Log CSP tests per zone with PASS/FAIL verdict. 9 CSP levels with ICRI reference (method, depth, typical use). 11 prep methods, 12 coating system presets. Red DO-NOT-COAT banner when zones fail. Print formal log.
+
+7. ✅ **TOOL 285 — Post-Pour Flatwork Deficiency Log (🔍)** — ACI 302.1R-15 §5 / ACI 546R-14 / ACI 224R-01. Document post-pour defects with ACI root cause reference and warranty classification. 12 defect types with cause, prevention, warranty position, ACI code. 8-stage status tracking. Business case: prevents "you accepted it" disputes.
+
+8. ✅ **TOOL 286 — Pump Line Pressure Calculator (🚰)** — ACI 304.2R simplified. Estimate line pressure from horizontal run, vertical rise, elbows, pipe diameter, slump. Includes pump type recommendation. Slump vs max line length reference table.
+
+9. ✅ **TOOL 287 — Backlog & Capacity Health Check (📊)** — Monthly business health snapshot: backlog duration, OH coverage, production capacity. Surety underwriter benchmarks. Save monthly snapshots for trend tracking. Answers: "Do I have enough work?" and "Can I take on more?"
+
+10. ✅ **TOOL 288 — Rebar Weight & Stock Calculator (⚙️)** — ASTM A615. Calculate weight and stock bar needs from bar size, quantity, cut length. Cutting plan with waste percentage and optimization guidance. Full ASTM A615 bar reference table (#3-#18).
+
+11. ✅ **TOOL 289 — Concrete Breakout Strength Check (⚓)** — ACI 318-19 §17.6.2 simplified. Single anchor concrete breakout strength in tension. Accounts for embedment, edge distance, anchor type. φNcb design capacity with verdict. Preliminary anchor capacity check.
+
+12. ✅ **TOOL 290 — Safety Tailgate Meeting Topic Selector (⚠️)** — OSHA-referenced daily toolbox talks. 12 topic presets with key points and regulatory citations. Random topic button. Generate printable sign-in sheet. Log meeting history. GC-required paper trail.
+
+13. ✅ **TOOL 291 — Curing Time Calculator (⏱️)** — ACI 308R simplified Nurse-Saul maturity method. Estimate cure time from temperature and curing method. Strength milestones (25/50/75/28d). Hot/cold weather warnings per ACI 305R/306R.
+
+14. ✅ **TOOL 292 — Subcontractor Safety Prequalification (🛡️)** — OSHA Multi-Employer Citation Doctrine compliance. 18-item checklist across 6 categories (insurance, safety record, training, equipment). Required items flagged. QUALIFIED/INCOMPLETE verdict. Print formal prequal form.
+
+15. ✅ **TOOL 293 — Mix Design Proportions Viewer (🧪)** — ACI 211.1-91 standard mix proportions. 5 strength class presets (3000-6000 PSI) with lb/yd³ for all materials, w/c ratio, air, slump, paste content. Save custom mix designs. Quick sanity check for ready-mix submittals.
+
+16. ✅ **TOOL 294 — Slump Loss Calculator (📉)** — ACI 304R-00 / ASTM C94. Estimate slump loss from time, temperature, SCM, and retarder. Pumpable/placeable verdict. Time remaining to pump limit. ASTM C94 water addition guidance.
+
+17. ✅ **TOOL 295 — Job Site Emergency Contact Board (🚨)** — OSHA 1926.50(g). Printable emergency contact poster with 12 preset roles. Save per-project. Print large-format board for job trailer posting.
+
+18. ✅ **TOOL 296 — Temperature Condition Check (🌡️)** — ACI 305R / ACI 306R. Go/no-go placement decision from concrete temp, ambient temp, wind, humidity. Evaporation rate estimate. Required actions for hot/cold weather.
+
+19. ✅ **TOOL 297 — Rebar Lap Splice Quick Reference (🔗)** — ACI 318-19 §25.5 Class B tension lap splice table. Bar sizes #3-#11 for 3000/4000/5000 PSI. Conservative assumptions noted. Full reference table.
+
+20. ✅ **TOOL 298 — Concrete Unit Weight Calculator (⚖️)** — ACI 318-19 Table R19.2.4.1. Unit weights and λ factors for 8 concrete types (NW, SLW, ALW, HSC, heavy, SCC, cellular, CLSM). Total weight calculation from volume.
+
+21. ✅ **TOOL 299 — Project Milestone Dashboard (🎯)** — Track key milestones from Contract to Final Payment. Auto-detects overdue items. Progress bar per project. Fill actual dates as milestones complete.
+
+22. 🎉 **TOOL 300 — Quick Win Estimator (🎉)** — MILESTONE TOOL! Napkin-math for quick phone quotes. Enter quantities for slab, footing, pier, wall, curb, sidewalk, pump. El Paso 2025 unit rates. 30-second ballpark bid with markup.
+
+**Commits This Session:**
+- d67d1a2: Tools 279-281 (+367 lines)
+- 98a2cee: Tools 282-284 (+308 lines)
+- e2cf98f: Tools 285-287 (+296 lines)
+- bbf437a: Tools 288-290 (+282 lines)
+- c5ac88f: Tools 291-293 (+292 lines)
+- 6404a77: Tools 294-297 (+363 lines)
+- c31035c: 🎉 MILESTONE 300! Tools 298-300 (+301 lines)
+
+**Total Lines:** 86,268 | **Total Tools:** 300 🎉
+
+---
+
 ## Session: Mar 29, 2026 - 01:15 UTC
 **Status:** Added tools 276-278 this session (+497 lines)
 
