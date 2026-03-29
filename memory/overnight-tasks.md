@@ -1,5 +1,44 @@
 # Overnight Build Tasks - 2026-02-14
 
+## SESSION: Mar 29, 2026 - 08:13 UTC (Overnight Cron)
+**Status:** 🚀 Building toward 350! Added tools 321-332 this session (+1365 lines)
+
+### New Features Added (This Session):
+
+1. ✅ **TOOL 321 — Elevated Slab Post-Shore Load Check (🏗️)** — ACI 347R-14 / ACI 318-19 §6.7. Reshoring load analysis for multi-story construction. Slab DL, construction LL, floors reshored computation. Shore utilization % at typical 4' OC grid. PASS/WARNING/FAIL verdict. Shore capacity adjustment recommendations when overloaded. ACI 347R reference table for shore removal strength requirements.
+
+2. ✅ **TOOL 322 — Fly Ash & SCM Substitution Cost Analyzer (♻️)** — ACI 211.1 / ACI 232.2R / ACI 233R / ASTM C618/C989/C1240. Compare cost and CO₂ impact of SCM substitution. 6 SCM types (Class F/C fly ash, GGBS slag, silica fume, metakaolin, calcined clay LC3) with ASTM references, dosage ranges, GWP factors. Computes: savings per yd³, total project savings, GWP reduction %, LEED MRc3 eligibility (≥10% GWP reduction). Strength warnings for high dosages.
+
+3. ✅ **TOOL 323 — Concrete Slab Deflection Quick Check (📐)** — ACI 318-19 §24.2. L/360, L/240, L/480 deflection limit verification. LL and total deflection check against ACI Table 24.2.2. 6 condition presets (flat plate, flat slab, beam/slab, roof). PASS/FAIL verdict with margin computation. EOR notification requirement on FAIL. Print formal ACI 318-19 deflection inspection log.
+
+4. ✅ **TOOL 324 — Footing & Pier Excavation Volume Estimator (⛏️)** — ACI 336.2R. Bank CY, loose CY (with swell factor), haul truck loads. 6 soil types with El Paso-specific presets (caliche, expansive clay). Rectangular and round pier shapes. Cost per CY and total excavation schedule.
+
+5. ✅ **TOOL 325 — Pre-Bid Scope Comparison Matrix (🔄)** — AIA A201 §3.2. Compare two bid strategies side-by-side. 16 default scope items across 7 categories. Included/Excluded/Allowance/TBD status per strategy. Highlighted rows for scope differences. Scope difference count summary.
+
+6. ✅ **TOOL 326 — Surface Hardener & Densifier Application Log (💎)** — ACI 302.1R-15 §4.5 / ASTM C1202. Track densifier applications: zone, product type (6 presets), coverage rate, coats, lot #. Computes gallons and cost. Product reference table. ACI 302.1R warnings about silicate over colored concrete.
+
+7. ✅ **TOOL 327 — Subcontractor Pay Certification Tracker (💵)** — AIA G702/G703. Track sub pay apps, retainage held, approval status. 7-status workflow (Draft → Submitted → Under Review → Approved → Paid → Disputed → Retainage Held). TX Prompt Payment Act reminders (35-day pay window, 1.5%/mo interest).
+
+8. ✅ **TOOL 328 — Concrete Consolidation (Vibration) Log (📳)** — ACI 309R-05. Vibrator selection, insertion depth, duration tracking. 6 vibrator size presets with radius of action and max depth. Lift thickness vs vibrator capacity check. OK/WARN verdict. ACI 309R reference guide for proper vibration technique.
+
+9. ✅ **TOOL 329 — Rebar Lap Splice Length Calculator (🔗)** — ACI 318-19 §25.5. Tension Class A/B and compression lap splice lengths. 9 bar sizes, top bar factor, epoxy coating factor, clear cover. Development length (ld) computation with ACI 318-19 Eq 25.4.2.4a. Mechanical splice advisory when lap exceeds 48".
+
+10. ✅ **TOOL 330 — Concrete Placement Rate Calculator (⏱️)** — ACI 304R. Pour rate, crew sizing, truck dispatch timing. Element type and placement method productivity factors. Cold joint risk assessment vs CJ window. Achievable rate, estimated duration, trucks on site (steady state), dispatch interval.
+
+11. ✅ **TOOL 331 — Anchor Bolt Pull-Out Capacity Calculator (⚓)** — ACI 318-19 §17. Concrete breakout strength (simplified). 6 anchor types (CIP J/L-bolt, headed stud, post-installed expansion/adhesive/undercut). Embedment, edge distance, cracked concrete factors. φNb vs applied load utilization check. Edge reduction factor when ca1 < 1.5×hef.
+
+12. ✅ **TOOL 332 — Concrete Mix Water Adjustment Log (💧)** — ASTM C94 §10.3. Field water addition compliance tracking. Slump before/after, water added, max allowable (10% holdback rule of thumb). OK/VIOLATION verdict per load. ASTM C94 rules about field water addition and strength impact.
+
+**Commits:**
+- 000f2cd: Tools 321-323 (+460 lines)
+- 78a820f: Tools 324-326 (+285 lines)
+- b0ed9e2: Tools 327-329 (+320 lines)
+- 018e2c0: Tools 330-332 (+300 lines)
+
+**Total Lines:** 89,985 | **Total Tools:** 332
+
+---
+
 ## SESSION: Mar 29, 2026 - 07:04 UTC (Overnight Cron)
 **Status:** 🎉 MILESTONE 320 TOOLS! Added tools 316-320 this session (+721 lines)
 
