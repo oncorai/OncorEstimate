@@ -1,5 +1,60 @@
 # Overnight Build Tasks - 2026-02-14
 
+## SESSION: Mar 29, 2026 - 07:04 UTC (Overnight Cron)
+**Status:** 🎉 MILESTONE 320 TOOLS! Added tools 316-320 this session (+721 lines)
+
+### New Features Added (This Session):
+
+1. ✅ **TOOL 316 — Pour Cost-Per-Yard Ledger (💵)** — ACI 304R / Job Costing. Track actual cost per cubic yard for every pour event. 8 cost categories (Concrete Material, Rebar/Mesh, Formwork, Labor, Pump Rental, Equipment, Testing/QC, Misc) entered per pour. Dashboard: total pours, total yd³, total cost, avg $/yd³ color-coded. Cost distribution bar chart by category (% of spend). $/yd³ by element type table — after 10-20 pours per type, shows your actual vs estimated unit rate. Answers: "What did this pour actually cost per yard?" vs "What did I bid?" Most concrete contractors only know margin at closeout; this captures it pour by pour.
+
+2. ✅ **TOOL 317 — Concrete Sub Contract Terms Analyzer (📜)** — AIA A401-2017 / ConsensusDocs 750 / TX Property Code §53. 20 common high-risk contract clauses across 7 categories (Payment, Scope, Schedule, Warranty, Dispute, Insurance, Admin). Checkbox each clause present in your contract. Each flagged clause shows: AIA/statute citation, specific risk description, and recommended negotiation response. HIGH/MED/LOW risk classification. Dashboard: HIGH/MED count, ⛔ DO NOT SIGN banner when HIGH risk clauses flagged. Print formal risk report with TX attorney disclaimer. Critical clauses covered: pay-if-paid, broad indemnity for GC's own negligence, LD pass-through without cap, waiver of lien rights (TX §53.285 — unenforceable but GCs include it anyway), warranty covering normal drying shrinkage (ACI 302.1R §2.9).
+
+3. ✅ **TOOL 318 — Precast Hollow-Core Plank Bearing & Topping Estimator (🏗️)** — PCI MNL-116 / ACI 318-19 §12 / SDI C-2017. PCI standard HC plank profile reference table (4"/6"/8"/10"/12" plank with dead load psf, void area in²/ft, min/typical topping thickness). Calculator: slab SF, topping thickness, keyway joint LF, keyway dimensions. Computes: net topping yd³, order qty (+5%), truck count, keyway grout CF, 50-lb bag count, full cost breakdown (concrete + grout + labor + pump + OH+profit). PCI MNL-116 §5.4: min 2" composite topping; keyway joints must be grouted before topping. Save/print named estimates.
+
+4. ✅ **TOOL 319 — Concrete Scanning & NDT Log (📡)** — ACI 318-19 §6.3 / ASNT SNT-TC-1A / ACI 228.2R. Track all non-destructive testing events: GPR, covermeter, rebound hammer (ASTM C805), UPV (ASTM C597), infrared thermography, half-cell potential (ASTM C876), pull-off bond test, F-number survey, nuclear density, custom. Per test: project, location, method, technician/cert, key reading, result (PASS/FAIL/MARGINAL/INCONCLUSIVE). NDT method quick reference table with standard, purpose, and required certification level. FAIL alert banner with EOR evaluation requirement. Print ACI 318-19/ASNT formal log with triple sign-off. GPR by ASNT Level II mandatory before coring any PT slab — severing a tendon = structural emergency.
+
+5. 🎉 **TOOL 320 — MILESTONE: Oncor Suite Executive Summary (🏆)** — Searchable, categorized tool directory for all 320+ tools. Milestone banner: 320 tools, 88,000+ lines, 150+ ACI/ASTM standards, El Paso calibrated. Searchable and filterable by category (Core Estimating, Quantity Calculators, QC & Testing, Safety & Compliance, Legal & Financial, Documentation). Suite coverage summary panel. Each tool card shows number, name, description, and category color code.
+
+**Commits:**
+- 3d1a718: Tools 316-318 (+444 lines)
+- cb93980: 🎉 Tools 319-320, MILESTONE 320 (+277 lines)
+
+**Total Lines:** 88,620 | **Total Tools:** 320 🎉
+
+---
+
+## SESSION: Mar 29, 2026 - 04:50 UTC
+**Status:** Added tools 310-312 this session (+456 lines)
+
+### New Features Added (This Session):
+
+1. ✅ **TOOL 310 — Crew Fatigue & Burnout Risk Monitor (😓)** — OSHA 29 CFR §1926.20 / ACI 305R. Track daily crew conditions: hours worked, consecutive days without rest, peak ambient temp, pour count. Weighted risk scoring engine (0–100 pts): hours >12 (+30), >10 (+20); consecutive days ≥7 (+30), ≥5 (+20); heat ≥105°F (+25), ≥95°F (+15); pours/day ≥3 (+15). 4 risk tiers: LOW (<25), MODERATE (25–44), HIGH (45–69), CRITICAL (≥70 — OSHA General Duty Clause stop-work consideration). Critical days highlighted red in log. Print OSHA 305R formal log with Safety Lead/Foreman/GC Safety Officer triple sign-off. El Paso July–Sept: 110°F + long pours + consecutive days = consistently CRITICAL without active management.
+
+2. ✅ **TOOL 311 — Takeoff Accuracy Scorecard & Correction Factors (🎯)** — ACI 304R / ACI 211.1. Log bid yd³ vs. actual ticket yd³ per element type across all completed jobs. Correction factor engine: Total Actual ÷ Total Bid per element type. Color-coded: >1.08 red (consistently under-bidding), <0.92 blue (over-bidding), within range green. Average delta% per element. Insight text: "Consistently under-bid — multiply future estimates by 1.12." Job history log with bid/actual/delta/% columns. Print formal ACI accuracy report with Estimator/QC Manager/Principal sign-off. After 10–20 jobs per element, systematic bias becomes visible — rebar concrete vs SOG concrete have very different accuracy profiles.
+
+3. ✅ **TOOL 312 — 13-Week Rolling Cash Flow Forecast (💰)** — AIA G702 / AIA A201 §9.4. Model cash in and out for next 13 weeks across all active contracts. Per contract: contract value, start date, duration weeks, GC pay lag days, retainage %, direct cost %. Linear weekly revenue/cost spread model with pay lag offset. 13-week table: inflow, outflow, net, running balance — negative weeks highlighted red. Cash flow alert when any week projects negative balance with lowest balance shown. LOC planning recommendation. Contract roster with edit/delete. Print formal 3-table report (contracts + weekly forecast + pay cycle notes) with PM/Principal/Controller triple sign-off. Answers: "When do I need to draw the line of credit?" and "Can I start a new job next month?"
+
+**Commit:** 85f91ad → GitHub pushed
+**Total Lines:** 87,532 | **Total Tools:** 312
+
+---
+
+## SESSION: Mar 29, 2026 - 03:45 UTC
+**Status:** Added tools 307-309 this session (+403 lines)
+
+### New Features Added (This Session):
+
+1. ✅ **TOOL 307 — Polished Concrete Floor Spec & Cost Estimator (💎)** — CSDA STD-105 / ACI 302.1R-15 / ACI 310R. 5 specification levels (Cream Polish Level 1 through Superflat Mirror Level 4, plus Grind & Seal). Each spec shows grit progression, CSP requirement, sheen/gloss level, densifier type, guard type, labor $/SF, material $/SF, description. Calculator: SF, dye/color add-on, mobilization, OH%, profit% → itemized cost breakdown, total bid, all-in $/SF. Notes: f'c ≥ 3,500 PSI and FF≥35/FL≥25 for Level 2+. Grit progression reference table (16-3000 grit with type and purpose). Save estimates to history.
+
+2. ✅ **TOOL 308 — Owner-Furnished Material (GFM) Tracker (📦)** — AIA A201-2017 §3.8 / §10.2.6. Track receipt, inspection, and installation status of all owner/GC-furnished materials (anchor bolts, embed plates, rebar, PT strand, weld studs, conduit sleeves, etc.). Per item: type, description, mark/column line, qty, furnished-by, delivery date, need-by date, notes/defects. Status cycle: Pending Delivery → Delivered Not Inspected → Inspected Accepted → Conditional → Rejected → Stored → Installed → N/A. Mill Cert toggle per item. Dashboard: total, accepted, installed, rejected counts. Red ⛔ REJECTED banner — do NOT install. Missing cert warning (ACI 318-19 §26.3.2). AIA A201 §3.8 GFM key requirements reference.
+
+3. ✅ **TOOL 309 — Concrete Project Lessons Learned Log (📝)** — Institutional knowledge capture per project. 15 category presets (Estimating Accuracy, Scope Gap, Material Cost Variance, Labor Productivity, QC/Cylinder Failure, Cold Joint, etc.). 5 impact levels (Positive → Critical). Per lesson: project, GC, project type (13 types), category, impact, what happened, root cause (why), action for next time, $ impact. Filter by category. Dashboard: total lessons, positives, criticals, total $ impact. Critical lessons flagged with banner. Cards show what/why/action in color-coded sections. Build bidding intelligence over time.
+
+**Commit:** 55e11fe → GitHub pushed
+**Total Lines:** 87,076 | **Total Tools:** 309
+
+---
+
 ## SESSION: Mar 29, 2026 - 02:20 UTC (continued)
 **Status:** Added tools 301-306 this session (+405 lines)
 
