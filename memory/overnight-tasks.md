@@ -1,6 +1,33 @@
 # Overnight Build Tasks - 2026-02-14
 
-## Session: Mar 28, 2026 - 22:24 UTC
+## Session: Mar 28, 2026 - 23:49 UTC
+**Status:** Adding tools 263-271+ this session
+
+### New Features Added (This Session):
+
+13. ✅ **TOOL 263 — Pour Card / Field Ticket Generator (🎫)** — ACI 304R / ACI 311.1. Generates comprehensive pour day field tickets with project info, mix design, crew, truck log table (12 trucks), issue log, end-of-pour summary. Save tickets to history, reprint from archive. Business case: contemporaneous production records are required by ACI 304R §6 and are critical evidence in concrete placement disputes.
+
+14. ✅ **TOOL 264 — Project Close-Out Cost Recovery Log (💸)** — ACI 301-16 / AIA A201 §15.1. Track unrecovered costs for GC billing claims. 11 category presets (repair/rework, over-pour, equipment breakdown, sub default, GC backcharge, etc.). 7-stage status cycle. AIA 21-day deadline tracking with overdue alerts. Dashboard: total items, open exposure $, approved to collect $. Print formal log with TX Prompt Payment Act reference.
+
+15. ✅ **TOOL 265 — Reinforcement Inspection Photo Log (📸)** — ACI 318-19 §26.6 / ACI 117-10. Index pre-pour inspection photos with categories (13 types), status cycle (6 stages), action required notes. Red alert when action items pending (do not pour). Print formal photo index with inspector sign-off. ACI §26.6 reference table.
+
+16. ✅ **TOOL 266 — Slab Curling Measurement Log (📐)** — ACI 302.1R-15 §5.6 / ACI 360R-10 §8.4. Track post-pour curl and edge drop readings. 7 slab use presets with curl limits (residential 0.25" to superflat 0.063"). Auto PASS/MARGINAL/FAIL verdict. Probable cause tracking (8 options). Status cycle including EOR evaluation. Print ACI-formal log.
+
+17. ✅ **TOOL 267 — Admixture Compatibility Checker (🧪)** — ASTM C494 / ACI 211.1 / ACI 212.3R. Check compatibility of 16 admixture types (water reducers, retarders, accelerators, HRWR, air entrainer, SRA, silica fume, fly ash, GGBS, corrosion inhibitor, lithium, fibers, pigment, hydration stabilizer). Auto-detects incompatible and caution combinations. ACI 212.3R reference notes. Save check history.
+
+18. ✅ **TOOL 268 — Coring Authorization Tracker (🔩)** — ACI 318-19 §6.3 / ASTM C42 / ASNT SNT-TC-1A. Track core requests through 8-stage approval cycle. PT slab flag with critical warnings. GPR scan tracking. 11 purpose presets. Print formal authorization log with EOR sign-off. ACI/ASTM reference table (GPR requirement for PT, core diameter rules, L/D ratios).
+
+19. ✅ **TOOL 269 — Joint Sealant Material Calculator (🧴)** — ASTM C920 / C1193 / D6690. Calculate sealant quantity from joint dimensions. 9 sealant type presets with movement capability, life expectancy, cost. 3 backer rod types. ASTM C1193 depth-to-width ratio validation. Outputs: volume (ci), cartridges, sausages, backer rod LF, total cost. Print formal estimate.
+
+20. ✅ **TOOL 270 — Project Daily Log Generator (📋)** — AIA A201 §3.7 / OSHA 1926.20. Comprehensive daily field report with weather AM/PM, temps, crew size, man-hours, activities (20 checkboxes), work accomplished, visitors/inspections, safety/incidents, delays. Print professional daily log with triple sign-off. Save to history, reprint from archive.
+
+21. ✅ **TOOL 271 — Control Joint Spacing Calculator (📏)** — ACI 360R-10 §7.3 / ACI 302.1R-15 §5.5. Calculate max joint spacing from slab thickness, aggregate type (5 options), reinforcement (6 options). Computes: panel grid, total panels, actual panel dimensions, aspect ratio check, saw cut depth, total joint LF. ACI rule reference table. Print formal calculation sheet.
+
+**Progress:** 82,999 lines | 271 tools | 3 commits this session (+1,254 lines)
+
+---
+
+## Previous Session: Mar 28, 2026 - 22:24 UTC
 **Status:** Added 9 new tools (251-259) then 3 more (260-262), ~1,340 lines this session
 
 ### New Features Added:
