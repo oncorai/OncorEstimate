@@ -1,5 +1,30 @@
 # Overnight Build Tasks - 2026-02-14
 
+## SESSION: Mar 29, 2026 - 02:20 UTC (continued)
+**Status:** Added tools 301-306 this session (+405 lines)
+
+### New Features Added (Continued):
+
+23. ✅ **TOOL 301 — Concrete Yield Check (🧪)** — ASTM C138. Verify delivered concrete matches ticketed quantity from unit weight and batch weight. Yield %, cost impact, credit recommendation for underyield <97%.
+
+24. ✅ **TOOL 302 — Rebar Cover Depth Quick Reference (📏)** — ACI 318-19 §20.6.1.3. 15-row searchable reference table for minimum cover requirements by element type. Includes precast, PT tendons, drilled shafts. Field tolerance notes.
+
+25. ✅ **TOOL 303 — Construction Math Converter (🔢)** — Decimal feet ↔ feet-inches (with 1/8" fractions). CF → yd³/gallons/lbs. SF → SY/acres/m². Quick reference card for common conversions (yd³/100SF by slab thickness).
+
+26. ✅ **TOOL 304 — Truck Count & Order Calculator (🚚)** — Net volume + waste + prime → order qty → truck count. Per-truck load schedule. Short-load warning (<3 yd³) with plant minimum charge advisory.
+
+27. ✅ **TOOL 305 — Air Content Quick Reference (💨)** — ACI 318-19 Table 19.3.3.1. Exposure class × max agg size → required air %. El Paso notes (F0/F1 typical, F2 for salt-truck loading docks). ±1.5% field tolerance per ASTM C231.
+
+28. ✅ **TOOL 306 — Quick Volume Calc (📐)** — L×W×T calculator for rectangle/circle/triangle shapes. Live calculation with waste%. Instant area, net yd³, order yd³, truck count. Thickness in inches or feet.
+
+**Commits This Sub-Session:**
+- 97c2bce: Tools 301-303 (+229 lines)
+- 20c1101: Tools 304-306 (+176 lines)
+
+**Total Lines:** 86,673 | **Total Tools:** 306
+
+---
+
 ## 🎉 SESSION: Mar 29, 2026 - 02:20 UTC — MILESTONE 300 TOOLS!
 **Status:** Added tools 279-300 this session (+2,209 lines) | **REACHED 300 TOOLS!**
 
