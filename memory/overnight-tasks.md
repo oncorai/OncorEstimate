@@ -23,7 +23,15 @@
 
 21. ✅ **TOOL 271 — Control Joint Spacing Calculator (📏)** — ACI 360R-10 §7.3 / ACI 302.1R-15 §5.5. Calculate max joint spacing from slab thickness, aggregate type (5 options), reinforcement (6 options). Computes: panel grid, total panels, actual panel dimensions, aspect ratio check, saw cut depth, total joint LF. ACI rule reference table. Print formal calculation sheet.
 
-**Progress:** 82,999 lines | 271 tools | 3 commits this session (+1,254 lines)
+22. ✅ **TOOL 272 — Pump Selection Comparison Matrix (🚛)** — ACI 304.2R / ASME B30.27. Side-by-side pump comparison from pour requirements. 9 pump type presets (trailer through 58m+ boom and stationary high-pressure) with EP 2025 daily rates, max reach, rate range, prime waste. Inputs: yd³, target duration, reach needed, vertical, concrete $/yd³, CJ window. Auto-filters suitable pumps, sorts by cost, shows waste cost, mob cost, daily rate, $/yd³ adder. Trophy badge on lowest-cost option. Save analyses.
+
+23. ✅ **TOOL 273 — Rebar Bend Schedule Calculator (📐)** — ACI 315-18 / CRSI / ACI 318-19 §25.3. Build formal bar schedule with mark, size (#3-#11), bend type (7 types: straight, 90°/180°/135° hooks, 90° bent, U-stirrup, truss/cranked). Auto-computes cut length with ACI 318 hook allowances and bend deductions. Weight per mark and running total in lbs/tons. Print formal ACI 315-18 schedule with sign-off. Copy tab-delimited.
+
+24. ✅ **TOOL 274 — Placement Rate vs Cold Joint Risk Analyzer (⚡)** — ACI 304R §5.3 / ACI 305R / ACI 306R. Real-time risk analysis from placement rate, CJ window, temperature, and retarder. 12 element type presets with typical rates and CJ windows. Temperature-adjusted window (100°F+ = 60% of base, <50°F = 130%). Retarder adds 50%. Truck interval vs safe window comparison. HIGH/MODERATE/LOW risk verdict with exact solutions for high risk scenarios.
+
+25. ✅ **TOOL 275 — Footing Reinforcement Quick Sizer (🏗️)** — ACI 318-19 §13 / §24.4. Preliminary rebar sizing from footing dimensions. 8 footing type presets. Computes As,min per ACI 318-19 §24.4.3.2, recommended bar size and spacing, actual As provided, reinforcement ratio, weight estimate. ACI footing requirements reference table (cover, depth, shear checks). EOR disclaimer.
+
+**Progress:** 83,562 lines | 275 tools | 5 commits this session (+1,817 lines)
 
 ---
 
