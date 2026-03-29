@@ -1,7 +1,23 @@
 # Overnight Build Tasks - 2026-02-14
 
+## Session: Mar 29, 2026 - 01:15 UTC
+**Status:** Added tools 276-278 this session (+497 lines)
+
+### New Features Added (This Session):
+
+1. ✅ **TOOL 276 — CMU / Masonry Core Fill Calculator (🧱)** — ACI 530-19 / ASTM C90 / ACI 318-19 §26.9. Calculate grout volume and cost for CMU wall core fill. 7 block size presets (6"/8"/10"/12" CMU, double open-end, H-block, custom) with core dimensions pre-loaded. Fill pattern selector (100%/50%/rebar cores/bond beams only). Auto-selects fine vs coarse grout per ACI 530 §3.3.3.2 core size threshold (2"×3"). Computes: blocks, net grout CF/yd³, order qty +10%, material cost + OH/profit = total bid, $/SF. ACI 530 §3.3.3 reference table (f'c min, slump, consolidation, lift heights). Save/print estimates. Business case: CMU core fill on a 1,000 SF wall at 8" CMU full grout = ~3.4 yd³ + 10% waste; routinely estimated as a flat $/SF guess without breaking out grout type, volume, and waste factor.
+
+2. ✅ **TOOL 277 — Concrete Acceptance Criteria Quick Checker (✅)** — ACI 318-19 §26.12 / ACI 301-16 §1.6.8 / ASTM C39. Enter 28-day cylinder break values and instantly check both ACI acceptance criteria: (1) avg ≥ f'c and (2) no single break < f'c - 500 PSI (or 90% of f'c when f'c > 5000 PSI). Clear PASS/FAIL/MARGINAL verdict. 7-day companion analysis (ratio check vs 28-day prediction). Non-conformance panel: when FAIL, shows ACI 318-19 §26.12.4 required actions (notify EOR, core testing options, structural analysis). Save check history. Print formal ACI-cited acceptance log with QC/PM/EOR sign-off. Business case: field QC techs routinely calculate acceptance by hand with errors; this is a 30-second authoritative check with the formal paper trail.
+
+3. ✅ **TOOL 278 — Cold Joint Window Timer (🚚)** — ACI 304R §5.3 / ACI 305R. Real-time pour management timer that counts elapsed time since last truck arrival vs the configured cold joint window. Setup: project/element, CJ window (30/45/60/90/120 min presets tuned for El Paso summer conditions), truck load size, ambient temp. Large countdown display with color-coded risk zones (green <70%, amber <90%, red = COLD JOINT RISK). "LOG TRUCK ARRIVAL" button resets the clock and logs timestamp. Truck log shows intervals between deliveries. Pour-end summary saved to session history. El Paso-specific presets: 30-min window for 105°F+ days, 45-min for 90-105°F. Business case: most foremen watch a phone clock and don't know their exact CJ window for conditions — this puts a live ACI-threshold-aware timer on the pour with a big red alert when you're approaching the danger zone.
+
+**Commit:** 489815e → GitHub pushed
+**Total Lines:** 84,059 | **Total Tools:** 278
+
+---
+
 ## Session: Mar 28, 2026 - 23:49 UTC
-**Status:** Adding tools 263-271+ this session
+**Status:** Added tools 263-275 this session (+1,817 lines)
 
 ### New Features Added (This Session):
 
