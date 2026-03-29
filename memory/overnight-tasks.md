@@ -1,7 +1,7 @@
 # Overnight Build Tasks - 2026-02-14
 
 ## SESSION: Mar 29, 2026 - 08:13 UTC (Overnight Cron)
-**Status:** 🚀 Building toward 350! Added tools 321-332 this session (+1365 lines)
+**Status:** 🚀 Building toward 350! Added tools 321-341 this session (+2248 lines)
 
 ### New Features Added (This Session):
 
@@ -29,13 +29,34 @@
 
 12. ✅ **TOOL 332 — Concrete Mix Water Adjustment Log (💧)** — ASTM C94 §10.3. Field water addition compliance tracking. Slump before/after, water added, max allowable (10% holdback rule of thumb). OK/VIOLATION verdict per load. ASTM C94 rules about field water addition and strength impact.
 
+13. ✅ **TOOL 333 — Grade Beam Reinforcement Calculator (🔩)** — ACI 318-19 §18.13. Longitudinal top/bottom bar quantities + stirrup rebar weight. 7 bar sizes (#4-#10), configurable top/bottom bar counts, stirrup size/spacing. Computes: top lbs, bottom lbs, stirrup lbs, total weight/tons, $/LF rebar, lap splice multiplier. Cost per LF.
+
+14. ✅ **TOOL 334 — Material Escalation Tracker (📈)** — Track concrete, rebar, formwork, equipment price changes over time. 9 material categories. Per-quote logging with supplier/date. Escalation summary: first→last price, % change color-coded (red up, green down). Identifies materials with >5% escalation for clause recommendation.
+
+15. ✅ **TOOL 335 — Mix Design Submittal Generator (📋)** — ACI 301-16 §4. 26-item checklist across 6 categories (Mix Design, SCM, Admixtures, Performance, Test Data, Certs). Required items flagged. READY TO SUBMIT / items remaining banner. Printable ACI 301-16 formal submittal checklist with sign-off.
+
+16. ✅ **TOOL 336 — Truck Ticket Reconciliation (🧾)** — ASTM C94. Compare batch ticket yd³ vs invoice yd³ per load. Auto-detects overcharges (invoice > ticket). Delta and cost impact per load. OVERCHARGE DETECTED banner with total disputed amount. Per-load delete.
+
+17. ✅ **TOOL 337 — Pump Daily Rate Comparison (🚛)** — ACI 304.2R. 8 pump type presets with El Paso 2025 daily rates ($850 trailer → $3,800 58m+ boom). Filter by reach and rate requirements. Lowest-cost suitable pump with trophy badge. Prime waste cost included in all-in comparison.
+
+18. ✅ **TOOL 338 — Curing Duration Tracker (⏳)** — ACI 308R-16. Start/end curing events per element. 8 curing method presets with ACI minimum durations. Live elapsed time with progress bar vs ACI requirement. READY TO END badge when minimum met. Active/completed event separation. SHORT verdict for premature ending.
+
+19. ✅ **TOOL 339 — Slab Thickness Optimizer (📏)** — ACI 360R-10 / PCA method. 8 load class presets (foot traffic → crane outrigger). 6 subgrade types including El Paso caliche. Westergaard interior load iteration for required thickness. Modulus of rupture safety factor 2.0. yd³/100SF computed.
+
+20. ✅ **TOOL 340 — Column Axial Load Capacity Check (🏛️)** — ACI 318-19 §22.4 simplified pure axial capacity. Square/round columns. φPn,max = φ×0.80×[0.85f'c(Ag-Ast)+fy×Ast]. Steel ratio ρg check (1-8% per ACI 318-19 §10.6.1.1). Utilization % with PASS/FAIL verdict.
+
+21. ✅ **TOOL 341 — GC Payment Terms Analyzer (💰)** — AIA A201 / TX Prompt Payment Act. 13 common payment clauses with risk scoring (LOW/MEDIUM/HIGH/CRITICAL). Check all clauses in your contract to score risk. Pay-when-paid, pay-if-paid, retainage tiers, LD pass-through, broad form indemnity. CRITICAL banner with legal review recommendation.
+
 **Commits:**
 - 000f2cd: Tools 321-323 (+460 lines)
 - 78a820f: Tools 324-326 (+285 lines)
 - b0ed9e2: Tools 327-329 (+320 lines)
 - 018e2c0: Tools 330-332 (+300 lines)
+- 407d837: Tools 333-335 (+333 lines)
+- 31dc584: Tools 336-338 (+290 lines)
+- d3e955e: Tools 339-341 (+260 lines)
 
-**Total Lines:** 89,985 | **Total Tools:** 332
+**Total Lines:** 90,868 | **Total Tools:** 341
 
 ---
 
