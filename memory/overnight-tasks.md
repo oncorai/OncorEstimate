@@ -1,5 +1,38 @@
 # Overnight Build Tasks - 2026-02-14
 
+## SESSION: Mar 29, 2026 - 09:39 UTC (Overnight Cron)
+**Status:** 🎉🎉🎉 MILESTONE 350 TOOLS! Added tools 342-350 this session (+1,046 lines)
+
+### New Features Added (This Session):
+
+1. ✅ **TOOL 342 — Crack Repair Method Selector (🔬)** — ACI 224R-01 / ACI 546R-14. 10 crack type reference cards (plastic shrinkage, drying, settlement, structural flexure, shear, cold joint, thermal, corrosion, map/crazing, delamination). Per type: cause, structural flag (EOR required), and 3 repair methods with ASTM/ACI citations. Structural crack types auto-flag EOR notification. Interactive click-to-expand cards. Reference panel at bottom.
+
+2. ✅ **TOOL 343 — Sidewalk & ADA Ramp Scope Builder (♿)** — TxDOT Item 529/531 / ADA 2010 §4.7 / TAS 406. 12 preset line items (sidewalk 4/6, ADA curb ramp w/ TDD, curb & gutter, driveway, valley gutter, mow strip, edge form, scored finish, integral color, TDD pad, mobilization). Quick-add presets with qty prompt. Custom line items. OH%/profit% markup. Live total. ADA notes panel (4' min width, 5% max slope, turning space requirements). El Paso 2025 rates.
+
+3. ✅ **TOOL 344 — Concrete Reject & Reorder Decision Log (🚫)** — ASTM C94 §11.10 / ACI 318-19 §26.4.3. 12 rejection reason presets (slump high/low, temp violations, time/rev exceeded, wrong PSI, water addition, air OOS, contamination, missing docs). Disposition tracking (5 options). Status cycle with EOR notification tracking. Dashboard with open rejections count. Red alert banner when open events exist. ASTM C94 §11.10 reference at bottom.
+
+4. ✅ **TOOL 345 — Form Stripping Schedule (🏗️)** — ACI 347R-14 Table 6.1. Reference table: 12 element types with minimum hours/days (footings 12h → elevated deck span >10ft 336h → PT per EOR). Live pour tracking with pour date/time input. Countdown timer shows hours remaining vs ACI minimum. Progress bar (green = ready, blue = curing). Cold weather doubling note (ACI 306R). Auto-advances status when minimum met.
+
+5. ✅ **TOOL 346 — Project Schedule Gantt Builder (📅)** — AIA A201 §3.10 / ConsensusDocs §6. Set project start date + number of weeks (4-26). Add activities with name, category (11 options: Mobilization/Earthwork/Formwork/Rebar/Concrete/PT/Curing/Finishing/Inspection/Backfill/Punch), start week, duration. Visual grid Gantt chart with category color-coded bars per week. Activity delete. AIA §3.10 submittal requirement note.
+
+6. ✅ **TOOL 347 — Structural Integrity Evaluation Checklist (⚠️)** — ACI 318-19 §26.12 / §27. 10 structural concern triggers: cylinder failure, cold joint, form blowout, water addition, gross slump OOS, early curing termination, deficient cover, wrong embed location, premature shoring removal, structural crack. Each with ACI reference and required action. Evaluation event log with EOR notification tracking, work-halt status, status cycle (Open/Resolved). STOP WORK banner.
+
+7. ✅ **TOOL 348 — Surface Grinding & Leveling Cost Estimator (💎)** — ACI 302.1R-15 / CSDA STD-105 / ASTM E1155. 11 method presets: diamond grind 1/2-3/4+ passes, shot blast, scarify, SLU topping, bonded overlay, partial/full panel replacement, bump cutter, mobilization. Each with ACI/CSDA method description and El Paso 2025 rate. Quick-add preset with qty prompt. Custom line items. OH%/profit% markup. Live total calculation.
+
+8. ✅ **TOOL 349 — Pre-Construction Photo Documentation Plan (📷)** — AIA A201 §3.2. 14 default photo subjects: existing SOG condition, subgrade, adjacent surfaces, TX811 markings, pre-pour rebar, embedded items, formwork, post-pour surface, curing application, equipment damage, GC-directed extra work, material deliveries, adjacent property, site access. Each with dispute protection rationale. Status cycle (Pending/In Progress/Done). Load defaults button. Custom subject add. Progress tracking. Best practice notes.
+
+9. 🏆 **TOOL 350 — MILESTONE: Oncor Suite Master Index** — Searchable, animated milestone tool. 350-tool index with category color-coding (Core Estimating/Quantity Calculators/QC & Testing/Safety & Compliance/Legal & Financial/Documentation/Business Intelligence). Pulsing gold/gradient button. Live search across all 350 tool names and categories. Category summary cards showing count per category. Per-tool cards with tool #, category badge, name. Milestone banner: 350 tools, 92k+ lines, 150+ standards. Zeus ⚡ attribution.
+
+**Commits:**
+- 96a39d6: 🎉 MILESTONE 350! Tools 342-350 (+1,046 lines)
+
+**Total Lines:** 91,914 | **Total Tools:** 350 🎉🎉🎉
+
+
+---
+
+# Overnight Build Tasks - 2026-02-14
+
 ## SESSION: Mar 29, 2026 - 08:13 UTC (Overnight Cron)
 **Status:** 🚀 Building toward 350! Added tools 321-341 this session (+2248 lines)
 
