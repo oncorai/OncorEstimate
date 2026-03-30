@@ -129442,3 +129442,1175 @@ window.t920calc=function(){
 var tgt=document.getElementById('tools-section')||document.body;
 tgt.appendChild(btn);tgt.appendChild(wrap);
 })();
+(function(){
+// TOOL 921 — Concrete Slab Thickness Design (ACI 360R)
+var btn=document.createElement('button');
+btn.className='tool-btn';btn.textContent='Concrete Slab Thickness Designer (ACI 360R) 📐';
+btn.onclick=function(){document.getElementById('t921_wrap').style.display=document.getElementById('t921_wrap').style.display==='none'?'block':'none';};
+var wrap=document.createElement('div');wrap.id='t921_wrap';wrap.style.display='none';wrap.className='tool-wrap';
+wrap.innerHTML='<h3>📐 Tool 921 — Concrete Slab Thickness Design (ACI 360R)</h3>'
++'<p style="color:#94a3b8;font-size:11px;">ACI 360R-10 / PCA EB075 / WRI / TR-34 / El Paso caliche subgrade</p>'
++'<div class="inp-grid">'
++'<label>Design Vehicle / Load<select id="t921_load" class="inp"><option value="forklift_light">Forklift ≤5,000 lb (warehouse)</option><option value="forklift_med">Forklift 5–15,000 lb (distribution)</option><option value="forklift_heavy">Forklift 15–30,000 lb (heavy industrial)</option><option value="truck_single">Single-axle truck (40K lb)</option><option value="truck_tandem">Tandem-axle truck (80K lb)</option><option value="pedestrian">Pedestrian / light foot traffic</option><option value="rack">Rack post load (shelf storage)</option></select></label>'
++'<label>Subgrade CBR (California Bearing Ratio)<input id="t921_cbr" type="number" value="5" step="0.5" class="inp"></label>'
++'<label>Concrete Compressive Strength f\'c (psi)<input id="t921_fc" type="number" value="4000" class="inp"></label>'
++'<label>Steel Fiber or WWF Reinforcement<select id="t921_reinf" class="inp"><option value="none">None (plain concrete)</option><option value="wwf">WWF 6×6-W2.9×W2.9</option><option value="fiber_25">Steel Fiber 25 lb/CY</option><option value="fiber_50">Steel Fiber 50 lb/CY</option><option value="rebar">Rebar (temp/shrinkage #3@18")</option></select></label>'
++'<label>Joint Spacing (ft)<input id="t921_joint" type="number" value="12" class="inp"></label>'
++'<label>Traffic Category<select id="t921_traffic" class="inp"><option value="light">Light (≤10 heavy vehicles/day)</option><option value="medium">Medium (10–100/day)</option><option value="heavy">Heavy (>100/day, logistics hub)</option></select></label>'
++'</div>'
++'<button onclick="t921calc()" class="calc-btn">Calculate Slab Thickness</button>'
++'<div id="t921_out"></div>';
+window.t921calc=function(){
+  var load=document.getElementById('t921_load').value;
+  var cbr=parseFloat(document.getElementById('t921_cbr').value)||5;
+  var fc=parseFloat(document.getElementById('t921_fc').value)||4000;
+  var reinf=document.getElementById('t921_reinf').value;
+  var joint=parseFloat(document.getElementById('t921_joint').value)||12;
+  var traffic=document.getElementById('t921_traffic').value;
+  // Modulus of subgrade reaction k (psi/in) from CBR — PCA correlation
+  var k=cbr*10; // simplified: k≈10×CBR for most soils
+  if(k<50)k=50; if(k>500)k=500;
+  // Base thickness lookup (inches) by load & k — ACI 360R Table 5.1 approximation
+  var baseTable={
+    'pedestrian':{50:4,100:4,200:3.5,500:3.5},
+    'forklift_light':{50:5,100:5,200:4.5,500:4},
+    'forklift_med':{50:6,100:6,200:5.5,500:5},
+    'forklift_heavy':{50:8,100:7,200:6.5,500:6},
+    'truck_single':{50:7,100:6.5,200:6,500:5.5},
+    'truck_tandem':{50:9,100:8,200:7.5,500:7},
+    'rack':{50:6,100:5.5,200:5,500:4.5}
+  };
+  var kBracket=[50,100,200,500];
+  var nearest=kBracket.reduce(function(prev,curr){return Math.abs(curr-k)<Math.abs(prev-k)?curr:prev;});
+  var baseThick=baseTable[load]?baseTable[load][nearest]:6;
+  // fc adjustment: designed for 4000 psi; higher fc allows thinner slab
+  var fcAdj=0;
+  if(fc>=5000)fcAdj=-0.5;
+  if(fc>=6000)fcAdj=-1;
+  if(fc<3500)fcAdj=0.5;
+  // Traffic adjustment
+  var trafAdj={'light':0,'medium':0.5,'heavy':1};
+  var adjT=trafAdj[traffic]||0;
+  // Reinforcement adjustment
+  var reinfAdj={'none':0,'wwf':-0.5,'fiber_25':-0.5,'fiber_50':-1,'rebar':0};
+  var rAdj=reinfAdj[reinf]||0;
+  var finalThick=baseThick+fcAdj+adjT+rAdj;
+  finalThick=Math.max(3.5,Math.round(finalThick*2)/2); // round to nearest 0.5"
+  // Concrete quantity at calculated thickness
+  var thickFt=finalThick/12;
+  var concPerSF=thickFt; // CY per SF × (1/27)
+  var concPer1000SF=Math.round((thickFt/27)*1000*100)/100;
+  // Joint spacing check — ACI 360R rule of thumb: spacing ≤ 2-3× thickness (in feet)
+  var maxJoint=Math.round(finalThick*2.5);
+  var jointOk=joint<=maxJoint;
+  // Cost estimate (El Paso 2025)
+  var reinfCostSF=0;
+  var reinfDesc='';
+  if(reinf==='wwf'){reinfCostSF=0.35;reinfDesc='WWF 6×6-W2.9×W2.9';}
+  else if(reinf==='fiber_25'){reinfCostSF=0.20;reinfDesc='Steel Fiber 25 lb/CY (~$20/CY adder)';}
+  else if(reinf==='fiber_50'){reinfCostSF=0.38;reinfDesc='Steel Fiber 50 lb/CY (~$38/CY adder)';}
+  else if(reinf==='rebar'){reinfCostSF=0.55;reinfDesc='#3 Rebar @18" EW temp/shrinkage';}
+  else{reinfDesc='Plain concrete (no reinforcement)';}
+  // Concrete unit cost by thickness
+  var baseConc=fc>=5000?9.50:8.50; // $/SF per inch (El Paso ready-mix + labor)
+  var concCostSF=Math.round(baseConc*(finalThick/4)*100)/100; // relative to 4" base
+  var totalCostSF=Math.round((concCostSF+reinfCostSF)*100)/100;
+  var loadLabels={
+    'pedestrian':'Pedestrian / Light Foot Traffic',
+    'forklift_light':'Light Forklift ≤5,000 lb',
+    'forklift_med':'Medium Forklift 5–15,000 lb',
+    'forklift_heavy':'Heavy Forklift 15–30,000 lb',
+    'truck_single':'Single-Axle Truck (40K lb)',
+    'truck_tandem':'Tandem-Axle Truck (80K lb)',
+    'rack':'Rack Post / Point Load'
+  };
+  var html='<div style="background:#0f172a;padding:12px;border-radius:8px;margin-top:8px;">';
+  html+='<div style="color:#38bdf8;font-size:14px;font-weight:bold;margin-bottom:8px;">📐 ACI 360R Slab Thickness Results</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+  var mainStats=[
+    {icon:'📐',label:'DESIGN THICKNESS',val:finalThick+'"',color:'#38bdf8',bg:'#0c1445'},
+    {icon:'🏗️',label:'CONCRETE VOLUME',val:concPer1000SF+' CY / 1,000 SF',color:'#a78bfa',bg:'#1e1b4b'},
+    {icon:'💰',label:'EST. COST/SF',val:'$'+totalCostSF,color:'#10b981',bg:'#022c22'}
+  ];
+  mainStats.forEach(function(s){
+    html+='<div style="background:'+s.bg+';padding:10px;border-radius:6px;text-align:center;">';
+    html+='<div style="font-size:20px;">'+s.icon+'</div>';
+    html+='<div style="color:'+s.color+';font-weight:bold;font-size:18px;">'+s.val+'</div>';
+    html+='<div style="color:#94a3b8;font-size:9px;">'+s.label+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+  var details=[
+    {label:'Design Vehicle',val:loadLabels[load]},
+    {label:'Subgrade CBR',val:cbr+' (k='+k+' psi/in)'},
+    {label:'Concrete Strength',val:"f'c "+fc+' psi'},
+    {label:'Reinforcement',val:reinfDesc},
+    {label:'Traffic Category',val:traffic.charAt(0).toUpperCase()+traffic.slice(1)},
+    {label:'Joint Spacing',val:joint+"' (max rec: "+maxJoint+"') "+(jointOk?'✅ OK':'⚠️ REDUCE')},
+  ];
+  details.forEach(function(d){
+    html+='<div style="background:#1e293b;padding:6px 10px;border-radius:4px;">';
+    html+='<span style="color:#64748b;font-size:10px;">'+d.label+':</span>';
+    html+='<div style="color:#e2e8f0;font-size:12px;font-weight:bold;">'+d.val+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  // ACI 360R slab types note
+  var typeNote='';
+  if(load==='pedestrian'){typeNote='Type A (Plain) — typical retail, office, light commercial';}
+  else if(load.startsWith('forklift_light')||load==='rack'){typeNote='Type B (Lightly Reinforced) — warehouse, storage';}
+  else if(load==='forklift_med'||load==='truck_single'){typeNote='Type C (Shrinkage Control) — distribution center';}
+  else{typeNote='Type D/E (Structural or Post-Tensioned) — heavy industrial, cold storage';}
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;margin-bottom:6px;">';
+  html+='<div style="color:#60a5fa;font-size:11px;font-weight:bold;">ACI 360R Slab Classification</div>';
+  html+='<div style="color:#93c5fd;font-size:11px;">'+typeNote+'</div>';
+  html+='</div>';
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;margin-bottom:6px;">';
+  html+='<div style="color:#a78bfa;font-size:10px;font-weight:bold;margin-bottom:4px;">El Paso Construction Notes</div>';
+  html+='<div style="color:#c4b5fd;font-size:10px;">• Caliche subgrade CBR typically 4–8; get geotech report for commercial slabs<br>';
+  html+='• El Paso summer: use ACI 305R hot weather protocols (w/c ≤0.45, place at night if T>90°F)<br>';
+  html+='• Curing: ASTM C309 compound OR 7-day wet cure (plastic sheeting) minimum<br>';
+  html+='• Vapor barrier: ASTM E1745 Class A (≥10-mil) under all interior slabs<br>';
+  html+='• Saw cut joints within 4–6 hrs; depth = T/4 minimum</div>';
+  html+='</div>';
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;">';
+  html+='<div style="color:#60a5fa;font-size:10px;font-weight:bold;margin-bottom:4px;">Standards</div>';
+  html+='<div style="color:#93c5fd;font-size:10px;">ACI 360R-10 (Design of Slabs on Ground) | PCA EB075 | WRI TR-34 | ACI 302.1R | ASTM E1155 | ASTM C309</div>';
+  html+='</div></div>';
+  document.getElementById('t921_out').innerHTML=html;
+};
+var tgt=document.getElementById('tools-section')||document.body;
+tgt.appendChild(btn);tgt.appendChild(wrap);
+})();
+(function(){
+// TOOL 922 — Commercial Roof Drain & Overflow Sizing (ASPE/IPC)
+var btn=document.createElement('button');
+btn.className='tool-btn';btn.textContent='Roof Drain & Overflow Sizing (IPC/ASPE) 🌧️';
+btn.onclick=function(){document.getElementById('t922_wrap').style.display=document.getElementById('t922_wrap').style.display==='none'?'block':'none';};
+var wrap=document.createElement('div');wrap.id='t922_wrap';wrap.style.display='none';wrap.className='tool-wrap';
+wrap.innerHTML='<h3>🌧️ Tool 922 — Roof Drain & Overflow Sizing (IPC/ASPE/IBC)</h3>'
++'<p style="color:#94a3b8;font-size:11px;">IPC 2021 §1106 / IBC 2021 §1503 / ASPE Plumbing Engineering Design Handbook / El Paso 100yr rainfall</p>'
++'<div class="inp-grid">'
++'<label>Roof Area (SF)<input id="t922_area" type="number" value="20000" class="inp"></label>'
++'<label>Rainfall Intensity (in/hr)<select id="t922_rain" class="inp"><option value="4.0">4.0 in/hr — El Paso 100-yr / 1-hr</option><option value="3.0">3.0 in/hr — El Paso 50-yr</option><option value="2.0">2.0 in/hr — El Paso 10-yr</option><option value="6.0">6.0 in/hr — IBC design (overflow)</option><option value="custom">Custom</option></select></label>'
++'<label>Custom Rainfall (in/hr) — if Custom above<input id="t922_rain_custom" type="number" value="4.0" step="0.1" class="inp"></label>'
++'<label>Roof Slope<select id="t922_slope" class="inp"><option value="flat">Flat (≤1/4:12)</option><option value="low">Low slope (1/4–2:12)</option><option value="steep">Steep (>2:12)</option></select></label>'
++'<label>Drain Type<select id="t922_drain" class="inp"><option value="4in">4" Round Roof Drain</option><option value="6in">6" Round Roof Drain</option><option value="8in">8" Round Roof Drain</option><option value="12in">12" Round Roof Drain</option><option value="scupper">Scupper / Wall Overflow</option></select></label>'
++'<label>Number of Primary Drains<input id="t922_qty" type="number" value="4" class="inp"></label>'
++'</div>'
++'<button onclick="t922calc()" class="calc-btn">Size Drainage System</button>'
++'<div id="t922_out"></div>';
+window.t922calc=function(){
+  var area=parseFloat(document.getElementById('t922_area').value)||20000;
+  var rainSel=document.getElementById('t922_rain').value;
+  var rainCustom=parseFloat(document.getElementById('t922_rain_custom').value)||4.0;
+  var rain=rainSel==='custom'?rainCustom:parseFloat(rainSel);
+  var slope=document.getElementById('t922_slope').value;
+  var drainType=document.getElementById('t922_drain').value;
+  var qty=parseFloat(document.getElementById('t922_qty').value)||4;
+  // IPC Table 1106.2 — roof drain capacity (gpm) at 1/8" head
+  var drainCap={'4in':67,'6in':171,'8in':361,'12in':913,'scupper':250};
+  var capGPM=drainCap[drainType]||67;
+  // Flow rate Q = (A × i) / 96.23  [gpm] — IPC formula
+  var totalGPM=Math.round(area*rain/96.23);
+  var gpmPerDrain=Math.round(totalGPM/qty);
+  var drainsNeeded=Math.ceil(totalGPM/capGPM);
+  var adequate=qty>=drainsNeeded;
+  // Overflow requirement: IBC 1503.4 — secondary (overflow) drains required
+  // Overflow sized for 100yr 1hr intensity; primary sized for lesser
+  var overflowGPM=Math.round(area*6.0/96.23); // IBC 6 in/hr for overflow
+  var overflowDrainsNeeded=Math.ceil(overflowGPM/capGPM);
+  // Leader pipe sizing — IPC Table 1106.3
+  var leaderTable=[
+    {dia:3,cap:96},{dia:4,cap:192},{dia:5,cap:360},{dia:6,cap:563},{dia:8,cap:1208}
+  ];
+  var leader=leaderTable.find(function(l){return l.cap>=gpmPerDrain;})||{dia:8,cap:1208};
+  // Area per drain
+  var areaPerDrain=Math.round(area/qty);
+  // IPC max area per drain guideline (4" ≈ 1,610 SF at 4 in/hr)
+  var maxAreaPerDrain=Math.round(capGPM*96.23/rain);
+  var html='<div style="background:#0f172a;padding:12px;border-radius:8px;margin-top:8px;">';
+  html+='<div style="color:#38bdf8;font-size:14px;font-weight:bold;margin-bottom:8px;">🌧️ Roof Drainage Sizing Results</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+  var mainStats=[
+    {icon:'💧',label:'TOTAL FLOW',val:totalGPM.toLocaleString()+' GPM',color:'#38bdf8',bg:'#0c1445'},
+    {icon:'🔢',label:'DRAINS NEEDED',val:drainsNeeded+' primary',color:adequate?'#10b981':'#ef4444',bg:adequate?'#022c22':'#2d0a0a'},
+    {icon:'📏',label:'LEADER PIPE',val:leader.dia+'" dia',color:'#a78bfa',bg:'#1e1b4b'}
+  ];
+  mainStats.forEach(function(s){
+    html+='<div style="background:'+s.bg+';padding:10px;border-radius:6px;text-align:center;">';
+    html+='<div style="font-size:20px;">'+s.icon+'</div>';
+    html+='<div style="color:'+s.color+';font-weight:bold;font-size:18px;">'+s.val+'</div>';
+    html+='<div style="color:#94a3b8;font-size:9px;">'+s.label+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  if(!adequate){
+    html+='<div style="background:#2d0a0a;padding:8px;border-radius:6px;margin-bottom:8px;border:1px solid #ef4444;">';
+    html+='<div style="color:#ef4444;font-weight:bold;">⚠️ INSUFFICIENT PRIMARY DRAINS — ADD '+(drainsNeeded-qty)+' MORE</div>';
+    html+='<div style="color:#fca5a5;font-size:11px;">Each drain handles '+capGPM+' GPM max. You have '+qty+' drains ('+Math.round(qty*capGPM)+' GPM total capacity) but need '+totalGPM+' GPM.</div>';
+    html+='</div>';
+  }
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+  var details=[
+    {label:'Roof Area',val:area.toLocaleString()+' SF'},
+    {label:'Design Rainfall',val:rain+' in/hr'},
+    {label:'GPM per Drain',val:gpmPerDrain+' GPM ('+capGPM+' GPM cap)'},
+    {label:'Max Area per Drain',val:maxAreaPerDrain.toLocaleString()+' SF; actual: '+areaPerDrain.toLocaleString()+' SF'},
+    {label:'Overflow Flow (IBC 6"/hr)',val:overflowGPM.toLocaleString()+' GPM'},
+    {label:'Overflow Drains Required',val:overflowDrainsNeeded+' ('+drainType+' drains)'},
+  ];
+  details.forEach(function(d){
+    html+='<div style="background:#1e293b;padding:6px 10px;border-radius:4px;">';
+    html+='<span style="color:#64748b;font-size:10px;">'+d.label+':</span>';
+    html+='<div style="color:#e2e8f0;font-size:12px;font-weight:bold;">'+d.val+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;margin-bottom:6px;">';
+  html+='<div style="color:#60a5fa;font-size:11px;font-weight:bold;margin-bottom:4px;">El Paso Rainfall Data (NOAA Atlas 14)</div>';
+  html+='<div style="color:#93c5fd;font-size:10px;">• 2-yr/1-hr: ~1.3 in/hr | 10-yr/1-hr: ~2.0 in/hr | 25-yr/1-hr: ~2.7 in/hr<br>';
+  html+='• 50-yr/1-hr: ~3.0 in/hr | 100-yr/1-hr: ~4.0 in/hr<br>';
+  html+='• IBC §1503.4 requires secondary (overflow) drains sized for 100yr event<br>';
+  html+='• El Paso monsoon (Jul–Sep): intense short-duration storms — design for 100yr min</div>';
+  html+='</div>';
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;">';
+  html+='<div style="color:#60a5fa;font-size:10px;font-weight:bold;margin-bottom:4px;">Standards</div>';
+  html+='<div style="color:#93c5fd;font-size:10px;">IPC 2021 §1106 | IBC 2021 §1503.4 | ASPE Plumbing Eng Design Handbook | NOAA Atlas 14 | SMACNA Architectural Sheet Metal</div>';
+  html+='</div></div>';
+  document.getElementById('t922_out').innerHTML=html;
+};
+var tgt=document.getElementById('tools-section')||document.body;
+tgt.appendChild(btn);tgt.appendChild(wrap);
+})();
+(function(){
+// TOOL 923 — Material Escalation & Inflation Adjuster
+var btn=document.createElement('button');
+btn.className='tool-btn';btn.textContent='Material Cost Escalation Adjuster (ENR/PPI) 📈';
+btn.onclick=function(){document.getElementById('t923_wrap').style.display=document.getElementById('t923_wrap').style.display==='none'?'block':'none';};
+var wrap=document.createElement('div');wrap.id='t923_wrap';wrap.style.display='none';wrap.className='tool-wrap';
+wrap.innerHTML='<h3>📈 Tool 923 — Material Cost Escalation & Inflation Adjuster</h3>'
++'<p style="color:#94a3b8;font-size:11px;">ENR Construction Cost Index / BLS PPI / RS Means Historical / El Paso 2025 actuals</p>'
++'<div class="inp-grid">'
++'<label>Material Type<select id="t923_mat" class="inp"><option value="concrete">Ready-Mix Concrete ($/CY)</option><option value="rebar">Rebar ($/ton)</option><option value="steel">Structural Steel ($/ton)</option><option value="lumber">Dimensional Lumber ($/MBF)</option><option value="copper">Copper Wire ($/lb)</option><option value="pvc">PVC Pipe ($/LF)</option><option value="aggregate">Crushed Aggregate ($/ton)</option><option value="asphalt">Asphalt Mix ($/ton)</option><option value="masonry">CMU Block ($/unit)</option><option value="drywall">Gypsum Drywall ($/SF)</option></select></label>'
++'<label>Base Year (bid was priced in)<input id="t923_baseyr" type="number" value="2023" min="2015" max="2026" class="inp"></label>'
++'<label>Target Year (adjust to)<input id="t923_targetyr" type="number" value="2026" min="2015" max="2028" class="inp"></label>'
++'<label>Base Year Unit Cost<input id="t923_basecost" type="number" value="0" step="0.01" class="inp" placeholder="Enter your original cost"></label>'
++'<label>Quantity (optional, for total)<input id="t923_qty" type="number" value="0" class="inp" placeholder="e.g. CY, tons, LF"></label>'
++'</div>'
++'<button onclick="t923calc()" class="calc-btn">Calculate Escalation</button>'
++'<div id="t923_out"></div>';
+window.t923calc=function(){
+  var mat=document.getElementById('t923_mat').value;
+  var baseYr=parseInt(document.getElementById('t923_baseyr').value)||2023;
+  var targetYr=parseInt(document.getElementById('t923_targetyr').value)||2026;
+  var baseCost=parseFloat(document.getElementById('t923_basecost').value)||0;
+  var qty=parseFloat(document.getElementById('t923_qty').value)||0;
+  // Annual escalation rates by material (historical + projected, ENR/BLS PPI)
+  var escRates={
+    // [2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025,2026,2027]
+    'concrete':  [2.0, 2.5, 3.0, 4.5, 3.0, 1.5, 8.0,10.0, 6.0, 4.0, 3.5, 3.0, 3.0],
+    'rebar':     [2.0,-3.0, 5.0,10.0,-5.0,-10.0,35.0,20.0,-15.0,5.0, 4.0, 4.0, 3.5],
+    'steel':     [1.0,-2.0, 3.0,12.0,-4.0,-8.0, 40.0,15.0,-10.0,4.0, 3.5, 3.5, 3.0],
+    'lumber':    [3.0, 4.0, 5.0, 8.0, 3.0,50.0,100.0,-30.0,-20.0,5.0,4.0, 4.0, 3.5],
+    'copper':    [2.0,-1.0, 5.0, 6.0,-3.0, 5.0,25.0,15.0,-5.0, 6.0, 5.0, 4.0, 3.5],
+    'pvc':       [1.5, 1.5, 2.0, 5.0, 1.0, 8.0,30.0,20.0,-8.0, 3.0, 3.0, 3.0, 2.5],
+    'aggregate': [1.5, 2.0, 2.5, 3.0, 2.5, 1.5, 6.0, 8.0, 5.0, 3.5, 3.0, 3.0, 2.5],
+    'asphalt':   [2.0,-3.0, 3.0,10.0,-5.0,-15.0,20.0,25.0,-5.0, 4.0, 3.5, 3.5, 3.0],
+    'masonry':   [1.5, 2.0, 2.5, 4.0, 3.0, 2.0, 8.0,10.0, 5.0, 3.5, 3.0, 3.0, 2.5],
+    'drywall':   [2.0, 2.0, 3.0, 5.0, 2.0,10.0,15.0,20.0,-5.0, 3.0, 2.5, 2.5, 2.5]
+  };
+  var rates=escRates[mat]||escRates['concrete'];
+  var baseYear=2015;
+  function getCumulative(yr){
+    var cum=1.0;
+    var steps=Math.max(0,yr-baseYear);
+    for(var i=0;i<Math.min(steps,rates.length);i++){
+      cum*=(1+rates[i]/100);
+    }
+    return cum;
+  }
+  var baseCum=getCumulative(baseYr);
+  var targetCum=getCumulative(targetYr);
+  var escFactor=targetCum/baseCum;
+  var escPct=Math.round((escFactor-1)*1000)/10;
+  var adjustedCost=baseCost?Math.round(baseCost*escFactor*100)/100:0;
+  var delta=baseCost?Math.round((adjustedCost-baseCost)*100)/100:0;
+  var totalOrig=qty&&baseCost?Math.round(qty*baseCost*100)/100:0;
+  var totalAdj=qty&&baseCost?Math.round(qty*adjustedCost*100)/100:0;
+  var totalDelta=totalAdj-totalOrig;
+  // Current 2025 El Paso benchmark prices
+  var benchmarks={
+    'concrete':{unit:'CY',low:145,high:185,note:'El Paso ready-mix 3000-5000 psi'},
+    'rebar':{unit:'ton',low:850,high:1100,note:'#3-#8 ASTM A615 Gr 60 delivered'},
+    'steel':{unit:'ton',low:1200,high:1600,note:'W-shapes fabricated & delivered'},
+    'lumber':{unit:'MBF',low:450,high:650,note:'SPF #2 dimensional'},
+    'copper':{unit:'lb',low:4.50,high:5.50,note:'THHN wire 12 AWG'},
+    'pvc':{unit:'LF',low:2.50,high:8.00,note:'Schedule 40, 2"-4" dia'},
+    'aggregate':{unit:'ton',low:18,high:28,note:'3/4" crushed limestone delivered'},
+    'asphalt':{unit:'ton',low:95,high:130,note:'Type D HMA in-place'},
+    'masonry':{unit:'unit',low:1.85,high:2.50,note:'8"×8"×16" CMU normal weight'},
+    'drywall':{unit:'SF',low:0.45,high:0.65,note:'5/8" Type X installed'}
+  };
+  var bench=benchmarks[mat];
+  var html='<div style="background:#0f172a;padding:12px;border-radius:8px;margin-top:8px;">';
+  html+='<div style="color:#38bdf8;font-size:14px;font-weight:bold;margin-bottom:8px;">📈 Escalation Analysis: '+baseYr+' → '+targetYr+'</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+  var mainStats=[
+    {icon:'📈',label:'ESCALATION FACTOR',val:escFactor.toFixed(3)+'×',color:escPct>0?'#ef4444':'#10b981',bg:escPct>0?'#2d0a0a':'#022c22'},
+    {icon:'%',label:'TOTAL CHANGE',val:(escPct>0?'+':'')+escPct+'%',color:escPct>0?'#ef4444':'#10b981',bg:escPct>0?'#2d0a0a':'#022c22'},
+    {icon:'💰',label:'ADJ. UNIT COST',val:adjustedCost?'$'+adjustedCost:'Enter cost',color:'#a78bfa',bg:'#1e1b4b'}
+  ];
+  mainStats.forEach(function(s){
+    html+='<div style="background:'+s.bg+';padding:10px;border-radius:6px;text-align:center;">';
+    html+='<div style="font-size:20px;">'+s.icon+'</div>';
+    html+='<div style="color:'+s.color+';font-weight:bold;font-size:18px;">'+s.val+'</div>';
+    html+='<div style="color:#94a3b8;font-size:9px;">'+s.label+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  if(baseCost&&qty){
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+    var totals=[
+      {label:'Original Total ('+baseYr+')',val:'$'+totalOrig.toLocaleString()},
+      {label:'Adjusted Total ('+targetYr+')',val:'$'+totalAdj.toLocaleString()},
+      {label:'Cost Delta',val:(totalDelta>=0?'+':'')+'$'+Math.round(totalDelta).toLocaleString()}
+    ];
+    totals.forEach(function(d){
+      html+='<div style="background:#1e293b;padding:8px;border-radius:4px;text-align:center;">';
+      html+='<div style="color:#64748b;font-size:9px;">'+d.label+'</div>';
+      html+='<div style="color:#e2e8f0;font-size:13px;font-weight:bold;">'+d.val+'</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;margin-bottom:6px;">';
+  html+='<div style="color:#60a5fa;font-size:11px;font-weight:bold;margin-bottom:4px;">2025 El Paso Market Benchmark — '+bench.unit+'</div>';
+  html+='<div style="display:flex;gap:8px;align-items:center;">';
+  html+='<div style="color:#38bdf8;font-size:16px;font-weight:bold;">$'+bench.low+' – $'+bench.high+' / '+bench.unit+'</div>';
+  html+='</div>';
+  html+='<div style="color:#93c5fd;font-size:10px;margin-top:4px;">'+bench.note+'</div>';
+  html+='</div>';
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;margin-bottom:6px;">';
+  html+='<div style="color:#a78bfa;font-size:10px;font-weight:bold;margin-bottom:4px;">Year-by-Year Escalation ('+baseYr+' to '+targetYr+')</div>';
+  html+='<div style="font-size:9px;">';
+  var yr=baseYr+1;
+  var running=baseCost||100;
+  while(yr<=targetYr){
+    var idx=yr-baseYear-1;
+    var r=idx>=0&&idx<rates.length?rates[idx]:3.0;
+    running=running*(1+r/100);
+    html+='<span style="display:inline-block;background:#0f172a;padding:2px 6px;border-radius:3px;margin:2px;color:'+(r>0?'#ef4444':'#10b981')+'">';
+    html+=yr+': '+(r>0?'+':'')+r+'%'+(baseCost?' = $'+Math.round(running*100)/100:'');
+    html+='</span>';
+    yr++;
+  }
+  html+='</div></div>';
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;">';
+  html+='<div style="color:#60a5fa;font-size:10px;font-weight:bold;margin-bottom:4px;">Standards & Sources</div>';
+  html+='<div style="color:#93c5fd;font-size:10px;">ENR Construction Cost Index | BLS Producer Price Index (PPI) | RS Means Historical Data | CFMA Financial Survey | AGC Data DIGest</div>';
+  html+='</div></div>';
+  document.getElementById('t923_out').innerHTML=html;
+};
+var tgt=document.getElementById('tools-section')||document.body;
+tgt.appendChild(btn);tgt.appendChild(wrap);
+})();
+(function(){
+// TOOL 924 — Texas Homestead Exemption & ARB Appeal Guide
+var btn=document.createElement('button');
+btn.className='tool-btn';btn.textContent='TX Homestead Exemption & ARB Appeal Guide (EPCAD) 🏠';
+btn.onclick=function(){document.getElementById('t924_wrap').style.display=document.getElementById('t924_wrap').style.display==='none'?'block':'none';};
+var wrap=document.createElement('div');wrap.id='t924_wrap';wrap.style.display='none';wrap.className='tool-wrap';
+wrap.innerHTML='<h3>🏠 Tool 924 — Texas Homestead Exemption & ARB Appeal Guide</h3>'
++'<p style="color:#94a3b8;font-size:11px;">TX Tax Code §11.13 / EPCAD / El Paso CAD Protest Process / El Paso ARB / 2025 deadlines</p>'
++'<div class="inp-grid">'
++'<label>Property Type<select id="t924_type" class="inp"><option value="homestead">Primary Residence (Homestead)</option><option value="over65">Over 65 / Disabled</option><option value="veteran">Disabled Veteran</option><option value="commercial">Commercial (no homestead)</option></select></label>'
++'<label>EPCAD Assessed Value ($)<input id="t924_assessed" type="number" value="300000" class="inp"></label>'
++'<label>Your Estimated Market Value ($)<input id="t924_market" type="number" value="250000" class="inp"></label>'
++'<label>Last Year Assessed Value ($) (for 10% cap)<input id="t924_lastyr" type="number" value="280000" class="inp"></label>'
++'<label>Year Built<input id="t924_built" type="number" value="2005" class="inp"></label>'
++'</div>'
++'<button onclick="t924calc()" class="calc-btn">Calculate Exemptions & Appeal Strategy</button>'
++'<div id="t924_out"></div>';
+window.t924calc=function(){
+  var type=document.getElementById('t924_type').value;
+  var assessed=parseFloat(document.getElementById('t924_assessed').value)||300000;
+  var market=parseFloat(document.getElementById('t924_market').value)||250000;
+  var lastYr=parseFloat(document.getElementById('t924_lastyr').value)||280000;
+  var built=parseInt(document.getElementById('t924_built').value)||2005;
+  // Texas exemption amounts — El Paso 2025
+  var schoolExempt=100000; // TX §11.13(b) — mandatory $100k school district from Jan 2023
+  var cityExempt=20000;   // City of El Paso homestead exemption (20% of value, min $5k)
+  var countyExempt=3000;  // El Paso County
+  var over65School=10000; // Additional $10k school exemption
+  var over65City=10000;   // El Paso city over-65 additional
+  var disVetExempt={
+    low:5000,   // 0–29% disability
+    mid:7500,   // 30–49%
+    high:10000, // 50–69%
+    higher:12000,// 70–99%
+    full:0      // 100% = total exemption
+  };
+  // Calculate 10% cap
+  var capLimit=lastYr*1.10;
+  var capApplies=assessed>capLimit&&type!=='commercial';
+  var effectiveAssessed=capApplies?Math.min(assessed,capLimit):assessed;
+  // Apply exemptions
+  var totalExempt=0;
+  var exemptBreakdown=[];
+  if(type==='homestead'||type==='over65'||type==='veteran'){
+    totalExempt+=schoolExempt;
+    exemptBreakdown.push({name:'School District (§11.13b)',val:schoolExempt});
+    totalExempt+=cityExempt;
+    exemptBreakdown.push({name:'City of El Paso (20% min $5k)',val:cityExempt});
+    totalExempt+=countyExempt;
+    exemptBreakdown.push({name:'El Paso County',val:countyExempt});
+  }
+  if(type==='over65'){
+    totalExempt+=over65School;
+    exemptBreakdown.push({name:'Over-65 Additional (School)',val:over65School});
+    totalExempt+=over65City;
+    exemptBreakdown.push({name:'Over-65 City Additional',val:over65City});
+  }
+  if(type==='veteran'){
+    totalExempt+=12000; // 70-99% disabled veteran example
+    exemptBreakdown.push({name:'Disabled Veteran (70-99%)',val:12000});
+  }
+  var taxableValue=Math.max(0,effectiveAssessed-totalExempt);
+  // El Paso 2025 total rate ~2.37%
+  var elPasoRate=0.02373;
+  var annualTax=Math.round(taxableValue*elPasoRate);
+  var annualTaxBefore=Math.round(effectiveAssessed*elPasoRate);
+  var savings=annualTaxBefore-annualTax;
+  // Appeal potential
+  var overAssessed=assessed>market;
+  var appealSavings=overAssessed?Math.round((assessed-market)*elPasoRate*(type==='commercial'?1:1)):0;
+  var html='<div style="background:#0f172a;padding:12px;border-radius:8px;margin-top:8px;">';
+  html+='<div style="color:#38bdf8;font-size:14px;font-weight:bold;margin-bottom:8px;">🏠 TX Homestead Exemption & Appeal Analysis</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+  var mainStats=[
+    {icon:'💰',label:'TAXABLE VALUE',val:'$'+taxableValue.toLocaleString(),color:'#38bdf8',bg:'#0c1445'},
+    {icon:'🏷️',label:'TOTAL EXEMPTIONS',val:'$'+totalExempt.toLocaleString(),color:'#10b981',bg:'#022c22'},
+    {icon:'📉',label:'TAX SAVINGS/YR',val:'$'+savings.toLocaleString(),color:'#a78bfa',bg:'#1e1b4b'}
+  ];
+  mainStats.forEach(function(s){
+    html+='<div style="background:'+s.bg+';padding:10px;border-radius:6px;text-align:center;">';
+    html+='<div style="font-size:20px;">'+s.icon+'</div>';
+    html+='<div style="color:'+s.color+';font-weight:bold;font-size:18px;">'+s.val+'</div>';
+    html+='<div style="color:#94a3b8;font-size:9px;">'+s.label+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;margin-bottom:6px;">';
+  html+='<div style="color:#60a5fa;font-size:11px;font-weight:bold;margin-bottom:4px;">Exemption Breakdown</div>';
+  exemptBreakdown.forEach(function(e){
+    html+='<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #1e293b;">';
+    html+='<span style="color:#94a3b8;font-size:11px;">'+e.name+'</span>';
+    html+='<span style="color:#10b981;font-size:11px;font-weight:bold;">-$'+e.val.toLocaleString()+'</span>';
+    html+='</div>';
+  });
+  html+='<div style="display:flex;justify-content:space-between;padding:4px 0;margin-top:2px;">';
+  html+='<span style="color:#e2e8f0;font-size:12px;font-weight:bold;">Estimated Annual Tax</span>';
+  html+='<span style="color:#38bdf8;font-size:14px;font-weight:bold;">$'+annualTax.toLocaleString()+'/yr</span>';
+  html+='</div>';
+  html+='</div>';
+  if(capApplies){
+    html+='<div style="background:#2d1a00;padding:8px;border-radius:6px;margin-bottom:6px;border:1px solid #f59e0b;">';
+    html+='<div style="color:#f59e0b;font-weight:bold;font-size:11px;">📊 10% Cap Applied (TX §23.23)</div>';
+    html+='<div style="color:#fde68a;font-size:10px;">EPCAD assessed $'+assessed.toLocaleString()+' but last year was $'+lastYr.toLocaleString()+'. The 10% cap limits increase to $'+Math.round(capLimit).toLocaleString()+'. Your effective taxable base is reduced by $'+Math.round(assessed-capLimit).toLocaleString()+'.</div>';
+    html+='</div>';
+  }
+  if(overAssessed){
+    html+='<div style="background:#2d0a0a;padding:8px;border-radius:6px;margin-bottom:6px;border:1px solid #ef4444;">';
+    html+='<div style="color:#ef4444;font-weight:bold;font-size:11px;">⚠️ POTENTIAL OVER-ASSESSMENT — PROTEST NOW</div>';
+    html+='<div style="color:#fca5a5;font-size:10px;">EPCAD value $'+assessed.toLocaleString()+' vs your estimate $'+market.toLocaleString()+' = $'+(assessed-market).toLocaleString()+' over-assessed.<br>';
+    html+='If successful, estimated additional annual savings: ~$'+appealSavings.toLocaleString()+'</div>';
+    html+='</div>';
+  }
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;margin-bottom:6px;">';
+  html+='<div style="color:#a78bfa;font-size:11px;font-weight:bold;margin-bottom:4px;">ARB Protest Timeline (El Paso 2025)</div>';
+  html+='<div style="color:#c4b5fd;font-size:10px;">';
+  html+='📅 <b>Jan–Apr:</b> EPCAD mails appraisal notices<br>';
+  html+='📅 <b>May 15 (or 30 days after notice):</b> <b style="color:#ef4444">PROTEST DEADLINE</b><br>';
+  html+='📅 <b>Jun–Jul:</b> Informal hearings with EPCAD appraisers<br>';
+  html+='📅 <b>Jul–Aug:</b> ARB (Appraisal Review Board) formal hearing if needed<br>';
+  html+='📅 <b>Aug–Sep:</b> Certified tax rolls<br>';
+  html+='📅 <b>Jan 31 next yr:</b> Tax payment deadline (half by Nov 30 / half by Jun 30)<br>';
+  html+='<br>File online: <b>epcad.org</b> → "Protest" | Form 50-132 (Notice of Protest)</div>';
+  html+='</div>';
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;margin-bottom:6px;">';
+  html+='<div style="color:#60a5fa;font-size:11px;font-weight:bold;margin-bottom:4px;">Evidence for Your Protest</div>';
+  html+='<div style="color:#93c5fd;font-size:10px;">• Recent sales comps (3–5 similar properties sold within 1 yr, 1-mile radius)<br>';
+  html+='• Licensed appraisal report (USPAP-compliant)<br>';
+  html+='• Repair estimates / deferred maintenance documentation<br>';
+  html+='• Flood zone, environmental issues, easements<br>';
+  html+='• Neighbor\'s assessed value (equity argument — TX §41.43(b))<br>';
+  html+='• Photos of condition vs. comparable properties</div>';
+  html+='</div>';
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;">';
+  html+='<div style="color:#60a5fa;font-size:10px;font-weight:bold;margin-bottom:4px;">Standards</div>';
+  html+='<div style="color:#93c5fd;font-size:10px;">TX Tax Code §11.13 (Homestead) | §23.23 (10% Cap) | §41.41 (Protest Rights) | §41.43 (Equity) | EPCAD 2025 | El Paso ISD/City/County 2025 Rates</div>';
+  html+='</div></div>';
+  document.getElementById('t924_out').innerHTML=html;
+};
+var tgt=document.getElementById('tools-section')||document.body;
+tgt.appendChild(btn);tgt.appendChild(wrap);
+})();
+(function(){
+// TOOL 925 — Concrete Truck Washout & SWPPP Compliance Checklist
+var btn=document.createElement('button');
+btn.className='tool-btn';btn.textContent='SWPPP / Site Stormwater Compliance Checklist (TCEQ) 🌿';
+btn.onclick=function(){document.getElementById('t925_wrap').style.display=document.getElementById('t925_wrap').style.display==='none'?'block':'none';};
+var wrap=document.createElement('div');wrap.id='t925_wrap';wrap.style.display='none';wrap.className='tool-wrap';
+wrap.innerHTML='<h3>🌿 Tool 925 — SWPPP / Site Stormwater Compliance Checklist</h3>'
++'<p style="color:#94a3b8;font-size:11px;">EPA CGP 2022 / TCEQ TXR150000 TPDES / El Paso MS4 / OSHA 1926.502</p>'
++'<div class="inp-grid">'
++'<label>Site Area (acres)<input id="t925_acres" type="number" value="5" step="0.5" class="inp"></label>'
++'<label>Project Type<select id="t925_type" class="inp"><option value="commercial">Commercial Construction</option><option value="residential">Residential Subdivision</option><option value="linear">Linear (roads, utilities)</option><option value="redevelopment">Redevelopment (demo+build)</option></select></label>'
++'<label>Disturbed Area (acres)<input id="t925_disturbed" type="number" value="4" step="0.5" class="inp"></label>'
++'<label>Proximity to Water (ft)<input id="t925_water" type="number" value="500" class="inp" placeholder="Nearest creek/channel"></label>'
++'<label>Slope (max %)<input id="t925_slope" type="number" value="5" step="0.5" class="inp"></label>'
++'<label>Soil Type<select id="t925_soil" class="inp"><option value="caliche">Caliche (El Paso typical)</option><option value="clay">Clay / Adobe</option><option value="sandy">Sandy / Silty</option><option value="rocky">Rocky / Gravel</option></select></label>'
++'</div>'
++'<button onclick="t925calc()" class="calc-btn">Generate Compliance Checklist</button>'
++'<div id="t925_out"></div>';
+window.t925calc=function(){
+  var acres=parseFloat(document.getElementById('t925_acres').value)||5;
+  var type=document.getElementById('t925_type').value;
+  var disturbed=parseFloat(document.getElementById('t925_disturbed').value)||4;
+  var water=parseFloat(document.getElementById('t925_water').value)||500;
+  var slope=parseFloat(document.getElementById('t925_slope').value)||5;
+  var soil=document.getElementById('t925_soil').value;
+  var needsPermit=disturbed>=1; // TPDES required ≥1 acre disturbed
+  var highRisk=water<200||slope>15||soil==='sandy';
+  var html='<div style="background:#0f172a;padding:12px;border-radius:8px;margin-top:8px;">';
+  html+='<div style="color:#38bdf8;font-size:14px;font-weight:bold;margin-bottom:8px;">🌿 SWPPP Compliance Status</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">';
+  var mainStats=[
+    {icon:'📋',label:'TPDES PERMIT REQUIRED',val:needsPermit?'YES':'NO',color:needsPermit?'#ef4444':'#10b981',bg:needsPermit?'#2d0a0a':'#022c22'},
+    {icon:'⚠️',label:'RISK LEVEL',val:highRisk?'HIGH':'MODERATE',color:highRisk?'#f59e0b':'#10b981',bg:highRisk?'#2d1a00':'#022c22'},
+    {icon:'🌧️',label:'DISTURBED AREA',val:disturbed+' ac',color:'#38bdf8',bg:'#0c1445'}
+  ];
+  mainStats.forEach(function(s){
+    html+='<div style="background:'+s.bg+';padding:10px;border-radius:6px;text-align:center;">';
+    html+='<div style="font-size:20px;">'+s.icon+'</div>';
+    html+='<div style="color:'+s.color+';font-weight:bold;font-size:16px;">'+s.val+'</div>';
+    html+='<div style="color:#94a3b8;font-size:9px;">'+s.label+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  // Permit info
+  if(needsPermit){
+    html+='<div style="background:#2d0a0a;padding:8px;border-radius:6px;margin-bottom:8px;border:1px solid #ef4444;">';
+    html+='<div style="color:#ef4444;font-weight:bold;font-size:11px;">🚨 TPDES Construction General Permit (TXR150000) Required</div>';
+    html+='<div style="color:#fca5a5;font-size:10px;">Must file Notice of Intent (NOI) with TCEQ <b>before</b> land disturbance begins. Fee: $100–$450 depending on site area. Operator must prepare a Site Notice and post it at site entrance.</div>';
+    html+='</div>';
+  }
+  // SWPPP Checklist sections
+  var sections=[
+    {title:'📋 Pre-Construction Requirements',color:'#60a5fa',items:[
+      needsPermit?'✅ TPDES NOI filed with TCEQ (tceq.texas.gov) before disturbance':'ℹ️ TPDES not required (<1 acre), but check local ordinance',
+      '✅ SWPPP document prepared and on-site',
+      '✅ SWPPP signed by legally responsible person',
+      '✅ Site Notice posted at all entry points (visible from road)',
+      '✅ Operator training completed (or designated SWPPP Inspector)',
+      '✅ Pre-construction inspection documented',
+      '✅ El Paso MS4 permit coordination if within city limits'
+    ]},
+    {title:'🚧 BMP Installation (Before Disturbance)',color:'#10b981',items:[
+      '✅ Silt fence / straw wattles installed along down-gradient perimeter',
+      water<200?'⚠️ ENHANCED protection required: <200ft to waterway — install double barrier':'✅ Sediment barriers per plan',
+      '✅ Concrete washout area established (watertight, lined, signed)',
+      '✅ Stabilized construction entrance (TxDOT Item 169 or 6" crushed stone)',
+      '✅ Inlet protection on all catch basins within/adjacent to site',
+      soil==='sandy'?'⚠️ Sandy/silty soil: use fiber rolls + erosion blanket on all slopes':'✅ Erosion controls on disturbed slopes',
+      slope>10?'⚠️ Slope >10%: Install check dams in swales, erosion blanket on all cut/fill slopes':'✅ Slope stabilization per grading plan',
+      '✅ Stockpile perimeter sediment controls',
+      '✅ Fueling area secondary containment (if fuel storage on site)'
+    ]},
+    {title:'📅 Ongoing Inspections (During Construction)',color:'#f59e0b',items:[
+      '✅ Inspections every 7 calendar days',
+      '✅ Inspections within 24 hrs after any ½"+ rain event',
+      '✅ Inspection reports documented and retained 3 years',
+      '✅ BMP repairs completed within 24 hrs (or ASAP if weather)',
+      '✅ Stabilization within 14 days on areas inactive ≥14 days',
+      '✅ Concrete washout inspected; pumped/emptied before overflow',
+      '✅ El Paso monsoon season (Jul–Sep): heightened inspection frequency'
+    ]},
+    {title:'🌱 Final Stabilization & Closeout',color:'#a78bfa',items:[
+      '✅ Vegetation established on all disturbed areas (70%+ cover)',
+      '✅ Or equivalent permanent cover (paving, gravel)',
+      '✅ All temporary BMPs removed',
+      '✅ Notice of Termination (NOT) filed with TCEQ',
+      '✅ Final inspection documented',
+      '✅ SWPPP records retained 3 years after NOT'
+    ]}
+  ];
+  sections.forEach(function(s){
+    html+='<div style="background:#1a2744;padding:8px;border-radius:6px;margin-bottom:6px;">';
+    html+='<div style="color:'+s.color+';font-size:11px;font-weight:bold;margin-bottom:4px;">'+s.title+'</div>';
+    s.items.forEach(function(item){
+      var isWarn=item.startsWith('⚠️');
+      html+='<div style="color:'+(isWarn?'#fde68a':'#cbd5e1')+';font-size:10px;padding:2px 0;">'+item+'</div>';
+    });
+    html+='</div>';
+  });
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;">';
+  html+='<div style="color:#60a5fa;font-size:10px;font-weight:bold;margin-bottom:4px;">Standards & Contacts</div>';
+  html+='<div style="color:#93c5fd;font-size:10px;">EPA CGP 2022 | TCEQ TXR150000 TPDES CGP | El Paso MS4 (ELPASO-000002) | OSHA 1926.502 | TX Clean Water Act §402 | EPA SWPPP Template: epa.gov/npdes<br>';
+  html+='TCEQ: tceq.texas.gov | El Paso Stormwater: elpasotexas.gov/stormwater | NOI fees: $100–$450</div>';
+  html+='</div></div>';
+  document.getElementById('t925_out').innerHTML=html;
+};
+var tgt=document.getElementById('tools-section')||document.body;
+tgt.appendChild(btn);tgt.appendChild(wrap);
+})();
+(function(){
+// TOOL 926 — Precast Concrete Cost Estimator (PCI)
+var btn=document.createElement('button');
+btn.className='tool-btn';btn.textContent='Precast Concrete Cost Estimator (PCI) 🏭';
+btn.onclick=function(){document.getElementById('t926_wrap').style.display=document.getElementById('t926_wrap').style.display==='none'?'block':'none';};
+var wrap=document.createElement('div');wrap.id='t926_wrap';wrap.style.display='none';wrap.className='tool-wrap';
+wrap.innerHTML='<h3>🏭 Tool 926 — Precast Concrete Cost Estimator (PCI)</h3>'
++'<p style="color:#94a3b8;font-size:11px;">PCI Design Handbook 8th Ed. / MNL-120 / MNL-116 / AISC / El Paso structural 2025</p>'
++'<div class="inp-grid">'
++'<label>Precast Element Type<select id="t926_type" class="inp"><option value="doubleT">Double-T Beam (parking, floor)</option><option value="hollow_core">Hollow Core Plank (floors)</option><option value="wall_panel">Precast Wall Panel (solid/insulated)</option><option value="column">Precast Column</option><option value="beam">Precast Beam / Girder</option><option value="staircase">Precast Staircase</option><option value="spandrel">Spandrel Panel (architectural)</option></select></label>'
++'<label>Quantity (units or SF as noted)<input id="t926_qty" type="number" value="1000" class="inp"></label>'
++'<label>Span / Length (ft) — for beams, planks<input id="t926_span" type="number" value="30" class="inp"></label>'
++'<label>Concrete Strength f\'c (psi)<input id="t926_fc" type="number" value="6000" class="inp"></label>'
++'<label>Finish / Facing<select id="t926_finish" class="inp"><option value="standard">Standard (gray, form finish)</option><option value="sandblast">Sandblast / Exposed Aggregate</option><option value="painted">Painted</option><option value="insulated">Insulated (sandwich panel)</option></select></label>'
++'<label>Erection Included?<select id="t926_erect" class="inp"><option value="yes">Yes (include erection)</option><option value="no">No (fabrication only)</option></select></label>'
++'</div>'
++'<button onclick="t926calc()" class="calc-btn">Estimate Precast Cost</button>'
++'<div id="t926_out"></div>';
+window.t926calc=function(){
+  var type=document.getElementById('t926_type').value;
+  var qty=parseFloat(document.getElementById('t926_qty').value)||1000;
+  var span=parseFloat(document.getElementById('t926_span').value)||30;
+  var fc=parseFloat(document.getElementById('t926_fc').value)||6000;
+  var finish=document.getElementById('t926_finish').value;
+  var erect=document.getElementById('t926_erect').value;
+  // Unit costs ($/SF or $/unit depending on type) — El Paso Southwest 2025 (PCI + RS Means)
+  var costTable={
+    // [low$/unit or $/SF, high$/unit or $/SF, unit label, description]
+    'doubleT':    {low:18, high:28, unit:'SF',  desc:'8DT24, 10DT32 typical; spans 40–80ft'},
+    'hollow_core':{low:12, high:20, unit:'SF',  desc:'8" HC plank, spans 20–40ft, fire-rated'},
+    'wall_panel': {low:20, high:38, unit:'SF',  desc:'6"–8" solid; 10"–12" insulated sandwich'},
+    'column':     {low:2500,high:5000,unit:'ea',desc:'12"×12" to 24"×24", 20–40ft height'},
+    'beam':       {low:150, high:350, unit:'LF', desc:'AASHTO, I-beam, or inverted T'},
+    'staircase':  {low:4000,high:8000,unit:'ea',desc:'Straight run, precast landing included'},
+    'spandrel':   {low:28,  high:55,  unit:'SF', desc:'Architectural finish, embedded connections'}
+  };
+  var ct=costTable[type];
+  var unitLow=ct.low, unitHigh=ct.high, unitLabel=ct.unit;
+  // Span adjustment for beams/hollow core
+  var spanAdj=1.0;
+  if((type==='doubleT'||type==='hollow_core'||type==='beam')&&span>40)spanAdj=1.10;
+  if((type==='doubleT'||type==='beam')&&span>60)spanAdj=1.20;
+  // fc adjustment
+  var fcAdj=1.0;
+  if(fc>=8000)fcAdj=1.08;
+  if(fc>=10000)fcAdj=1.15;
+  // Finish adjustment
+  var finishAdj={'standard':1.0,'sandblast':1.15,'painted':1.10,'insulated':1.35};
+  var fAdj=finishAdj[finish]||1.0;
+  var adjustedLow=Math.round(unitLow*spanAdj*fcAdj*fAdj);
+  var adjustedHigh=Math.round(unitHigh*spanAdj*fcAdj*fAdj);
+  // Erection cost (typically 25–35% of fab cost)
+  var erectPct=erect==='yes'?0.30:0;
+  var totalLow=Math.round(adjustedLow*(1+erectPct)*qty);
+  var totalHigh=Math.round(adjustedHigh*(1+erectPct)*qty);
+  var midpoint=Math.round((totalLow+totalHigh)/2);
+  var typeLabels={
+    'doubleT':'Double-T Beam','hollow_core':'Hollow Core Plank','wall_panel':'Precast Wall Panel',
+    'column':'Precast Column','beam':'Precast Beam/Girder','staircase':'Precast Staircase','spandrel':'Spandrel Panel'
+  };
+  var html='<div style="background:#0f172a;padding:12px;border-radius:8px;margin-top:8px;">';
+  html+='<div style="color:#38bdf8;font-size:14px;font-weight:bold;margin-bottom:8px;">🏭 Precast Cost Estimate — '+typeLabels[type]+'</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+  var mainStats=[
+    {icon:'💰',label:'LOW ESTIMATE',val:'$'+totalLow.toLocaleString(),color:'#10b981',bg:'#022c22'},
+    {icon:'🎯',label:'MIDPOINT',val:'$'+midpoint.toLocaleString(),color:'#38bdf8',bg:'#0c1445'},
+    {icon:'📈',label:'HIGH ESTIMATE',val:'$'+totalHigh.toLocaleString(),color:'#f59e0b',bg:'#2d1a00'}
+  ];
+  mainStats.forEach(function(s){
+    html+='<div style="background:'+s.bg+';padding:10px;border-radius:6px;text-align:center;">';
+    html+='<div style="font-size:20px;">'+s.icon+'</div>';
+    html+='<div style="color:'+s.color+';font-weight:bold;font-size:16px;">'+s.val+'</div>';
+    html+='<div style="color:#94a3b8;font-size:9px;">'+s.label+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+  var details=[
+    {label:'Unit Cost (fab only)',val:'$'+adjustedLow+' – $'+adjustedHigh+' / '+unitLabel},
+    {label:'Erection Cost',val:erect==='yes'?'~30% of fab included':'Not included (add ~30%)'},
+    {label:'Quantity',val:qty.toLocaleString()+' '+unitLabel},
+    {label:"f'c",val:fc+' psi (prestressed)'},
+    {label:'Span Adjustment',val:spanAdj>1?(((spanAdj-1)*100).toFixed(0)+'% adder'):'None (≤40ft)'},
+    {label:'Finish',val:finish.charAt(0).toUpperCase()+finish.slice(1)+(fAdj>1?(' +'+Math.round((fAdj-1)*100)+'%'):'')},
+  ];
+  details.forEach(function(d){
+    html+='<div style="background:#1e293b;padding:6px 10px;border-radius:4px;">';
+    html+='<span style="color:#64748b;font-size:10px;">'+d.label+':</span>';
+    html+='<div style="color:#e2e8f0;font-size:12px;font-weight:bold;">'+d.val+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;margin-bottom:6px;">';
+  html+='<div style="color:#60a5fa;font-size:11px;font-weight:bold;margin-bottom:4px;">Element Notes</div>';
+  html+='<div style="color:#93c5fd;font-size:11px;">'+ct.desc+'</div>';
+  html+='</div>';
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;margin-bottom:6px;">';
+  html+='<div style="color:#a78bfa;font-size:10px;font-weight:bold;margin-bottom:4px;">El Paso Precast Notes</div>';
+  html+='<div style="color:#c4b5fd;font-size:10px;">• Nearest major precast plants: Albuquerque NM (~250mi) or El Paso area specialty producers<br>';
+  html+='• Trucking adder: +$1.50–$3.00/SF (oversized load permit, pilot car, weight limit routing)<br>';
+  html+='• Lead time: 8–14 weeks typical; plan shop drawings early<br>';
+  html+='• Connections: embedded plates, bearing pads, grouted splices — verify with SE<br>';
+  html+='• Seismic: El Paso SDC B/C; check ACI 318-19 Ch. 18 connection ductility requirements</div>';
+  html+='</div>';
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;">';
+  html+='<div style="color:#60a5fa;font-size:10px;font-weight:bold;margin-bottom:4px;">Standards</div>';
+  html+='<div style="color:#93c5fd;font-size:10px;">PCI Design Handbook 8th Ed. | PCI MNL-116 (Quality Control) | PCI MNL-120 | ACI 318-19 | AISC | IBC 2021 | ASTM C39 / C138</div>';
+  html+='</div></div>';
+  document.getElementById('t926_out').innerHTML=html;
+};
+var tgt=document.getElementById('tools-section')||document.body;
+tgt.appendChild(btn);tgt.appendChild(wrap);
+})();
+(function(){
+// TOOL 927 — Construction Productivity & Crew Rate Calculator
+var btn=document.createElement('button');
+btn.className='tool-btn';btn.textContent='Construction Productivity & Crew Rate Calculator 👷';
+btn.onclick=function(){document.getElementById('t927_wrap').style.display=document.getElementById('t927_wrap').style.display==='none'?'block':'none';};
+var wrap=document.createElement('div');wrap.id='t927_wrap';wrap.style.display='none';wrap.className='tool-wrap';
+wrap.innerHTML='<h3>👷 Tool 927 — Construction Productivity & Crew Rate Calculator</h3>'
++'<p style="color:#94a3b8;font-size:11px;">RS Means Crew Database / AGC / CFMA / El Paso 2025 labor rates</p>'
++'<div class="inp-grid">'
++'<label>Trade / Work Type<select id="t927_trade" class="inp"><option value="concrete_flat">Concrete Flatwork (place & finish)</option><option value="concrete_form">Concrete Formwork</option><option value="rebar">Rebar Placement</option><option value="masonry">CMU Block Laying</option><option value="framing_steel">Structural Steel Erection</option><option value="framing_wood">Wood Framing (light commercial)</option><option value="roofing_tpo">TPO Roofing</option><option value="drywall">Drywall Hang & Tape</option><option value="painting">Painting (commercial)</option><option value="asphalt_paving">Asphalt Paving (place & compact)</option></select></label>'
++'<label>Crew Size (workers)<input id="t927_crew" type="number" value="4" class="inp"></label>'
++'<label>Work Hours per Day<input id="t927_hrs" type="number" value="8" step="0.5" class="inp"></label>'
++'<label>Project Duration (working days)<input id="t927_days" type="number" value="10" class="inp"></label>'
++'<label>Complexity Factor<select id="t927_complex" class="inp"><option value="1.0">Normal (straightforward layout)</option><option value="0.85">Complex (tight access, odd shapes)</option><option value="0.70">Very Complex (congested, multistory)</option><option value="1.15">Simple (open area, repetitive)</option></select></label>'
++'</div>'
++'<button onclick="t927calc()" class="calc-btn">Calculate Productivity & Cost</button>'
++'<div id="t927_out"></div>';
+window.t927calc=function(){
+  var trade=document.getElementById('t927_trade').value;
+  var crew=parseFloat(document.getElementById('t927_crew').value)||4;
+  var hrs=parseFloat(document.getElementById('t927_hrs').value)||8;
+  var days=parseFloat(document.getElementById('t927_days').value)||10;
+  var complex=parseFloat(document.getElementById('t927_complex').value)||1.0;
+  // Production rates and crew costs (El Paso 2025, RS Means Southwest)
+  var tradeData={
+    // {unit, baseProduction (units/crew/day), crewDesc, wageLead, wageJourney, unitLabel}
+    'concrete_flat': {unit:'SF', prod:800, desc:'1 Lead + 3 Finishers + 1 Laborer', wageLead:38, wageJ:32, unitLabel:'SF flatwork'},
+    'concrete_form': {unit:'SFCA', prod:350, desc:'1 Foreman + 3 Carpenters + 1 Laborer', wageLead:42, wageJ:36, unitLabel:'SF contact area'},
+    'rebar':         {unit:'tons', prod:1.2, desc:'1 Ironworker Foreman + 3 Ironworkers', wageLead:48, wageJ:42, unitLabel:'tons placed'},
+    'masonry':       {unit:'SF', prod:120, desc:'1 Mason Foreman + 2 Masons + 1 Tender', wageLead:40, wageJ:34, unitLabel:'SF wall face'},
+    'framing_steel': {unit:'tons', prod:3.5, desc:'1 Ironworker Foreman + 4 Connectors + Crane', wageLead:55, wageJ:48, unitLabel:'tons erected'},
+    'framing_wood':  {unit:'SF', prod:400, desc:'1 Carpenter Foreman + 3 Carpenters', wageLead:38, wageJ:32, unitLabel:'SF floor area'},
+    'roofing_tpo':   {unit:'SQ', prod:8, desc:'1 Roofer Foreman + 3 Roofers', wageLead:38, wageJ:32, unitLabel:'SQ (100SF)'},
+    'drywall':       {unit:'SF', prod:600, desc:'1 Drywall Foreman + 3 Hangers', wageLead:36, wageJ:30, unitLabel:'SF hang+tape'},
+    'painting':      {unit:'SF', prod:1200, desc:'1 Painter Foreman + 2 Painters', wageLead:32, wageJ:28, unitLabel:'SF painted'},
+    'asphalt_paving':{unit:'TN', prod:200, desc:'1 Operator + 2 Laborers + Roller Op', wageLead:45, wageJ:32, unitLabel:'tons placed'}
+  };
+  var td=tradeData[trade];
+  var burdenMultiplier=1.35; // taxes, insurance, benefits (El Paso)
+  var adjustedProd=Math.round(td.prod*complex*10)/10;
+  // Total production over project
+  var totalCrewDays=days;
+  var totalUnits=Math.round(adjustedProd*totalCrewDays*10)/10;
+  // Labor cost calculation
+  // Assume crew: 1 lead + (crew-1) journeymen
+  var journeymen=Math.max(0,crew-1);
+  var dailyLaborRaw=(td.wageLead+journeymen*td.wageJ)*hrs;
+  var dailyLaborWithBurden=Math.round(dailyLaborRaw*burdenMultiplier);
+  var totalLaborCost=Math.round(dailyLaborWithBurden*days);
+  var laborPerUnit=totalUnits>0?Math.round((totalLaborCost/totalUnits)*100)/100:0;
+  // Effective hourly rate for crew
+  var crewHourlyRate=Math.round(dailyLaborWithBurden/hrs);
+  var tradeLabels={
+    'concrete_flat':'Concrete Flatwork (place & finish)',
+    'concrete_form':'Concrete Formwork',
+    'rebar':'Rebar Placement',
+    'masonry':'CMU Block Laying',
+    'framing_steel':'Structural Steel Erection',
+    'framing_wood':'Wood Framing',
+    'roofing_tpo':'TPO Roofing',
+    'drywall':'Drywall Hang & Tape',
+    'painting':'Painting (Commercial)',
+    'asphalt_paving':'Asphalt Paving'
+  };
+  var html='<div style="background:#0f172a;padding:12px;border-radius:8px;margin-top:8px;">';
+  html+='<div style="color:#38bdf8;font-size:14px;font-weight:bold;margin-bottom:8px;">👷 Productivity Analysis — '+tradeLabels[trade]+'</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+  var mainStats=[
+    {icon:'⚡',label:'DAILY PRODUCTION',val:adjustedProd+' '+td.unit+'/day',color:'#38bdf8',bg:'#0c1445'},
+    {icon:'📦',label:'TOTAL OUTPUT',val:totalUnits.toLocaleString()+' '+td.unit,color:'#10b981',bg:'#022c22'},
+    {icon:'💰',label:'LABOR / UNIT',val:'$'+laborPerUnit+' / '+td.unit,color:'#a78bfa',bg:'#1e1b4b'}
+  ];
+  mainStats.forEach(function(s){
+    html+='<div style="background:'+s.bg+';padding:10px;border-radius:6px;text-align:center;">';
+    html+='<div style="font-size:20px;">'+s.icon+'</div>';
+    html+='<div style="color:'+s.color+';font-weight:bold;font-size:16px;">'+s.val+'</div>';
+    html+='<div style="color:#94a3b8;font-size:9px;">'+s.label+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+  var details=[
+    {label:'Crew Composition',val:td.desc},
+    {label:'Lead Wage + Burden',val:'$'+Math.round(td.wageLead*burdenMultiplier)+'/hr (raw: $'+td.wageLead+')'},
+    {label:'Journey Wage + Burden',val:'$'+Math.round(td.wageJ*burdenMultiplier)+'/hr (raw: $'+td.wageJ+')'},
+    {label:'Daily Crew Cost',val:'$'+dailyLaborWithBurden.toLocaleString()},
+    {label:'Total Labor Cost ('+days+' days)',val:'$'+totalLaborCost.toLocaleString()},
+    {label:'Effective Crew Rate',val:'$'+crewHourlyRate+'/hr for whole crew'},
+  ];
+  details.forEach(function(d){
+    html+='<div style="background:#1e293b;padding:6px 10px;border-radius:4px;">';
+    html+='<span style="color:#64748b;font-size:10px;">'+d.label+':</span>';
+    html+='<div style="color:#e2e8f0;font-size:12px;font-weight:bold;">'+d.val+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  if(complex<1.0){
+    html+='<div style="background:#2d1a00;padding:8px;border-radius:6px;margin-bottom:6px;border:1px solid #f59e0b;">';
+    html+='<div style="color:#f59e0b;font-size:11px;font-weight:bold;">⚠️ Complexity Factor Applied: '+Math.round(complex*100)+'%</div>';
+    html+='<div style="color:#fde68a;font-size:10px;">Complex conditions reduce productivity. Budget for additional crew days or overtime to maintain schedule.</div>';
+    html+='</div>';
+  }
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;margin-bottom:6px;">';
+  html+='<div style="color:#60a5fa;font-size:11px;font-weight:bold;margin-bottom:4px;">El Paso Labor Market (2025)</div>';
+  html+='<div style="color:#93c5fd;font-size:10px;">• Concrete finishers: $28–$38/hr | Ironworkers: $38–$52/hr | Carpenters: $28–$40/hr<br>';
+  html+='• Masons: $30–$42/hr | Roofers: $28–$36/hr | Laborers: $18–$25/hr<br>';
+  html+='• Prevailing wage (fed projects): add 20–40% to commercial rates<br>';
+  html+='• El Paso is non-union; journeymen wages ~15% below Houston/DFW</div>';
+  html+='</div>';
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;">';
+  html+='<div style="color:#60a5fa;font-size:10px;font-weight:bold;margin-bottom:4px;">Standards</div>';
+  html+='<div style="color:#93c5fd;font-size:10px;">RS Means Building Construction Cost Data 2025 | AGC Workforce Survey | CFMA Financial Survey | BLS Occupational Employment Stats | NCCI Experience Mod</div>';
+  html+='</div></div>';
+  document.getElementById('t927_out').innerHTML=html;
+};
+var tgt=document.getElementById('tools-section')||document.body;
+tgt.appendChild(btn);tgt.appendChild(wrap);
+})();
+(function(){
+// TOOL 928 — Land Feasibility Quick Score (Oncor Phase 1)
+var btn=document.createElement('button');
+btn.className='tool-btn';btn.textContent='Land Feasibility Quick Score — Oncor Phase 1 🏆';
+btn.onclick=function(){document.getElementById('t928_wrap').style.display=document.getElementById('t928_wrap').style.display==='none'?'block':'none';};
+var wrap=document.createElement('div');wrap.id='t928_wrap';wrap.style.display='none';wrap.className='tool-wrap';
+wrap.innerHTML='<h3>🏆 Tool 928 — Land Feasibility Quick Score</h3>'
++'<p style="color:#94a3b8;font-size:11px;">Oncor Phase 1 entitlement flip strategy | El Paso / West Texas / Sun Belt 2025</p>'
++'<div class="inp-grid">'
++'<label>Asking Price / Acre ($)<input id="t928_askprice" type="number" value="150000" class="inp"></label>'
++'<label>Estimated Entitled Value / Acre ($)<input id="t928_entvalue" type="number" value="350000" class="inp"></label>'
++'<label>Estimated Entitlement Cost ($)<input id="t928_entcost" type="number" value="80000" class="inp"></label>'
++'<label>Entitlement Timeline (months)<input id="t928_months" type="number" value="12" class="inp"></label>'
++'<label>Site Size (acres)<input id="t928_acres" type="number" value="5" step="0.5" class="inp"></label>'
++'<label>Current Zoning<select id="t928_zoning" class="inp"><option value="ag">Ag / Unzoned Rural</option><option value="res_sf">R1/R2 Single Family</option><option value="res_mf">R3/R4 Multi-Family (entitled)</option><option value="comm_light">C1/C2 Light Commercial</option><option value="comm_gen">C3/C4 General Commercial</option><option value="industrial">Industrial / M1-M2</option><option value="mixed">Mixed Use / PUD</option></select></label>'
++'<label>Target Use (flip to)<select id="t928_target" class="inp"><option value="multifamily">Multi-Family Residential</option><option value="retail">Retail / Strip Center</option><option value="industrial">Industrial / Flex</option><option value="office">Office</option><option value="hotel">Hotel / Hospitality</option><option value="sfr">Single Family Subdivision</option></select></label>'
++'<label>Utilities Available?<select id="t928_utilities" class="inp"><option value="all">All at site (water, sewer, gas, power)</option><option value="nearby">Adjacent (within 500ft, need extensions)</option><option value="far">Off-site (>500ft, major extension)</option><option value="none">None (well/septic required)</option></select></label>'
++'<label>Market Demand<select id="t928_demand" class="inp"><option value="high">High (multiple interested buyers)</option><option value="med">Moderate (some interest)</option><option value="low">Low (speculative)</option></select></label>'
++'</div>'
++'<button onclick="t928calc()" class="calc-btn">Score This Deal</button>'
++'<div id="t928_out"></div>';
+window.t928calc=function(){
+  var askPricePerAc=parseFloat(document.getElementById('t928_askprice').value)||150000;
+  var entValuePerAc=parseFloat(document.getElementById('t928_entvalue').value)||350000;
+  var entCost=parseFloat(document.getElementById('t928_entcost').value)||80000;
+  var months=parseFloat(document.getElementById('t928_months').value)||12;
+  var acres=parseFloat(document.getElementById('t928_acres').value)||5;
+  var zoning=document.getElementById('t928_zoning').value;
+  var target=document.getElementById('t928_target').value;
+  var utilities=document.getElementById('t928_utilities').value;
+  var demand=document.getElementById('t928_demand').value;
+  // Financial analysis
+  var totalAcqCost=askPricePerAc*acres;
+  var totalEntCost=entCost;
+  var totalIn=totalAcqCost+totalEntCost;
+  var estimatedFlipValue=entValuePerAc*acres;
+  var grossProfit=estimatedFlipValue-totalIn;
+  var roi=Math.round((grossProfit/totalIn)*1000)/10;
+  var annualROI=months>0?Math.round(roi/(months/12)*10)/10:roi;
+  // Score components (0–10 each)
+  var scores={};
+  // 1. Profit margin score (0–10)
+  var margin=grossProfit/estimatedFlipValue;
+  scores.margin=margin>=0.40?10:margin>=0.30?8:margin>=0.20?6:margin>=0.10?4:2;
+  // 2. ROI score
+  scores.roi=annualROI>=50?10:annualROI>=35?8:annualROI>=25?6:annualROI>=15?4:2;
+  // 3. Entitlement difficulty (zoning change score)
+  var zoningDifficulty={
+    'ag':3,'res_sf':5,'res_mf':9,'comm_light':7,'comm_gen':8,'industrial':7,'mixed':8
+  };
+  scores.entitlement=zoningDifficulty[zoning]||5;
+  // 4. Utilities score
+  var utilScore={'all':10,'nearby':7,'far':4,'none':2};
+  scores.utilities=utilScore[utilities]||7;
+  // 5. Timeline score (shorter = better for capital efficiency)
+  scores.timeline=months<=6?10:months<=12?8:months<=18?6:months<=24?4:2;
+  // 6. Market demand score
+  var demandScore={'high':10,'med':6,'low':3};
+  scores.demand=demandScore[demand]||6;
+  // 7. Deal size score (sweet spot for Phase 1: 2–20 acres)
+  scores.size=acres>=2&&acres<=20?10:acres<2?6:acres<=50?7:4;
+  // Weighted total score (out of 100)
+  var weights={margin:25,roi:20,entitlement:15,utilities:10,timeline:10,demand:15,size:5};
+  var totalScore=0;
+  Object.keys(weights).forEach(function(k){totalScore+=scores[k]*weights[k]/10;});
+  totalScore=Math.round(totalScore);
+  var scoreColor=totalScore>=80?'#10b981':totalScore>=60?'#38bdf8':totalScore>=40?'#f59e0b':'#ef4444';
+  var scoreLabel=totalScore>=80?'🔥 STRONG BUY':totalScore>=60?'✅ INVESTIGATE':totalScore>=40?'⚠️ MARGINAL':'❌ PASS';
+  var html='<div style="background:#0f172a;padding:12px;border-radius:8px;margin-top:8px;">';
+  html+='<div style="color:#38bdf8;font-size:14px;font-weight:bold;margin-bottom:8px;">🏆 Oncor Deal Score</div>';
+  html+='<div style="text-align:center;padding:16px;background:#0c1445;border-radius:8px;margin-bottom:12px;">';
+  html+='<div style="color:'+scoreColor+';font-size:48px;font-weight:900;line-height:1;">'+totalScore+'</div>';
+  html+='<div style="color:#94a3b8;font-size:11px;">/ 100 points</div>';
+  html+='<div style="color:'+scoreColor+';font-size:16px;font-weight:bold;margin-top:4px;">'+scoreLabel+'</div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+  var mainStats=[
+    {icon:'💰',label:'GROSS PROFIT',val:'$'+Math.round(grossProfit).toLocaleString(),color:grossProfit>0?'#10b981':'#ef4444',bg:grossProfit>0?'#022c22':'#2d0a0a'},
+    {icon:'📈',label:'ROI (annualized)',val:annualROI+'%',color:annualROI>=25?'#10b981':'#f59e0b',bg:'#022c22'},
+    {icon:'🏗️',label:'TOTAL INVESTED',val:'$'+Math.round(totalIn).toLocaleString(),color:'#38bdf8',bg:'#0c1445'}
+  ];
+  mainStats.forEach(function(s){
+    html+='<div style="background:'+s.bg+';padding:10px;border-radius:6px;text-align:center;">';
+    html+='<div style="font-size:20px;">'+s.icon+'</div>';
+    html+='<div style="color:'+s.color+';font-weight:bold;font-size:16px;">'+s.val+'</div>';
+    html+='<div style="color:#94a3b8;font-size:9px;">'+s.label+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;margin-bottom:6px;">';
+  html+='<div style="color:#60a5fa;font-size:11px;font-weight:bold;margin-bottom:6px;">Score Breakdown</div>';
+  var scoreItems=[
+    {name:'Profit Margin',score:scores.margin,weight:'25%'},
+    {name:'Annualized ROI',score:scores.roi,weight:'20%'},
+    {name:'Entitlement Clarity',score:scores.entitlement,weight:'15%'},
+    {name:'Market Demand',score:scores.demand,weight:'15%'},
+    {name:'Utilities Access',score:scores.utilities,weight:'10%'},
+    {name:'Timeline',score:scores.timeline,weight:'10%'},
+    {name:'Deal Size',score:scores.size,weight:'5%'},
+  ];
+  scoreItems.forEach(function(item){
+    var barColor=item.score>=8?'#10b981':item.score>=6?'#38bdf8':item.score>=4?'#f59e0b':'#ef4444';
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">';
+    html+='<div style="flex:0 0 130px;color:#94a3b8;font-size:10px;">'+item.name+'</div>';
+    html+='<div style="flex:1;background:#0f172a;border-radius:3px;height:8px;">';
+    html+='<div style="background:'+barColor+';width:'+(item.score*10)+'%;height:8px;border-radius:3px;"></div>';
+    html+='</div>';
+    html+='<div style="flex:0 0 30px;color:'+barColor+';font-size:11px;font-weight:bold;text-align:right;">'+item.score+'/10</div>';
+    html+='<div style="flex:0 0 30px;color:#475569;font-size:9px;text-align:right;">'+item.weight+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+  var financials=[
+    {label:'Acquisition Cost',val:'$'+totalAcqCost.toLocaleString()+' ($'+askPricePerAc.toLocaleString()+'/ac)'},
+    {label:'Entitlement Cost',val:'$'+totalEntCost.toLocaleString()},
+    {label:'Projected Flip Value',val:'$'+estimatedFlipValue.toLocaleString()+' ($'+entValuePerAc.toLocaleString()+'/ac)'},
+    {label:'Profit Margin',val:Math.round(margin*1000)/10+'% of exit value'},
+    {label:'Deal Size',val:acres+' acres'},
+    {label:'Timeline',val:months+' months to flip'}
+  ];
+  financials.forEach(function(d){
+    html+='<div style="background:#1e293b;padding:6px 10px;border-radius:4px;">';
+    html+='<span style="color:#64748b;font-size:10px;">'+d.label+':</span>';
+    html+='<div style="color:#e2e8f0;font-size:12px;font-weight:bold;">'+d.val+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;">';
+  html+='<div style="color:#60a5fa;font-size:10px;font-weight:bold;margin-bottom:4px;">Oncor Phase 1 Framework</div>';
+  html+='<div style="color:#93c5fd;font-size:10px;">Target: 25%+ unlevered ROI, <18 months, strong builder demand, utilities accessible.<br>';
+  html+='Sweet spot: 2–20 acres, C-1 or higher zoning, near growth corridors (Eastside, NE El Paso, NW El Paso, Horizon City).<br>';
+  html+='Exit strategy: Sell entitled to merchant builder, REIT, or national retailer. No construction risk.</div>';
+  html+='</div></div>';
+  document.getElementById('t928_out').innerHTML=html;
+};
+var tgt=document.getElementById('tools-section')||document.body;
+tgt.appendChild(btn);tgt.appendChild(wrap);
+})();
+(function(){
+// TOOL 929 — ACI 318 Beam & Slab Flexure Quick Check
+var btn=document.createElement('button');
+btn.className='tool-btn';btn.textContent='ACI 318 Beam/Slab Flexure Quick Check 🔢';
+btn.onclick=function(){document.getElementById('t929_wrap').style.display=document.getElementById('t929_wrap').style.display==='none'?'block':'none';};
+var wrap=document.createElement('div');wrap.id='t929_wrap';wrap.style.display='none';wrap.className='tool-wrap';
+wrap.innerHTML='<h3>🔢 Tool 929 — ACI 318-19 Beam & Slab Flexure Quick Check</h3>'
++'<p style="color:#94a3b8;font-size:11px;">ACI 318-19 §22.2 / Chapter 7 & 9 / ϕMn ≥ Mu verification / Field reference</p>'
++'<div class="inp-grid">'
++'<label>Element Type<select id="t929_elem" class="inp"><option value="rect_beam">Rectangular Beam</option><option value="t_beam">T-Beam (flanged)</option><option value="one_way_slab">One-Way Slab</option><option value="two_way_slab">Two-Way Slab (12" strip)</option></select></label>'
++'<label>Width b (inches)<input id="t929_b" type="number" value="12" class="inp"></label>'
++'<label>Total Depth h (inches)<input id="t929_h" type="number" value="18" class="inp"></label>'
++'<label>Cover to Stirrup (inches)<input id="t929_cover" type="number" value="1.5" step="0.25" class="inp"></label>'
++'<label>Stirrup Bar Size<select id="t929_stirrup" class="inp"><option value="3">#3 stirrup</option><option value="4">#4 stirrup</option><option value="5">#5 stirrup</option></select></label>'
++'<label>Main Bar Size<select id="t929_bar" class="inp"><option value="4">#4 (0.20 in²)</option><option value="5">#5 (0.31 in²)</option><option value="6">#6 (0.44 in²)</option><option value="7">#7 (0.60 in²)</option><option value="8">#8 (0.79 in²)</option><option value="9">#9 (1.00 in²)</option><option value="10">#10 (1.27 in²)</option></select></label>'
++'<label>Number of Bars (bottom)<input id="t929_nbar" type="number" value="3" class="inp"></label>'
++'<label>f\'c (psi)<input id="t929_fc" type="number" value="4000" class="inp"></label>'
++'<label>fy (psi)<input id="t929_fy" type="number" value="60000" class="inp"></label>'
++'<label>Applied Moment Mu (ft-kip)<input id="t929_mu" type="number" value="80" class="inp"></label>'
++'</div>'
++'<button onclick="t929calc()" class="calc-btn">Check Flexural Capacity</button>'
++'<div id="t929_out"></div>';
+window.t929calc=function(){
+  var elem=document.getElementById('t929_elem').value;
+  var b=parseFloat(document.getElementById('t929_b').value)||12;
+  var h=parseFloat(document.getElementById('t929_h').value)||18;
+  var cover=parseFloat(document.getElementById('t929_cover').value)||1.5;
+  var stirrupSize=parseInt(document.getElementById('t929_stirrup').value)||3;
+  var barSize=parseInt(document.getElementById('t929_bar').value)||8;
+  var nBar=parseInt(document.getElementById('t929_nbar').value)||3;
+  var fc=parseFloat(document.getElementById('t929_fc').value)||4000;
+  var fy=parseFloat(document.getElementById('t929_fy').value)||60000;
+  var mu=parseFloat(document.getElementById('t929_mu').value)||80; // ft-kip
+  // Bar areas (in²)
+  var barAreas={4:0.20,5:0.31,6:0.44,7:0.60,8:0.79,9:1.00,10:1.27,11:1.56};
+  var stirrupDia={3:0.375,4:0.500,5:0.625};
+  var As=barAreas[barSize]*nBar;
+  var stirrupDiaIn=stirrupDia[stirrupSize]||0.375;
+  var mainBarDia=(barSize===4?0.500:barSize===5?0.625:barSize===6?0.750:barSize===7?0.875:barSize===8?1.000:barSize===9?1.128:barSize===10?1.270:0.5);
+  var d=h-cover-stirrupDiaIn-mainBarDia/2; // effective depth
+  d=Math.round(d*100)/100;
+  // ACI 318-19 β₁
+  var beta1=fc<=4000?0.85:Math.max(0.65,0.85-0.05*(fc-4000)/1000);
+  beta1=Math.round(beta1*1000)/1000;
+  // Depth of stress block a = As*fy / (0.85*f'c*b)
+  var a=As*fy/(0.85*fc*b);
+  a=Math.round(a*1000)/1000;
+  // c = a/β₁
+  var c=a/beta1;
+  c=Math.round(c*1000)/1000;
+  // εt = (d-c)/c × 0.003 (ACI 21.2.2)
+  var et=Math.round(((d-c)/c*0.003)*100000)/100000;
+  // φ factor
+  var phi=et>=0.005?0.90:(et<=0.002?0.65:0.65+0.25*(et-0.002)/(0.003));
+  phi=Math.round(phi*1000)/1000;
+  var phiType=et>=0.005?'Tension-Controlled (ϕ=0.90)':et>=0.002?'Transition Zone':'Compression-Controlled (ϕ=0.65)';
+  // ϕMn (ft-kip) = ϕ × As × fy × (d - a/2) / 12000
+  var phiMn=phi*As*fy*(d-a/2)/12000;
+  phiMn=Math.round(phiMn*10)/10;
+  var adequate=phiMn>=mu;
+  var DCR=Math.round((mu/phiMn)*100)/100;
+  // Minimum steel check — ACI 318 §9.6.1.2
+  var AsMin=Math.max(3*Math.sqrt(fc)/fy,200/fy)*b*d;
+  AsMin=Math.round(AsMin*1000)/1000;
+  var minOk=As>=AsMin;
+  // Maximum reinforcement (tension-controlled) check
+  var rhoMax=0.75*0.85*beta1*fc/fy*(87000/(87000+fy));
+  var rhoActual=As/(b*d);
+  var maxOk=rhoActual<=rhoMax;
+  var html='<div style="background:#0f172a;padding:12px;border-radius:8px;margin-top:8px;">';
+  html+='<div style="color:#38bdf8;font-size:14px;font-weight:bold;margin-bottom:8px;">🔢 ACI 318-19 Flexure Check Results</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+  var mainStats=[
+    {icon:'💪',label:'ϕMn (CAPACITY)',val:phiMn+' ft-kip',color:'#10b981',bg:'#022c22'},
+    {icon:'⚡',label:'Mu (DEMAND)',val:mu+' ft-kip',color:'#38bdf8',bg:'#0c1445'},
+    {icon:adequate?'✅':'❌',label:'D/C RATIO',val:DCR,color:adequate?'#10b981':'#ef4444',bg:adequate?'#022c22':'#2d0a0a'}
+  ];
+  mainStats.forEach(function(s){
+    html+='<div style="background:'+s.bg+';padding:10px;border-radius:6px;text-align:center;">';
+    html+='<div style="font-size:20px;">'+s.icon+'</div>';
+    html+='<div style="color:'+s.color+';font-weight:bold;font-size:18px;">'+s.val+'</div>';
+    html+='<div style="color:#94a3b8;font-size:9px;">'+s.label+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  if(!adequate){
+    html+='<div style="background:#2d0a0a;padding:8px;border-radius:6px;margin-bottom:8px;border:1px solid #ef4444;">';
+    html+='<div style="color:#ef4444;font-weight:bold;">❌ INSUFFICIENT CAPACITY — ϕMn ('+phiMn+') < Mu ('+mu+') ft-kip</div>';
+    html+='<div style="color:#fca5a5;font-size:10px;">Increase beam depth, add reinforcing bars, or increase f\'c. D/C ratio must be ≤ 1.0.</div>';
+    html+='</div>';
+  }
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+  var details=[
+    {label:"Effective Depth d",val:d+'"'},
+    {label:"Stress Block Depth a",val:a+'"'},
+    {label:"Neutral Axis Depth c",val:c+'"'},
+    {label:"β₁",val:beta1},
+    {label:"Steel Strain εt",val:et+(et>=0.005?' ✅':' ⚠️')},
+    {label:"ϕ Factor",val:phi+' — '+phiType},
+    {label:"As Provided",val:As+' in² ('+nBar+'× #'+barSize+')'},
+    {label:"As,min (ACI §9.6.1.2)",val:AsMin+' in² '+(minOk?'✅ OK':'❌ INCREASE STEEL')},
+    {label:"ρ Actual / ρ Max",val:Math.round(rhoActual*10000)/10000+' / '+Math.round(rhoMax*10000)/10000+(maxOk?' ✅':'⚠️')},
+    {label:"Section",val:b+'"b × '+h+'"h (d='+d+'")'}
+  ];
+  details.forEach(function(d){
+    html+='<div style="background:#1e293b;padding:6px 10px;border-radius:4px;">';
+    html+='<span style="color:#64748b;font-size:10px;">'+d.label+':</span>';
+    html+='<div style="color:#e2e8f0;font-size:12px;font-weight:bold;">'+d.val+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;margin-bottom:6px;">';
+  html+='<div style="color:#f59e0b;font-size:10px;font-weight:bold;margin-bottom:2px;">⚠️ DISCLAIMER</div>';
+  html+='<div style="color:#fde68a;font-size:10px;">This is a simplified field-reference check for #4–#10 reinforcing in standard sections. It does NOT replace a licensed Structural Engineer\'s design. T-beam flanges, shear, deflection, and development length must also be verified per ACI 318-19.</div>';
+  html+='</div>';
+  html+='<div style="background:#1a2744;padding:8px;border-radius:6px;">';
+  html+='<div style="color:#60a5fa;font-size:10px;font-weight:bold;margin-bottom:4px;">Standards</div>';
+  html+='<div style="color:#93c5fd;font-size:10px;">ACI 318-19 §22.2 (flexure) | §9.6.1.2 (min steel) | §21.2 (strain limits & ϕ) | CRSI Design Handbook | ACI SP-17 Reinforced Concrete Design Examples</div>';
+  html+='</div></div>';
+  document.getElementById('t929_out').innerHTML=html;
+};
+var tgt=document.getElementById('tools-section')||document.body;
+tgt.appendChild(btn);tgt.appendChild(wrap);
+})();
+(function(){
+// TOOL 930 — Session #27 Summary Dashboard
+var btn=document.createElement('button');
+btn.className='tool-btn';btn.textContent='⚡ Session #27 Summary — 930 Tools Dashboard';
+btn.style.background='linear-gradient(135deg,#0284c7,#7c3aed)';
+btn.onclick=function(){document.getElementById('t930_wrap').style.display=document.getElementById('t930_wrap').style.display==='none'?'block':'none';};
+var wrap=document.createElement('div');wrap.id='t930_wrap';wrap.style.display='none';wrap.className='tool-wrap';
+wrap.innerHTML='<h3>⚡ Session #27 Summary — 930 Tools!</h3>'
++'<p style="color:#94a3b8;font-size:11px;">Oncor Construction & Development Suite — Built by Zeus ⚡ for JFS</p>'
++'<button onclick="t930calc()" class="calc-btn" style="background:linear-gradient(135deg,#0284c7,#7c3aed);">Show Session #27 Summary</button>'
++'<div id="t930_out"></div>';
+window.t930calc=function(){
+  var html='<div style="background:#0f172a;padding:12px;border-radius:8px;margin-top:8px;">';
+  html+='<div style="color:#38bdf8;font-size:14px;font-weight:bold;margin-bottom:8px;">⚡ Session #27 — 930 Tools Built!</div>';
+  var tools=[
+    'Concrete Slab Thickness Design (ACI 360R)',
+    'Roof Drain & Overflow Sizing (IPC/ASPE)',
+    'Material Cost Escalation Adjuster (ENR/PPI)',
+    'TX Homestead Exemption & ARB Appeal Guide',
+    'SWPPP / Site Stormwater Compliance Checklist',
+    'Precast Concrete Cost Estimator (PCI)',
+    'Construction Productivity & Crew Rate Calculator',
+    'Land Feasibility Quick Score — Oncor Phase 1',
+    'ACI 318 Beam/Slab Flexure Quick Check',
+    'This Session #27 Summary Dashboard'
+  ];
+  html+='<div style="margin-bottom:8px;">';
+  html+='<div style="color:#60a5fa;font-size:10px;font-weight:bold;margin-bottom:4px;">Session #27 New Tools (921-930):</div>';
+  tools.forEach(function(t,i){html+='<span style="display:inline-block;background:#0c1445;padding:2px 6px;border-radius:4px;margin:2px;font-size:9px;color:#bfdbfe;">'+(921+i)+'. '+t+'</span>';});
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px;">';
+  var stats=[
+    {icon:'🛠️',label:'TOTAL TOOLS',val:'930',color:'#38bdf8'},
+    {icon:'📄',label:'TOTAL LINES',val:'~131K',color:'#a78bfa'},
+    {icon:'📐',label:'STANDARDS',val:'225+',color:'#60a5fa'},
+    {icon:'🌮',label:'EL PASO CALIBRATED',val:'YES',color:'#10b981'}
+  ];
+  stats.forEach(function(s){
+    html+='<div style="background:#0f172a;padding:10px;border-radius:6px;text-align:center;">';
+    html+='<div style="font-size:18px;">'+s.icon+'</div>';
+    html+='<div style="color:'+s.color+';font-weight:bold;font-size:16px;">'+s.val+'</div>';
+    html+='<div style="color:#94a3b8;font-size:8px;">'+s.label+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  html+='<div style="text-align:center;padding:10px;background:linear-gradient(135deg,#0c1445,#2e1065);border-radius:6px;">';
+  html+='<div style="color:#38bdf8;font-size:13px;font-weight:bold;">⚡ 930 TOOLS — ONCOR CONSTRUCTION SUITE ⚡</div>';
+  html+='<div style="color:#64748b;font-size:9px;margin-top:4px;">From concrete to real estate development | Built by Zeus ⚡</div>';
+  html+='</div></div>';
+  document.getElementById('t930_out').innerHTML=html;
+};
+var tgt=document.getElementById('tools-section')||document.body;
+tgt.appendChild(btn);tgt.appendChild(wrap);
+})();
