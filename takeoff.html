@@ -146949,3 +146949,610 @@ td{padding:6px 8px;border-bottom:1px solid #e2e8f0;}
 })();
 // ==================== END CONCRETE QC LOG — Zeus ⚡ Session #55 ====================
 </script>
+
+<script>
+// ==================== JOB COST TRACKER — Zeus ⚡ Session #56 ====================
+// 💰 Ctrl+Shift+J — Track actual costs (invoices, labor, materials) vs. estimate budget
+// Per-project localStorage: oncor_job_cost_v1_[projectname]
+// Exposes window._getJobCostStats() for Project Status Card
+
+(function() {
+  'use strict';
+
+  // ─── Helpers ───
+  function getProjKey() {
+    const n = (document.getElementById('projectName') || {}).value || 'default';
+    return 'oncor_job_cost_v1_' + n.trim().toLowerCase().replace(/[^a-z0-9]/g,'_');
+  }
+  function getEntries() { try { return JSON.parse(localStorage.getItem(getProjKey()) || '[]'); } catch(e){ return []; } }
+  function saveEntries(arr) { localStorage.setItem(getProjKey(), JSON.stringify(arr)); }
+  function fmtD(d) { if (!d) return '—'; const [y,m,dd]=d.split('-'); return `${m}/${dd}/${y}`; }
+  function fmtC(v) { const n=parseFloat(v)||0; return n<0?`($${Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})})`:`$${n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`; }
+  function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  const COST_CATEGORIES = [
+    'Concrete Materials','Rebar & Wire Mesh','Formwork','Labor (Self-Performed)',
+    'Subcontractor','Concrete Pump','Saw Cutting','Fiber','Base Course',
+    'Vapor Barrier','Equipment Rental','Fuel & Oil','Small Tools',
+    'Mobilization','Temporary Works','Testing & Inspection','Permits & Fees',
+    'Insurance','Dump/Disposal','Miscellaneous'
+  ];
+
+  const PAYMENT_STATUSES = ['Unpaid','Partial','Paid','Disputed','Voided'];
+
+  // ─── Get budget from last estimate ───
+  function getBudget() {
+    const le = window.lastEstimate;
+    if (!le) return {};
+    return {
+      'Concrete Materials':  (le.concreteCost||0),
+      'Rebar & Wire Mesh':   (le.rebarCost||0) + (le.meshCost||0),
+      'Formwork':            (le.formworkCost||0),
+      'Labor (Self-Performed)': (le.laborCost||0),
+      'Concrete Pump':       (le.pumpCost||0),
+      'Saw Cutting':         (le.sawCutCost||0),
+      'Fiber':               (le.fiberCost||0),
+      'Base Course':         (le.baseCourseCost||0),
+      'Vapor Barrier':       (le.vaporBarrierCost||0),
+      'Mobilization':        (le.mobCost||0),
+      'Miscellaneous':       (le.miscCost||0),
+      '_totalBid':           (le.totalBid||0),
+      '_directCost':         (le.directCost||0),
+      '_profit':             (le.profitAmt||0),
+      '_overhead':           (le.overheadAmt||0),
+    };
+  }
+
+  // ─── Compute rollup ───
+  function computeRollup(entries) {
+    const byCategory = {};
+    let totalActual = 0, totalPaid = 0, totalUnpaid = 0;
+    entries.forEach(e => {
+      const amt = parseFloat(e.amount)||0;
+      totalActual += amt;
+      if (e.payStatus === 'Paid') totalPaid += amt;
+      else if (e.payStatus === 'Unpaid' || e.payStatus === 'Partial') totalUnpaid += amt;
+      if (!byCategory[e.category]) byCategory[e.category] = 0;
+      byCategory[e.category] += amt;
+    });
+    return { byCategory, totalActual, totalPaid, totalUnpaid };
+  }
+
+  // ─── Build modal ───
+  function buildModal() {
+    const entries = getEntries();
+    const budget = getBudget();
+    const rollup = computeRollup(entries);
+    const totalBudget = budget._totalBid || 0;
+    const variance = totalBudget - rollup.totalActual;
+    const pct = totalBudget > 0 ? (rollup.totalActual / totalBudget * 100).toFixed(1) : 0;
+    const varColor = variance >= 0 ? '#22c55e' : '#ef4444';
+
+    const ov = document.createElement('div');
+    ov.id = 'oncor-jct-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:99999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px 10px;';
+
+    const mb = document.createElement('div');
+    mb.style.cssText = 'background:#1e293b;border:1px solid #334155;border-radius:12px;width:100%;max-width:900px;color:#e2e8f0;font-family:system-ui,sans-serif;overflow:hidden;';
+
+    // Header
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'background:linear-gradient(135deg,#1e3a5f,#0f172a);padding:18px 22px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #334155;';
+    hdr.innerHTML = `<div><div style="font-size:1.1rem;font-weight:700;color:#38bdf8;">💰 Job Cost Tracker</div><div style="font-size:0.72rem;color:#64748b;margin-top:2px;">Actual costs vs. estimate budget · Ctrl+Shift+J</div></div><button onclick="document.getElementById('oncor-jct-overlay').remove()" style="background:#374151;border:none;color:#9ca3af;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.85rem;">✕ Close</button>`;
+    mb.appendChild(hdr);
+
+    // Stats bar
+    const stats = document.createElement('div');
+    stats.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px 22px;background:#0f172a;border-bottom:1px solid #1e293b;';
+    stats.innerHTML = `
+      <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;border:1px solid #334155;">
+        <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Total Budgeted</div>
+        <div style="font-size:1.1rem;font-weight:700;color:#38bdf8;margin-top:4px;">${fmtC(totalBudget)}</div>
+        <div style="font-size:0.65rem;color:#64748b;">Estimate Bid</div>
+      </div>
+      <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;border:1px solid #334155;">
+        <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Total Actual</div>
+        <div style="font-size:1.1rem;font-weight:700;color:#f59e0b;margin-top:4px;">${fmtC(rollup.totalActual)}</div>
+        <div style="font-size:0.65rem;color:#64748b;">${pct}% of budget</div>
+      </div>
+      <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;border:1px solid #334155;">
+        <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Variance</div>
+        <div style="font-size:1.1rem;font-weight:700;color:${varColor};margin-top:4px;">${fmtC(variance)}</div>
+        <div style="font-size:0.65rem;color:#64748b;">${variance >= 0 ? '✅ Under budget' : '⚠️ Over budget'}</div>
+      </div>
+      <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;border:1px solid #334155;">
+        <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Outstanding AP</div>
+        <div style="font-size:1.1rem;font-weight:700;color:#a78bfa;margin-top:4px;">${fmtC(rollup.totalUnpaid)}</div>
+        <div style="font-size:0.65rem;color:#64748b;">${entries.filter(e=>e.payStatus==='Unpaid'||e.payStatus==='Partial').length} invoices</div>
+      </div>
+    `;
+    mb.appendChild(stats);
+
+    // Budget vs Actual by category
+    if (Object.keys(budget).filter(k=>!k.startsWith('_')).length > 0) {
+      const catSection = document.createElement('div');
+      catSection.style.cssText = 'padding:16px 22px;border-bottom:1px solid #334155;';
+      catSection.innerHTML = `<div style="font-size:0.8rem;font-weight:700;color:#94a3b8;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px;">Budget vs Actual by Category</div>`;
+      const catTable = document.createElement('table');
+      catTable.style.cssText = 'width:100%;border-collapse:collapse;font-size:0.78rem;';
+      catTable.innerHTML = `<thead><tr style="color:#64748b;border-bottom:1px solid #334155;"><th style="text-align:left;padding:6px 8px;">Category</th><th style="text-align:right;padding:6px 8px;">Budget</th><th style="text-align:right;padding:6px 8px;">Actual</th><th style="text-align:right;padding:6px 8px;">Variance</th><th style="text-align:left;padding:6px 8px;width:120px;">Progress</th></tr></thead>`;
+      const tbody = document.createElement('tbody');
+      const budgetCats = Object.keys(budget).filter(k=>!k.startsWith('_') && budget[k]>0);
+      // also show categories with actual spend but no budget
+      const actualCats = Object.keys(rollup.byCategory).filter(k=>!budgetCats.includes(k));
+      const allCats = [...budgetCats, ...actualCats];
+      allCats.forEach(cat => {
+        const bud = budget[cat]||0;
+        const act = rollup.byCategory[cat]||0;
+        const vari = bud - act;
+        const pct2 = bud > 0 ? Math.min(100, act/bud*100) : (act > 0 ? 100 : 0);
+        const barColor = pct2 > 100 ? '#ef4444' : pct2 > 85 ? '#f59e0b' : '#22c55e';
+        const variColor = vari >= 0 ? '#22c55e' : '#ef4444';
+        const tr = document.createElement('tr');
+        tr.style.cssText = 'border-bottom:1px solid #1e3a5f;';
+        tr.innerHTML = `
+          <td style="padding:7px 8px;color:#cbd5e1;">${escH(cat)}</td>
+          <td style="padding:7px 8px;text-align:right;color:#64748b;">${bud>0?fmtC(bud):'—'}</td>
+          <td style="padding:7px 8px;text-align:right;color:#f59e0b;">${act>0?fmtC(act):'—'}</td>
+          <td style="padding:7px 8px;text-align:right;color:${variColor};font-weight:600;">${bud>0||act>0?fmtC(vari):'—'}</td>
+          <td style="padding:7px 8px;">
+            <div style="background:#334155;border-radius:3px;height:8px;overflow:hidden;">
+              <div style="background:${barColor};height:100%;width:${pct2.toFixed(1)}%;transition:width 0.3s;"></div>
+            </div>
+            <div style="font-size:0.65rem;color:#64748b;margin-top:2px;">${pct2.toFixed(0)}%</div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+      // Total row
+      const totRow = document.createElement('tr');
+      totRow.style.cssText = 'background:#1e3a5f;font-weight:700;';
+      const totalBud2 = budgetCats.reduce((s,c)=>s+(budget[c]||0),0);
+      const totalVar = totalBud2 - rollup.totalActual;
+      totRow.innerHTML = `<td style="padding:8px 8px;color:#38bdf8;">TOTAL</td><td style="text-align:right;padding:8px 8px;color:#38bdf8;">${totalBud2>0?fmtC(totalBud2):'—'}</td><td style="text-align:right;padding:8px 8px;color:#f59e0b;">${fmtC(rollup.totalActual)}</td><td style="text-align:right;padding:8px 8px;color:${totalVar>=0?'#22c55e':'#ef4444'};">${fmtC(totalVar)}</td><td style="padding:8px;"></td>`;
+      tbody.appendChild(totRow);
+      catTable.appendChild(tbody);
+      catSection.appendChild(catTable);
+      mb.appendChild(catSection);
+    }
+
+    // Toolbar
+    const toolbar = document.createElement('div');
+    toolbar.style.cssText = 'display:flex;gap:10px;align-items:center;padding:14px 22px;border-bottom:1px solid #334155;background:#0f172a;';
+    toolbar.innerHTML = `
+      <button id="jct-add-btn" style="background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:7px 16px;cursor:pointer;font-size:0.82rem;font-weight:600;">+ Add Cost Entry</button>
+      <input id="jct-search" type="text" placeholder="🔍 Search entries..." style="flex:1;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:7px 12px;font-size:0.82rem;">
+      <select id="jct-filter-cat" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:7px 10px;font-size:0.82rem;">
+        <option value="">All Categories</option>
+        ${COST_CATEGORIES.map(c=>`<option value="${escH(c)}">${escH(c)}</option>`).join('')}
+      </select>
+      <select id="jct-filter-pay" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:7px 10px;font-size:0.82rem;">
+        <option value="">All Statuses</option>
+        ${PAYMENT_STATUSES.map(s=>`<option value="${escH(s)}">${escH(s)}</option>`).join('')}
+      </select>
+      <button onclick="printJobCostReport()" style="background:#374151;color:#9ca3af;border:1px solid #4b5563;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:0.82rem;">🖨 Print Report</button>
+    `;
+    mb.appendChild(toolbar);
+
+    // List area
+    const listArea = document.createElement('div');
+    listArea.id = 'jct-list-area';
+    listArea.style.cssText = 'padding:16px 22px;min-height:200px;';
+    mb.appendChild(listArea);
+
+    ov.appendChild(mb);
+    ov.addEventListener('click', function(e){ if(e.target===ov) ov.remove(); });
+
+    // Render after insert
+    setTimeout(function(){
+      renderJCTList();
+      document.getElementById('jct-add-btn').onclick = function(){ openJCTForm(); };
+      const srch = document.getElementById('jct-search');
+      const fcat = document.getElementById('jct-filter-cat');
+      const fpay = document.getElementById('jct-filter-pay');
+      if(srch) srch.oninput = renderJCTList;
+      if(fcat) fcat.onchange = renderJCTList;
+      if(fpay) fpay.onchange = renderJCTList;
+    }, 50);
+
+    return ov;
+  }
+
+  // ─── Render list ───
+  function renderJCTList() {
+    const area = document.getElementById('jct-list-area');
+    if (!area) return;
+    const entries = getEntries();
+    const srch = (document.getElementById('jct-search')||{}).value||'';
+    const fcat = (document.getElementById('jct-filter-cat')||{}).value||'';
+    const fpay = (document.getElementById('jct-filter-pay')||{}).value||'';
+
+    let filtered = entries.filter(e => {
+      const q = srch.toLowerCase();
+      if (q && !e.description.toLowerCase().includes(q) && !e.vendor.toLowerCase().includes(q) && !e.category.toLowerCase().includes(q) && !(e.invoiceNo||'').toLowerCase().includes(q)) return false;
+      if (fcat && e.category !== fcat) return false;
+      if (fpay && e.payStatus !== fpay) return false;
+      return true;
+    });
+    filtered.sort((a,b) => (b.date||'').localeCompare(a.date||''));
+
+    if (filtered.length === 0) {
+      area.innerHTML = `<div style="text-align:center;padding:40px;color:#64748b;"><div style="font-size:2rem;margin-bottom:10px;">💰</div><div>No cost entries yet. Click <strong>+ Add Cost Entry</strong> to log your first expense.</div></div>`;
+      return;
+    }
+
+    const PAY_COLORS = {'Paid':'#22c55e','Unpaid':'#ef4444','Partial':'#f59e0b','Disputed':'#a78bfa','Voided':'#64748b'};
+
+    let html = `<table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
+      <thead><tr style="color:#64748b;border-bottom:1px solid #334155;">
+        <th style="text-align:left;padding:7px 8px;">Date</th>
+        <th style="text-align:left;padding:7px 8px;">Category</th>
+        <th style="text-align:left;padding:7px 8px;">Description / Vendor</th>
+        <th style="text-align:left;padding:7px 8px;">Invoice #</th>
+        <th style="text-align:right;padding:7px 8px;">Amount</th>
+        <th style="text-align:center;padding:7px 8px;">Status</th>
+        <th style="text-align:center;padding:7px 8px;">Actions</th>
+      </tr></thead><tbody>`;
+
+    filtered.forEach((e, idx) => {
+      const realIdx = entries.indexOf(e);
+      const pColor = PAY_COLORS[e.payStatus]||'#64748b';
+      html += `<tr style="border-bottom:1px solid #1e3a5f;">
+        <td style="padding:8px 8px;color:#94a3b8;white-space:nowrap;">${fmtD(e.date)}</td>
+        <td style="padding:8px 8px;color:#cbd5e1;">${escH(e.category)}</td>
+        <td style="padding:8px 8px;"><div style="color:#e2e8f0;font-weight:500;">${escH(e.description)}</div><div style="color:#64748b;font-size:0.72rem;">${escH(e.vendor||'')}</div></td>
+        <td style="padding:8px 8px;color:#94a3b8;">${escH(e.invoiceNo||'—')}</td>
+        <td style="padding:8px 8px;text-align:right;color:#f59e0b;font-weight:700;">${fmtC(e.amount)}</td>
+        <td style="padding:8px 8px;text-align:center;"><span style="background:${pColor}22;color:${pColor};border:1px solid ${pColor}44;border-radius:4px;padding:2px 8px;font-size:0.72rem;font-weight:600;">${escH(e.payStatus)}</span></td>
+        <td style="padding:8px 8px;text-align:center;white-space:nowrap;">
+          <button onclick="openJCTForm(${realIdx})" style="background:#1e3a5f;color:#38bdf8;border:1px solid #334155;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:0.72rem;margin-right:4px;">✏️</button>
+          <button onclick="deleteJCTEntry(${realIdx})" style="background:#3f1f1f;color:#ef4444;border:1px solid #7f1d1d;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:0.72rem;">🗑</button>
+        </td>
+      </tr>`;
+      if (e.notes) {
+        html += `<tr style="border-bottom:1px solid #1e3a5f;background:#0f172a;"><td colspan="7" style="padding:4px 8px 8px 36px;color:#64748b;font-size:0.72rem;font-style:italic;">📝 ${escH(e.notes)}</td></tr>`;
+      }
+    });
+
+    const total = filtered.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+    html += `<tr style="background:#1e3a5f;font-weight:700;">
+      <td colspan="4" style="padding:9px 8px;color:#38bdf8;">TOTAL (filtered)</td>
+      <td style="padding:9px 8px;text-align:right;color:#f59e0b;font-size:0.9rem;">${fmtC(total)}</td>
+      <td colspan="2"></td>
+    </tr></tbody></table>`;
+
+    area.innerHTML = html;
+  }
+
+  // ─── Form ───
+  function openJCTForm(editIdx) {
+    const entries = getEntries();
+    const isEdit = editIdx !== undefined && editIdx >= 0;
+    const e = isEdit ? entries[editIdx] : {};
+    const today = new Date().toISOString().slice(0,10);
+
+    const existing = document.getElementById('jct-form-overlay');
+    if (existing) existing.remove();
+
+    const fo = document.createElement('div');
+    fo.id = 'jct-form-overlay';
+    fo.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:100001;display:flex;align-items:center;justify-content:center;';
+
+    const fw = document.createElement('div');
+    fw.style.cssText = 'background:#1e293b;border:1px solid #334155;border-radius:12px;width:100%;max-width:560px;color:#e2e8f0;font-family:system-ui,sans-serif;overflow:hidden;margin:20px;';
+
+    fw.innerHTML = `
+      <div style="background:linear-gradient(135deg,#1e3a5f,#0f172a);padding:16px 22px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #334155;">
+        <div style="font-size:1rem;font-weight:700;color:#38bdf8;">💰 ${isEdit?'Edit':'New'} Cost Entry</div>
+        <button onclick="document.getElementById('jct-form-overlay').remove()" style="background:#374151;border:none;color:#9ca3af;border-radius:6px;padding:5px 10px;cursor:pointer;">✕</button>
+      </div>
+      <div style="padding:20px 22px;display:grid;gap:14px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:5px;">Date *</label>
+            <input id="jctf-date" type="date" value="${escH(e.date||today)}" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:5px;">Amount ($) *</label>
+            <input id="jctf-amount" type="number" step="0.01" min="0" value="${escH(e.amount||'')}" placeholder="0.00" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;">
+          </div>
+        </div>
+        <div>
+          <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:5px;">Category *</label>
+          <select id="jctf-category" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;">
+            ${COST_CATEGORIES.map(c=>`<option value="${escH(c)}" ${(e.category||''===c)?'selected':''}>${escH(c)}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:5px;">Description *</label>
+          <input id="jctf-description" type="text" value="${escH(e.description||'')}" placeholder="What was purchased / what work was done" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:5px;">Vendor / Payee</label>
+            <input id="jctf-vendor" type="text" value="${escH(e.vendor||'')}" placeholder="Supplier, subcontractor, etc." style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:5px;">Invoice / PO #</label>
+            <input id="jctf-invoiceNo" type="text" value="${escH(e.invoiceNo||'')}" placeholder="INV-001" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:5px;">Payment Status</label>
+            <select id="jctf-payStatus" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;">
+              ${PAYMENT_STATUSES.map(s=>`<option value="${escH(s)}" ${(e.payStatus||'Unpaid')===s?'selected':''}>${escH(s)}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:5px;">Date Paid</label>
+            <input id="jctf-datePaid" type="date" value="${escH(e.datePaid||'')}" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;">
+          </div>
+        </div>
+        <div>
+          <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:5px;">Notes</label>
+          <textarea id="jctf-notes" rows="2" placeholder="PO reference, quantities, delivery ticket numbers..." style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;resize:vertical;">${escH(e.notes||'')}</textarea>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;padding-top:4px;">
+          <button onclick="document.getElementById('jct-form-overlay').remove()" style="background:#374151;color:#9ca3af;border:1px solid #4b5563;border-radius:6px;padding:8px 20px;cursor:pointer;font-size:0.82rem;">Cancel</button>
+          <button id="jctf-save-btn" style="background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:8px 24px;cursor:pointer;font-size:0.82rem;font-weight:600;">${isEdit?'Save Changes':'Add Entry'}</button>
+        </div>
+      </div>
+    `;
+
+    fo.appendChild(fw);
+    fo.addEventListener('click', function(e){ if(e.target===fo) fo.remove(); });
+    document.body.appendChild(fo);
+
+    // Set category select value after DOM insert
+    setTimeout(function(){
+      const catSel = document.getElementById('jctf-category');
+      if (catSel && e.category) catSel.value = e.category;
+
+      document.getElementById('jctf-save-btn').onclick = function(){
+        const amt = parseFloat(document.getElementById('jctf-amount').value)||0;
+        const desc = (document.getElementById('jctf-description').value||'').trim();
+        if (!desc) { alert('Description is required.'); return; }
+        if (!amt) { alert('Amount must be greater than 0.'); return; }
+
+        const newEntry = {
+          date: document.getElementById('jctf-date').value,
+          amount: amt,
+          category: document.getElementById('jctf-category').value,
+          description: desc,
+          vendor: (document.getElementById('jctf-vendor').value||'').trim(),
+          invoiceNo: (document.getElementById('jctf-invoiceNo').value||'').trim(),
+          payStatus: document.getElementById('jctf-payStatus').value,
+          datePaid: document.getElementById('jctf-datePaid').value,
+          notes: (document.getElementById('jctf-notes').value||'').trim(),
+          id: e.id || Date.now()
+        };
+
+        const arr = getEntries();
+        if (isEdit) arr[editIdx] = newEntry; else arr.push(newEntry);
+        saveEntries(arr);
+        fo.remove();
+        // Refresh modal
+        const ov2 = document.getElementById('oncor-jct-overlay');
+        if (ov2) { ov2.remove(); showJobCostTracker(); }
+        showJCTToast(isEdit ? '✅ Entry updated' : '✅ Entry added');
+      };
+    }, 50);
+  }
+
+  // ─── Delete entry ───
+  window.deleteJCTEntry = function(idx) {
+    const arr = getEntries();
+    const e = arr[idx];
+    if (!e) return;
+    if (!confirm(`Delete "${e.description}" (${fmtC(e.amount)})?`)) return;
+    arr.splice(idx, 1);
+    saveEntries(arr);
+    const ov = document.getElementById('oncor-jct-overlay');
+    if (ov) { ov.remove(); showJobCostTracker(); }
+    showJCTToast('🗑 Entry deleted');
+  };
+
+  // ─── Edit entry ───
+  window.openJCTForm = openJCTForm;
+
+  // ─── Print report ───
+  window.printJobCostReport = function() {
+    const entries = getEntries();
+    const budget = getBudget();
+    const rollup = computeRollup(entries);
+    const proj = (document.getElementById('projectName')||{}).value || 'Project';
+    const comp = {
+      name: (document.getElementById('companyName')||{}).value||'',
+      addr: (document.getElementById('companyAddress')||{}).value||'',
+      phone: (document.getElementById('companyPhone')||{}).value||'',
+      email: (document.getElementById('companyEmail')||{}).value||'',
+    };
+    const totalBudget = budget._totalBid || 0;
+    const variance = totalBudget - rollup.totalActual;
+
+    const PAY_COLORS_PRINT = {'Paid':'#166534','Unpaid':'#991b1b','Partial':'#92400e','Disputed':'#5b21b6','Voided':'#374151'};
+
+    const sorted = [...entries].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+
+    let costRows = '';
+    sorted.forEach(e => {
+      const pColor = PAY_COLORS_PRINT[e.payStatus]||'#374151';
+      costRows += `<tr>
+        <td>${fmtD(e.date)}</td>
+        <td>${escH(e.category)}</td>
+        <td><strong>${escH(e.description)}</strong>${e.vendor?`<br><small style="color:#666;">${escH(e.vendor)}</small>`:''}</td>
+        <td>${escH(e.invoiceNo||'—')}</td>
+        <td style="text-align:right;font-weight:600;">${fmtC(e.amount)}</td>
+        <td style="text-align:center;"><span style="background:${pColor};color:#fff;border-radius:3px;padding:1px 6px;font-size:7pt;">${escH(e.payStatus)}</span></td>
+      </tr>`;
+      if (e.notes) costRows += `<tr style="background:#f9fafb;"><td colspan="6" style="padding:2px 8px 5px 24px;color:#666;font-size:7pt;font-style:italic;">📝 ${escH(e.notes)}</td></tr>`;
+    });
+
+    let budgetRows = '';
+    const budCats = Object.keys(budget).filter(k=>!k.startsWith('_') && budget[k]>0);
+    budCats.forEach(cat => {
+      const bud = budget[cat]||0;
+      const act = rollup.byCategory[cat]||0;
+      const vari = bud - act;
+      const pct2 = bud > 0 ? (act/bud*100).toFixed(0) : '—';
+      budgetRows += `<tr>
+        <td>${escH(cat)}</td>
+        <td style="text-align:right;">${fmtC(bud)}</td>
+        <td style="text-align:right;">${act>0?fmtC(act):'—'}</td>
+        <td style="text-align:right;color:${vari>=0?'#166534':'#991b1b'};font-weight:600;">${fmtC(vari)}</td>
+        <td style="text-align:right;">${pct2}%</td>
+      </tr>`;
+    });
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Job Cost Report — ${escH(proj)}</title>
+    <style>
+      * { margin:0;padding:0;box-sizing:border-box; }
+      body { font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#1e293b;background:#fff; }
+      .page { max-width:8.5in;margin:0 auto;padding:0.5in; }
+      .co-header { display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;padding-bottom:12px;border-bottom:2px solid #1e3a5f; }
+      .co-company h2 { font-size:13pt;color:#1e3a5f; }
+      .co-company p { font-size:8pt;color:#64748b;line-height:1.5; }
+      .co-title { text-align:right; }
+      .co-badge { background:#1e3a5f;color:#fff;font-size:11pt;font-weight:700;padding:6px 18px;border-radius:4px;display:inline-block;margin-bottom:6px; }
+      .stats-grid { display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px; }
+      .stat-card { border:1px solid #e2e8f0;border-radius:6px;padding:10px;text-align:center; }
+      .stat-label { font-size:7pt;color:#64748b;text-transform:uppercase;letter-spacing:.3px; }
+      .stat-value { font-size:12pt;font-weight:700;margin-top:3px; }
+      h3 { font-size:9pt;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px;padding-bottom:4px;border-bottom:1px solid #e2e8f0; }
+      table { width:100%;border-collapse:collapse;font-size:8pt;margin-bottom:14px; }
+      th { background:#1e3a5f;color:#fff;padding:5px 7px;text-align:left;font-size:7.5pt; }
+      td { padding:5px 7px;border-bottom:1px solid #e2e8f0;vertical-align:top; }
+      tr:nth-child(even) { background:#f8fafc; }
+      .total-row { background:#1e3a5f!important;color:#fff;font-weight:700; }
+      .total-row td { border-bottom:none; }
+      .variance-box { border:2px solid #1e3a5f;border-radius:6px;padding:12px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center; }
+      .print-btn { display:none; }
+      @media print { .print-btn { display:none!important; } }
+    </style></head><body><div class="page">
+      <div class="co-header">
+        <div class="co-company">
+          <h2>${escH(comp.name||'Oncor Concrete')}</h2>
+          <p>${escH(comp.addr||'')}<br>${escH(comp.phone||'')} ${comp.email?'· '+escH(comp.email):''}</p>
+        </div>
+        <div class="co-title">
+          <div class="co-badge">💰 JOB COST REPORT</div>
+          <div style="font-size:8.5pt;color:#64748b;">Project: <strong>${escH(proj)}</strong></div>
+          <div style="font-size:7.5pt;color:#9ca3af;">Printed: ${new Date().toLocaleDateString()}</div>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Total Budgeted</div>
+          <div class="stat-value" style="color:#1e3a5f;">${fmtC(totalBudget)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Actual</div>
+          <div class="stat-value" style="color:#d97706;">${fmtC(rollup.totalActual)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Variance</div>
+          <div class="stat-value" style="color:${variance>=0?'#166534':'#991b1b'};">${fmtC(variance)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Outstanding AP</div>
+          <div class="stat-value" style="color:#5b21b6;">${fmtC(rollup.totalUnpaid)}</div>
+        </div>
+      </div>
+
+      ${budCats.length > 0 ? `
+      <h3>Budget vs Actual by Category</h3>
+      <table>
+        <thead><tr><th>Category</th><th style="text-align:right;">Budget</th><th style="text-align:right;">Actual</th><th style="text-align:right;">Variance</th><th style="text-align:right;">% Used</th></tr></thead>
+        <tbody>${budgetRows}
+          <tr class="total-row"><td>TOTAL</td><td style="text-align:right;">${fmtC(totalBudget)}</td><td style="text-align:right;">${fmtC(rollup.totalActual)}</td><td style="text-align:right;">${fmtC(variance)}</td><td style="text-align:right;">${totalBudget>0?(rollup.totalActual/totalBudget*100).toFixed(0)+'%':'—'}</td></tr>
+        </tbody>
+      </table>` : ''}
+
+      <h3>Cost Entries (${entries.length})</h3>
+      <table>
+        <thead><tr><th>Date</th><th>Category</th><th>Description / Vendor</th><th>Invoice #</th><th style="text-align:right;">Amount</th><th style="text-align:center;">Status</th></tr></thead>
+        <tbody>${costRows}
+          <tr class="total-row"><td colspan="4">TOTAL ACTUAL COSTS</td><td style="text-align:right;">${fmtC(rollup.totalActual)}</td><td></td></tr>
+        </tbody>
+      </table>
+
+      <div style="text-align:center;font-size:6.5pt;color:#aaa;margin-top:14px;border-top:1px solid #e2e8f0;padding-top:8px;">
+        ${escH(comp.name)} · Job Cost Report · ${escH(proj)} · Printed: ${new Date().toLocaleDateString()}<br>
+        CONFIDENTIAL — INTERNAL USE ONLY
+      </div>
+      <div style="text-align:center;margin-top:6px;"><button class="print-btn" onclick="window.print()" style="padding:5px 14px;background:#0ea5e9;color:#fff;border:none;border-radius:4px;cursor:pointer;">🖨 Print / Save PDF</button></div>
+    </div></body></html>`;
+
+    const win = window.open('', '_blank', 'width=1000,height=700');
+    if (!win) { alert('Pop-up blocked.'); return; }
+    win.document.write(html);
+    win.document.close();
+  };
+
+  // ─── Toast ───
+  function showJCTToast(msg) {
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;color:#38bdf8;border:1px solid #334155;border-radius:8px;padding:10px 20px;font-size:0.82rem;z-index:999999;font-weight:600;pointer-events:none;';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(()=>t.remove(), 2200);
+  }
+
+  // ─── Main open ───
+  function showJobCostTracker() {
+    const existing = document.getElementById('oncor-jct-overlay');
+    if (existing) { existing.remove(); return; }
+    const modal = buildModal();
+    document.body.appendChild(modal);
+  }
+
+  // ─── Keyboard shortcut Ctrl+Shift+J ───
+  document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'J' || e.key === 'j')) {
+      e.preventDefault();
+      showJobCostTracker();
+    }
+  });
+
+  // ─── Sidebar button (inject after QC Log button) ───
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      const qcBtn = document.querySelector('button[onclick*="showQCLog"]');
+      if (!qcBtn) return;
+      const newRow = document.createElement('div');
+      newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML = `
+        <button class="action-btn secondary" onclick="showJobCostTracker()" title="Job Cost Tracker — Log actual costs (invoices, materials, labor, subs) vs estimate budget. Live budget vs actual by category, variance tracking, AP aging. (Ctrl+Shift+J)" style="background:rgba(251,191,36,0.1);border-color:rgba(251,191,36,0.3);color:#fbbf24;">💰 Job Costs</button>
+      `;
+      const parentRow = qcBtn.closest('div');
+      if (parentRow && parentRow.parentNode) {
+        parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+      }
+    }, 1200);
+  });
+
+  window.showJobCostTracker = showJobCostTracker;
+
+  // ─── Expose stats for Project Status Card ───
+  window._getJobCostStats = function() {
+    const entries = getEntries();
+    const budget = getBudget();
+    const rollup = computeRollup(entries);
+    const totalBudget = budget._totalBid || 0;
+    return {
+      totalEntries: entries.length,
+      totalActual: rollup.totalActual,
+      totalBudget,
+      variance: totalBudget - rollup.totalActual,
+      totalPaid: rollup.totalPaid,
+      totalUnpaid: rollup.totalUnpaid,
+      overBudget: totalBudget > 0 && rollup.totalActual > totalBudget
+    };
+  };
+
+})();
+// ==================== END JOB COST TRACKER — Zeus ⚡ Session #56 ====================
+</script>
