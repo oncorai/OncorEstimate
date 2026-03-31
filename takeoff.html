@@ -145520,3 +145520,686 @@ ${items.filter(i=>i.notes).length ? `<div style="margin-top:14px;"><h4 style="fo
 })();
 // ==================== END PUNCH LIST TRACKER — Zeus ⚡ Session #53 ====================
 </script>
+<script>
+// ==================== LIEN RIGHTS & NOTICES TRACKER — Zeus ⚡ Session #54 ====================
+// Ctrl+Shift+N | Sidebar: ⚖️ Lien Notices | localStorage: oncor_lien_notices_v1
+// Track Texas mechanics lien deadlines — Notice to Owner, lien filing, bond claims
+// Missing deadlines = losing payment rights. Critical for every commercial job.
+(function() {
+  'use strict';
+
+  // ─── Storage ───
+  function getLienKey() {
+    const pn = document.getElementById('projectName');
+    return 'oncor_lien_notices_v1_' + (pn ? pn.value.trim() || 'default' : 'default');
+  }
+  function loadLienNotices() {
+    try { return JSON.parse(localStorage.getItem(getLienKey()) || '{}'); } catch(e) { return {}; }
+  }
+  function saveLienNotices(data) {
+    localStorage.setItem(getLienKey(), JSON.stringify(data));
+  }
+
+  // ─── TX Lien Law Reference (Property Code Ch. 53) ───
+  const NOTICE_TYPES = [
+    { id: 'nto', name: 'Notice to Owner', desc: 'Texas Property Code §53.056', deadline: 'Within 30 days of first furnishing materials/labor', critical: true },
+    { id: 'retainage', name: 'Retainage Notice', desc: 'Property Code §53.057', deadline: '30 days after receiving payment request', critical: false },
+    { id: 'monthly_notice', name: 'Monthly Billing Notice', desc: 'For unpaid progress billings', deadline: 'Monthly or per contract', critical: false },
+    { id: 'lien_affidavit', name: 'Lien Affidavit Filing', desc: 'Property Code §53.052', deadline: '15th of 4th month after last work (sub)', critical: true },
+    { id: 'bond_claim', name: 'Bond Claim Notice', desc: 'Property Code §53.202', deadline: '15th of 3rd month after unpaid (bonded)', critical: true },
+    { id: 'fund_trap', name: 'Fund Trapping Notice', desc: 'Property Code §53.081-084', deadline: 'Before owner pays GC', critical: true },
+    { id: 'release_partial', name: 'Partial Lien Release', desc: 'Release upon partial payment', deadline: 'When requested/paid', critical: false },
+    { id: 'release_final', name: 'Final Lien Release', desc: 'Full release at project close', deadline: 'Final payment + retainage', critical: false },
+    { id: 'foreclosure', name: 'Lien Foreclosure', desc: 'Property Code §53.154', deadline: '2 years from lien filing', critical: true },
+    { id: 'other', name: 'Other Notice', desc: 'Custom notice type', deadline: 'As specified', critical: false }
+  ];
+
+  const NOTICE_STATUSES = ['Pending', 'Sent', 'Received', 'Filed', 'Released', 'Expired', 'N/A'];
+  const STATUS_COLORS = {
+    'Pending': '#f59e0b',
+    'Sent': '#3b82f6',
+    'Received': '#34d399',
+    'Filed': '#8b5cf6',
+    'Released': '#10b981',
+    'Expired': '#ef4444',
+    'N/A': '#6b7280'
+  };
+
+  function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function fmtDate(s) {
+    if (!s) return '—';
+    const d = new Date(s + 'T12:00:00');
+    return isNaN(d) ? s : d.toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'});
+  }
+
+  function daysBetween(d1, d2) {
+    return Math.round((new Date(d2) - new Date(d1)) / (1000 * 60 * 60 * 24));
+  }
+
+  function daysUntil(dateStr) {
+    if (!dateStr) return null;
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const target = new Date(dateStr + 'T23:59:59');
+    return Math.round((target - today) / (1000 * 60 * 60 * 24));
+  }
+
+  // ─── Deadline Calculator based on TX Property Code ───
+  function calcDeadlines(data) {
+    const deadlines = [];
+    const firstWork = data.firstWorkDate;
+    const lastWork = data.lastWorkDate;
+    
+    if (firstWork) {
+      // Notice to Owner: 30 days from first work (commercial/residential over $5k)
+      const nto30 = new Date(firstWork + 'T12:00:00');
+      nto30.setDate(nto30.getDate() + 30);
+      deadlines.push({
+        type: 'nto',
+        name: 'Notice to Owner Deadline',
+        date: nto30.toISOString().split('T')[0],
+        daysLeft: daysUntil(nto30.toISOString().split('T')[0]),
+        law: 'TX Prop. Code §53.056',
+        critical: true
+      });
+    }
+    
+    if (lastWork) {
+      // Lien Affidavit: 15th of 4th month after last work (for subs/suppliers)
+      const lastD = new Date(lastWork + 'T12:00:00');
+      const lienMonth = new Date(lastD.getFullYear(), lastD.getMonth() + 4, 15);
+      deadlines.push({
+        type: 'lien_affidavit',
+        name: 'Lien Affidavit Filing Deadline',
+        date: lienMonth.toISOString().split('T')[0],
+        daysLeft: daysUntil(lienMonth.toISOString().split('T')[0]),
+        law: 'TX Prop. Code §53.052',
+        critical: true
+      });
+      
+      // Bond Claim: 15th of 3rd month after unpaid (bonded jobs)
+      if (data.isBonded) {
+        const bondMonth = new Date(lastD.getFullYear(), lastD.getMonth() + 3, 15);
+        deadlines.push({
+          type: 'bond_claim',
+          name: 'Bond Claim Notice Deadline',
+          date: bondMonth.toISOString().split('T')[0],
+          daysLeft: daysUntil(bondMonth.toISOString().split('T')[0]),
+          law: 'TX Prop. Code §53.202',
+          critical: true
+        });
+      }
+    }
+    
+    return deadlines.sort((a,b) => (a.daysLeft||999) - (b.daysLeft||999));
+  }
+
+  // ─── Modal HTML ───
+  function buildModal() {
+    const data = loadLienNotices();
+    const m = document.createElement('div');
+    m.id = 'oncor-lien-overlay';
+    m.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.72);z-index:990050;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px);';
+    m.innerHTML = `
+<div id="oncor-lien-modal" style="background:#0f172a;border:1px solid #334155;border-radius:12px;width:95%;max-width:1100px;max-height:92vh;overflow-y:auto;padding:24px;position:relative;font-family:system-ui,sans-serif;color:#f1f5f9;">
+  <button onclick="document.getElementById('oncor-lien-overlay').remove()" style="position:absolute;top:14px;right:16px;background:none;border:none;color:#94a3b8;cursor:pointer;font-size:1.3rem;line-height:1;">✕</button>
+  <h2 style="margin:0 0 4px;font-size:1.15rem;color:#f8fafc;">⚖️ Lien Rights & Notices Tracker</h2>
+  <p style="margin:0 0 18px;font-size:0.78rem;color:#64748b;">Texas Property Code Ch. 53 — Track critical lien deadlines to protect your payment rights. <kbd style="background:#1e293b;border:1px solid #475569;border-radius:3px;padding:1px 5px;color:#94a3b8;font-size:0.72rem;">Ctrl+Shift+N</kbd></p>
+  
+  <!-- Project Lien Dates -->
+  <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:18px;">
+    <div style="font-size:0.82rem;font-weight:600;color:#fbbf24;margin-bottom:10px;">📅 Project Timeline (for deadline calculations)</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+      <div>
+        <label style="display:block;font-size:0.72rem;color:#94a3b8;margin-bottom:4px;">First Work Date</label>
+        <input type="date" id="lien-first-work" value="${escHtml(data.firstWorkDate||'')}" onchange="window._saveLienDates()" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #475569;color:#f1f5f9;border-radius:6px;padding:7px 10px;font-size:0.82rem;">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.72rem;color:#94a3b8;margin-bottom:4px;">Last Work Date</label>
+        <input type="date" id="lien-last-work" value="${escHtml(data.lastWorkDate||'')}" onchange="window._saveLienDates()" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #475569;color:#f1f5f9;border-radius:6px;padding:7px 10px;font-size:0.82rem;">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.72rem;color:#94a3b8;margin-bottom:4px;">Contract Amount</label>
+        <input type="number" id="lien-contract-amt" value="${data.contractAmount||''}" onchange="window._saveLienDates()" placeholder="$" step="100" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #475569;color:#f1f5f9;border-radius:6px;padding:7px 10px;font-size:0.82rem;">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.72rem;color:#94a3b8;margin-bottom:4px;">Job Type</label>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+          <label style="font-size:0.78rem;color:#cbd5e1;display:flex;align-items:center;gap:4px;cursor:pointer;">
+            <input type="checkbox" id="lien-is-bonded" ${data.isBonded?'checked':''} onchange="window._saveLienDates()" style="accent-color:#8b5cf6;"> Bonded Job
+          </label>
+          <label style="font-size:0.78rem;color:#cbd5e1;display:flex;align-items:center;gap:4px;cursor:pointer;">
+            <input type="checkbox" id="lien-is-residential" ${data.isResidential?'checked':''} onchange="window._saveLienDates()" style="accent-color:#3b82f6;"> Residential
+          </label>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+      <div>
+        <label style="display:block;font-size:0.72rem;color:#94a3b8;margin-bottom:4px;">Property Owner Name</label>
+        <input type="text" id="lien-owner-name" value="${escHtml(data.ownerName||'')}" onchange="window._saveLienDates()" placeholder="Property owner / title holder" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #475569;color:#f1f5f9;border-radius:6px;padding:7px 10px;font-size:0.82rem;">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.72rem;color:#94a3b8;margin-bottom:4px;">Property Address</label>
+        <input type="text" id="lien-property-addr" value="${escHtml(data.propertyAddress||'')}" onchange="window._saveLienDates()" placeholder="Full legal property address" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #475569;color:#f1f5f9;border-radius:6px;padding:7px 10px;font-size:0.82rem;">
+      </div>
+    </div>
+  </div>
+  
+  <!-- Calculated Deadlines -->
+  <div id="lien-deadlines-panel" style="margin-bottom:18px;"></div>
+  
+  <!-- Notice Log -->
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+    <button onclick="window._openLienForm(null)" style="background:#8b5cf6;color:#fff;border:none;border-radius:6px;padding:7px 16px;cursor:pointer;font-weight:700;font-size:0.82rem;">+ Log Notice</button>
+    <select id="lien-status-filter" onchange="window._renderLienLog()" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:6px;padding:6px 10px;font-size:0.8rem;">
+      <option value="">All Statuses</option>
+      ${NOTICE_STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('')}
+    </select>
+    <button onclick="window._printLienSummary()" style="background:#1e293b;border:1px solid #475569;color:#94a3b8;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.78rem;margin-left:auto;">🖨 Print Lien Summary</button>
+    <button onclick="window._copyLienSummary()" style="background:#1e293b;border:1px solid #475569;color:#94a3b8;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.78rem;">📋 Copy</button>
+  </div>
+  
+  <div id="lien-log-container"></div>
+  
+  <!-- Form Panel -->
+  <div id="lien-form-panel" style="display:none;background:#1e293b;border:1px solid #334155;border-radius:10px;padding:20px;margin-top:16px;">
+    <h3 id="lien-form-title" style="margin:0 0 16px;font-size:1rem;color:#f8fafc;">Log Notice</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div>
+        <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:4px;">Notice Type <span style="color:#ef4444;">*</span></label>
+        <select id="lf-type" onchange="window._updateLienFormHints()" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #475569;color:#f1f5f9;border-radius:6px;padding:7px 10px;font-size:0.82rem;">
+          ${NOTICE_TYPES.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:4px;">Status</label>
+        <select id="lf-status" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #475569;color:#f1f5f9;border-radius:6px;padding:7px 10px;font-size:0.82rem;">
+          ${NOTICE_STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:4px;">Date Sent / Filed</label>
+        <input type="date" id="lf-date-sent" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #475569;color:#f1f5f9;border-radius:6px;padding:7px 10px;font-size:0.82rem;">
+      </div>
+    </div>
+    <div id="lf-type-hint" style="font-size:0.75rem;color:#fbbf24;margin-bottom:12px;padding:8px 10px;background:#fbbf2410;border-left:3px solid #fbbf24;border-radius:0 6px 6px 0;"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div>
+        <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:4px;">Sent To / Filed With</label>
+        <input type="text" id="lf-recipient" placeholder="e.g. Property Owner, County Clerk" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #475569;color:#f1f5f9;border-radius:6px;padding:7px 10px;font-size:0.82rem;">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:4px;">Delivery Method</label>
+        <select id="lf-method" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #475569;color:#f1f5f9;border-radius:6px;padding:7px 10px;font-size:0.82rem;">
+          <option value="">—</option>
+          <option value="certified">Certified Mail (RRRR)</option>
+          <option value="hand">Hand Delivered</option>
+          <option value="email">Email</option>
+          <option value="fax">Fax</option>
+          <option value="filed">County Filed</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:4px;">Tracking # / Doc #</label>
+        <input type="text" id="lf-tracking" placeholder="Certified mail #, filing #" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #475569;color:#f1f5f9;border-radius:6px;padding:7px 10px;font-size:0.82rem;">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div>
+        <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:4px;">Amount Claimed ($)</label>
+        <input type="number" id="lf-amount" placeholder="Lien amount" step="0.01" min="0" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #475569;color:#f1f5f9;border-radius:6px;padding:7px 10px;font-size:0.82rem;">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:4px;">Response Due Date</label>
+        <input type="date" id="lf-response-due" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #475569;color:#f1f5f9;border-radius:6px;padding:7px 10px;font-size:0.82rem;">
+      </div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:4px;">Notes</label>
+      <textarea id="lf-notes" rows="2" placeholder="Any relevant details, responses received, etc." style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #475569;color:#f1f5f9;border-radius:6px;padding:8px 10px;font-size:0.82rem;resize:vertical;"></textarea>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="document.getElementById('lien-form-panel').style.display='none'" style="background:#334155;border:none;color:#94a3b8;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:0.82rem;">Cancel</button>
+      <button onclick="window._saveLienNotice()" style="background:#8b5cf6;color:#fff;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;font-weight:700;font-size:0.82rem;">Save Notice</button>
+    </div>
+    <input type="hidden" id="lf-edit-index" value="-1">
+  </div>
+  
+  <!-- TX Lien Law Quick Reference -->
+  <div style="margin-top:20px;background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px;">
+    <div style="font-size:0.82rem;font-weight:600;color:#60a5fa;margin-bottom:10px;">📖 Texas Mechanics Lien Law Quick Reference</div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;font-size:0.75rem;color:#94a3b8;">
+      <div>
+        <strong style="color:#f1f5f9;">Notice to Owner (NTO):</strong><br>
+        §53.056 — Send within <span style="color:#fbbf24;">30 days</span> of first furnishing labor/materials. Required for subs/suppliers on commercial jobs. Certified mail recommended.
+      </div>
+      <div>
+        <strong style="color:#f1f5f9;">Lien Affidavit Deadline:</strong><br>
+        §53.052 — File by the <span style="color:#fbbf24;">15th of the 4th month</span> after last work. File with County Clerk where property is located.
+      </div>
+      <div>
+        <strong style="color:#f1f5f9;">Bond Claim (Payment Bond):</strong><br>
+        §53.202 — Send to GC and surety by <span style="color:#fbbf24;">15th of 3rd month</span> after unpaid work. Required for bonded public/private jobs.
+      </div>
+      <div>
+        <strong style="color:#f1f5f9;">Fund Trapping:</strong><br>
+        §53.081-084 — Send notice before owner pays GC. Traps funds at owner level for direct payment to sub.
+      </div>
+      <div>
+        <strong style="color:#f1f5f9;">Foreclosure Deadline:</strong><br>
+        §53.154 — Must file suit within <span style="color:#fbbf24;">2 years</span> of filing lien affidavit or lien expires.
+      </div>
+      <div>
+        <strong style="color:#f1f5f9;">Residential Projects:</strong><br>
+        §53.254-255 — Different rules for residential. Owner can demand contractor's affidavit listing all subs. 30-day statutory disclosure rights.
+      </div>
+    </div>
+    <div style="margin-top:10px;font-size:0.72rem;color:#64748b;">⚠️ This is a tracking tool, not legal advice. Consult a TX construction attorney for lien-critical decisions. Deadlines are date-strict — missing by 1 day = lost rights.</div>
+  </div>
+</div>`;
+    m.addEventListener('click', e => { if (e.target === m) m.remove(); });
+    return m;
+  }
+
+  // ─── Save project dates ───
+  window._saveLienDates = function() {
+    const data = loadLienNotices();
+    data.firstWorkDate = document.getElementById('lien-first-work').value;
+    data.lastWorkDate = document.getElementById('lien-last-work').value;
+    data.contractAmount = parseFloat(document.getElementById('lien-contract-amt').value) || 0;
+    data.isBonded = document.getElementById('lien-is-bonded').checked;
+    data.isResidential = document.getElementById('lien-is-residential').checked;
+    data.ownerName = document.getElementById('lien-owner-name').value.trim();
+    data.propertyAddress = document.getElementById('lien-property-addr').value.trim();
+    saveLienNotices(data);
+    renderDeadlines();
+  };
+
+  // ─── Render calculated deadlines ───
+  function renderDeadlines() {
+    const panel = document.getElementById('lien-deadlines-panel');
+    if (!panel) return;
+    const data = loadLienNotices();
+    const deadlines = calcDeadlines(data);
+    
+    if (!deadlines.length) {
+      panel.innerHTML = `<div style="background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:8px;padding:14px;text-align:center;color:#fbbf24;font-size:0.82rem;">⚠️ Enter First Work Date and Last Work Date above to calculate lien deadlines.</div>`;
+      return;
+    }
+    
+    panel.innerHTML = `
+      <div style="font-size:0.82rem;font-weight:600;color:#ef4444;margin-bottom:10px;">🚨 Critical Deadlines</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+        ${deadlines.map(d => {
+          const urgent = d.daysLeft !== null && d.daysLeft <= 14;
+          const overdue = d.daysLeft !== null && d.daysLeft < 0;
+          const bgColor = overdue ? 'rgba(239,68,68,0.15)' : urgent ? 'rgba(251,191,36,0.12)' : 'rgba(30,41,59,1)';
+          const borderColor = overdue ? '#ef4444' : urgent ? '#fbbf24' : '#334155';
+          const textColor = overdue ? '#ef4444' : urgent ? '#fbbf24' : '#f1f5f9';
+          return `<div style="background:${bgColor};border:1px solid ${borderColor};border-radius:8px;padding:12px;">
+            <div style="font-size:0.78rem;font-weight:600;color:${textColor};">${escHtml(d.name)}</div>
+            <div style="font-size:1.1rem;font-weight:700;color:${textColor};margin:4px 0;">${fmtDate(d.date)}</div>
+            <div style="font-size:0.72rem;color:${overdue?'#fca5a5':urgent?'#fcd34d':'#94a3b8'};">
+              ${overdue ? `⚠️ OVERDUE by ${Math.abs(d.daysLeft)} days` : d.daysLeft !== null ? `${d.daysLeft} days remaining` : ''}
+            </div>
+            <div style="font-size:0.68rem;color:#64748b;margin-top:4px;">${escHtml(d.law)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  // ─── Render notice log ───
+  window._renderLienLog = function() {
+    const container = document.getElementById('lien-log-container');
+    if (!container) return;
+    renderDeadlines();
+    
+    const data = loadLienNotices();
+    const notices = data.notices || [];
+    const sf = (document.getElementById('lien-status-filter')||{}).value||'';
+    let filtered = notices;
+    if (sf) filtered = filtered.filter(n => n.status === sf);
+    
+    if (!filtered.length) {
+      container.innerHTML = `<div style="text-align:center;padding:30px;color:#475569;font-size:0.85rem;">${notices.length?'No notices match the filter.':'No notices logged yet. Click + Log Notice to track your lien-related communications.'}</div>`;
+      return;
+    }
+    
+    container.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
+      <thead>
+        <tr style="background:#1e293b;color:#94a3b8;text-align:left;">
+          <th style="padding:8px 10px;border-bottom:1px solid #334155;">Type</th>
+          <th style="padding:8px 10px;border-bottom:1px solid #334155;">Status</th>
+          <th style="padding:8px 10px;border-bottom:1px solid #334155;">Date Sent</th>
+          <th style="padding:8px 10px;border-bottom:1px solid #334155;">Sent To</th>
+          <th style="padding:8px 10px;border-bottom:1px solid #334155;">Method</th>
+          <th style="padding:8px 10px;border-bottom:1px solid #334155;">Amount</th>
+          <th style="padding:8px 10px;border-bottom:1px solid #334155;">Notes</th>
+          <th style="padding:8px 10px;border-bottom:1px solid #334155;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${filtered.map((notice, fi) => {
+          const realIdx = notices.indexOf(notice);
+          const typeInfo = NOTICE_TYPES.find(t => t.id === notice.type) || {name: notice.type};
+          const sc = STATUS_COLORS[notice.status] || '#94a3b8';
+          return `<tr style="border-bottom:1px solid #1e293b;">
+            <td style="padding:8px 10px;font-weight:600;color:#f1f5f9;">${escHtml(typeInfo.name)}</td>
+            <td style="padding:8px 10px;"><span style="background:${sc}22;color:${sc};border:1px solid ${sc}44;border-radius:4px;padding:2px 7px;font-size:0.72rem;font-weight:600;">${escHtml(notice.status)}</span></td>
+            <td style="padding:8px 10px;color:#94a3b8;font-size:0.75rem;">${fmtDate(notice.dateSent)}</td>
+            <td style="padding:8px 10px;color:#cbd5e1;font-size:0.75rem;">${escHtml(notice.recipient||'—')}</td>
+            <td style="padding:8px 10px;color:#94a3b8;font-size:0.75rem;">${escHtml(notice.method||'—')}</td>
+            <td style="padding:8px 10px;color:#34d399;font-size:0.75rem;">${notice.amount ? '$'+Number(notice.amount).toLocaleString() : '—'}</td>
+            <td style="padding:8px 10px;color:#94a3b8;font-size:0.72rem;max-width:150px;">${escHtml((notice.notes||'').slice(0,50))}${(notice.notes||'').length>50?'…':''}</td>
+            <td style="padding:8px 10px;white-space:nowrap;">
+              <button onclick="window._openLienForm(${realIdx})" style="background:#1e40af22;border:1px solid #1e40af44;color:#60a5fa;border-radius:4px;padding:3px 9px;cursor:pointer;font-size:0.72rem;margin-right:4px;">✏️</button>
+              <button onclick="window._deleteLienNotice(${realIdx})" style="background:#dc262622;border:1px solid #dc262644;color:#f87171;border-radius:4px;padding:3px 9px;cursor:pointer;font-size:0.72rem;">🗑</button>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+  };
+
+  // ─── Update form hints based on type ───
+  window._updateLienFormHints = function() {
+    const typeId = document.getElementById('lf-type').value;
+    const typeInfo = NOTICE_TYPES.find(t => t.id === typeId) || {};
+    const hint = document.getElementById('lf-type-hint');
+    if (hint) {
+      hint.innerHTML = `<strong>${escHtml(typeInfo.desc||'')}</strong> — ${escHtml(typeInfo.deadline||'')}`;
+    }
+  };
+
+  // ─── Open form ───
+  window._openLienForm = function(idx) {
+    const panel = document.getElementById('lien-form-panel');
+    if (!panel) return;
+    const data = loadLienNotices();
+    const notices = data.notices || [];
+    const editing = idx !== null && idx >= 0 && idx < notices.length;
+    const notice = editing ? notices[idx] : {};
+    
+    document.getElementById('lien-form-title').textContent = editing ? 'Edit Notice' : 'Log Notice';
+    document.getElementById('lf-type').value = notice.type || 'nto';
+    document.getElementById('lf-status').value = notice.status || 'Pending';
+    document.getElementById('lf-date-sent').value = notice.dateSent || '';
+    document.getElementById('lf-recipient').value = notice.recipient || '';
+    document.getElementById('lf-method').value = notice.method || '';
+    document.getElementById('lf-tracking').value = notice.tracking || '';
+    document.getElementById('lf-amount').value = notice.amount || '';
+    document.getElementById('lf-response-due').value = notice.responseDue || '';
+    document.getElementById('lf-notes').value = notice.notes || '';
+    document.getElementById('lf-edit-index').value = editing ? idx : -1;
+    
+    window._updateLienFormHints();
+    panel.style.display = 'block';
+    panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+  };
+
+  // ─── Save notice ───
+  window._saveLienNotice = function() {
+    const data = loadLienNotices();
+    if (!data.notices) data.notices = [];
+    const idx = parseInt(document.getElementById('lf-edit-index').value);
+    
+    const notice = {
+      type: document.getElementById('lf-type').value,
+      status: document.getElementById('lf-status').value,
+      dateSent: document.getElementById('lf-date-sent').value,
+      recipient: document.getElementById('lf-recipient').value.trim(),
+      method: document.getElementById('lf-method').value,
+      tracking: document.getElementById('lf-tracking').value.trim(),
+      amount: parseFloat(document.getElementById('lf-amount').value) || 0,
+      responseDue: document.getElementById('lf-response-due').value,
+      notes: document.getElementById('lf-notes').value.trim(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    if (idx >= 0 && idx < data.notices.length) {
+      data.notices[idx] = notice;
+    } else {
+      data.notices.push(notice);
+    }
+    
+    saveLienNotices(data);
+    document.getElementById('lien-form-panel').style.display = 'none';
+    window._renderLienLog();
+    showLienToast(idx >= 0 ? '✔️ Notice updated' : '✔️ Notice logged');
+  };
+
+  // ─── Delete notice ───
+  window._deleteLienNotice = function(idx) {
+    if (!confirm('Delete this notice record?')) return;
+    const data = loadLienNotices();
+    if (!data.notices) return;
+    data.notices.splice(idx, 1);
+    saveLienNotices(data);
+    window._renderLienLog();
+    showLienToast('🗑 Notice deleted');
+  };
+
+  // ─── Copy summary ───
+  window._copyLienSummary = function() {
+    const data = loadLienNotices();
+    const proj = (document.getElementById('projectName')||{}).value || 'Project';
+    const deadlines = calcDeadlines(data);
+    const notices = data.notices || [];
+    
+    let text = `LIEN RIGHTS SUMMARY — ${proj}\n`;
+    text += `${'='.repeat(50)}\n\n`;
+    text += `Property: ${data.propertyAddress || '—'}\n`;
+    text += `Owner: ${data.ownerName || '—'}\n`;
+    text += `Contract Amount: ${data.contractAmount ? '$'+Number(data.contractAmount).toLocaleString() : '—'}\n`;
+    text += `First Work: ${fmtDate(data.firstWorkDate)}\n`;
+    text += `Last Work: ${fmtDate(data.lastWorkDate)}\n`;
+    text += `Bonded: ${data.isBonded ? 'Yes' : 'No'}\n\n`;
+    
+    text += `CRITICAL DEADLINES\n${'-'.repeat(30)}\n`;
+    deadlines.forEach(d => {
+      text += `• ${d.name}: ${fmtDate(d.date)} (${d.daysLeft >= 0 ? d.daysLeft + ' days left' : 'OVERDUE'})\n`;
+    });
+    
+    text += `\nNOTICES LOGGED (${notices.length})\n${'-'.repeat(30)}\n`;
+    notices.forEach(n => {
+      const typeInfo = NOTICE_TYPES.find(t => t.id === n.type) || {name: n.type};
+      text += `• ${typeInfo.name} — ${n.status} — ${fmtDate(n.dateSent)} — ${n.recipient||'—'}\n`;
+    });
+    
+    navigator.clipboard.writeText(text).then(() => showLienToast('📋 Copied to clipboard'));
+  };
+
+  // ─── Print summary ───
+  window._printLienSummary = function() {
+    const data = loadLienNotices();
+    const proj = (document.getElementById('projectName')||{}).value || 'Project';
+    const client = (document.getElementById('clientName')||{}).value || '';
+    const deadlines = calcDeadlines(data);
+    const notices = data.notices || [];
+    const comp = {
+      name: (document.getElementById('company-name')||{}).value || '',
+      addr: (document.getElementById('company-address')||{}).value || '',
+      phone: (document.getElementById('company-phone')||{}).value || '',
+      email: (document.getElementById('company-email')||{}).value || '',
+      lic: (document.getElementById('company-license')||{}).value || ''
+    };
+    const today = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Lien Summary — ${escHtml(proj)}</title>
+<style>
+*{box-sizing:border-box;}
+body{font-family:Arial,sans-serif;font-size:9pt;color:#1a1a1a;padding:20px 24px;margin:0;}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #0f172a;}
+.hdr-left h1{margin:0 0 4px;font-size:14pt;color:#0f172a;}
+.hdr-left p{margin:2px 0;font-size:7.5pt;color:#555;}
+.hdr-right{text-align:right;font-size:7.5pt;color:#555;line-height:1.5;}
+.badge{display:inline-block;background:#8b5cf6;color:#fff;border-radius:4px;padding:3px 10px;font-size:8pt;font-weight:700;margin-bottom:6px;}
+.section{margin-bottom:16px;}
+.section h3{font-size:10pt;color:#0f172a;margin:0 0 8px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:8pt;}
+.info-grid .lbl{color:#666;}
+.info-grid .val{font-weight:600;}
+.deadline-box{background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:10px;margin-bottom:8px;}
+.deadline-box.overdue{background:#fee2e2;border-color:#ef4444;}
+.deadline-box .name{font-weight:600;font-size:9pt;}
+.deadline-box .date{font-size:11pt;font-weight:700;margin:4px 0;}
+.deadline-box .days{font-size:7.5pt;color:#666;}
+table{width:100%;border-collapse:collapse;font-size:8pt;margin-top:8px;}
+thead tr{background:#0f172a;color:#fff;}
+th{padding:6px 8px;text-align:left;font-size:7.5pt;}
+td{padding:6px 8px;border-bottom:1px solid #e2e8f0;}
+.footer{margin-top:16px;font-size:7pt;color:#888;text-align:center;border-top:1px solid #e2e8f0;padding-top:8px;}
+@media print{body{padding:12px 16px;}button{display:none;}}
+</style></head><body>
+<div class="hdr">
+  <div class="hdr-left">
+    <div class="badge">⚖️ LIEN RIGHTS SUMMARY</div>
+    <h1>${escHtml(proj)}</h1>
+    <p><strong>Owner/GC:</strong> ${escHtml(client||data.ownerName||'—')}</p>
+    <p>Generated: ${today}</p>
+  </div>
+  <div class="hdr-right">
+    <strong>${escHtml(comp.name||'Contractor')}</strong><br>
+    ${comp.addr ? escHtml(comp.addr)+'<br>' : ''}
+    ${comp.phone ? escHtml(comp.phone)+'<br>' : ''}
+    ${comp.email ? escHtml(comp.email)+'<br>' : ''}
+    ${comp.lic ? 'Lic: '+escHtml(comp.lic) : ''}
+  </div>
+</div>
+
+<div class="section">
+  <h3>Property & Project Info</h3>
+  <div class="info-grid">
+    <div><span class="lbl">Property Address:</span> <span class="val">${escHtml(data.propertyAddress||'—')}</span></div>
+    <div><span class="lbl">Property Owner:</span> <span class="val">${escHtml(data.ownerName||'—')}</span></div>
+    <div><span class="lbl">Contract Amount:</span> <span class="val">${data.contractAmount ? '$'+Number(data.contractAmount).toLocaleString() : '—'}</span></div>
+    <div><span class="lbl">Bonded Job:</span> <span class="val">${data.isBonded ? 'Yes' : 'No'}</span></div>
+    <div><span class="lbl">First Work Date:</span> <span class="val">${fmtDate(data.firstWorkDate)}</span></div>
+    <div><span class="lbl">Last Work Date:</span> <span class="val">${fmtDate(data.lastWorkDate)}</span></div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>🚨 Critical Deadlines (TX Property Code Ch. 53)</h3>
+  ${deadlines.length ? deadlines.map(d => {
+    const overdue = d.daysLeft !== null && d.daysLeft < 0;
+    return `<div class="deadline-box ${overdue?'overdue':''}">
+      <div class="name">${escHtml(d.name)}</div>
+      <div class="date">${fmtDate(d.date)}</div>
+      <div class="days">${overdue ? '⚠️ OVERDUE by '+Math.abs(d.daysLeft)+' days' : (d.daysLeft !== null ? d.daysLeft+' days remaining' : '')} — ${escHtml(d.law)}</div>
+    </div>`;
+  }).join('') : '<p style="color:#888;font-size:8pt;">Enter first/last work dates to calculate deadlines.</p>'}
+</div>
+
+<div class="section">
+  <h3>Notice Log (${notices.length} entries)</h3>
+  ${notices.length ? `<table>
+    <thead><tr><th>Type</th><th>Status</th><th>Date Sent</th><th>Sent To</th><th>Method</th><th>Amount</th><th>Notes</th></tr></thead>
+    <tbody>
+      ${notices.map(n => {
+        const typeInfo = NOTICE_TYPES.find(t => t.id === n.type) || {name: n.type};
+        return `<tr>
+          <td>${escHtml(typeInfo.name)}</td>
+          <td>${escHtml(n.status)}</td>
+          <td>${fmtDate(n.dateSent)}</td>
+          <td>${escHtml(n.recipient||'—')}</td>
+          <td>${escHtml(n.method||'—')}</td>
+          <td>${n.amount ? '$'+Number(n.amount).toLocaleString() : '—'}</td>
+          <td>${escHtml(n.notes||'—')}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>` : '<p style="color:#888;font-size:8pt;">No notices logged yet.</p>'}
+</div>
+
+<div class="footer">
+  ${escHtml(comp.name||'Contractor')} · Lien Rights Summary · ${escHtml(proj)} · ${today}<br>
+  <span style="font-size:6.5pt;color:#aaa;">This is a tracking document, not legal advice. Consult a TX construction attorney for lien filing decisions.</span><br>
+  <button onclick="window.print()" style="margin-top:6px;padding:5px 14px;background:#8b5cf6;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:9pt;">🖨 Print / Save PDF</button>
+</div>
+</body></html>`;
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (!win) { alert('Pop-up blocked.'); return; }
+    win.document.write(html);
+    win.document.close();
+  };
+
+  // ─── Toast ───
+  function showLienToast(msg) {
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;color:#8b5cf6;border:1px solid #334155;border-radius:8px;padding:10px 20px;font-size:0.82rem;z-index:999999;font-weight:600;pointer-events:none;';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2500);
+  }
+
+  // ─── Main Open ───
+  function showLienTracker() {
+    const existing = document.getElementById('oncor-lien-overlay');
+    if (existing) { existing.remove(); return; }
+    const m = buildModal();
+    document.body.appendChild(m);
+    window._renderLienLog();
+  }
+
+  // ─── Keyboard Shortcut ───
+  document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.shiftKey && e.key === 'N') {
+      e.preventDefault();
+      showLienTracker();
+    }
+  });
+
+  // ─── Sidebar Button ───
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      const actionsDiv = document.querySelector('.actions');
+      if (!actionsDiv) return;
+      const rows = actionsDiv.querySelectorAll('.action-row');
+      let targetRow = null;
+      rows.forEach(row => {
+        if (row.textContent.includes('Punch List')) {
+          targetRow = row;
+        }
+      });
+      const newRow = document.createElement('div');
+      newRow.className = 'action-row';
+      newRow.innerHTML = `
+        <button class="action-btn secondary" onclick="showLienTracker()" title="Lien Rights & Notices — Track TX Property Code Ch. 53 deadlines. Notice to Owner, lien affidavit, bond claims, fund trapping. Missing a deadline = lost payment rights. (Ctrl+Shift+N)" style="background:rgba(139,92,246,0.1);border-color:rgba(139,92,246,0.3);color:#8b5cf6;">⚖️ Lien Notices</button>
+      `;
+      if (targetRow && targetRow.parentNode) {
+        targetRow.parentNode.insertBefore(newRow, targetRow.nextSibling);
+      } else {
+        actionsDiv.appendChild(newRow);
+      }
+    }, 995);
+  });
+
+  window.showLienTracker = showLienTracker;
+  window._showLienTracker = showLienTracker;
+
+  // ─── Expose stats for Project Status Card ───
+  window._getLienStats = function() {
+    const data = loadLienNotices();
+    const deadlines = calcDeadlines(data);
+    const notices = data.notices || [];
+    const urgentDeadlines = deadlines.filter(d => d.daysLeft !== null && d.daysLeft <= 14 && d.daysLeft >= 0).length;
+    const overdueDeadlines = deadlines.filter(d => d.daysLeft !== null && d.daysLeft < 0).length;
+    return {
+      totalNotices: notices.length,
+      pendingNotices: notices.filter(n => n.status === 'Pending').length,
+      sentNotices: notices.filter(n => n.status === 'Sent' || n.status === 'Filed').length,
+      urgentDeadlines,
+      overdueDeadlines,
+      hasNTO: notices.some(n => n.type === 'nto' && (n.status === 'Sent' || n.status === 'Received')),
+      lienFiled: notices.some(n => n.type === 'lien_affidavit' && n.status === 'Filed')
+    };
+  };
+
+})();
+// ==================== END LIEN RIGHTS & NOTICES TRACKER — Zeus ⚡ Session #54 ====================
+</script>
