@@ -146203,3 +146203,749 @@ td{padding:6px 8px;border-bottom:1px solid #e2e8f0;}
 })();
 // ==================== END LIEN RIGHTS & NOTICES TRACKER — Zeus ⚡ Session #54 ====================
 </script>
+
+<!-- ==================== CONCRETE QC LOG — Zeus ⚡ Session #55 ==================== -->
+<script>
+(function() {
+  'use strict';
+
+  // ─── Storage ───
+  const QC_KEY_PREFIX = 'oncor_qc_log_v1_';
+  function getProjectKey() {
+    const pn = document.getElementById('projectName');
+    return QC_KEY_PREFIX + (pn && pn.value.trim() ? pn.value.trim() : 'default');
+  }
+  function loadQC() {
+    try { return JSON.parse(localStorage.getItem(getProjectKey()) || '{}'); } catch(e) { return {}; }
+  }
+  function saveQC(data) {
+    localStorage.setItem(getProjectKey(), JSON.stringify(data));
+  }
+  function getTests() { return loadQC().tests || []; }
+  function saveTests(tests) { const d = loadQC(); d.tests = tests; saveQC(d); }
+
+  // ─── Helpers ───
+  function genId() { return 'qc_' + Date.now() + '_' + Math.random().toString(36).slice(2,6); }
+  function fmtDate(s) {
+    if (!s) return '—';
+    const d = new Date(s + 'T00:00:00');
+    return isNaN(d) ? s : (d.getMonth()+1) + '/' + d.getDate() + '/' + d.getFullYear();
+  }
+  function today() { return new Date().toISOString().slice(0,10); }
+  function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function getCompany() {
+    const f = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+    return { name: f('companyName')||'Contractor', address: f('companyAddress'), phone: f('companyPhone'), email: f('companyEmail'), license: f('companyLicense') };
+  }
+  function getProject() { const el = document.getElementById('projectName'); return el ? el.value.trim() : ''; }
+
+  // ─── Cylinder break strength evaluation ───
+  // ACI 318-19 §26.12.3: fc' met if avg of two 28-day cylinders ≥ fc', neither < fc'-500 psi
+  function evalBreaks(test) {
+    const fc = parseInt(test.specPSI) || 0;
+    const b1 = parseFloat(test.break1) || null;
+    const b2 = parseFloat(test.break2) || null;
+    const b3 = parseFloat(test.break3) || null;
+
+    if (!fc || !b1) return { status: 'Pending', color: '#64748b', note: 'Awaiting break results' };
+
+    const available = [b1, b2, b3].filter(v => v !== null);
+    const avg = available.reduce((a,b) => a+b, 0) / available.length;
+    const minBreak = Math.min(...available);
+    const threshold = fc - 500;
+
+    if (avg >= fc && minBreak >= threshold) {
+      return { status: '✅ PASS', color: '#22c55e', note: `Avg ${Math.round(avg)} psi ≥ ${fc} psi; min ${Math.round(minBreak)} ≥ ${threshold} psi (ACI 318 §26.12.3)` };
+    } else if (avg < fc && minBreak < threshold) {
+      return { status: '❌ FAIL', color: '#ef4444', note: `Avg ${Math.round(avg)} psi < ${fc} psi AND min ${Math.round(minBreak)} < ${threshold} psi — Requires investigation per ACI 318 §26.12.4` };
+    } else if (avg < fc) {
+      return { status: '⚠️ LOW AVG', color: '#f59e0b', note: `Avg ${Math.round(avg)} psi < ${fc} psi — Review ACI 318 §26.12.4 core drilling or load test` };
+    } else {
+      return { status: '⚠️ LOW MIN', color: '#f59e0b', note: `Min cylinder ${Math.round(minBreak)} psi < ${threshold} psi — Monitor; may need additional testing` };
+    }
+  }
+
+  // ─── Slump evaluation ───
+  function evalSlump(slump, maxSlump) {
+    const s = parseFloat(slump);
+    const m = parseFloat(maxSlump) || 5;
+    if (isNaN(s)) return { ok: true, note: '' };
+    if (s > m) return { ok: false, note: `⚠️ Slump ${s}" exceeds max ${m}" — ASTM C94 / ACI 305R` };
+    if (s > m - 0.5) return { ok: true, note: `Near limit: ${s}" (max ${m}")` };
+    return { ok: true, note: '' };
+  }
+
+  // ─── Build modal ───
+  function buildQCModal() {
+    const overlay = document.createElement('div');
+    overlay.id = 'oncor-qc-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:99998;display:flex;align-items:center;justify-content:center;';
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+
+    overlay.innerHTML = `
+    <div id="oncor-qc-modal" style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;width:min(1020px,96vw);max-height:90vh;overflow-y:auto;font-family:system-ui,sans-serif;color:#e2e8f0;box-shadow:0 24px 48px rgba(0,0,0,0.5);">
+      <!-- Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #1e293b;position:sticky;top:0;background:#0f172a;z-index:10;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:1.3rem;">🧪</span>
+          <div>
+            <div style="font-size:1rem;font-weight:700;color:#38bdf8;">Concrete QC Log</div>
+            <div style="font-size:0.72rem;color:#64748b;">Slump • Air • Temp • Cylinders — ACI 318 / ASTM C31 / ASTM C172</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button onclick="window._printQCReport()" style="background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.3);color:#38bdf8;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.78rem;">🖨 Print Report</button>
+          <button onclick="window._addQCTest()" style="background:#38bdf8;border:none;color:#0f172a;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:700;">+ New Test</button>
+          <button onclick="document.getElementById('oncor-qc-overlay').remove()" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;">✕ Close</button>
+        </div>
+      </div>
+
+      <!-- Stats Bar -->
+      <div id="qc-stats-bar" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;padding:14px 20px;border-bottom:1px solid #1e293b;background:#0a1120;">
+        <div style="text-align:center;"><div id="qcs-total" style="font-size:1.5rem;font-weight:700;color:#38bdf8;">0</div><div style="font-size:0.68rem;color:#64748b;text-transform:uppercase;">Total Tests</div></div>
+        <div style="text-align:center;"><div id="qcs-pass" style="font-size:1.5rem;font-weight:700;color:#22c55e;">0</div><div style="font-size:0.68rem;color:#64748b;text-transform:uppercase;">Pass</div></div>
+        <div style="text-align:center;"><div id="qcs-warn" style="font-size:1.5rem;font-weight:700;color:#f59e0b;">0</div><div style="font-size:0.68rem;color:#64748b;text-transform:uppercase;">Warning</div></div>
+        <div style="text-align:center;"><div id="qcs-fail" style="font-size:1.5rem;font-weight:700;color:#ef4444;">0</div><div style="font-size:0.68rem;color:#64748b;text-transform:uppercase;">Fail</div></div>
+        <div style="text-align:center;"><div id="qcs-pending" style="font-size:1.5rem;font-weight:700;color:#64748b;">0</div><div style="font-size:0.68rem;color:#64748b;text-transform:uppercase;">Pending Breaks</div></div>
+      </div>
+
+      <!-- Filter Row -->
+      <div style="display:flex;gap:10px;align-items:center;padding:12px 20px;border-bottom:1px solid #1e293b;flex-wrap:wrap;">
+        <select id="qc-filter-result" onchange="window._renderQCList()" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:5px 8px;border-radius:6px;font-size:0.78rem;">
+          <option value="">All Results</option>
+          <option value="PASS">✅ Pass</option>
+          <option value="WARN">⚠️ Warning</option>
+          <option value="FAIL">❌ Fail</option>
+          <option value="Pending">Pending</option>
+        </select>
+        <select id="qc-filter-pour" onchange="window._renderQCList()" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:5px 8px;border-radius:6px;font-size:0.78rem;">
+          <option value="">All Pours</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:5px;font-size:0.78rem;color:#94a3b8;cursor:pointer;">
+          <input type="checkbox" id="qc-filter-fails-only" onchange="window._renderQCList()" style="cursor:pointer;"> Fails & Warnings Only
+        </label>
+      </div>
+
+      <!-- Test List -->
+      <div id="qc-list-container" style="padding:16px 20px;">
+        <div style="text-align:center;color:#475569;padding:32px;font-size:0.85rem;">No QC tests logged yet.<br>Click <strong style="color:#38bdf8;">+ New Test</strong> to add your first field test.</div>
+      </div>
+    </div>
+
+    <!-- Add/Edit Form Modal -->
+    <div id="qc-form-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99999;display:none;align-items:center;justify-content:center;">
+      <div style="background:#0f172a;border:1px solid #334155;border-radius:12px;width:min(700px,94vw);max-height:88vh;overflow-y:auto;padding:0;">
+        <div style="padding:14px 20px;border-bottom:1px solid #1e293b;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#0f172a;z-index:5;">
+          <div style="font-weight:700;color:#38bdf8;font-size:0.95rem;" id="qc-form-title">New Concrete Field Test</div>
+          <button onclick="document.getElementById('qc-form-modal').style.display='none'" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:5px 10px;border-radius:6px;cursor:pointer;">✕</button>
+        </div>
+        <form id="qc-form" onsubmit="window._saveQCTest(event)" style="padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <input type="hidden" id="qc-id">
+
+          <div style="grid-column:1/-1;font-size:0.75rem;color:#38bdf8;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid #1e293b;padding-bottom:4px;">📋 Pour Identification</div>
+
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Test Date *</label>
+            <input type="date" id="qc-testDate" required style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Pour Name / Location</label>
+            <input type="text" id="qc-pourName" placeholder="e.g. Slab - Grid A-D, Footings Line 1" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Ticket / Load #</label>
+            <input type="text" id="qc-ticketNum" placeholder="e.g. 12345 or Load 3 of 8" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Cylinder Set # / ID</label>
+            <input type="text" id="qc-cylId" placeholder="e.g. C-001, Set A" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+          </div>
+
+          <div style="grid-column:1/-1;font-size:0.75rem;color:#38bdf8;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid #1e293b;padding-bottom:4px;margin-top:4px;">🧪 Mix Design</div>
+
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Spec PSI (f'c) *</label>
+            <select id="qc-specPSI" required style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+              <option value="">Select...</option>
+              <option value="2500">2500 psi</option>
+              <option value="3000">3000 psi</option>
+              <option value="3500">3500 psi</option>
+              <option value="4000" selected>4000 psi</option>
+              <option value="4500">4500 psi</option>
+              <option value="5000">5000 psi</option>
+              <option value="6000">6000 psi</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Mix Code / Batch Plant</label>
+            <input type="text" id="qc-mixCode" placeholder="e.g. 4000F1 / El Paso Ready Mix" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">w/cm Ratio</label>
+            <input type="number" id="qc-wcm" step="0.01" min="0.3" max="0.7" placeholder="e.g. 0.45" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Truck Discharge Time</label>
+            <input type="time" id="qc-dischargeTime" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+          </div>
+
+          <div style="grid-column:1/-1;font-size:0.75rem;color:#38bdf8;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid #1e293b;padding-bottom:4px;margin-top:4px;">🌡️ Field Tests (ASTM C172 composite sample)</div>
+
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Slump (inches) — ASTM C143</label>
+            <input type="number" id="qc-slump" step="0.25" min="0" max="9" placeholder="e.g. 4.5" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Max Allowed Slump (inches)</label>
+            <input type="number" id="qc-maxSlump" step="0.5" min="1" max="9" value="5" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Air Content (%) — ASTM C231</label>
+            <input type="number" id="qc-air" step="0.1" min="0" max="10" placeholder="e.g. 1.5" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Concrete Temp (°F) — ASTM C1064</label>
+            <input type="number" id="qc-temp" min="32" max="140" placeholder="e.g. 82" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Ambient Temp (°F)</label>
+            <input type="number" id="qc-ambientTemp" min="-20" max="130" placeholder="e.g. 95" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Unit Weight (pcf) — ASTM C138</label>
+            <input type="number" id="qc-unitWeight" step="0.1" min="100" max="175" placeholder="e.g. 145.2" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+          </div>
+
+          <div style="grid-column:1/-1;font-size:0.75rem;color:#38bdf8;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid #1e293b;padding-bottom:4px;margin-top:4px;">🔬 Cylinder Breaks (psi) — ASTM C39</div>
+
+          <div style="grid-column:1/-1;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
+            <div>
+              <label style="display:block;font-size:0.72rem;color:#94a3b8;margin-bottom:3px;">7-Day Break (psi)</label>
+              <input type="number" id="qc-break7" min="0" max="15000" placeholder="e.g. 3200" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+            </div>
+            <div>
+              <label style="display:block;font-size:0.72rem;color:#94a3b8;margin-bottom:3px;">28-Day Break #1 *</label>
+              <input type="number" id="qc-break1" min="0" max="15000" placeholder="Required for eval" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+            </div>
+            <div>
+              <label style="display:block;font-size:0.72rem;color:#94a3b8;margin-bottom:3px;">28-Day Break #2</label>
+              <input type="number" id="qc-break2" min="0" max="15000" placeholder="Companion cyl." style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+            </div>
+            <div>
+              <label style="display:block;font-size:0.72rem;color:#94a3b8;margin-bottom:3px;">56-Day Break (psi)</label>
+              <input type="number" id="qc-break56" min="0" max="15000" placeholder="If spec'd" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+            </div>
+          </div>
+          <div style="grid-column:1/-1;">
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Break Date (28-day)</label>
+            <input type="date" id="qc-breakDate" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+          </div>
+
+          <div style="grid-column:1/-1;font-size:0.75rem;color:#38bdf8;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid #1e293b;padding-bottom:4px;margin-top:4px;">👷 Personnel & Notes</div>
+
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Sampled By (ACI Tech)</label>
+            <input type="text" id="qc-sampledBy" placeholder="Name / Cert #" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Testing Lab</label>
+            <input type="text" id="qc-testingLab" placeholder="Lab name" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Water Added on Site? (gal)</label>
+            <input type="number" id="qc-waterAdded" min="0" max="50" placeholder="0" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Curing Method</label>
+            <select id="qc-curing" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;">
+              <option value="">Select...</option>
+              <option value="Curing Compound (ASTM C309)">Curing Compound (ASTM C309)</option>
+              <option value="Wet Burlap + Poly">Wet Burlap + Poly</option>
+              <option value="Water Ponding">Water Ponding</option>
+              <option value="Spray Mist">Spray Mist</option>
+              <option value="Insulating Blankets">Insulating Blankets (Cold Weather)</option>
+              <option value="Evaporation Retarder">Evaporation Retarder (Hot Weather)</option>
+              <option value="Plastic Sheeting">Plastic Sheeting</option>
+              <option value="None">None</option>
+            </select>
+          </div>
+          <div style="grid-column:1/-1;">
+            <label style="display:block;font-size:0.75rem;color:#94a3b8;margin-bottom:3px;">Field Notes / Observations</label>
+            <textarea id="qc-notes" rows="3" placeholder="Any observations: pump issues, weather delays, mix concerns, surface conditions, early stiffening, etc." style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px;border-radius:6px;box-sizing:border-box;font-size:0.83rem;resize:vertical;"></textarea>
+          </div>
+
+          <div style="grid-column:1/-1;display:flex;justify-content:flex-end;gap:10px;padding-top:8px;border-top:1px solid #1e293b;margin-top:4px;">
+            <button type="button" onclick="document.getElementById('qc-form-modal').style.display='none'" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:0.83rem;">Cancel</button>
+            <button type="submit" style="background:#38bdf8;border:none;color:#0f172a;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:0.83rem;font-weight:700;">💾 Save Test</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+
+    return overlay;
+  }
+
+  // ─── Render list ───
+  window._renderQCList = function() {
+    const tests = getTests();
+    const container = document.getElementById('qc-list-container');
+    if (!container) return;
+
+    const filterResult = (document.getElementById('qc-filter-result')||{}).value || '';
+    const filterPour = (document.getElementById('qc-filter-pour')||{}).value || '';
+    const failsOnly = (document.getElementById('qc-filter-fails-only')||{}).checked;
+
+    // Populate pour filter
+    const pourSel = document.getElementById('qc-filter-pour');
+    if (pourSel) {
+      const pours = [...new Set(tests.map(t => t.pourName).filter(Boolean))];
+      const cur = pourSel.value;
+      pourSel.innerHTML = '<option value="">All Pours</option>' + pours.map(p => `<option value="${escH(p)}" ${cur===p?'selected':''}>${escH(p)}</option>`).join('');
+    }
+
+    // Compute results & update stats
+    let total = 0, pass = 0, warn = 0, fail = 0, pending = 0;
+    const enriched = tests.map(t => {
+      const br = evalBreaks(t);
+      if (br.status === '✅ PASS') pass++;
+      else if (br.status.includes('⚠️')) warn++;
+      else if (br.status.includes('❌')) fail++;
+      else pending++;
+      total++;
+      return { ...t, _breakResult: br };
+    });
+    const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    setEl('qcs-total', total);
+    setEl('qcs-pass', pass);
+    setEl('qcs-warn', warn);
+    setEl('qcs-fail', fail);
+    setEl('qcs-pending', pending);
+
+    // Filter
+    let filtered = enriched;
+    if (filterResult) {
+      filtered = filtered.filter(t => {
+        const s = t._breakResult.status;
+        if (filterResult === 'PASS') return s.includes('PASS');
+        if (filterResult === 'WARN') return s.includes('⚠️');
+        if (filterResult === 'FAIL') return s.includes('❌');
+        if (filterResult === 'Pending') return s === 'Pending';
+        return true;
+      });
+    }
+    if (filterPour) filtered = filtered.filter(t => t.pourName === filterPour);
+    if (failsOnly) filtered = filtered.filter(t => t._breakResult.status.includes('⚠️') || t._breakResult.status.includes('❌'));
+
+    if (!filtered.length) {
+      container.innerHTML = '<div style="text-align:center;color:#475569;padding:32px;font-size:0.85rem;">No tests match current filters.</div>';
+      return;
+    }
+
+    // Sort: newest first
+    filtered.sort((a, b) => (b.testDate||'').localeCompare(a.testDate||''));
+
+    container.innerHTML = filtered.map(t => {
+      const br = t._breakResult;
+      const slumpEval = evalSlump(t.slump, t.maxSlump);
+      const b1 = t.break1 ? `${Number(t.break1).toLocaleString()} psi` : '—';
+      const b2 = t.break2 ? `${Number(t.break2).toLocaleString()} psi` : '—';
+      const tempFlag = t.temp && (parseFloat(t.temp) > 90 || parseFloat(t.temp) < 50) ? ' ⚠️' : '';
+      const waterFlag = t.waterAdded && parseFloat(t.waterAdded) > 0 ? `<span style="color:#ef4444;font-weight:600;"> +${t.waterAdded} gal water on-site ⚠️</span>` : '';
+
+      return `
+      <div style="background:#1a2332;border:1px solid ${br.status.includes('❌') ? '#ef444440' : br.status.includes('⚠️') ? '#f59e0b40' : '#1e293b'};border-radius:8px;padding:14px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+          <div style="flex:1;min-width:200px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+              <span style="font-weight:700;color:#e2e8f0;font-size:0.9rem;">${escH(t.pourName||'Unnamed Pour')}</span>
+              <span style="background:${br.color}22;color:${br.color};border:1px solid ${br.color}44;padding:2px 8px;border-radius:4px;font-size:0.72rem;font-weight:600;">${escH(br.status)}</span>
+              ${t.specPSI ? `<span style="color:#64748b;font-size:0.75rem;">f'c = ${t.specPSI} psi</span>` : ''}
+            </div>
+            <div style="font-size:0.75rem;color:#64748b;margin-bottom:6px;">${fmtDate(t.testDate)}${t.ticketNum ? ' · Ticket '+escH(t.ticketNum) : ''}${t.cylId ? ' · Set '+escH(t.cylId) : ''}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:0.78rem;">
+              ${t.slump ? `<span style="color:${slumpEval.ok ? '#94a3b8' : '#f59e0b'};">Slump: <strong>${t.slump}"</strong>${slumpEval.ok ? '' : ' ⚠️'}</span>` : ''}
+              ${t.air ? `<span style="color:#94a3b8;">Air: <strong>${t.air}%</strong></span>` : ''}
+              ${t.temp ? `<span style="color:${tempFlag ? '#f59e0b' : '#94a3b8'};">Concrete Temp: <strong>${t.temp}°F${tempFlag}</strong></span>` : ''}
+              ${t.unitWeight ? `<span style="color:#94a3b8;">Unit Wt: <strong>${t.unitWeight} pcf</strong></span>` : ''}
+              ${t.break7 ? `<span style="color:#94a3b8;">7-day: <strong>${Number(t.break7).toLocaleString()} psi</strong></span>` : ''}
+              ${t.break1 ? `<span style="color:#94a3b8;">28-day: <strong>${b1}</strong>${t.break2 ? ` / ${b2}` : ''}</span>` : ''}
+            </div>
+            ${waterFlag ? `<div style="font-size:0.76rem;margin-top:4px;">${waterFlag}</div>` : ''}
+            ${br.note ? `<div style="font-size:0.72rem;color:${br.color};margin-top:5px;padding:4px 8px;background:${br.color}11;border-radius:4px;">${escH(br.note)}</div>` : ''}
+            ${t.notes ? `<div style="font-size:0.73rem;color:#64748b;margin-top:4px;">📝 ${escH(t.notes)}</div>` : ''}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;min-width:80px;align-items:flex-end;">
+            <button onclick="window._editQCTest('${t.id}')" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:4px 10px;border-radius:5px;cursor:pointer;font-size:0.75rem;">✏️ Edit</button>
+            <button onclick="window._printSingleQCTest('${t.id}')" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:4px 10px;border-radius:5px;cursor:pointer;font-size:0.75rem;">🖨 Print</button>
+            <button onclick="window._deleteQCTest('${t.id}')" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:4px 10px;border-radius:5px;cursor:pointer;font-size:0.75rem;">🗑 Del</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  };
+
+  // ─── Add/Edit form ───
+  window._addQCTest = function() {
+    document.getElementById('qc-id').value = '';
+    document.getElementById('qc-form-title').textContent = 'New Concrete Field Test';
+    document.getElementById('qc-form').reset();
+    document.getElementById('qc-testDate').value = today();
+    document.getElementById('qc-maxSlump').value = '5';
+    document.getElementById('qc-form-modal').style.display = 'flex';
+  };
+
+  window._editQCTest = function(id) {
+    const tests = getTests();
+    const t = tests.find(x => x.id === id);
+    if (!t) return;
+    document.getElementById('qc-id').value = t.id;
+    document.getElementById('qc-form-title').textContent = 'Edit Field Test';
+    const set = (fid, val) => { const el = document.getElementById(fid); if (el) el.value = val||''; };
+    set('qc-testDate', t.testDate);
+    set('qc-pourName', t.pourName);
+    set('qc-ticketNum', t.ticketNum);
+    set('qc-cylId', t.cylId);
+    set('qc-specPSI', t.specPSI);
+    set('qc-mixCode', t.mixCode);
+    set('qc-wcm', t.wcm);
+    set('qc-dischargeTime', t.dischargeTime);
+    set('qc-slump', t.slump);
+    set('qc-maxSlump', t.maxSlump||'5');
+    set('qc-air', t.air);
+    set('qc-temp', t.temp);
+    set('qc-ambientTemp', t.ambientTemp);
+    set('qc-unitWeight', t.unitWeight);
+    set('qc-break7', t.break7);
+    set('qc-break1', t.break1);
+    set('qc-break2', t.break2);
+    set('qc-break56', t.break56);
+    set('qc-breakDate', t.breakDate);
+    set('qc-sampledBy', t.sampledBy);
+    set('qc-testingLab', t.testingLab);
+    set('qc-waterAdded', t.waterAdded);
+    set('qc-curing', t.curing);
+    set('qc-notes', t.notes);
+    document.getElementById('qc-form-modal').style.display = 'flex';
+  };
+
+  window._saveQCTest = function(e) {
+    e.preventDefault();
+    const get = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+    const existingId = get('qc-id');
+    const test = {
+      id: existingId || genId(),
+      testDate: get('qc-testDate'),
+      pourName: get('qc-pourName'),
+      ticketNum: get('qc-ticketNum'),
+      cylId: get('qc-cylId'),
+      specPSI: get('qc-specPSI'),
+      mixCode: get('qc-mixCode'),
+      wcm: get('qc-wcm'),
+      dischargeTime: get('qc-dischargeTime'),
+      slump: get('qc-slump'),
+      maxSlump: get('qc-maxSlump'),
+      air: get('qc-air'),
+      temp: get('qc-temp'),
+      ambientTemp: get('qc-ambientTemp'),
+      unitWeight: get('qc-unitWeight'),
+      break7: get('qc-break7'),
+      break1: get('qc-break1'),
+      break2: get('qc-break2'),
+      break56: get('qc-break56'),
+      breakDate: get('qc-breakDate'),
+      sampledBy: get('qc-sampledBy'),
+      testingLab: get('qc-testingLab'),
+      waterAdded: get('qc-waterAdded'),
+      curing: get('qc-curing'),
+      notes: get('qc-notes')
+    };
+    let tests = getTests();
+    if (existingId) {
+      tests = tests.map(x => x.id === existingId ? test : x);
+    } else {
+      tests.push(test);
+    }
+    saveTests(tests);
+    document.getElementById('qc-form-modal').style.display = 'none';
+    window._renderQCList();
+    showQCToast('✅ Test saved');
+  };
+
+  window._deleteQCTest = function(id) {
+    if (!confirm('Delete this QC test record?')) return;
+    saveTests(getTests().filter(t => t.id !== id));
+    window._renderQCList();
+    showQCToast('🗑 Test deleted');
+  };
+
+  // ─── Print single test ───
+  window._printSingleQCTest = function(id) {
+    const tests = getTests();
+    const t = tests.find(x => x.id === id);
+    if (!t) return;
+    const comp = getCompany();
+    const proj = getProject();
+    const br = evalBreaks(t);
+    const slumpEval = evalSlump(t.slump, t.maxSlump);
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Concrete QC Test Report</title>
+    <style>
+      body { font-family:Arial,sans-serif; font-size:9pt; color:#1a1a2e; margin:0; padding:18px; }
+      .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; border-bottom:2px solid #0ea5e9; padding-bottom:10px; }
+      .company { text-align:right; font-size:8pt; color:#555; }
+      .title-block h2 { margin:0; font-size:13pt; color:#0ea5e9; }
+      .title-block p { margin:2px 0; font-size:8pt; color:#555; }
+      .badge { display:inline-block; padding:3px 10px; border-radius:4px; font-weight:700; font-size:9pt; }
+      .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px; }
+      .cell { background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; padding:7px; }
+      .cell-label { font-size:7pt; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; }
+      .cell-value { font-size:9.5pt; font-weight:600; }
+      .section-head { background:#0ea5e9; color:#fff; padding:4px 10px; border-radius:4px; font-weight:700; font-size:8pt; margin:10px 0 6px; text-transform:uppercase; }
+      .result-box { border:2px solid ${br.color}; border-radius:6px; padding:10px 14px; margin:12px 0; }
+      .result-box .label { font-size:7pt; color:#64748b; text-transform:uppercase; }
+      .result-box .status { font-size:13pt; font-weight:700; color:${br.color}; }
+      .result-box .note { font-size:8pt; color:#475569; margin-top:4px; }
+      .sig-block { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-top:18px; padding-top:10px; border-top:1px solid #e2e8f0; }
+      .sig-line { border-bottom:1px solid #333; margin:18px 0 3px; }
+      .sig-label { font-size:7pt; color:#64748b; }
+      .warn-note { background:#fef3c7; border:1px solid #f59e0b; border-radius:4px; padding:6px 10px; font-size:8pt; color:#92400e; margin:6px 0; }
+      @media print { button { display:none; } }
+    </style></head><body>
+    <div class="header">
+      <div class="title-block">
+        <h2>🧪 Concrete Field Test Report</h2>
+        <p>${escH(proj||'Project Name')}</p>
+        <p>Test Date: ${fmtDate(t.testDate)} | Cylinder Set: ${escH(t.cylId||'—')}</p>
+      </div>
+      <div class="company">
+        <strong>${escH(comp.name)}</strong><br>
+        ${escH(comp.address||'')}<br>
+        ${escH(comp.phone||'')} ${comp.email ? '· ' + escH(comp.email) : ''}<br>
+        ${comp.license ? 'Lic: ' + escH(comp.license) : ''}
+      </div>
+    </div>
+
+    <div class="section-head">📋 Pour Identification</div>
+    <div class="grid">
+      <div class="cell"><div class="cell-label">Pour / Location</div><div class="cell-value">${escH(t.pourName||'—')}</div></div>
+      <div class="cell"><div class="cell-label">Ticket / Load #</div><div class="cell-value">${escH(t.ticketNum||'—')}</div></div>
+      <div class="cell"><div class="cell-label">Spec f'c (PSI)</div><div class="cell-value">${escH(t.specPSI||'—')} psi</div></div>
+      <div class="cell"><div class="cell-label">Mix Code / Plant</div><div class="cell-value">${escH(t.mixCode||'—')}</div></div>
+      <div class="cell"><div class="cell-label">w/cm Ratio</div><div class="cell-value">${escH(t.wcm||'—')}</div></div>
+      <div class="cell"><div class="cell-label">Discharge Time</div><div class="cell-value">${escH(t.dischargeTime||'—')}</div></div>
+    </div>
+
+    <div class="section-head">🌡️ Field Test Results (ASTM C172 Composite Sample)</div>
+    <div class="grid">
+      <div class="cell"><div class="cell-label">Slump (ASTM C143)</div><div class="cell-value" style="color:${slumpEval.ok ? '#333' : '#d97706'};">${t.slump ? t.slump + '"' : '—'}${slumpEval.ok ? '' : ' ⚠️ OVER LIMIT'} (max: ${escH(t.maxSlump||'5')}")</div></div>
+      <div class="cell"><div class="cell-label">Air Content (ASTM C231)</div><div class="cell-value">${t.air ? t.air + '%' : '—'}</div></div>
+      <div class="cell"><div class="cell-label">Concrete Temp (ASTM C1064)</div><div class="cell-value" style="color:${t.temp && (t.temp > 90 || t.temp < 50) ? '#d97706' : '#333'};">${t.temp ? t.temp + '°F' : '—'}${t.temp && t.temp > 90 ? ' ⚠️ HOT (ACI 305R)' : ''}${t.temp && t.temp < 50 ? ' ⚠️ COLD (ACI 306R)' : ''}</div></div>
+      <div class="cell"><div class="cell-label">Ambient Temp</div><div class="cell-value">${t.ambientTemp ? t.ambientTemp + '°F' : '—'}</div></div>
+      <div class="cell"><div class="cell-label">Unit Weight (ASTM C138)</div><div class="cell-value">${t.unitWeight ? t.unitWeight + ' pcf' : '—'}</div></div>
+      <div class="cell"><div class="cell-label">Curing Method</div><div class="cell-value">${escH(t.curing||'—')}</div></div>
+    </div>
+    ${t.waterAdded && parseFloat(t.waterAdded) > 0 ? `<div class="warn-note">⚠️ Water Added on Site: ${escH(t.waterAdded)} gallons — this increases w/cm ratio and may reduce strength. ASTM C94 Section 11.8 requires retesting slump after addition.</div>` : ''}
+
+    <div class="section-head">🔬 Cylinder Break Results (ASTM C39)</div>
+    <div class="grid">
+      <div class="cell"><div class="cell-label">7-Day Break</div><div class="cell-value">${t.break7 ? Number(t.break7).toLocaleString() + ' psi' : 'Pending'}</div></div>
+      <div class="cell"><div class="cell-label">Break Date (28-day)</div><div class="cell-value">${fmtDate(t.breakDate)}</div></div>
+      <div class="cell"><div class="cell-label">28-Day Cylinder #1</div><div class="cell-value">${t.break1 ? Number(t.break1).toLocaleString() + ' psi' : 'Pending'}</div></div>
+      <div class="cell"><div class="cell-label">28-Day Cylinder #2</div><div class="cell-value">${t.break2 ? Number(t.break2).toLocaleString() + ' psi' : 'Pending'}</div></div>
+      <div class="cell"><div class="cell-label">56-Day Break</div><div class="cell-value">${t.break56 ? Number(t.break56).toLocaleString() + ' psi' : '—'}</div></div>
+    </div>
+
+    <div class="result-box">
+      <div class="label">ACI 318-19 §26.12.3 Strength Evaluation</div>
+      <div class="status">${escH(br.status)}</div>
+      <div class="note">${escH(br.note)}</div>
+    </div>
+
+    <div class="section-head">👷 Personnel</div>
+    <div class="grid">
+      <div class="cell"><div class="cell-label">Sampled By (ACI Tech)</div><div class="cell-value">${escH(t.sampledBy||'—')}</div></div>
+      <div class="cell"><div class="cell-label">Testing Lab</div><div class="cell-value">${escH(t.testingLab||'—')}</div></div>
+    </div>
+    ${t.notes ? `<div class="cell" style="margin-bottom:10px;"><div class="cell-label">Field Notes</div><div class="cell-value" style="font-weight:400;">${escH(t.notes)}</div></div>` : ''}
+
+    <div class="sig-block">
+      <div><div class="sig-line"></div><div class="sig-label">ACI Field Tech (Sampled By)</div></div>
+      <div><div class="sig-line"></div><div class="sig-label">Contractor QC Rep</div></div>
+      <div><div class="sig-line"></div><div class="sig-label">GC Inspector / Date</div></div>
+    </div>
+    <div style="text-align:center;font-size:7pt;color:#aaa;margin-top:12px;border-top:1px solid #e2e8f0;padding-top:8px;">
+      ${escH(comp.name)} · Concrete QC Test Report · ${escH(proj)} · Generated: ${new Date().toLocaleDateString()}<br>
+      Standards: ASTM C172, C143, C231, C1064, C138, C39, C31 | ACI 305R, 306R, 318-19 §26.12.3
+    </div>
+    <div style="text-align:center;margin-top:8px;"><button onclick="window.print()" style="padding:6px 16px;background:#0ea5e9;color:#fff;border:none;border-radius:4px;cursor:pointer;">🖨 Print / Save PDF</button></div>
+    </body></html>`;
+
+    const win = window.open('', '_blank', 'width=820,height=680');
+    if (!win) { alert('Pop-up blocked.'); return; }
+    win.document.write(html);
+    win.document.close();
+  };
+
+  // ─── Print Full QC Report ───
+  window._printQCReport = function() {
+    const tests = getTests();
+    const comp = getCompany();
+    const proj = getProject();
+
+    if (!tests.length) { alert('No QC tests to print.'); return; }
+    const sorted = [...tests].sort((a,b) => (a.testDate||'').localeCompare(b.testDate||''));
+    let pass = 0, warn = 0, fail = 0, pending = 0;
+    const rows = sorted.map(t => {
+      const br = evalBreaks(t);
+      if (br.status.includes('PASS')) pass++;
+      else if (br.status.includes('⚠️')) warn++;
+      else if (br.status.includes('❌')) fail++;
+      else pending++;
+      const b1 = t.break1 ? Number(t.break1).toLocaleString() : '—';
+      const b2 = t.break2 ? Number(t.break2).toLocaleString() : '—';
+      const waterWarn = t.waterAdded && parseFloat(t.waterAdded) > 0 ? ` ⚠️+${t.waterAdded}gal` : '';
+      return `<tr style="border-bottom:1px solid #e2e8f0;">
+        <td>${fmtDate(t.testDate)}</td>
+        <td>${escH(t.pourName||'—')}</td>
+        <td>${escH(t.ticketNum||'—')}</td>
+        <td>${escH(t.cylId||'—')}</td>
+        <td>${escH(t.specPSI||'—')}</td>
+        <td>${t.slump ? t.slump+'"' : '—'}${t.slump && parseFloat(t.slump) > parseFloat(t.maxSlump||5) ? ' ⚠️' : ''}</td>
+        <td>${t.air ? t.air+'%' : '—'}</td>
+        <td>${t.temp ? t.temp+'°F' + (t.temp > 90 ? '⚠️' : '') : '—'}${waterWarn}</td>
+        <td>${t.break7 ? Number(t.break7).toLocaleString() : '—'}</td>
+        <td>${b1}${t.break2 ? ' / '+b2 : ''}</td>
+        <td style="color:${br.color};font-weight:600;">${escH(br.status)}</td>
+      </tr>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Concrete QC Log — ${escH(proj)}</title>
+    <style>
+      body { font-family:Arial,sans-serif; font-size:8pt; color:#1a1a2e; margin:0; padding:16px; }
+      .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; border-bottom:2px solid #0ea5e9; padding-bottom:10px; }
+      .company { text-align:right; font-size:7.5pt; color:#555; }
+      h2 { margin:0; font-size:13pt; color:#0ea5e9; }
+      .stats { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin:10px 0; }
+      .stat-card { background:#f1f5f9; border:1px solid #e2e8f0; border-radius:4px; padding:6px 10px; text-align:center; }
+      .stat-num { font-size:12pt; font-weight:700; }
+      .stat-label { font-size:6.5pt; color:#64748b; text-transform:uppercase; }
+      table { width:100%; border-collapse:collapse; font-size:7.5pt; margin-top:8px; }
+      th { background:#0ea5e9; color:#fff; padding:4px 6px; text-align:left; font-size:7pt; }
+      td { padding:3px 6px; vertical-align:top; }
+      tr:nth-child(even) { background:#f8fafc; }
+      @media print { button { display:none; } }
+    </style></head><body>
+    <div class="header">
+      <div><h2>🧪 Concrete QC Log</h2><p style="margin:2px 0;font-size:9pt;">${escH(proj||'Project Name')}</p><p style="margin:2px 0;font-size:7.5pt;color:#666;">ACI 318-19 §26.12 | ASTM C39 / C172 / C143 / C231 / C1064</p></div>
+      <div class="company"><strong>${escH(comp.name)}</strong><br>${escH(comp.address||'')}<br>${escH(comp.phone||'')}${comp.email ? ' · '+escH(comp.email) : ''}</div>
+    </div>
+
+    <div class="stats">
+      <div class="stat-card"><div class="stat-num">${tests.length}</div><div class="stat-label">Total Tests</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:#22c55e;">${pass}</div><div class="stat-label">✅ Pass</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:#f59e0b;">${warn}</div><div class="stat-label">⚠️ Warning</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:#ef4444;">${fail}</div><div class="stat-label">❌ Fail</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:#64748b;">${pending}</div><div class="stat-label">Pending</div></div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th><th>Pour / Location</th><th>Ticket #</th><th>Cyl. Set</th><th>f'c</th>
+          <th>Slump</th><th>Air</th><th>Temp</th><th>7-Day</th><th>28-Day Break(s)</th><th>ACI 318 Result</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr style="background:#1e3a5f;color:#fff;font-weight:700;">
+          <td colspan="4">TOTALS</td>
+          <td colspan="6"></td>
+          <td>Pass: ${pass} | Warn: ${warn} | Fail: ${fail} | Pending: ${pending}</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div style="text-align:center;font-size:6.5pt;color:#aaa;margin-top:14px;border-top:1px solid #e2e8f0;padding-top:8px;">
+      ${escH(comp.name)} · Concrete QC Log · ${escH(proj)} · Printed: ${new Date().toLocaleDateString()}<br>
+      This report is for contractor QC tracking only. Testing lab reports govern per contract specifications.
+    </div>
+    <div style="text-align:center;margin-top:6px;"><button onclick="window.print()" style="padding:5px 14px;background:#0ea5e9;color:#fff;border:none;border-radius:4px;cursor:pointer;">🖨 Print / Save PDF</button></div>
+    </body></html>`;
+
+    const win = window.open('', '_blank', 'width=1000,height=700');
+    if (!win) { alert('Pop-up blocked.'); return; }
+    win.document.write(html);
+    win.document.close();
+  };
+
+  // ─── Toast ───
+  function showQCToast(msg) {
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;color:#38bdf8;border:1px solid #334155;border-radius:8px;padding:10px 20px;font-size:0.82rem;z-index:999999;font-weight:600;pointer-events:none;';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2200);
+  }
+
+  // ─── Main Open ───
+  function showQCLog() {
+    const existing = document.getElementById('oncor-qc-overlay');
+    if (existing) { existing.remove(); return; }
+    const m = buildQCModal();
+    document.body.appendChild(m);
+    window._renderQCList();
+  }
+
+  // ─── Keyboard shortcut Ctrl+Shift+Q ───
+  document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.shiftKey && e.key === 'Q') {
+      e.preventDefault();
+      showQCLog();
+    }
+  });
+
+  // ─── Sidebar button ───
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      const actionsDiv = document.querySelector('.actions');
+      if (!actionsDiv) return;
+      const rows = actionsDiv.querySelectorAll('.action-row');
+      let targetRow = null;
+      rows.forEach(row => {
+        if (row.textContent.includes('Lien Notices')) {
+          targetRow = row;
+        }
+      });
+      const newRow = document.createElement('div');
+      newRow.className = 'action-row';
+      newRow.innerHTML = `
+        <button class="action-btn secondary" onclick="showQCLog()" title="Concrete QC Log — Field tests: slump, air, temp, cylinder breaks. ACI 318 §26.12 strength evaluation, ASTM C39/C143/C172. Pass/fail/warning per spec. (Ctrl+Shift+Q)" style="background:rgba(56,189,248,0.1);border-color:rgba(56,189,248,0.3);color:#38bdf8;">🧪 QC Log</button>
+      `;
+      if (targetRow && targetRow.parentNode) {
+        targetRow.parentNode.insertBefore(newRow, targetRow.nextSibling);
+      } else {
+        actionsDiv.appendChild(newRow);
+      }
+    }, 1000);
+  });
+
+  window.showQCLog = showQCLog;
+
+  // ─── Expose stats for Project Status Card ───
+  window._getQCStats = function() {
+    const tests = getTests();
+    let pass = 0, warn = 0, fail = 0, pending = 0;
+    tests.forEach(t => {
+      const br = evalBreaks(t);
+      if (br.status.includes('PASS')) pass++;
+      else if (br.status.includes('⚠️')) warn++;
+      else if (br.status.includes('❌')) fail++;
+      else pending++;
+    });
+    return { total: tests.length, pass, warn, fail, pending };
+  };
+
+})();
+// ==================== END CONCRETE QC LOG — Zeus ⚡ Session #55 ====================
+</script>
