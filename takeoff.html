@@ -143222,3 +143222,895 @@ function copyStatus() {
 })();
 // ==================== END KEYBOARD SHORTCUTS HELP — Zeus ⚡ Session #50 ====================
 </script>
+
+<!-- ==================== PAY APPLICATION GENERATOR (Ctrl+Shift+Y) — Zeus ⚡ Session #51 ==================== -->
+<script>
+(function(){
+  /**
+   * AIA G702/G703-Style Pay Application Generator
+   * -----------------------------------------------
+   * Generates professional progress payment applications for submission to GC/Owner.
+   * - Schedule of Values (SOV) line items with % complete per period
+   * - Running balance: previous billed, this period, retainage, balance to finish
+   * - Prints AIA G702 Cover Sheet + G703 Continuation Sheet
+   * - Stores pay app history per project (localStorage)
+   * - TX Prompt Payment Act compliance reminders
+   *
+   * Session #51 — Zeus ⚡ for Oncor
+   */
+
+  const STORAGE_KEY = 'oncor_pay_apps_v1';
+
+  // ─── Storage Helpers ───
+  function loadPayApps() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e) { return {}; }
+  }
+  function savePayApps(data) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+  function getProjectKey() {
+    const proj = window.projectData || {};
+    return (proj.name || 'default').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  }
+  function getProjectPayApps() {
+    const all = loadPayApps();
+    const key = getProjectKey();
+    if (!all[key]) all[key] = { sov: [], applications: [] };
+    return all[key];
+  }
+  function saveProjectPayApps(data) {
+    const all = loadPayApps();
+    all[getProjectKey()] = data;
+    savePayApps(all);
+  }
+
+  // ─── Number Formatters ───
+  function fmt$(n) { return '$' + (parseFloat(n)||0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+  function fmtPct(n) { return (parseFloat(n)||0).toFixed(1) + '%'; }
+  function num(v) { return parseFloat(v) || 0; }
+
+  // ─── Auto-Seed SOV from Estimate ───
+  function autoSeedSOV() {
+    const data = getProjectPayApps();
+    if (data.sov.length > 0) return data.sov; // already seeded
+
+    const est = window.lastEstimate || {};
+    const items = [];
+    let id = 1;
+
+    const addLine = (desc, val) => {
+      if (val > 0) items.push({ id: id++, desc, scheduledValue: val, prevBilled: 0, thisPeriod: 0, retainagePct: 10, storedMaterials: 0 });
+    };
+
+    if (est.concreteCost > 0) addLine('Concrete Materials', est.concreteCost);
+    if (est.laborCost > 0) addLine('Concrete Labor & Finishing', est.laborCost);
+    if (est.formworkCost > 0) addLine('Formwork & Shoring', est.formworkCost);
+    if (est.rebarCost > 0) addLine('Reinforcing Steel (Rebar)', est.rebarCost);
+    if (est.pumpCost > 0) addLine('Concrete Pump', est.pumpCost);
+    if (est.fiberCost > 0) addLine('Fiber Reinforcement', est.fiberCost);
+    if (est.baseCost > 0) addLine('Base Course Material', est.baseCost);
+    if (est.vaporCost > 0) addLine('Vapor Retarder', est.vaporCost);
+    if (est.sawCost > 0) addLine('Saw Cutting & Joints', est.sawCost);
+    if (est.mobilizationCost > 0) addLine('Mobilization & Demobilization', est.mobilizationCost);
+    if (est.overhead > 0) addLine('General Conditions & Overhead', est.overhead);
+    if (est.profitAmount > 0) addLine('Contractor Fee (Profit)', est.profitAmount);
+
+    // Fallback: one lump sum line
+    if (items.length === 0) {
+      const total = est.totalCost || 0;
+      if (total > 0) {
+        items.push({ id: id++, desc: 'Concrete Work — Lump Sum', scheduledValue: total, prevBilled: 0, thisPeriod: 0, retainagePct: 10, storedMaterials: 0 });
+      } else {
+        items.push({ id: id++, desc: 'Concrete Work — Lump Sum', scheduledValue: 0, prevBilled: 0, thisPeriod: 0, retainagePct: 10, storedMaterials: 0 });
+      }
+    }
+
+    data.sov = items;
+    saveProjectPayApps(data);
+    return items;
+  }
+
+  // ─── Main Modal ───
+  let _payVisible = false;
+  let _editingAppIdx = null;
+  let _currentView = 'list'; // 'list' | 'sov' | 'form'
+
+  function showPayApp() {
+    if (_payVisible) { hidePayApp(); return; }
+    _payVisible = true;
+    renderPayAppModal();
+  }
+
+  function hidePayApp() {
+    _payVisible = false;
+    const overlay = document.getElementById('payAppOverlay');
+    if (overlay) overlay.remove();
+  }
+  window._hidePayApp = hidePayApp;
+
+  function renderPayAppModal() {
+    const old = document.getElementById('payAppOverlay');
+    if (old) old.remove();
+
+    const data = getProjectPayApps();
+    const sov = data.sov.length ? data.sov : autoSeedSOV();
+    const apps = data.applications || [];
+
+    // Totals
+    const sovTotal = sov.reduce((s,r) => s + num(r.scheduledValue), 0);
+    const prevTotal = sov.reduce((s,r) => s + num(r.prevBilled), 0);
+
+    const overlay = document.createElement('div');
+    overlay.id = 'payAppOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(4px);z-index:99999;display:flex;align-items:center;justify-content:center;';
+    overlay.onclick = e => { if (e.target === overlay) hidePayApp(); };
+
+    let html = `
+      <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;width:95%;max-width:900px;max-height:90vh;overflow:hidden;box-shadow:0 25px 70px rgba(0,0,0,0.6);display:flex;flex-direction:column;">
+        
+        <!-- Header -->
+        <div style="background:#0f172a;padding:14px 20px;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+          <div>
+            <div style="font-size:1.05rem;font-weight:700;color:#f1f5f9;">💵 Pay Application Generator</div>
+            <div style="font-size:0.72rem;color:#64748b;">AIA G702/G703-Style — Progress Billing for GC/Owner · TX Prompt Payment Act</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button onclick="window._paySOVView()" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.35);color:#818cf8;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.78rem;">📋 Schedule of Values</button>
+            <button onclick="window._payNewApp()" style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.35);color:#10b981;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.78rem;">+ New Pay App</button>
+            <button onclick="window._hidePayApp()" style="background:none;border:none;color:#94a3b8;font-size:1.5rem;cursor:pointer;">×</button>
+          </div>
+        </div>
+
+        <!-- Stats Bar -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:1px solid #334155;flex-shrink:0;">
+          <div style="padding:10px 16px;border-right:1px solid #334155;">
+            <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Contract Value</div>
+            <div style="font-size:1rem;font-weight:700;color:#f1f5f9;">${fmt$(sovTotal)}</div>
+          </div>
+          <div style="padding:10px 16px;border-right:1px solid #334155;">
+            <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Prev Billed</div>
+            <div style="font-size:1rem;font-weight:700;color:#60a5fa;">${fmt$(prevTotal)}</div>
+          </div>
+          <div style="padding:10px 16px;border-right:1px solid #334155;">
+            <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Pay Apps</div>
+            <div style="font-size:1rem;font-weight:700;color:#f1f5f9;">${apps.length}</div>
+          </div>
+          <div style="padding:10px 16px;">
+            <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Balance to Finish</div>
+            <div style="font-size:1rem;font-weight:700;color:${sovTotal - prevTotal > 0 ? '#34d399' : '#94a3b8'};">${fmt$(sovTotal - prevTotal)}</div>
+          </div>
+        </div>
+
+        <!-- Content (scrollable) -->
+        <div id="payAppContent" style="overflow-y:auto;flex:1;padding:16px 20px;">
+    `;
+
+    if (apps.length === 0) {
+      html += `
+        <div style="text-align:center;padding:40px 20px;color:#64748b;">
+          <div style="font-size:2.5rem;margin-bottom:12px;">💵</div>
+          <div style="font-size:1rem;font-weight:600;color:#94a3b8;margin-bottom:6px;">No Pay Applications Yet</div>
+          <div style="font-size:0.8rem;margin-bottom:20px;">Create your first pay application to bill the GC/Owner for progress completed to date.</div>
+          <button onclick="window._payNewApp()" style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.35);color:#10b981;border-radius:8px;padding:10px 24px;cursor:pointer;font-size:0.85rem;">+ Create First Pay Application</button>
+        </div>
+      `;
+    } else {
+      html += `<table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="border-bottom:1px solid #334155;">
+            <th style="text-align:left;padding:8px 10px;font-size:0.7rem;color:#64748b;text-transform:uppercase;">App #</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.7rem;color:#64748b;text-transform:uppercase;">Period</th>
+            <th style="text-align:right;padding:8px 10px;font-size:0.7rem;color:#64748b;text-transform:uppercase;">This Period</th>
+            <th style="text-align:right;padding:8px 10px;font-size:0.7rem;color:#64748b;text-transform:uppercase;">Retainage</th>
+            <th style="text-align:right;padding:8px 10px;font-size:0.7rem;color:#64748b;text-transform:uppercase;">Net Due</th>
+            <th style="text-align:center;padding:8px 10px;font-size:0.7rem;color:#64748b;text-transform:uppercase;">Status</th>
+            <th style="text-align:center;padding:8px 10px;font-size:0.7rem;color:#64748b;text-transform:uppercase;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+      apps.forEach((app, idx) => {
+        const statusColors = {
+          'Draft': 'rgba(100,116,139,0.3):#94a3b8',
+          'Submitted': 'rgba(59,130,246,0.3):#60a5fa',
+          'Approved': 'rgba(16,185,129,0.3):#10b981',
+          'Paid': 'rgba(52,211,153,0.3):#34d399',
+          'Disputed': 'rgba(239,68,68,0.3):#f87171'
+        };
+        const [bg, col] = (statusColors[app.status] || statusColors['Draft']).split(':');
+        html += `
+          <tr style="border-bottom:1px solid rgba(51,65,85,0.5);">
+            <td style="padding:10px;font-weight:600;color:#f1f5f9;">App #${app.appNum}</td>
+            <td style="padding:10px;font-size:0.82rem;color:#cbd5e1;">${app.periodThru || app.date}</td>
+            <td style="padding:10px;text-align:right;color:#60a5fa;font-weight:600;">${fmt$(app.thisPeriodTotal)}</td>
+            <td style="padding:10px;text-align:right;color:#fbbf24;font-size:0.82rem;">${fmt$(app.retainageTotal)}</td>
+            <td style="padding:10px;text-align:right;color:#34d399;font-weight:700;">${fmt$(app.netDue)}</td>
+            <td style="padding:10px;text-align:center;"><span style="background:${bg};color:${col};border-radius:4px;padding:2px 8px;font-size:0.7rem;">${app.status}</span></td>
+            <td style="padding:10px;text-align:center;">
+              <button onclick="window._payEditApp(${idx})" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);color:#818cf8;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:0.72rem;margin:0 2px;" title="Edit">✏️</button>
+              <button onclick="window._payPrintApp(${idx})" style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);color:#10b981;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:0.72rem;margin:0 2px;" title="Print Pay App">🖨️</button>
+              <button onclick="window._payDeleteApp(${idx})" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:0.72rem;margin:0 2px;" title="Delete">🗑</button>
+            </td>
+          </tr>`;
+      });
+
+      html += `</tbody></table>`;
+    }
+
+    html += `
+          <!-- TX Prompt Payment Act reminder -->
+          <div style="margin-top:16px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.2);border-radius:6px;padding:10px 14px;font-size:0.72rem;color:#fbbf24;">
+            <strong>⚖️ TX Prompt Payment Act (Property Code Ch. 28):</strong> Owner must pay GC within 35 days of receiving pay app; GC must pay subs within 7 days of receiving owner payment. Interest accrues at 1.5%/month on late payments. Keep signed pay app copies for claim documentation.
+          </div>
+        </div>
+      </div>
+    `;
+
+    overlay.innerHTML = html;
+    document.body.appendChild(overlay);
+  }
+
+  // ─── SOV View ───
+  window._paySOVView = function() {
+    const data = getProjectPayApps();
+    const sov = data.sov.length ? data.sov : autoSeedSOV();
+    const sovTotal = sov.reduce((s,r) => s + num(r.scheduledValue), 0);
+
+    const overlay = document.getElementById('payAppOverlay');
+    if (!overlay) return;
+
+    const content = overlay.querySelector('#payAppContent');
+    if (!content) return;
+
+    let html = `
+      <div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-weight:600;color:#f1f5f9;">📋 Schedule of Values</div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="window._payAddSOVRow()" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);color:#818cf8;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:0.75rem;">+ Add Line</button>
+          <button onclick="window._paySeedSOV()" style="background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.2);color:#fbbf24;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:0.75rem;">⚡ Re-seed from Estimate</button>
+          <button onclick="window._paySOVSave()" style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);color:#10b981;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:0.75rem;">💾 Save SOV</button>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;" id="sovTable">
+        <thead>
+          <tr style="border-bottom:1px solid #334155;">
+            <th style="text-align:left;padding:6px 8px;font-size:0.68rem;color:#64748b;text-transform:uppercase;width:40%;">Description</th>
+            <th style="text-align:right;padding:6px 8px;font-size:0.68rem;color:#64748b;text-transform:uppercase;width:18%;">Scheduled Value ($)</th>
+            <th style="text-align:right;padding:6px 8px;font-size:0.68rem;color:#64748b;text-transform:uppercase;width:14%;">Prev Billed ($)</th>
+            <th style="text-align:right;padding:6px 8px;font-size:0.68rem;color:#64748b;text-transform:uppercase;width:14%;">Retainage %</th>
+            <th style="text-align:center;padding:6px 8px;font-size:0.68rem;color:#64748b;text-transform:uppercase;width:8%;">Del</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+    sov.forEach((row, i) => {
+      html += `
+        <tr style="border-bottom:1px solid rgba(51,65,85,0.4);" data-sov-idx="${i}">
+          <td style="padding:6px 4px;"><input type="text" value="${row.desc.replace(/"/g,'&quot;')}" onchange="window._paySOVField(${i},'desc',this.value)" style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:5px 8px;width:100%;font-size:0.78rem;"></td>
+          <td style="padding:6px 4px;"><input type="number" value="${row.scheduledValue}" onchange="window._paySOVField(${i},'scheduledValue',this.value)" style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#60a5fa;padding:5px 8px;width:100%;font-size:0.78rem;text-align:right;"></td>
+          <td style="padding:6px 4px;"><input type="number" value="${row.prevBilled}" onchange="window._paySOVField(${i},'prevBilled',this.value)" style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#94a3b8;padding:5px 8px;width:100%;font-size:0.78rem;text-align:right;"></td>
+          <td style="padding:6px 4px;"><input type="number" value="${row.retainagePct}" onchange="window._paySOVField(${i},'retainagePct',this.value)" style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#fbbf24;padding:5px 8px;width:100%;font-size:0.78rem;text-align:right;" min="0" max="20"></td>
+          <td style="padding:6px 4px;text-align:center;"><button onclick="window._paySOVDelete(${i})" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:0.7rem;">✕</button></td>
+        </tr>`;
+    });
+
+    html += `
+        </tbody>
+        <tfoot>
+          <tr style="border-top:2px solid #334155;">
+            <td style="padding:8px;font-weight:600;color:#f1f5f9;font-size:0.82rem;">TOTAL</td>
+            <td style="padding:8px;text-align:right;font-weight:700;color:#34d399;">${fmt$(sovTotal)}</td>
+            <td colspan="3"></td>
+          </tr>
+        </tfoot>
+      </table>
+      <div style="margin-top:10px;font-size:0.72rem;color:#64748b;">Tip: Edit Scheduled Values and Previous Billed amounts, then Save SOV. Retainage % applied per line item when creating pay apps.</div>
+    `;
+
+    content.innerHTML = html;
+  };
+
+  // SOV helpers
+  window._paySOVField = function(idx, field, val) {
+    const data = getProjectPayApps();
+    if (data.sov[idx]) data.sov[idx][field] = field === 'desc' ? val : num(val);
+    saveProjectPayApps(data);
+  };
+  window._paySOVDelete = function(idx) {
+    const data = getProjectPayApps();
+    data.sov.splice(idx, 1);
+    saveProjectPayApps(data);
+    window._paySOVView();
+  };
+  window._payAddSOVRow = function() {
+    const data = getProjectPayApps();
+    data.sov.push({ id: Date.now(), desc: 'New Line Item', scheduledValue: 0, prevBilled: 0, thisPeriod: 0, retainagePct: 10, storedMaterials: 0 });
+    saveProjectPayApps(data);
+    window._paySOVView();
+  };
+  window._paySeedSOV = function() {
+    if (!confirm('Re-seed Schedule of Values from current estimate? This will replace existing SOV lines.')) return;
+    const data = getProjectPayApps();
+    data.sov = [];
+    saveProjectPayApps(data);
+    autoSeedSOV();
+    window._paySOVView();
+  };
+  window._paySOVSave = function() {
+    // Changes are saved in real-time via onchange handlers
+    showToast('SOV saved ✓');
+    renderPayAppModal(); // go back to list
+  };
+
+  // ─── New/Edit Pay Application Form ───
+  window._payNewApp = function() {
+    _editingAppIdx = null;
+    renderPayAppForm(null);
+  };
+  window._payEditApp = function(idx) {
+    _editingAppIdx = idx;
+    const data = getProjectPayApps();
+    renderPayAppForm(data.applications[idx]);
+  };
+
+  function renderPayAppForm(existingApp) {
+    const overlay = document.getElementById('payAppOverlay');
+    if (!overlay) return;
+    const content = overlay.querySelector('#payAppContent');
+    if (!content) return;
+
+    const data = getProjectPayApps();
+    const sov = data.sov.length ? data.sov : autoSeedSOV();
+    const appNum = existingApp ? existingApp.appNum : (data.applications.length + 1);
+
+    const today = new Date().toISOString().split('T')[0];
+    const app = existingApp || {
+      appNum,
+      date: today,
+      periodFrom: today,
+      periodThru: today,
+      status: 'Draft',
+      ownerName: '',
+      architectName: '',
+      projectNum: '',
+      contractDate: '',
+      lines: sov.map(r => ({ sovId: r.id, desc: r.desc, scheduledValue: num(r.scheduledValue), prevBilled: num(r.prevBilled), thisPeriod: 0, storedMaterials: 0, retainagePct: num(r.retainagePct) }))
+    };
+
+    // Recalculate totals live
+    function calcTotals(lines) {
+      let totalSov=0, totalPrev=0, totalThis=0, totalStored=0, totalRetainage=0;
+      lines.forEach(l => {
+        totalSov += num(l.scheduledValue);
+        totalPrev += num(l.prevBilled);
+        const tp = num(l.thisPeriod);
+        const sm = num(l.storedMaterials);
+        totalThis += tp;
+        totalStored += sm;
+        const completed = num(l.prevBilled) + tp + sm;
+        totalRetainage += completed * (num(l.retainagePct)/100);
+      });
+      const gross = totalPrev + totalThis + totalStored;
+      const netDue = totalThis - totalRetainage + totalStored * (1 - (lines[0] ? num(lines[0].retainagePct)/100 : 0.1));
+      return { totalSov, totalPrev, totalThis, totalStored, totalRetainage, gross, netDue };
+    }
+
+    const t = calcTotals(app.lines);
+
+    let html = `
+      <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-weight:600;color:#f1f5f9;">💵 Pay Application #${appNum}</div>
+        <button onclick="window._paySaveApp()" style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.35);color:#10b981;border-radius:6px;padding:7px 16px;cursor:pointer;font-size:0.82rem;font-weight:600;">💾 Save Pay App</button>
+      </div>
+
+      <!-- Meta Fields -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;background:rgba(15,23,42,0.5);padding:12px;border-radius:8px;border:1px solid #334155;">
+        <div>
+          <label style="font-size:0.68rem;color:#64748b;display:block;margin-bottom:3px;">Application #</label>
+          <input id="pa_appNum" type="number" value="${appNum}" style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:6px 10px;width:100%;font-size:0.82rem;">
+        </div>
+        <div>
+          <label style="font-size:0.68rem;color:#64748b;display:block;margin-bottom:3px;">App Date</label>
+          <input id="pa_date" type="date" value="${app.date}" style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:6px 10px;width:100%;font-size:0.82rem;">
+        </div>
+        <div>
+          <label style="font-size:0.68rem;color:#64748b;display:block;margin-bottom:3px;">Status</label>
+          <select id="pa_status" style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:6px 10px;width:100%;font-size:0.82rem;">
+            ${['Draft','Submitted','Approved','Paid','Disputed'].map(s => `<option ${s===app.status?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:0.68rem;color:#64748b;display:block;margin-bottom:3px;">Period From</label>
+          <input id="pa_periodFrom" type="date" value="${app.periodFrom}" style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:6px 10px;width:100%;font-size:0.82rem;">
+        </div>
+        <div>
+          <label style="font-size:0.68rem;color:#64748b;display:block;margin-bottom:3px;">Period Through</label>
+          <input id="pa_periodThru" type="date" value="${app.periodThru}" style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:6px 10px;width:100%;font-size:0.82rem;">
+        </div>
+        <div>
+          <label style="font-size:0.68rem;color:#64748b;display:block;margin-bottom:3px;">Contract Date</label>
+          <input id="pa_contractDate" type="date" value="${app.contractDate||''}" style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:6px 10px;width:100%;font-size:0.82rem;">
+        </div>
+        <div>
+          <label style="font-size:0.68rem;color:#64748b;display:block;margin-bottom:3px;">Owner / GC Name</label>
+          <input id="pa_ownerName" type="text" value="${app.ownerName||''}" placeholder="Owner or GC name" style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:6px 10px;width:100%;font-size:0.82rem;">
+        </div>
+        <div>
+          <label style="font-size:0.68rem;color:#64748b;display:block;margin-bottom:3px;">Architect / Engineer</label>
+          <input id="pa_architectName" type="text" value="${app.architectName||''}" placeholder="A/E name if applicable" style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:6px 10px;width:100%;font-size:0.82rem;">
+        </div>
+        <div>
+          <label style="font-size:0.68rem;color:#64748b;display:block;margin-bottom:3px;">Project / Contract #</label>
+          <input id="pa_projectNum" type="text" value="${app.projectNum||''}" placeholder="GC's project number" style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:6px 10px;width:100%;font-size:0.82rem;">
+        </div>
+      </div>
+
+      <!-- G703 Continuation Sheet (Line Items) -->
+      <div style="font-size:0.78rem;font-weight:600;color:#94a3b8;margin-bottom:8px;">G703 Continuation Sheet — Work Completed This Period</div>
+      <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;min-width:700px;" id="pa_linesTable">
+        <thead>
+          <tr style="border-bottom:1px solid #334155;">
+            <th style="text-align:left;padding:6px 8px;font-size:0.65rem;color:#64748b;text-transform:uppercase;">Description of Work</th>
+            <th style="text-align:right;padding:6px 8px;font-size:0.65rem;color:#64748b;text-transform:uppercase;white-space:nowrap;">Sched. Value</th>
+            <th style="text-align:right;padding:6px 8px;font-size:0.65rem;color:#64748b;text-transform:uppercase;white-space:nowrap;">Prev Billed</th>
+            <th style="text-align:right;padding:6px 8px;font-size:0.65rem;color:#64748b;text-transform:uppercase;white-space:nowrap;">This Period ($)</th>
+            <th style="text-align:right;padding:6px 8px;font-size:0.65rem;color:#64748b;text-transform:uppercase;white-space:nowrap;">Stored Matl ($)</th>
+            <th style="text-align:right;padding:6px 8px;font-size:0.65rem;color:#64748b;text-transform:uppercase;white-space:nowrap;">% Complete</th>
+            <th style="text-align:right;padding:6px 8px;font-size:0.65rem;color:#64748b;text-transform:uppercase;white-space:nowrap;">Retainage</th>
+            <th style="text-align:right;padding:6px 8px;font-size:0.65rem;color:#64748b;text-transform:uppercase;white-space:nowrap;">Balance</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+    app.lines.forEach((line, i) => {
+      const prev = num(line.prevBilled);
+      const tp = num(line.thisPeriod);
+      const sm = num(line.storedMaterials);
+      const sv = num(line.scheduledValue);
+      const completed = prev + tp + sm;
+      const pct = sv > 0 ? (completed / sv * 100) : 0;
+      const ret = completed * (num(line.retainagePct)/100);
+      const bal = sv - completed;
+
+      html += `
+        <tr style="border-bottom:1px solid rgba(51,65,85,0.4);">
+          <td style="padding:5px 6px;font-size:0.78rem;color:#cbd5e1;">${line.desc}</td>
+          <td style="padding:5px 6px;text-align:right;font-size:0.75rem;color:#64748b;">${fmt$(sv)}</td>
+          <td style="padding:5px 6px;text-align:right;font-size:0.75rem;color:#94a3b8;">${fmt$(prev)}</td>
+          <td style="padding:5px 6px;"><input type="number" value="${tp}" min="0" onchange="window._paLineChange(${i},'thisPeriod',this.value)" style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#60a5fa;padding:4px 6px;width:100%;font-size:0.75rem;text-align:right;min-width:90px;"></td>
+          <td style="padding:5px 6px;"><input type="number" value="${sm}" min="0" onchange="window._paLineChange(${i},'storedMaterials',this.value)" style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#94a3b8;padding:4px 6px;width:100%;font-size:0.75rem;text-align:right;min-width:80px;"></td>
+          <td style="padding:5px 6px;text-align:right;font-size:0.75rem;color:${pct >= 100 ? '#34d399' : pct > 50 ? '#60a5fa' : '#f1f5f9'};">${pct.toFixed(1)}%</td>
+          <td style="padding:5px 6px;text-align:right;font-size:0.75rem;color:#fbbf24;">${fmt$(ret)}</td>
+          <td style="padding:5px 6px;text-align:right;font-size:0.75rem;color:${bal > 0 ? '#94a3b8' : '#34d399'};">${fmt$(bal)}</td>
+        </tr>`;
+    });
+
+    html += `
+        </tbody>
+        <tfoot style="border-top:2px solid #334155;">
+          <tr>
+            <td style="padding:8px 6px;font-weight:700;color:#f1f5f9;font-size:0.8rem;">TOTALS</td>
+            <td style="padding:8px 6px;text-align:right;font-weight:600;color:#34d399;font-size:0.8rem;">${fmt$(t.totalSov)}</td>
+            <td style="padding:8px 6px;text-align:right;font-weight:600;color:#94a3b8;font-size:0.8rem;">${fmt$(t.totalPrev)}</td>
+            <td style="padding:8px 6px;text-align:right;font-weight:700;color:#60a5fa;font-size:0.8rem;" id="pa_totalThis">${fmt$(t.totalThis)}</td>
+            <td style="padding:8px 6px;text-align:right;font-weight:600;color:#94a3b8;font-size:0.8rem;" id="pa_totalStored">${fmt$(t.totalStored)}</td>
+            <td></td>
+            <td style="padding:8px 6px;text-align:right;font-weight:600;color:#fbbf24;font-size:0.8rem;" id="pa_totalRetainage">${fmt$(t.totalRetainage)}</td>
+            <td style="padding:8px 6px;text-align:right;font-weight:700;color:#34d399;font-size:0.8rem;" id="pa_totalBalance">${fmt$(t.totalSov - t.totalPrev - t.totalThis)}</td>
+          </tr>
+        </tfoot>
+      </table>
+      </div>
+
+      <!-- G702 Summary Box -->
+      <div style="margin-top:16px;background:rgba(15,23,42,0.7);border:1px solid #334155;border-radius:8px;padding:14px;">
+        <div style="font-size:0.78rem;font-weight:600;color:#94a3b8;margin-bottom:10px;">G702 Payment Summary</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.8rem;">
+          <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(51,65,85,0.5);">
+            <span style="color:#94a3b8;">Original Contract Value:</span>
+            <span style="color:#f1f5f9;font-weight:600;">${fmt$(t.totalSov)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(51,65,85,0.5);">
+            <span style="color:#94a3b8;">Previously Billed:</span>
+            <span style="color:#60a5fa;">${fmt$(t.totalPrev)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(51,65,85,0.5);">
+            <span style="color:#94a3b8;">Work This Period:</span>
+            <span style="color:#60a5fa;" id="pa_sum_this">${fmt$(t.totalThis)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(51,65,85,0.5);">
+            <span style="color:#94a3b8;">Stored Materials:</span>
+            <span style="color:#60a5fa;" id="pa_sum_stored">${fmt$(t.totalStored)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(51,65,85,0.5);">
+            <span style="color:#94a3b8;">Total Completed + Stored:</span>
+            <span style="color:#f1f5f9;" id="pa_sum_gross">${fmt$(t.totalPrev + t.totalThis + t.totalStored)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(51,65,85,0.5);">
+            <span style="color:#94a3b8;">Retainage Withheld:</span>
+            <span style="color:#fbbf24;" id="pa_sum_ret">${fmt$(t.totalRetainage)}</span>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding:12px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:6px;">
+          <span style="font-size:0.9rem;font-weight:600;color:#34d399;">CURRENT PAYMENT DUE:</span>
+          <span style="font-size:1.3rem;font-weight:800;color:#34d399;" id="pa_sum_netDue">${fmt$(t.totalThis + t.totalStored - t.totalRetainage)}</span>
+        </div>
+      </div>
+    `;
+
+    // Store working lines in window for live update
+    window._paAppLines = JSON.parse(JSON.stringify(app.lines));
+    window._paLineChange = function(idx, field, val) {
+      window._paAppLines[idx][field] = num(val);
+      // Recalculate and update totals in DOM
+      const lines = window._paAppLines;
+      let totalThis=0, totalStored=0, totalRetainage=0, totalSov=0, totalPrev=0;
+      lines.forEach(l => {
+        totalSov += num(l.scheduledValue);
+        totalPrev += num(l.prevBilled);
+        const tp = num(l.thisPeriod);
+        const sm = num(l.storedMaterials);
+        totalThis += tp;
+        totalStored += sm;
+        const completed = num(l.prevBilled) + tp + sm;
+        totalRetainage += completed * (num(l.retainagePct)/100);
+      });
+      const netDue = totalThis + totalStored - totalRetainage;
+      const update = id => document.getElementById(id);
+      if(update('pa_totalThis')) update('pa_totalThis').textContent = fmt$(totalThis);
+      if(update('pa_totalStored')) update('pa_totalStored').textContent = fmt$(totalStored);
+      if(update('pa_totalRetainage')) update('pa_totalRetainage').textContent = fmt$(totalRetainage);
+      if(update('pa_totalBalance')) update('pa_totalBalance').textContent = fmt$(totalSov - totalPrev - totalThis);
+      if(update('pa_sum_this')) update('pa_sum_this').textContent = fmt$(totalThis);
+      if(update('pa_sum_stored')) update('pa_sum_stored').textContent = fmt$(totalStored);
+      if(update('pa_sum_gross')) update('pa_sum_gross').textContent = fmt$(totalPrev + totalThis + totalStored);
+      if(update('pa_sum_ret')) update('pa_sum_ret').textContent = fmt$(totalRetainage);
+      if(update('pa_sum_netDue')) update('pa_sum_netDue').textContent = fmt$(netDue);
+    };
+
+    content.innerHTML = html;
+  }
+
+  // ─── Save Pay Application ───
+  window._paySaveApp = function() {
+    const data = getProjectPayApps();
+    const lines = window._paAppLines || [];
+
+    let totalThis=0, totalStored=0, totalRetainage=0, totalSov=0, totalPrev=0;
+    lines.forEach(l => {
+      totalSov += num(l.scheduledValue);
+      totalPrev += num(l.prevBilled);
+      const tp = num(l.thisPeriod);
+      const sm = num(l.storedMaterials);
+      totalThis += tp;
+      totalStored += sm;
+      const completed = num(l.prevBilled) + tp + sm;
+      totalRetainage += completed * (num(l.retainagePct)/100);
+    });
+
+    const app = {
+      appNum: num(document.getElementById('pa_appNum')?.value) || (data.applications.length + 1),
+      date: document.getElementById('pa_date')?.value || new Date().toISOString().split('T')[0],
+      periodFrom: document.getElementById('pa_periodFrom')?.value || '',
+      periodThru: document.getElementById('pa_periodThru')?.value || '',
+      status: document.getElementById('pa_status')?.value || 'Draft',
+      ownerName: document.getElementById('pa_ownerName')?.value || '',
+      architectName: document.getElementById('pa_architectName')?.value || '',
+      projectNum: document.getElementById('pa_projectNum')?.value || '',
+      contractDate: document.getElementById('pa_contractDate')?.value || '',
+      lines,
+      thisPeriodTotal: totalThis,
+      storedTotal: totalStored,
+      retainageTotal: totalRetainage,
+      netDue: totalThis + totalStored - totalRetainage,
+      totalBilled: totalPrev + totalThis + totalStored,
+      totalSov
+    };
+
+    if (_editingAppIdx !== null) {
+      data.applications[_editingAppIdx] = app;
+    } else {
+      data.applications.push(app);
+      // Update SOV prevBilled for next app
+      data.sov.forEach((sovRow, si) => {
+        const matchLine = lines.find(l => l.desc === sovRow.desc);
+        if (matchLine) {
+          sovRow.prevBilled = num(matchLine.prevBilled) + num(matchLine.thisPeriod) + num(matchLine.storedMaterials);
+        }
+      });
+    }
+
+    saveProjectPayApps(data);
+    showToast('Pay Application #' + app.appNum + ' saved ✓');
+    _editingAppIdx = null;
+    renderPayAppModal();
+  };
+
+  // ─── Delete Pay App ───
+  window._payDeleteApp = function(idx) {
+    if (!confirm('Delete this pay application? This cannot be undone.')) return;
+    const data = getProjectPayApps();
+    data.applications.splice(idx, 1);
+    saveProjectPayApps(data);
+    renderPayAppModal();
+  };
+
+  // ─── Print Pay Application (G702/G703 Style) ───
+  window._payPrintApp = function(idx) {
+    const data = getProjectPayApps();
+    const app = data.applications[idx];
+    if (!app) return;
+
+    const proj = window.projectData || {};
+    const comp = window.companyInfo || {};
+    const co = window.changeOrderData || {};
+
+    const sovTotal = app.totalSov || app.lines.reduce((s,l) => s + num(l.scheduledValue), 0);
+    const prevBilled = app.lines.reduce((s,l) => s + num(l.prevBilled), 0);
+    const coTotal = co.totalCOValue || 0;
+    const revisedContract = sovTotal + coTotal;
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Pay Application #${app.appNum} — ${proj.name || 'Project'}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1a202c; background: #fff; padding: 0.5in; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; border-bottom: 3px solid #1e3a5f; padding-bottom: 12px; }
+  .company-name { font-size: 16pt; font-weight: 700; color: #1e3a5f; }
+  .company-info { font-size: 8pt; color: #666; margin-top: 3px; line-height: 1.5; }
+  .doc-title { text-align: right; }
+  .doc-title h1 { font-size: 13pt; font-weight: 700; color: #1e3a5f; }
+  .doc-title .app-num { font-size: 11pt; color: #444; }
+  .confidential { font-size: 7pt; color: #aaa; margin-top: 4px; }
+  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid #ccc; margin-bottom: 16px; }
+  .meta-section { border-right: 1px solid #ccc; }
+  .meta-section:last-child { border-right: none; }
+  .meta-section-title { background: #1e3a5f; color: white; font-size: 7pt; font-weight: 700; text-transform: uppercase; padding: 3px 8px; letter-spacing: 0.5px; }
+  .meta-row { display: flex; border-bottom: 1px solid #eee; font-size: 8.5pt; }
+  .meta-row:last-child { border-bottom: none; }
+  .meta-label { color: #666; padding: 4px 8px; min-width: 120px; border-right: 1px solid #eee; }
+  .meta-value { font-weight: 600; padding: 4px 8px; }
+  .g703-title { font-size: 10pt; font-weight: 700; color: #1e3a5f; margin-bottom: 6px; border-bottom: 2px solid #1e3a5f; padding-bottom: 4px; }
+  table.g703 { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 8pt; }
+  table.g703 th { background: #1e3a5f; color: white; padding: 5px 6px; text-align: right; font-weight: 600; font-size: 7.5pt; }
+  table.g703 th:first-child { text-align: left; }
+  table.g703 td { padding: 4px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
+  table.g703 td:not(:first-child) { text-align: right; }
+  table.g703 tr:nth-child(even) { background: #f8fafc; }
+  table.g703 tfoot td { font-weight: 700; border-top: 2px solid #1e3a5f; background: #f1f5f9; font-size: 9pt; }
+  .g702-box { border: 2px solid #1e3a5f; border-radius: 4px; margin-bottom: 16px; overflow: hidden; }
+  .g702-title { background: #1e3a5f; color: white; font-size: 9pt; font-weight: 700; padding: 6px 12px; letter-spacing: 0.5px; }
+  .g702-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  .g702-row { display: flex; justify-content: space-between; padding: 5px 12px; border-bottom: 1px solid #e2e8f0; font-size: 9pt; }
+  .g702-row:last-child { border-bottom: none; }
+  .g702-label { color: #444; }
+  .g702-value { font-weight: 700; color: #1e3a5f; }
+  .payment-due-box { background: #1e3a5f; color: white; padding: 14px 20px; text-align: center; margin-bottom: 16px; border-radius: 4px; }
+  .payment-due-label { font-size: 9pt; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.85; }
+  .payment-due-amount { font-size: 22pt; font-weight: 800; margin-top: 4px; }
+  .sig-block { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px; }
+  .sig-col { border: 1px solid #ccc; border-radius: 4px; padding: 12px; }
+  .sig-role { font-size: 8pt; font-weight: 700; text-transform: uppercase; color: #1e3a5f; margin-bottom: 10px; }
+  .sig-line { border-bottom: 1px solid #333; margin: 8px 0 3px; height: 20px; }
+  .sig-label { font-size: 7pt; color: #888; }
+  .legal-note { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 4px; padding: 8px 10px; font-size: 7.5pt; color: #7c5e00; margin-bottom: 16px; }
+  .footer { text-align: center; font-size: 7pt; color: #aaa; border-top: 1px solid #e2e8f0; padding-top: 8px; margin-top: 16px; }
+  @media print { body { padding: 0.4in; } .no-print { display: none !important; } @page { size: letter; margin: 0.4in; } }
+</style>
+</head>
+<body>
+
+<div class="no-print" style="text-align:center;margin-bottom:12px;">
+  <button onclick="window.print()" style="background:#1e3a5f;color:white;border:none;border-radius:6px;padding:8px 20px;font-size:10pt;cursor:pointer;">🖨️ Print / Save PDF</button>
+</div>
+
+<!-- Header -->
+<div class="header">
+  <div>
+    <div class="company-name">${comp.name || proj.companyName || 'Contractor Name'}</div>
+    <div class="company-info">
+      ${comp.address || proj.companyAddress || ''}<br>
+      ${comp.phone || proj.companyPhone || ''} · ${comp.email || proj.companyEmail || ''}<br>
+      ${comp.license ? 'License: ' + comp.license : ''}
+    </div>
+  </div>
+  <div class="doc-title">
+    <h1>APPLICATION FOR PAYMENT</h1>
+    <div class="app-num">Application #${app.appNum} — AIA G702/G703</div>
+    <div class="confidential">Date: ${app.date} | Period: ${app.periodFrom} through ${app.periodThru}</div>
+  </div>
+</div>
+
+<!-- Project Meta -->
+<div class="meta-grid">
+  <div class="meta-section">
+    <div class="meta-section-title">Project Information</div>
+    <div class="meta-row"><span class="meta-label">Project Name:</span><span class="meta-value">${proj.name || 'Project Name'}</span></div>
+    <div class="meta-row"><span class="meta-label">Owner / GC:</span><span class="meta-value">${app.ownerName || proj.client || ''}</span></div>
+    <div class="meta-row"><span class="meta-label">Project / Contract #:</span><span class="meta-value">${app.projectNum || ''}</span></div>
+    <div class="meta-row"><span class="meta-label">Architect / Engineer:</span><span class="meta-value">${app.architectName || ''}</span></div>
+  </div>
+  <div class="meta-section">
+    <div class="meta-section-title">Contract & Payment Info</div>
+    <div class="meta-row"><span class="meta-label">Contract Date:</span><span class="meta-value">${app.contractDate || ''}</span></div>
+    <div class="meta-row"><span class="meta-label">Original Contract Value:</span><span class="meta-value">$${sovTotal.toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
+    ${coTotal !== 0 ? `<div class="meta-row"><span class="meta-label">Approved Change Orders:</span><span class="meta-value">$${coTotal.toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
+    <div class="meta-row"><span class="meta-label">Revised Contract Value:</span><span class="meta-value">$${revisedContract.toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>` : ''}
+    <div class="meta-row"><span class="meta-label">Status:</span><span class="meta-value">${app.status}</span></div>
+  </div>
+</div>
+
+<!-- G703 Continuation Sheet -->
+<div class="g703-title">G703 — Continuation Sheet: Schedule of Values</div>
+<table class="g703">
+  <thead>
+    <tr>
+      <th style="text-align:left;width:30%;">Description of Work</th>
+      <th>Scheduled Value</th>
+      <th>From Prev. App.</th>
+      <th>Work Completed This Period</th>
+      <th>Stored Materials</th>
+      <th>Total Completed & Stored</th>
+      <th>% Complete</th>
+      <th>Retainage</th>
+      <th>Balance to Finish</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${app.lines.map(l => {
+      const sv = num(l.scheduledValue);
+      const prev = num(l.prevBilled);
+      const tp = num(l.thisPeriod);
+      const sm = num(l.storedMaterials);
+      const total = prev + tp + sm;
+      const pct = sv > 0 ? (total/sv*100) : 0;
+      const ret = total * (num(l.retainagePct)/100);
+      const bal = sv - total;
+      const fmtC = v => '$' + num(v).toLocaleString('en-US',{minimumFractionDigits:2});
+      return `<tr>
+        <td style="text-align:left;">${l.desc}</td>
+        <td>${fmtC(sv)}</td>
+        <td>${fmtC(prev)}</td>
+        <td style="font-weight:700;color:#1e5c87;">${fmtC(tp)}</td>
+        <td>${fmtC(sm)}</td>
+        <td>${fmtC(total)}</td>
+        <td>${pct.toFixed(1)}%</td>
+        <td style="color:#b45309;">${fmtC(ret)}</td>
+        <td>${fmtC(bal)}</td>
+      </tr>`;
+    }).join('')}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td style="text-align:left;">TOTALS</td>
+      <td>$${sovTotal.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+      <td>$${prevBilled.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+      <td>$${app.thisPeriodTotal.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+      <td>$${(app.storedTotal||0).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+      <td>$${app.totalBilled.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+      <td>${sovTotal > 0 ? (app.totalBilled/sovTotal*100).toFixed(1) : 0}%</td>
+      <td>$${app.retainageTotal.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+      <td>$${(sovTotal - app.totalBilled).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+    </tr>
+  </tfoot>
+</table>
+
+<!-- G702 Summary -->
+<div class="g702-box">
+  <div class="g702-title">G702 — Application for Payment Summary</div>
+  <div class="g702-grid">
+    <div>
+      <div class="g702-row"><span class="g702-label">Original Contract Sum:</span><span class="g702-value">$${sovTotal.toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
+      ${coTotal !== 0 ? `<div class="g702-row"><span class="g702-label">Net Change by COs:</span><span class="g702-value">$${coTotal.toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
+      <div class="g702-row"><span class="g702-label">Contract Sum to Date:</span><span class="g702-value">$${revisedContract.toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>` : ''}
+      <div class="g702-row"><span class="g702-label">Total Completed + Stored:</span><span class="g702-value">$${app.totalBilled.toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
+    </div>
+    <div>
+      <div class="g702-row"><span class="g702-label">Less Retainage Withheld:</span><span class="g702-value" style="color:#b45309;">($${app.retainageTotal.toLocaleString('en-US',{minimumFractionDigits:2})})</span></div>
+      <div class="g702-row"><span class="g702-label">Less Previous Certificates:</span><span class="g702-value">($${prevBilled.toLocaleString('en-US',{minimumFractionDigits:2})})</span></div>
+      <div class="g702-row"><span class="g702-label">Current Payment Due:</span><span class="g702-value" style="color:#065f46;font-size:11pt;">$${app.netDue.toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Payment Due Callout -->
+<div class="payment-due-box">
+  <div class="payment-due-label">Current Payment Requested</div>
+  <div class="payment-due-amount">$${app.netDue.toLocaleString('en-US',{minimumFractionDigits:2})}</div>
+  <div style="font-size:8pt;opacity:0.75;margin-top:4px;">Payment due within 35 days per TX Prompt Payment Act · Property Code Ch. 28</div>
+</div>
+
+<!-- TX Legal Note -->
+<div class="legal-note">
+  <strong>Texas Prompt Payment Act Notice:</strong> Pursuant to Texas Property Code Chapter 28, payment is due within 35 days of Owner's receipt of this Application for Payment. Interest accrues at 1.5% per month on any overdue balance. Contractor reserves all rights under Texas Property Code Chapter 53 (Mechanic's Lien) and applicable bond claim statutes.
+</div>
+
+<!-- Signature Block -->
+<div class="sig-block">
+  <div class="sig-col">
+    <div class="sig-role">Contractor's Certification</div>
+    <div style="font-size:8pt;color:#555;margin-bottom:10px;">The undersigned Contractor certifies that to the best of the Contractor's knowledge, information and belief the work covered by this Application for Payment has been completed in accordance with the Contract Documents.</div>
+    <div class="sig-line"></div>
+    <div class="sig-label">Authorized Signature</div>
+    <div class="sig-line" style="margin-top:12px;"></div>
+    <div class="sig-label">Printed Name & Title</div>
+    <div class="sig-line" style="margin-top:12px;"></div>
+    <div class="sig-label">Date</div>
+  </div>
+  <div class="sig-col">
+    <div class="sig-role">Owner / GC Certification</div>
+    <div style="font-size:8pt;color:#555;margin-bottom:10px;">In accordance with the Contract Documents, based on on-site observations and the data comprising this application, the undersigned certifies to the Owner that the Work has progressed to the point indicated.</div>
+    <div class="sig-line"></div>
+    <div class="sig-label">Authorized Signature</div>
+    <div class="sig-line" style="margin-top:12px;"></div>
+    <div class="sig-label">Printed Name & Title</div>
+    <div class="sig-line" style="margin-top:12px;"></div>
+    <div class="sig-label">Date Approved</div>
+  </div>
+</div>
+
+<div class="footer">${comp.name || 'Contractor'} · Application for Payment #${app.appNum} · ${app.date} · AIA G702/G703 Format</div>
+
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=900,height=800');
+    if (!win) { alert('Pop-up blocked. Allow pop-ups for this site.'); return; }
+    win.document.write(html);
+    win.document.close();
+  };
+
+  // ─── Toast Helper ───
+  function showToast(msg) {
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;color:#34d399;border:1px solid #334155;border-radius:8px;padding:10px 20px;font-size:0.82rem;z-index:999999;font-weight:600;';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2500);
+  }
+
+  // ─── Keyboard Shortcut ───
+  document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.shiftKey && e.key === 'Y') {
+      e.preventDefault();
+      showPayApp();
+    }
+  });
+
+  // ─── Inject Sidebar Button ───
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      const actionsDiv = document.querySelector('.actions');
+      if (!actionsDiv) return;
+
+      const rows = actionsDiv.querySelectorAll('.action-row');
+      let targetRow = null;
+      rows.forEach(row => {
+        if (row.textContent.includes('Quick Messages')) {
+          targetRow = row;
+        }
+      });
+
+      const newRow = document.createElement('div');
+      newRow.className = 'action-row';
+      newRow.innerHTML = `
+        <button class="action-btn secondary" onclick="window._showPayApp()" title="Pay Application Generator — AIA G702/G703 progress billing for GC/Owner. Schedule of Values, this-period billing, retainage, net payment due. Print professional pay app. TX Prompt Payment Act. (Ctrl+Shift+Y)" style="background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.3);color:#10b981;">💵 Pay Applications</button>
+      `;
+
+      if (targetRow && targetRow.parentNode) {
+        targetRow.parentNode.insertBefore(newRow, targetRow.nextSibling);
+      } else {
+        actionsDiv.appendChild(newRow);
+      }
+    }, 975);
+  });
+
+  window._showPayApp = showPayApp;
+
+})();
+// ==================== END PAY APPLICATION GENERATOR — Zeus ⚡ Session #51 ====================
+</script>
