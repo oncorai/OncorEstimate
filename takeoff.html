@@ -142698,3 +142698,367 @@ ${d.phone || '[Phone]'}`
 })();
 // ==================== END QUICK COMMUNICATION TEMPLATES — Zeus ⚡ Session #48 ====================
 </script>
+
+<!-- ==================== PROJECT STATUS CARD (Ctrl+Shift+I) — Zeus ⚡ Session #49 ==================== -->
+<script>
+(function(){
+  /**
+   * Project Status Card (📊)
+   * -------------------------
+   * Quick-access project status overview — when GC calls and asks "where are we at?"
+   * Pull up instantly with Ctrl+Shift+I (I for Info/Status)
+   *
+   * Shows at a glance:
+   * - Project name, client, contract value
+   * - Bid date, start date (if set)
+   * - Total yd³ estimated, phases breakdown
+   * - Change orders summary (total value, count)
+   * - RFIs open/closed
+   * - Submittals status
+   * - Pour log summary (completed vs remaining)
+   * - AR status (invoiced vs paid)
+   * - Next action / notes
+   *
+   * One-click copy as text summary for quick paste.
+   * Session #49 — Zeus ⚡ for Oncor
+   */
+
+  // ─── Helpers ───
+  function esc(s) { return String(s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function fmt$(n) { return '$' + Math.round(n||0).toLocaleString('en-US'); }
+  function fmtNum(n, dec) { return (n||0).toLocaleString('en-US', { minimumFractionDigits: dec||0, maximumFractionDigits: dec||0 }); }
+
+  // ─── Data Gathering ───
+  function gatherProjectStatus() {
+    const proj = document.getElementById('projectName')?.value?.trim() || 'Untitled Project';
+    const client = document.getElementById('clientName')?.value?.trim() || '';
+    const estimator = document.getElementById('estimatorName')?.value?.trim() || '';
+    const bidDate = document.getElementById('bidDate')?.value || '';
+    const psi = document.getElementById('selected-psi')?.value || '4000';
+    
+    // Estimate data
+    const est = window.lastEstimate;
+    const yards = est?.quantities?.yards || 0;
+    const contractValue = est?.costs?.total || 0;
+    
+    // Company settings
+    let company = {};
+    try { company = JSON.parse(localStorage.getItem('oncor_company_settings') || '{}'); } catch(e){}
+
+    // Change orders (from window.changeOrders if exists)
+    const cos = window.changeOrders || [];
+    const coCount = cos.length;
+    const coTotal = cos.reduce((s, co) => s + (co.amount || 0), 0);
+    const signedCOs = cos.filter(co => co.status === 'signed' || co.signed).length;
+
+    // RFIs (from localStorage if using RFI log)
+    let rfis = [];
+    try { rfis = JSON.parse(localStorage.getItem('ocRFILog') || '[]'); } catch(e){}
+    const rfiOpen = rfis.filter(r => !r.answered).length;
+    const rfiClosed = rfis.filter(r => r.answered).length;
+
+    // Submittals (from localStorage)
+    let submittals = [];
+    try { submittals = JSON.parse(localStorage.getItem('ocSubmittalLog') || '[]'); } catch(e){}
+    const subPending = submittals.filter(s => s.status === 'pending').length;
+    const subApproved = submittals.filter(s => s.status === 'approved').length;
+
+    // Pour log (from localStorage)
+    let pourLog = [];
+    try { pourLog = JSON.parse(localStorage.getItem('ocPourLog') || '[]'); } catch(e){}
+    const pouredYards = pourLog.reduce((s, p) => s + (parseFloat(p.yards) || 0), 0);
+    const pourCount = pourLog.length;
+
+    // AR Tracker (from localStorage)
+    let invoices = [];
+    try { invoices = JSON.parse(localStorage.getItem('ocARTracker') || '[]'); } catch(e){}
+    const totalInvoiced = invoices.reduce((s, inv) => s + (inv.amount || 0), 0);
+    const totalPaid = invoices.filter(inv => inv.status === 'paid').reduce((s, inv) => s + (inv.amount || 0), 0);
+    const overdue = invoices.filter(inv => inv.status === 'overdue').reduce((s, inv) => s + (inv.amount || 0), 0);
+
+    // Punch list (from localStorage)
+    let punchItems = [];
+    try { punchItems = JSON.parse(localStorage.getItem('ocPunchList') || '[]'); } catch(e){}
+    const punchOpen = punchItems.filter(p => p.status === 'open').length;
+    const punchClosed = punchItems.filter(p => p.status === 'closed' || p.status === 'done').length;
+
+    // Phase breakdown if available
+    const measurements = window.measurements || [];
+    const phases = {};
+    measurements.filter(m => !m.excluded && m.phase).forEach(m => {
+      const p = m.phase || 1;
+      if (!phases[p]) phases[p] = 0;
+      phases[p] += m.yards || 0;
+    });
+
+    return {
+      project: proj,
+      client: client,
+      estimator: estimator,
+      company: company.name || '',
+      bidDate: bidDate,
+      psi: psi,
+      yards: yards,
+      contractValue: contractValue,
+      revisedValue: contractValue + coTotal,
+      coCount: coCount,
+      coTotal: coTotal,
+      signedCOs: signedCOs,
+      rfiOpen: rfiOpen,
+      rfiClosed: rfiClosed,
+      subPending: subPending,
+      subApproved: subApproved,
+      pouredYards: pouredYards,
+      pourCount: pourCount,
+      remainingYards: Math.max(0, yards - pouredYards),
+      percentComplete: yards > 0 ? Math.round((pouredYards / yards) * 100) : 0,
+      totalInvoiced: totalInvoiced,
+      totalPaid: totalPaid,
+      outstanding: totalInvoiced - totalPaid,
+      overdue: overdue,
+      punchOpen: punchOpen,
+      punchClosed: punchClosed,
+      phases: phases
+    };
+  }
+
+  // ─── Show Status Card ───
+  window._showProjectStatusCard = function() {
+    const d = gatherProjectStatus();
+    
+    // Build status card
+    let html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Project Status — ${esc(d.project)}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #e2e8f0; padding: 24px; }
+  .card { max-width: 700px; margin: 0 auto; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 2px solid #334155; }
+  .header h1 { font-size: 1.5rem; color: #f1f5f9; }
+  .header .meta { text-align: right; font-size: 0.85rem; color: #94a3b8; }
+  .section { margin-bottom: 20px; }
+  .section-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 8px; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+  .stat { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px; }
+  .stat-label { font-size: 0.7rem; color: #64748b; margin-bottom: 4px; }
+  .stat-value { font-size: 1.3rem; font-weight: 700; color: #f1f5f9; }
+  .stat-value.green { color: #4ade80; }
+  .stat-value.yellow { color: #fbbf24; }
+  .stat-value.red { color: #f87171; }
+  .stat-value.blue { color: #60a5fa; }
+  .stat-sub { font-size: 0.7rem; color: #64748b; margin-top: 2px; }
+  .progress-bar { background: rgba(255,255,255,0.1); border-radius: 4px; height: 8px; margin-top: 8px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+  .table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .table th { text-align: left; padding: 8px; background: rgba(255,255,255,0.05); color: #94a3b8; font-weight: 600; }
+  .table td { padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .actions { display: flex; gap: 10px; margin-top: 20px; }
+  button { padding: 10px 20px; border-radius: 6px; font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; }
+  .copy-btn { background: #2563eb; color: #fff; flex: 1; }
+  .copy-btn:hover { background: #1d4ed8; }
+  .print-btn { background: #374151; color: #e2e8f0; }
+  .print-btn:hover { background: #4b5563; }
+  @media print { body { background: #fff; color: #1f2937; } .stat { background: #f3f4f6; border-color: #e5e7eb; } .stat-value { color: #1f2937; } button { display: none; } }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <div>
+      <h1>📊 ${esc(d.project)}</h1>
+      ${d.client ? `<div style="color:#94a3b8;margin-top:4px;">Client: ${esc(d.client)}</div>` : ''}
+    </div>
+    <div class="meta">
+      <div>${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+      ${d.bidDate ? `<div>Bid Date: ${d.bidDate}</div>` : ''}
+      ${d.company ? `<div style="color:#60a5fa;font-weight:600;">${esc(d.company)}</div>` : ''}
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Contract & Value</div>
+    <div class="grid">
+      <div class="stat">
+        <div class="stat-label">Original Contract</div>
+        <div class="stat-value blue">${fmt$(d.contractValue)}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Change Orders (${d.coCount})</div>
+        <div class="stat-value ${d.coTotal >= 0 ? 'green' : 'red'}">${d.coTotal >= 0 ? '+' : ''}${fmt$(d.coTotal)}</div>
+        <div class="stat-sub">${d.signedCOs} signed</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Revised Contract</div>
+        <div class="stat-value">${fmt$(d.revisedValue)}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Total Volume</div>
+        <div class="stat-value">${fmtNum(d.yards, 1)} yd³</div>
+        <div class="stat-sub">${d.psi} PSI</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Progress</div>
+    <div class="grid">
+      <div class="stat" style="grid-column: span 2;">
+        <div class="stat-label">Concrete Placed</div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;">
+          <div class="stat-value ${d.percentComplete >= 90 ? 'green' : d.percentComplete >= 50 ? 'yellow' : ''}">${d.percentComplete}%</div>
+          <div style="font-size:0.85rem;color:#94a3b8;">${fmtNum(d.pouredYards, 1)} / ${fmtNum(d.yards, 1)} yd³</div>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:${d.percentComplete}%;background:${d.percentComplete >= 90 ? '#4ade80' : d.percentComplete >= 50 ? '#fbbf24' : '#60a5fa'};"></div>
+        </div>
+        <div class="stat-sub">${d.pourCount} pours completed · ${fmtNum(d.remainingYards, 1)} yd³ remaining</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">RFIs</div>
+        <div class="stat-value ${d.rfiOpen > 0 ? 'yellow' : 'green'}">${d.rfiOpen}</div>
+        <div class="stat-sub">open (${d.rfiClosed} closed)</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Submittals</div>
+        <div class="stat-value ${d.subPending > 0 ? 'yellow' : 'green'}">${d.subPending}</div>
+        <div class="stat-sub">pending (${d.subApproved} approved)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Financial Status</div>
+    <div class="grid">
+      <div class="stat">
+        <div class="stat-label">Total Invoiced</div>
+        <div class="stat-value">${fmt$(d.totalInvoiced)}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Collected</div>
+        <div class="stat-value green">${fmt$(d.totalPaid)}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Outstanding</div>
+        <div class="stat-value ${d.outstanding > 0 ? 'yellow' : ''}">${fmt$(d.outstanding)}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Past Due</div>
+        <div class="stat-value ${d.overdue > 0 ? 'red' : 'green'}">${fmt$(d.overdue)}</div>
+      </div>
+    </div>
+  </div>
+
+  ${d.punchOpen > 0 || d.punchClosed > 0 ? `
+  <div class="section">
+    <div class="section-title">Punch List</div>
+    <div class="grid">
+      <div class="stat">
+        <div class="stat-label">Open Items</div>
+        <div class="stat-value ${d.punchOpen > 0 ? 'red' : 'green'}">${d.punchOpen}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Completed</div>
+        <div class="stat-value green">${d.punchClosed}</div>
+      </div>
+    </div>
+  </div>` : ''}
+
+  ${Object.keys(d.phases).length > 1 ? `
+  <div class="section">
+    <div class="section-title">Phase Breakdown</div>
+    <table class="table">
+      <thead><tr><th>Phase</th><th style="text-align:right;">Volume (yd³)</th></tr></thead>
+      <tbody>
+        ${Object.entries(d.phases).map(([p, y]) => `<tr><td>Phase ${p}</td><td style="text-align:right;">${fmtNum(y, 1)}</td></tr>`).join('')}
+      </tbody>
+    </table>
+  </div>` : ''}
+
+  <div class="actions">
+    <button class="copy-btn" onclick="copyStatus()">📋 Copy as Text</button>
+    <button class="print-btn" onclick="window.print()">🖨️ Print</button>
+  </div>
+</div>
+
+<script>
+function copyStatus() {
+  const d = ${JSON.stringify(d)};
+  let txt = 'PROJECT STATUS: ' + d.project + '\\n';
+  txt += '='.repeat(50) + '\\n';
+  txt += 'Generated: ' + new Date().toLocaleDateString() + '\\n';
+  if (d.client) txt += 'Client: ' + d.client + '\\n';
+  txt += '\\nCONTRACT\\n';
+  txt += 'Original: $' + d.contractValue.toLocaleString() + '\\n';
+  txt += 'Change Orders: ' + (d.coTotal >= 0 ? '+' : '') + '$' + Math.abs(d.coTotal).toLocaleString() + ' (' + d.coCount + ' COs)\\n';
+  txt += 'Revised: $' + d.revisedValue.toLocaleString() + '\\n';
+  txt += '\\nPROGRESS\\n';
+  txt += 'Concrete: ' + d.percentComplete + '% complete (' + d.pouredYards.toFixed(1) + ' / ' + d.yards.toFixed(1) + ' yd³)\\n';
+  txt += 'Pours: ' + d.pourCount + ' completed\\n';
+  txt += 'RFIs: ' + d.rfiOpen + ' open, ' + d.rfiClosed + ' closed\\n';
+  txt += 'Submittals: ' + d.subPending + ' pending, ' + d.subApproved + ' approved\\n';
+  txt += '\\nFINANCIAL\\n';
+  txt += 'Invoiced: $' + d.totalInvoiced.toLocaleString() + '\\n';
+  txt += 'Collected: $' + d.totalPaid.toLocaleString() + '\\n';
+  txt += 'Outstanding: $' + d.outstanding.toLocaleString() + '\\n';
+  if (d.overdue > 0) txt += '⚠️ Past Due: $' + d.overdue.toLocaleString() + '\\n';
+  if (d.punchOpen > 0) txt += '\\nPUNCH: ' + d.punchOpen + ' open items\\n';
+  navigator.clipboard.writeText(txt).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => btn.textContent = '📋 Copy as Text', 2000);
+  });
+}
+<\/script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=800,height=700');
+    if (!win) { alert('Pop-up blocked.'); return; }
+    win.document.write(html);
+    win.document.close();
+  };
+
+  // ─── Keyboard Shortcut ───
+  document.addEventListener('keydown', function(e) {
+    // Ctrl+Shift+I — Project Status Card
+    if (e.ctrlKey && e.shiftKey && e.key === 'I') {
+      e.preventDefault();
+      window._showProjectStatusCard();
+    }
+  });
+
+  // ─── Inject Button ───
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      const actionsDiv = document.querySelector('.actions');
+      if (!actionsDiv) return;
+
+      // Find Analytics Dashboard button and insert after it
+      const rows = actionsDiv.querySelectorAll('.action-row');
+      let targetRow = null;
+      rows.forEach(row => {
+        if (row.textContent.includes('Analytics Dashboard')) {
+          targetRow = row;
+        }
+      });
+
+      const newRow = document.createElement('div');
+      newRow.className = 'action-row';
+      newRow.innerHTML = `
+        <button class="action-btn secondary" onclick="window._showProjectStatusCard()" title="Project Status Card — quick overview of where you stand: contract value, progress, financials, RFIs, submittals (Ctrl+Shift+I)" style="background:rgba(52,211,153,0.1);border-color:rgba(52,211,153,0.3);color:#34d399;">📊 Project Status</button>
+      `;
+
+      if (targetRow && targetRow.nextSibling) {
+        actionsDiv.insertBefore(newRow, targetRow.nextSibling);
+      } else if (targetRow) {
+        targetRow.parentNode.insertBefore(newRow, targetRow.nextSibling);
+      }
+    }, 950);
+  });
+
+})();
+// ==================== END PROJECT STATUS CARD — Zeus ⚡ Session #49 ====================
+</script>
