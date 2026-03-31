@@ -141643,3 +141643,508 @@ document.addEventListener('keydown', function(e){
 })();
 // ==================== END CHANGE ORDER GENERATOR — Zeus ⚡ Session #46 ====================
 </script>
+
+<!-- ==================== DAILY FIELD LOG — Zeus ⚡ Session #47 ==================== -->
+<script>
+(function() {
+  'use strict';
+
+  /* ═══════════════════════════════════════════════════════════════════════════════
+     📋 DAILY FIELD LOG — Track Pour Days, Weather, Crew, Actual Yardage, Issues
+     Session #47 — Zeus ⚡ for Oncor
+     
+     PURPOSE: Bridge bid acceptance to project completion. Track:
+     - Pour date, weather conditions, crew on site
+     - Actual yd³ delivered vs estimated (variance tracking)
+     - Batch plant tickets, delivery times
+     - Field issues, photos, QC notes
+     - Printable daily report for job files
+     
+     STORAGE: localStorage keyed by project name (oncor_field_log_v1)
+  ═══════════════════════════════════════════════════════════════════════════════ */
+
+  var STORAGE_KEY = 'oncor_field_log_v1';
+
+  /* ─── Helpers ─── */
+  function _esc(s){ return String(s||'').replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function _fmt$(n){ return '$'+(parseFloat(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function _fmtN(n,d){ return (parseFloat(n)||0).toLocaleString('en-US',{minimumFractionDigits:d||0,maximumFractionDigits:d||2}); }
+  function _today(){ return new Date().toISOString().slice(0,10); }
+  function _now(){ return new Date().toTimeString().slice(0,5); }
+
+  function _projKey(){ return (document.getElementById('projectName')?.value||'').trim()||'_default'; }
+
+  function _loadLogs(){
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY))||{}; }
+    catch(e){ return {}; }
+  }
+  function _saveLogs(data){
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e){}
+  }
+  function _projLogs(){
+    var all = _loadLogs();
+    return all[_projKey()] || [];
+  }
+  function _setProjLogs(logs){
+    var all = _loadLogs();
+    all[_projKey()] = logs;
+    _saveLogs(all);
+  }
+
+  /* ─── Weather Icon ─── */
+  function _wxIcon(wx){
+    var map = {'sunny':'☀️','clear':'☀️','cloudy':'☁️','partly cloudy':'⛅','overcast':'☁️','rain':'🌧️','showers':'🌧️','storm':'⛈️','thunderstorm':'⛈️','wind':'💨','windy':'💨','hot':'🔥','cold':'❄️','snow':'🌨️','fog':'🌫️'};
+    var lw = (wx||'').toLowerCase();
+    for(var k in map){ if(lw.indexOf(k)>=0) return map[k]; }
+    return '🌤️';
+  }
+
+  /* ─── Build Modal ─── */
+  function _buildFieldLogModal(){
+    var existing = document.getElementById('fieldLogModal');
+    if(existing) existing.remove();
+
+    var logs = _projLogs();
+    var projName = _projKey();
+
+    // Stats
+    var totalPours = logs.length;
+    var totalActualYd = logs.reduce(function(s,l){ return s + (parseFloat(l.actualYd)||0); },0);
+    var totalEstYd = logs.reduce(function(s,l){ return s + (parseFloat(l.estYd)||0); },0);
+    var variance = totalActualYd - totalEstYd;
+    var variancePct = totalEstYd ? ((variance/totalEstYd)*100) : 0;
+
+    var statsHtml = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">'
+      + '<div style="background:rgba(78,205,196,0.1);border:1px solid rgba(78,205,196,0.3);border-radius:6px;padding:8px;text-align:center;">'
+      + '<div style="font-size:0.68rem;color:#4ecdc4;text-transform:uppercase;">Pour Days</div>'
+      + '<div style="font-size:1.1rem;font-weight:700;color:#fff;">'+totalPours+'</div>'
+      + '</div>'
+      + '<div style="background:rgba(245,166,35,0.1);border:1px solid rgba(245,166,35,0.3);border-radius:6px;padding:8px;text-align:center;">'
+      + '<div style="font-size:0.68rem;color:#f5a623;text-transform:uppercase;">Actual yd³</div>'
+      + '<div style="font-size:1.1rem;font-weight:700;color:#fff;">'+_fmtN(totalActualYd,1)+'</div>'
+      + '</div>'
+      + '<div style="background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);border-radius:6px;padding:8px;text-align:center;">'
+      + '<div style="font-size:0.68rem;color:#a855f7;text-transform:uppercase;">Est yd³</div>'
+      + '<div style="font-size:1.1rem;font-weight:700;color:#fff;">'+_fmtN(totalEstYd,1)+'</div>'
+      + '</div>'
+      + '<div style="background:rgba('+(variance>=0?'52,211,153':'255,107,107')+',0.1);border:1px solid rgba('+(variance>=0?'52,211,153':'255,107,107')+',0.3);border-radius:6px;padding:8px;text-align:center;">'
+      + '<div style="font-size:0.68rem;color:'+(variance>=0?'#34d399':'#ff6b6b')+';text-transform:uppercase;">Variance</div>'
+      + '<div style="font-size:1rem;font-weight:700;color:'+(variance>=0?'#34d399':'#ff6b6b')+';">'+(variance>=0?'+':'')+_fmtN(variance,1)+' ('+(variancePct>=0?'+':'')+_fmtN(variancePct,1)+'%)</div>'
+      + '</div>'
+      + '</div>';
+
+    // Build log list
+    var logListHtml = '';
+    if(logs.length === 0){
+      logListHtml = '<div style="text-align:center;padding:30px;color:#666;font-size:0.85rem;">No field logs yet.<br><br>Click <strong>+ New Pour Day</strong> to start tracking.</div>';
+    } else {
+      logs.slice().reverse().forEach(function(log, ridx){
+        var idx = logs.length - 1 - ridx;
+        var actYd = parseFloat(log.actualYd)||0;
+        var estYd = parseFloat(log.estYd)||0;
+        var diff = actYd - estYd;
+        var diffColor = diff === 0 ? '#888' : (diff > 0 ? '#ff6b6b' : '#34d399');
+        var diffSign = diff > 0 ? '+' : '';
+
+        logListHtml += '<div style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 12px;margin-bottom:8px;">'
+          + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">'
+          + '<div>'
+          + '<span style="font-size:0.95rem;font-weight:700;color:#fff;">'+_esc(log.date||'')+'</span>'
+          + '<span style="font-size:0.78rem;color:#888;margin-left:8px;">'+_wxIcon(log.weather)+' '+_esc(log.weather||'')+'</span>'
+          + (log.tempHigh ? '<span style="font-size:0.72rem;color:#f5a623;margin-left:6px;">'+_esc(log.tempHigh)+'°/'+(log.tempLow||'—')+'°</span>' : '')
+          + '</div>'
+          + '<div style="display:flex;gap:6px;">'
+          + '<button onclick="window._editFieldLog('+idx+')" style="background:none;border:1px solid rgba(78,205,196,0.3);color:#4ecdc4;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:0.72rem;">✏️</button>'
+          + '<button onclick="window._printFieldLog('+idx+')" style="background:none;border:1px solid rgba(245,166,35,0.3);color:#f5a623;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:0.72rem;">🖨</button>'
+          + '<button onclick="window._deleteFieldLog('+idx+')" style="background:none;border:1px solid rgba(255,107,107,0.3);color:#ff6b6b;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:0.72rem;">🗑</button>'
+          + '</div>'
+          + '</div>'
+          + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-size:0.78rem;">'
+          + '<div><span style="color:#888;">Actual:</span> <span style="color:#4ecdc4;font-weight:600;">'+_fmtN(actYd,1)+' yd³</span></div>'
+          + '<div><span style="color:#888;">Est:</span> <span style="color:#a855f7;">'+_fmtN(estYd,1)+' yd³</span></div>'
+          + '<div><span style="color:#888;">Diff:</span> <span style="color:'+diffColor+';font-weight:600;">'+diffSign+_fmtN(diff,1)+'</span></div>'
+          + '<div><span style="color:#888;">Trucks:</span> <span style="color:#fff;">'+(log.truckCount||'—')+'</span></div>'
+          + '</div>'
+          + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:0.75rem;margin-top:6px;">'
+          + '<div><span style="color:#666;">Crew:</span> <span style="color:#ccc;">'+_esc(log.crewSize||'—')+'</span></div>'
+          + '<div><span style="color:#666;">Start:</span> <span style="color:#ccc;">'+_esc(log.startTime||'—')+'</span></div>'
+          + '<div><span style="color:#666;">End:</span> <span style="color:#ccc;">'+_esc(log.endTime||'—')+'</span></div>'
+          + '</div>'
+          + (log.notes ? '<div style="margin-top:8px;font-size:0.75rem;color:#888;border-top:1px solid rgba(255,255,255,0.06);padding-top:6px;">📝 '+_esc(log.notes)+'</div>' : '')
+          + (log.issues ? '<div style="margin-top:4px;font-size:0.75rem;color:#ff6b6b;">⚠️ '+_esc(log.issues)+'</div>' : '')
+          + '</div>';
+      });
+    }
+
+    var modal = document.createElement('div');
+    modal.id = 'fieldLogModal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;';
+    modal.innerHTML = '<div style="background:#16213e;border-radius:12px;width:95%;max-width:700px;max-height:90vh;display:flex;flex-direction:column;border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 32px rgba(0,0,0,0.4);">'
+      + '<div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center;">'
+      + '<div>'
+      + '<div style="font-size:1.1rem;font-weight:700;color:#4ecdc4;">📋 Daily Field Log</div>'
+      + '<div style="font-size:0.75rem;color:#888;">'+_esc(projName)+'</div>'
+      + '</div>'
+      + '<div style="display:flex;gap:8px;align-items:center;">'
+      + '<button onclick="window._newFieldLog()" style="background:rgba(78,205,196,0.15);border:1px solid rgba(78,205,196,0.4);color:#4ecdc4;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:0.82rem;font-weight:600;">+ New Pour Day</button>'
+      + '<button onclick="window._printAllFieldLogs()" style="background:rgba(245,166,35,0.15);border:1px solid rgba(245,166,35,0.4);color:#f5a623;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:0.82rem;" title="Print full log report">📊 Report</button>'
+      + '<button onclick="document.getElementById(\'fieldLogModal\').remove()" style="background:none;border:none;color:#888;font-size:1.4rem;cursor:pointer;">✕</button>'
+      + '</div>'
+      + '</div>'
+      + '<div style="padding:16px 20px;overflow-y:auto;flex:1;">'
+      + statsHtml
+      + '<div style="max-height:400px;overflow-y:auto;">'+logListHtml+'</div>'
+      + '</div>'
+      + '</div>';
+
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function(e){ if(e.target === modal) modal.remove(); });
+  }
+
+  /* ─── New / Edit Form ─── */
+  function _openFieldLogForm(idx){
+    var logs = _projLogs();
+    var isEdit = idx !== undefined && idx !== null;
+    var log = isEdit ? (logs[idx]||{}) : {};
+
+    var existing = document.getElementById('fieldLogFormModal');
+    if(existing) existing.remove();
+
+    // Estimate from measurements for default
+    var estYd = 0;
+    if(!isEdit && window.measurements){
+      estYd = window.measurements.filter(function(m){ return m.included !== false; }).reduce(function(s,m){ return s + (parseFloat(m.volume)||0); },0);
+    }
+
+    var modal = document.createElement('div');
+    modal.id = 'fieldLogFormModal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:10001;display:flex;align-items:center;justify-content:center;';
+    modal.innerHTML = '<div style="background:#16213e;border-radius:12px;width:95%;max-width:600px;max-height:90vh;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 32px rgba(0,0,0,0.4);">'
+      + '<div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center;">'
+      + '<div style="font-size:1.1rem;font-weight:700;color:#4ecdc4;">'+(isEdit?'✏️ Edit':'📝 New')+' Pour Day Log</div>'
+      + '<button onclick="document.getElementById(\'fieldLogFormModal\').remove()" style="background:none;border:none;color:#888;font-size:1.4rem;cursor:pointer;">✕</button>'
+      + '</div>'
+      + '<div style="padding:20px;">'
+
+      // Date & Weather row
+      + '<div style="display:grid;grid-template-columns:1fr 1fr 80px 80px;gap:10px;margin-bottom:12px;">'
+      + '<div>'
+      + '<label style="display:block;font-size:0.72rem;color:#888;margin-bottom:4px;">Pour Date</label>'
+      + '<input type="date" id="fl-date" value="'+_esc(log.date||_today())+'" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">'
+      + '</div>'
+      + '<div>'
+      + '<label style="display:block;font-size:0.72rem;color:#888;margin-bottom:4px;">Weather</label>'
+      + '<select id="fl-weather" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#ccc;font-size:0.85rem;">'
+      + '<option value="Sunny"'+(log.weather==='Sunny'?' selected':'')+'>☀️ Sunny</option>'
+      + '<option value="Partly Cloudy"'+(log.weather==='Partly Cloudy'?' selected':'')+'>⛅ Partly Cloudy</option>'
+      + '<option value="Cloudy"'+(log.weather==='Cloudy'?' selected':'')+'>☁️ Cloudy</option>'
+      + '<option value="Overcast"'+(log.weather==='Overcast'?' selected':'')+'>🌥️ Overcast</option>'
+      + '<option value="Rain"'+(log.weather==='Rain'?' selected':'')+'>🌧️ Rain</option>'
+      + '<option value="Wind"'+(log.weather==='Wind'?' selected':'')+'>💨 Wind</option>'
+      + '<option value="Hot"'+(log.weather==='Hot'?' selected':'')+'>🔥 Hot</option>'
+      + '</select>'
+      + '</div>'
+      + '<div>'
+      + '<label style="display:block;font-size:0.72rem;color:#888;margin-bottom:4px;">High °F</label>'
+      + '<input type="number" id="fl-temp-high" value="'+_esc(log.tempHigh||'')+'" placeholder="95" min="0" max="130" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">'
+      + '</div>'
+      + '<div>'
+      + '<label style="display:block;font-size:0.72rem;color:#888;margin-bottom:4px;">Low °F</label>'
+      + '<input type="number" id="fl-temp-low" value="'+_esc(log.tempLow||'')+'" placeholder="65" min="0" max="130" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">'
+      + '</div>'
+      + '</div>'
+
+      // Yardage row
+      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">'
+      + '<div>'
+      + '<label style="display:block;font-size:0.72rem;color:#888;margin-bottom:4px;">Actual yd³ Delivered</label>'
+      + '<input type="number" id="fl-actual-yd" value="'+_esc(log.actualYd||'')+'" placeholder="45.5" step="0.5" min="0" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(78,205,196,0.4);border-radius:6px;padding:8px;color:#4ecdc4;font-size:0.95rem;font-weight:600;">'
+      + '</div>'
+      + '<div>'
+      + '<label style="display:block;font-size:0.72rem;color:#888;margin-bottom:4px;">Est yd³ (plan)</label>'
+      + '<input type="number" id="fl-est-yd" value="'+_esc(log.estYd||(isEdit?'':_fmtN(estYd,1)))+'" placeholder="42" step="0.5" min="0" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(168,85,247,0.4);border-radius:6px;padding:8px;color:#a855f7;font-size:0.95rem;">'
+      + '</div>'
+      + '<div>'
+      + '<label style="display:block;font-size:0.72rem;color:#888;margin-bottom:4px;">Truck Count</label>'
+      + '<input type="number" id="fl-truck-count" value="'+_esc(log.truckCount||'')+'" placeholder="5" step="1" min="0" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">'
+      + '</div>'
+      + '</div>'
+
+      // Crew & time row
+      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px;">'
+      + '<div>'
+      + '<label style="display:block;font-size:0.72rem;color:#888;margin-bottom:4px;">Crew Size</label>'
+      + '<input type="number" id="fl-crew-size" value="'+_esc(log.crewSize||'')+'" placeholder="6" step="1" min="0" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">'
+      + '</div>'
+      + '<div>'
+      + '<label style="display:block;font-size:0.72rem;color:#888;margin-bottom:4px;">Start Time</label>'
+      + '<input type="time" id="fl-start-time" value="'+_esc(log.startTime||'06:00')+'" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">'
+      + '</div>'
+      + '<div>'
+      + '<label style="display:block;font-size:0.72rem;color:#888;margin-bottom:4px;">End Time</label>'
+      + '<input type="time" id="fl-end-time" value="'+_esc(log.endTime||'14:00')+'" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">'
+      + '</div>'
+      + '<div>'
+      + '<label style="display:block;font-size:0.72rem;color:#888;margin-bottom:4px;">Foreman</label>'
+      + '<input type="text" id="fl-foreman" value="'+_esc(log.foreman||'')+'" placeholder="Name" maxlength="30" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">'
+      + '</div>'
+      + '</div>'
+
+      // Batch plant & PSI
+      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">'
+      + '<div>'
+      + '<label style="display:block;font-size:0.72rem;color:#888;margin-bottom:4px;">Batch Plant</label>'
+      + '<input type="text" id="fl-batch-plant" value="'+_esc(log.batchPlant||'')+'" placeholder="e.g. Martin Marietta" maxlength="40" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">'
+      + '</div>'
+      + '<div>'
+      + '<label style="display:block;font-size:0.72rem;color:#888;margin-bottom:4px;">Mix PSI</label>'
+      + '<select id="fl-psi" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#ccc;font-size:0.85rem;">'
+      + '<option value="3000"'+((log.psi||4000)==3000?' selected':'')+'>3000 PSI</option>'
+      + '<option value="4000"'+((log.psi||4000)==4000?' selected':'')+'>4000 PSI</option>'
+      + '<option value="5000"'+((log.psi||4000)==5000?' selected':'')+'>5000 PSI</option>'
+      + '<option value="6000"'+((log.psi||4000)==6000?' selected':'')+'>6000 PSI</option>'
+      + '</select>'
+      + '</div>'
+      + '<div>'
+      + '<label style="display:block;font-size:0.72rem;color:#888;margin-bottom:4px;">Slump (in)</label>'
+      + '<input type="number" id="fl-slump" value="'+_esc(log.slump||4)+'" placeholder="4" step="0.5" min="0" max="10" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">'
+      + '</div>'
+      + '</div>'
+
+      // Ticket numbers
+      + '<div style="margin-bottom:12px;">'
+      + '<label style="display:block;font-size:0.72rem;color:#888;margin-bottom:4px;">Ticket #s (comma-separated)</label>'
+      + '<input type="text" id="fl-tickets" value="'+_esc(log.tickets||'')+'" placeholder="12345, 12346, 12347" maxlength="120" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">'
+      + '</div>'
+
+      // Element poured
+      + '<div style="margin-bottom:12px;">'
+      + '<label style="display:block;font-size:0.72rem;color:#888;margin-bottom:4px;">Elements Poured</label>'
+      + '<input type="text" id="fl-elements" value="'+_esc(log.elements||'')+'" placeholder="e.g. Slab at Grid A-D / Footings 1-12" maxlength="100" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">'
+      + '</div>'
+
+      // Notes
+      + '<div style="margin-bottom:12px;">'
+      + '<label style="display:block;font-size:0.72rem;color:#888;margin-bottom:4px;">Notes</label>'
+      + '<textarea id="fl-notes" placeholder="General observations, QC notes, cylinder IDs, test results..." rows="2" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#ccc;font-size:0.82rem;font-family:inherit;resize:vertical;">'+_esc(log.notes||'')+'</textarea>'
+      + '</div>'
+
+      // Issues
+      + '<div style="margin-bottom:16px;">'
+      + '<label style="display:block;font-size:0.72rem;color:#ff6b6b;margin-bottom:4px;">⚠️ Issues / Delays</label>'
+      + '<textarea id="fl-issues" placeholder="Pump breakdown, late trucks, rejected load, weather delay..." rows="2" style="width:100%;background:rgba(255,107,107,0.05);border:1px solid rgba(255,107,107,0.3);border-radius:6px;padding:8px;color:#ff6b6b;font-size:0.82rem;font-family:inherit;resize:vertical;">'+_esc(log.issues||'')+'</textarea>'
+      + '</div>'
+
+      // Buttons
+      + '<div style="display:flex;gap:10px;justify-content:flex-end;">'
+      + '<button onclick="document.getElementById(\'fieldLogFormModal\').remove()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#888;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:0.85rem;">Cancel</button>'
+      + '<button onclick="window._saveFieldLog('+(isEdit?idx:'null')+')" style="background:rgba(78,205,196,0.2);border:1px solid rgba(78,205,196,0.5);color:#4ecdc4;border-radius:6px;padding:8px 24px;cursor:pointer;font-size:0.85rem;font-weight:600;">💾 Save</button>'
+      + '</div>'
+
+      + '</div>'
+      + '</div>';
+
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function(e){ if(e.target === modal) modal.remove(); });
+  }
+
+  /* ─── Save Log ─── */
+  window._saveFieldLog = function(idx){
+    var logs = _projLogs();
+    var log = {
+      date: document.getElementById('fl-date')?.value || _today(),
+      weather: document.getElementById('fl-weather')?.value || '',
+      tempHigh: document.getElementById('fl-temp-high')?.value || '',
+      tempLow: document.getElementById('fl-temp-low')?.value || '',
+      actualYd: parseFloat(document.getElementById('fl-actual-yd')?.value)||0,
+      estYd: parseFloat(document.getElementById('fl-est-yd')?.value)||0,
+      truckCount: parseInt(document.getElementById('fl-truck-count')?.value)||0,
+      crewSize: parseInt(document.getElementById('fl-crew-size')?.value)||0,
+      startTime: document.getElementById('fl-start-time')?.value || '',
+      endTime: document.getElementById('fl-end-time')?.value || '',
+      foreman: document.getElementById('fl-foreman')?.value || '',
+      batchPlant: document.getElementById('fl-batch-plant')?.value || '',
+      psi: parseInt(document.getElementById('fl-psi')?.value)||4000,
+      slump: parseFloat(document.getElementById('fl-slump')?.value)||4,
+      tickets: document.getElementById('fl-tickets')?.value || '',
+      elements: document.getElementById('fl-elements')?.value || '',
+      notes: document.getElementById('fl-notes')?.value || '',
+      issues: document.getElementById('fl-issues')?.value || ''
+    };
+
+    if(idx !== null && idx !== undefined){
+      logs[idx] = log;
+    } else {
+      logs.push(log);
+    }
+
+    // Sort by date
+    logs.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+
+    _setProjLogs(logs);
+
+    document.getElementById('fieldLogFormModal')?.remove();
+    _buildFieldLogModal();
+  };
+
+  /* ─── Delete Log ─── */
+  window._deleteFieldLog = function(idx){
+    if(!confirm('Delete this pour day log?')) return;
+    var logs = _projLogs();
+    logs.splice(idx, 1);
+    _setProjLogs(logs);
+    _buildFieldLogModal();
+  };
+
+  /* ─── Edit Log ─── */
+  window._editFieldLog = function(idx){
+    document.getElementById('fieldLogModal')?.remove();
+    _openFieldLogForm(idx);
+  };
+
+  /* ─── New Log ─── */
+  window._newFieldLog = function(){
+    document.getElementById('fieldLogModal')?.remove();
+    _openFieldLogForm(null);
+  };
+
+  /* ─── Print Single Log ─── */
+  window._printFieldLog = function(idx){
+    var logs = _projLogs();
+    var log = logs[idx];
+    if(!log) return;
+    _printLogReport([log], false);
+  };
+
+  /* ─── Print All Logs ─── */
+  window._printAllFieldLogs = function(){
+    var logs = _projLogs();
+    if(logs.length === 0){ alert('No logs to print.'); return; }
+    _printLogReport(logs, true);
+  };
+
+  /* ─── Print Report ─── */
+  function _printLogReport(logs, isFullReport){
+    var projName = _projKey();
+    var coName = document.getElementById('company-name')?.value || 'ONCOR';
+    var coPhone = document.getElementById('company-phone')?.value || '';
+    var coEmail = document.getElementById('company-email')?.value || '';
+    var coAddr = document.getElementById('company-address')?.value || '';
+
+    // Stats for full report
+    var totalActual = logs.reduce(function(s,l){ return s + (parseFloat(l.actualYd)||0); },0);
+    var totalEst = logs.reduce(function(s,l){ return s + (parseFloat(l.estYd)||0); },0);
+    var variance = totalActual - totalEst;
+    var variancePct = totalEst ? ((variance/totalEst)*100) : 0;
+
+    var rowsHtml = logs.map(function(log, i){
+      var actYd = parseFloat(log.actualYd)||0;
+      var estYd = parseFloat(log.estYd)||0;
+      var diff = actYd - estYd;
+      var diffColor = diff === 0 ? '#666' : (diff > 0 ? '#dc2626' : '#059669');
+      var diffSign = diff > 0 ? '+' : '';
+
+      return '<tr>'
+        + '<td>'+_esc(log.date||'')+'</td>'
+        + '<td>'+_wxIcon(log.weather)+' '+_esc(log.weather||'')+(log.tempHigh?' '+log.tempHigh+'°':'')+''+(log.tempLow?'/'+log.tempLow+'°':'')+'</td>'
+        + '<td style="text-align:right;font-weight:600;color:#0891b2;">'+_fmtN(actYd,1)+'</td>'
+        + '<td style="text-align:right;">'+_fmtN(estYd,1)+'</td>'
+        + '<td style="text-align:right;color:'+diffColor+';font-weight:600;">'+diffSign+_fmtN(diff,1)+'</td>'
+        + '<td style="text-align:center;">'+(log.truckCount||'—')+'</td>'
+        + '<td style="text-align:center;">'+(log.crewSize||'—')+'</td>'
+        + '<td>'+_esc(log.startTime||'')+' – '+_esc(log.endTime||'')+'</td>'
+        + '</tr>'
+        + (log.elements ? '<tr style="background:#f8fafc;"><td colspan="8" style="font-size:11px;color:#475569;padding:4px 10px 6px;"><strong>Elements:</strong> '+_esc(log.elements)+'</td></tr>' : '')
+        + (log.notes ? '<tr style="background:#f8fafc;"><td colspan="8" style="font-size:11px;color:#475569;padding:4px 10px 6px;"><strong>Notes:</strong> '+_esc(log.notes)+'</td></tr>' : '')
+        + (log.issues ? '<tr style="background:#fef2f2;"><td colspan="8" style="font-size:11px;color:#b91c1c;padding:4px 10px 6px;"><strong>⚠️ Issues:</strong> '+_esc(log.issues)+'</td></tr>' : '')
+        + (log.tickets ? '<tr style="background:#f8fafc;"><td colspan="8" style="font-size:10px;color:#64748b;padding:2px 10px 4px;">Tickets: '+_esc(log.tickets)+'</td></tr>' : '');
+    }).join('');
+
+    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Field Log — '+_esc(projName)+'</title>'
+      + '<style>'
+      + 'body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111;background:#fff;margin:0;padding:0;}'
+      + '.page{max-width:900px;margin:0 auto;padding:24px 30px;}'
+      + 'h1{font-size:20px;margin:0;} h2{font-size:14px;margin:0 0 4px;}'
+      + 'table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:11px;}'
+      + 'th{background:#0891b2;color:#fff;padding:6px 8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;}'
+      + 'td{padding:5px 8px;border-bottom:1px solid #e5e7eb;vertical-align:top;}'
+      + 'tr:nth-child(even){background:#f9fafb;}'
+      + '.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;border-bottom:3px solid #0891b2;padding-bottom:14px;}'
+      + '.badge{background:#0891b2;color:#fff;padding:6px 14px;border-radius:5px;font-size:18px;font-weight:700;letter-spacing:0.04em;}'
+      + '.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;}'
+      + '.stat{background:#f1f5f9;border-radius:6px;padding:10px;text-align:center;}'
+      + '.stat .lbl{font-size:10px;color:#64748b;text-transform:uppercase;}'
+      + '.stat .val{font-size:18px;font-weight:700;margin-top:2px;}'
+      + '.footer{text-align:center;font-size:10px;color:#64748b;margin-top:20px;padding-top:10px;border-top:1px solid #e5e7eb;}'
+      + '@media print{.print-btn{display:none!important;}body{padding:0;}.page{padding:16px 20px;}}'
+      + '</style></head><body><div class="page">'
+      + '<div class="print-btn" style="margin-bottom:12px;"><button onclick="window.print()" style="background:#0891b2;color:#fff;border:none;padding:7px 18px;border-radius:5px;cursor:pointer;font-size:12px;">🖨 Print / Save PDF</button></div>'
+
+      + '<div class="header">'
+      + '<div>'
+      + '<h1>'+(isFullReport?'📋 Daily Field Log Report':'📋 Pour Day Report')+'</h1>'
+      + '<div style="color:#64748b;font-size:12px;margin-top:3px;">'+_esc(projName)+'</div>'
+      + '</div>'
+      + '<div style="text-align:right;">'
+      + '<div style="font-weight:700;font-size:14px;">'+_esc(coName)+'</div>'
+      + (coAddr?'<div style="color:#64748b;font-size:11px;">'+_esc(coAddr)+'</div>':'')
+      + (coPhone?'<div style="color:#64748b;font-size:11px;">'+_esc(coPhone)+'</div>':'')
+      + (coEmail?'<div style="color:#64748b;font-size:11px;">'+_esc(coEmail)+'</div>':'')
+      + '</div>'
+      + '</div>'
+
+      // Stats summary (full report only)
+      + (isFullReport
+        ? '<div class="stats">'
+          + '<div class="stat"><div class="lbl">Pour Days</div><div class="val">'+logs.length+'</div></div>'
+          + '<div class="stat"><div class="lbl">Actual yd³</div><div class="val" style="color:#0891b2;">'+_fmtN(totalActual,1)+'</div></div>'
+          + '<div class="stat"><div class="lbl">Estimated yd³</div><div class="val">'+_fmtN(totalEst,1)+'</div></div>'
+          + '<div class="stat"><div class="lbl">Variance</div><div class="val" style="color:'+(variance>=0?'#dc2626':'#059669')+';">'+(variance>=0?'+':'')+_fmtN(variance,1)+' ('+(variancePct>=0?'+':'')+_fmtN(variancePct,1)+'%)</div></div>'
+          + '</div>'
+        : '')
+
+      + '<table>'
+      + '<thead><tr><th>Date</th><th>Weather</th><th style="text-align:right;">Actual yd³</th><th style="text-align:right;">Est yd³</th><th style="text-align:right;">Diff</th><th style="text-align:center;">Trucks</th><th style="text-align:center;">Crew</th><th>Time</th></tr></thead>'
+      + '<tbody>'+rowsHtml+'</tbody>'
+      + (isFullReport
+        ? '<tfoot><tr style="background:#0891b2;color:#fff;font-weight:700;"><td colspan="2">TOTAL</td><td style="text-align:right;">'+_fmtN(totalActual,1)+'</td><td style="text-align:right;">'+_fmtN(totalEst,1)+'</td><td style="text-align:right;">'+(variance>=0?'+':'')+_fmtN(variance,1)+'</td><td colspan="3"></td></tr></tfoot>'
+        : '')
+      + '</table>'
+
+      + '<div class="footer">'+_esc(coName)+' · '+_esc(projName)+' · Generated '+new Date().toLocaleString()+'</div>'
+      + '</div></body></html>';
+
+    var win = window.open('', '_blank');
+    if(win){ win.document.write(html); win.document.close(); }
+  }
+
+  /* ─── Open Field Log ─── */
+  window._openFieldLog = function(){ _buildFieldLogModal(); };
+
+  /* ─── Keyboard shortcut: Ctrl+Shift+F ─── */
+  document.addEventListener('keydown', function(e){
+    if((e.ctrlKey||e.metaKey) && e.shiftKey && (e.key==='F'||e.key==='f')){
+      e.preventDefault();
+      _buildFieldLogModal();
+    }
+  });
+
+  /* ─── Inject sidebar button ─── */
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){
+      // Find change orders button to insert after
+      var coBtn = document.querySelector('button[onclick*="_openCOLog"]');
+      if(coBtn){
+        var row = coBtn.closest('div') || coBtn.parentNode;
+        if(row){
+          var newRow = document.createElement('div');
+          newRow.innerHTML = '<button class="action-btn secondary" onclick="window._openFieldLog()" title="Daily Field Log — track pour days, weather, crew, actual vs estimated yardage, issues, and generate printable reports (Ctrl+Shift+F)" style="background:rgba(78,205,196,0.1);border-color:rgba(78,205,196,0.35);color:#4ecdc4;">📋 Field Log</button>';
+          row.parentNode.insertBefore(newRow, row.nextSibling);
+        }
+      }
+    }, 850);
+  });
+
+})();
+// ==================== END DAILY FIELD LOG — Zeus ⚡ Session #47 ====================
+</script>
