@@ -1,5 +1,203 @@
 # Overnight Build Tasks - 2026-02-14
 
+## 📋 SESSION: Mar 31, 2026 - 18:14 UTC (Overnight Cron #52)
+**Status:** ✅ RFI & SUBMITTAL LOG added (+927 lines)
+
+### What Was Added:
+
+**📋 RFI & Submittal Log (Ctrl+Shift+X):**
+- New `📋 RFI / Submittals` button injected in sidebar below Pay Applications
+- `Ctrl+Shift+X` keyboard shortcut opens/toggles the log modal
+- **Two-tab modal:** RFIs tab + Submittals tab with their own stats bars, filter controls, and list tables
+- **Purpose:** The missing project management tracker — every concrete job generates RFIs (rebar placement questions, detail conflicts, specification clarifications) and submittals (mix designs, shop drawings, product data). GCs track these meticulously and expect the sub to as well.
+
+**RFI Log:**
+- Statuses: Open / Under Review / Answered / Closed / Void (color-coded badges)
+- Fields: RFI #, Subject, Description/Question detail, Date Issued, Response Due, Date Answered, Directed To (GC/Arch/Eng), Submitted By, Drawing/Spec Reference, Cost Impact (Unknown/None/Potential CO/No Cost Impact), Response/Answer text
+- **Overdue ⚠️ flags** — auto-detected if past due date and not Closed/Answered/Void
+- **Days Open counter** — auto-calculates from date issued
+- **4-card stats bar:** Total RFIs / Open / Answered+Closed / Overdue
+- **Filter controls:** Status dropdown + Overdue Only checkbox
+- **Per-RFI actions:** Edit (✏️), Print individual RFI doc (🖨), Delete (🗑)
+- Print RFI Log button — full table as PDF
+
+**Submittal Log:**
+- Statuses: Pending / Submitted / Under Review / Approved / Approved as Noted / Revise & Resubmit / Rejected / Void
+- Submittal Types: Shop Drawing / Product Data / Mix Design / Sample / Test Report / Certificate / O&M Manual / Warranty / Other
+- Fields: Submittal #, Description, Type, Spec Section (CSI MasterFormat), Date Submitted, Required By, Date Approved, Submitted To, Submitted By, Reviewer Comments/Notes
+- **Revise & Resubmit flag** shown inline on list items
+- **4-card stats bar:** Total / Pending+In Review / Approved / Revise & Resubmit
+- **Filter controls:** Status dropdown + Overdue Only checkbox
+- **Per-submittal actions:** Edit, Print individual submittal transmittal doc, Delete
+- Print Submittal Log button — full table as PDF
+
+**Printable Outputs:**
+- **Individual RFI Transmittal** — company header (name/address/phone/email/license), RFI badge + status badge, 6-cell meta grid (dates, directed-to, cost impact), Subject, Description, Drawing Reference, Response/Answer boxes, dual signature block (Contractor / Responded By), footer
+- **Individual Submittal Transmittal** — same structure, purple branding, submittal type, spec section, approval date, reviewer comments, dual signature block
+- **RFI Log (Full)** — stats header, table with all RFIs (RFI #, subject, status, issued, due, days open, directed-to, cost impact), footer with print button
+- **Submittal Log (Full)** — stats header, table with all submittals (sub #, description, type, spec, status, submitted, required by, approved), footer with print button
+
+**Integration:**
+- `window._getRFIStats()` exposed for Project Status Card (Ctrl+Shift+I) to consume live RFI/submittal counts
+- localStorage per project: `oncor_rfi_log_v1` + `oncor_submittal_log_v1`
+- Auto-fills "Submitted By" from estimator name field
+
+**Why this matters:** On any GC project, JFS will receive a submittal schedule on day 1 requiring mix designs, shop drawings, rebar submittals, curing compound data sheets — all with deadlines. Missing submittal deadlines causes work stoppages. Unanswered RFIs mean crew sitting idle. Now JFS tracks both with the same professionalism as any GC PM.
+
+**Commits:**
+- e6f77b1: 📋 RFI & Submittal Log (Ctrl+Shift+X) (+927 lines) [Session #52]
+
+**Total Lines:** ~145,043 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + Daily Field Log + Quick Communication Templates + Project Status Card + Keyboard Shortcuts + Pay Application Generator + **RFI & Submittal Log**
+
+---
+
+
+## 💵 SESSION: Mar 31, 2026 - 17:14 UTC (Overnight Cron #51)
+**Status:** ✅ PAY APPLICATION GENERATOR added (+892 lines)
+
+### What Was Added:
+
+**💵 Pay Application Generator (Ctrl+Shift+Y):**
+- New `💵 Pay Applications` button injected in sidebar below Quick Messages
+- `Ctrl+Shift+Y` keyboard shortcut opens the Pay App modal
+- **Purpose:** Professional AIA G702/G703-style progress billing — the missing link between winning a job and getting paid. Instead of handwritten invoices or emailing a lump sum, JFS submits a real progress pay application that GCs and Owners expect.
+
+**Core Features:**
+- **Schedule of Values (SOV)** — auto-seeded from estimate cost breakdown (concrete materials, labor, formwork, rebar, pump, fiber, base course, vapor barrier, saw cutting, mobilization, overhead, profit — each as a separate line item). SOV editable, can add/remove lines, re-seed anytime.
+- **Pay Application Form:**
+  - App #, date, period from/through, status (Draft/Submitted/Approved/Paid/Disputed), contract date
+  - Owner/GC name, Architect/Engineer name, Project/Contract #
+  - **G703 Continuation Sheet** — line-by-line input for "This Period" dollars and "Stored Materials" per SOV item
+  - Previous Billed auto-populated from prior approved apps
+  - % Complete calculated live per line
+  - Retainage withheld live (configurable % per line, default 10%)
+  - **Live running totals** — This Period / Stored / Retainage / Net Due update as you type
+- **G702 Payment Summary box** — Original Contract, Net CO Changes (integrates with CO log), Total Completed, Less Retainage, Less Previous Certs, **Current Payment Due** in large callout
+- **Pay App History list** — all apps per project: App #, Period, This Period $, Retainage $, Net Due, Status badges
+- **SOV carries forward** — when you save a new pay app, Previous Billed auto-updates for the next application
+- **localStorage per project** (`oncor_pay_apps_v1` keyed by project name)
+
+**Printable G702/G703 Document:**
+- Company header (name, address, phone, email, license)
+- Project meta grid: project name, owner/GC, architect, contract date, contract value, revised contract (with COs)
+- **Full G703 table** — all SOV line items with Scheduled Value, From Prev App, Work Completed This Period, Stored Materials, Total Completed & Stored, % Complete, Retainage, Balance to Finish
+- **G702 Summary section** — Original Contract Sum, Net Change by COs, Contract Sum to Date, Total Completed + Stored, Less Retainage, Less Previous Certificates, **Current Payment Due** highlighted
+- **Payment Due callout box** — large dark blue box with the net payment amount front-and-center
+- **TX Prompt Payment Act notice** — Property Code Ch. 28, 35-day payment window, 1.5%/month interest on late payments, lien rights reminder
+- **Dual signature block** — Contractor Certification (with attestation language) + Owner/GC Certification
+- Clean print stylesheet — professional enough to email as PDF to any GC
+
+**Why this matters:** Concrete contractors lose money because they can't bill like a real contractor. GCs expect pay apps — not lump sum invoices. With this, JFS submits a professional AIA-format pay application each month, tracks retainage, and has the TX Prompt Payment Act in writing on every submission. One button, professional billing.
+
+**Commits:**
+- 34a5a3c: 💵 Pay Application Generator (Ctrl+Shift+Y) (+892 lines) [Session #51]
+
+**Total Lines:** ~144,116 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + Daily Field Log + Quick Communication Templates + Project Status Card + Keyboard Shortcuts + **Pay Application Generator**
+
+---
+
+
+## 📨 SESSION: Mar 31, 2026 - 14:05 UTC (Overnight Cron #48)
+**Status:** ✅ QUICK COMMUNICATION TEMPLATES added (+550 lines)
+
+### What Was Added:
+
+**📨 Quick Communication Templates:**
+- New `📨 Quick Messages` button added to sidebar actions
+- **10 ready-to-copy message templates** for common contractor communications:
+  1. **Pour Notification** — notify GC/inspector of upcoming pour (date, time, location, mix, crew)
+  2. **Change Order Request** — formal CO request with description, reason, amount, schedule impact
+  3. **Weather Delay Notice** — document weather delay for time extension claims
+  4. **Payment Follow-Up** — polite reminder for past-due invoice
+  5. **Payment Demand (Formal)** — formal demand letter citing TX Prompt Payment Act
+  6. **Schedule Update / Look-Ahead** — 2-week look-ahead for GC coordination
+  7. **Material Delivery Coordination** — coordinate concrete/rebar delivery with supplier
+  8. **RFI Submission** — cover message for RFI submission
+  9. **Punch List Response** — respond to punch list with completed/remaining items
+  10. **Delay Notice (General)** — formal notice for owner/GC-caused delays
+- **Auto-fills from project data** — pulls project name, client, company info, estimator, yards, PSI
+- **One-click copy** — copy template to clipboard for SMS/email paste
+- **Customize mode** — opens editable window for tweaking before copying
+- **TX legal references** — payment demand includes TX Prompt Payment Act (Property Code Ch. 28) citations
+
+**Why this matters:** Contractors send the same types of messages constantly — pour notices, CO requests, payment follow-ups. Instead of typing from scratch or hunting for old emails to copy, JFS clicks one button and gets a professional template pre-filled with project data. Saves 5-10 minutes per message × dozens of messages per project = hours saved.
+
+**Commits:**
+- 948bc2a: 📨 Quick Communication Templates (Session #48) (+550 lines)
+
+**Total Lines:** ~142,700 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + Daily Field Log + **Quick Communication Templates**
+
+---
+
+## 📊 SESSION: Mar 31, 2026 - 14:15 UTC (Overnight Cron #49)
+**Status:** ✅ PROJECT STATUS CARD added (+364 lines)
+
+### What Was Added:
+
+**📊 Project Status Card (Ctrl+Shift+I):**
+- New `📊 Project Status` button in sidebar actions
+- **Keyboard shortcut Ctrl+Shift+I** opens status card instantly
+- **Quick overview when GC calls asking "where are we at?"** — all key metrics in one view
+- **Auto-pulls from all project data sources:**
+  - Contract value (original + revised with COs)
+  - Change orders count, total value, signed status
+  - Progress bar (% concrete placed vs total)
+  - Pour log summary (completed pours, remaining yardage)
+  - RFIs (open/closed count)
+  - Submittals (pending/approved count)
+  - Financial status (invoiced, collected, outstanding, past due)
+  - Punch list (open/completed items)
+  - Phase breakdown if multi-phase project
+- **One-click copy as text** — formatted summary for quick paste to text/email
+- **Print-ready** — clean print stylesheet for paper reports
+- **Real-time data** — always shows current state from localStorage sources
+
+**Why this matters:** When a GC calls JFS and asks "how's the XYZ project going?" he needs instant access to all the key metrics without clicking through 5 different panels. This is the answer — Ctrl+Shift+I and everything's there: money, progress, open items, AR status. Professional and fast.
+
+**Commits:**
+- 384d91f: 📊 Project Status Card (Ctrl+Shift+I) (+364 lines) [Session #49]
+
+**Total Lines:** ~143,064 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + Daily Field Log + Quick Communication Templates + **Project Status Card**
+
+---
+
+## ⌨️ SESSION: Mar 31, 2026 - 14:25 UTC (Overnight Cron #50)
+**Status:** ✅ KEYBOARD SHORTCUTS HELP added (+160 lines)
+
+### What Was Added:
+
+**⌨️ Keyboard Shortcuts Help (Ctrl+/):**
+- **Press Ctrl+/ (or Ctrl+?)** to open the shortcuts reference modal
+- Small `⌨️` button added to the canvas toolbar for mouse access
+- **Categorized shortcuts list:**
+  - **Navigation & Search:** Ctrl+K (tool search), Ctrl+/, Esc
+  - **Drawing & Measurement:** R/P/L/C modes, Ctrl+Z/Y, Delete, zoom
+  - **Quick Actions:** Ctrl+S/E/P for save/estimate/print
+  - **Productivity Features:** All the Ctrl+Shift shortcuts for:
+    - Analytics Dashboard (A)
+    - Multi-Project Dashboard (D)
+    - Project Status Card (I)
+    - Proposal Letter (L)
+    - Pour Schedule (O)
+    - Internal Report (R)
+    - Change Order Log (C)
+    - Daily Field Log (F)
+    - Measurement Sections (S)
+    - Pricing Presets (P)
+    - Alternate Bid Items (T)
+  - **View Controls:** Page navigation for multi-page PDFs
+- **Modal overlay** — blur background, click outside or Esc to close
+- **Discoverable** — users can now find all the power features they didn't know existed
+
+**Why this matters:** The tool has grown to 143K+ lines with many keyboard shortcuts — without a reference, users never discover features like Ctrl+Shift+I (status card) or Ctrl+Shift+L (proposal letter). Now they can press Ctrl+/ and see everything available.
+
+**Commits:**
+- 4950936: ⌨️ Keyboard Shortcuts Help (Ctrl+/) (+160 lines) [Session #50]
+
+**Total Lines:** ~143,224 | **50 OVERNIGHT BUILD SESSIONS** ✅
+
+---
+
 ## 📄 SESSION: Mar 31, 2026 - 08:43 UTC (Overnight Cron #43)
 **Status:** ✅ PROPOSAL BID LETTER GENERATOR added (+466 lines)
 
@@ -933,3 +1131,59 @@
 
 **Total Lines:** ~141,045 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + **Internal Estimate Report**
 
+
+---
+
+## 📋 SESSION: Mar 31, 2026 - 13:03 UTC (Overnight Cron #47)
+**Status:** ✅ DAILY FIELD LOG added (+430 lines)
+
+### What Was Added:
+
+**📋 Daily Field Log (Ctrl+Shift+F):**
+- New `📋 Field Log` button injected in sidebar below the Change Orders button
+- `Ctrl+Shift+F` keyboard shortcut opens the Field Log modal
+- **Purpose:** Bridge bid acceptance to project completion — track what actually happens on pour days, compare actual vs estimated yardage, document issues
+
+**Field Log Modal:**
+- **4-card stats header:** Pour Days count / Total Actual yd³ / Total Est yd³ / Variance (with % and color-coded green/red)
+- Full log list (newest first) with each entry showing:
+  - Date + weather icon + high/low temps
+  - Actual yd³ (teal) vs Est yd³ (purple) vs Diff (+/- colored)
+  - Trucks, crew size, start/end times
+  - Notes and Issues (if any, shown inline)
+  - Edit (✏️), Print (🖨), Delete (🗑) buttons per entry
+- **+ New Pour Day** button opens form
+- **📊 Report** button prints full project log
+
+**New/Edit Pour Day Form:**
+- Pour Date picker
+- Weather dropdown (Sunny/Partly Cloudy/Cloudy/Overcast/Rain/Wind/Hot with icons)
+- High/Low temp fields (°F)
+- Actual yd³ delivered (highlighted input — the key field)
+- Est yd³ (auto-fills from current measurements if new entry)
+- Truck count
+- Crew size, start time, end time, foreman name
+- Batch plant name, mix PSI, slump (in)
+- Ticket #s (comma-separated for all loads)
+- Elements poured (text field — "Slab at Grid A-D / Footings 1-12")
+- Notes textarea (QC notes, cylinder IDs, test results)
+- Issues/Delays textarea (red-highlighted — pump breakdown, late trucks, rejected loads)
+
+**Printable Reports:**
+- **Single day report** — one pour day with full details
+- **Full project report** — all pour days in table format with:
+  - Date, weather, actual yd³, est yd³, diff, trucks, crew, time
+  - Expandable notes/issues/elements/tickets per row
+  - Summary stats at top: total pour days, total actual, total est, variance
+  - Footer totals row
+- Print button / Save as PDF
+- Company branding header (from Company Info fields)
+
+**Storage:** localStorage keyed by project name (`oncor_field_log_v1`) — survives page reload, isolated per project
+
+**Why this matters:** After the bid is accepted, JFS needs to track execution. This closes the feedback loop between estimate and reality — see if you over/under-estimated, document issues for claims/backcharges, and generate daily reports for the job file. The variance tracking over time helps JFS calibrate future bids.
+
+**Commits:**
+- 84ae50f: 📋 Daily Field Log (Ctrl+Shift+F) (+430 lines) [Session #47]
+
+**Total Lines:** ~142,075 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + **Field Log**
