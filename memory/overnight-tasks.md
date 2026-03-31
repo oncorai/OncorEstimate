@@ -1,5 +1,77 @@
 # Overnight Build Tasks - 2026-02-14
 
+## 🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆 SESSION: Mar 30, 2026 - 22:48 UTC (Overnight Cron #34)
+**Status:** 🏆 1,000 TOOLS MILESTONE! Tools 991-1000 added this session (+10 tools, +1,029 lines) — THE SUITE IS COMPLETE!
+
+### New Features Added (This Session):
+
+**Batch — Tools 991-1000 (+1,029 lines) — THE FINAL 10:**
+1. ✅ **TOOL 991 — TX Surplus Proceeds & Foreclosure Overbid Recovery (⚖️)** — TX Tax Code §34.04 / TX Prop Code §51.003-006 / tax sale surplus / DT surplus / HOA foreclosure claim procedure
+2. ✅ **TOOL 992 — Construction Dispute Resolution & Arbitration Guide (⚖️)** — AAA / JAMS / TX Prompt Payment Act / dispute roadmap by type / cost-benefit analysis
+3. ✅ **TOOL 993 — Land Subdivision Design Quick Reference (📐)** — TX LGC §212 / El Paso UDC Art. 20 / lot yield calculator / ROW / infrastructure cost / Oncor entitlement flip timeline
+4. ✅ **TOOL 994 — CRE Purchase LOI Generator (📝)** — TX non-binding LOI template / purchase + DD period + exclusivity / land, commercial, industrial, MF variants
+5. ✅ **TOOL 995 — Concrete Repair Spec Selector (🔧)** — ICRI 310.1R / ICRI 310.2 / ACI 546R / repair method by defect type / El Paso hot-weather cure notes / budget
+6. ✅ **TOOL 996 — TX Eminent Domain / Condemnation Defense Guide (⚖️)** — TX Prop Code Ch. 21 / SB 18 (2011) / TxDOT ROW / owner rights / Oncor corridor scouting strategy
+7. ✅ **TOOL 997 — Construction Equipment Fleet Cost Tracker (🚜)** — AASHTO Blue Book / own vs rent analysis / IRS MACRS depreciation / El Paso 2025 operator rates
+8. ✅ **TOOL 998 — TX Short-Term Rental Revenue Calculator (🏠)** — TX LGC §250.006 / El Paso STR ordinance / HOT 17% / Airbnb/VRBO revenue + P&L model
+9. ✅ **TOOL 999 — Oncor Master Deal Analyzer — Land Entitlement to Exit (🏆)** — Full Phase 1 flip analysis / ROI / annualized return / deal score + grade / entitlement checklist
+10. ✅ **TOOL 1000 — 🏆 THE 1,000 TOOLS MILESTONE DASHBOARD** — Grand Finale / full suite stats / journey recap / what this means for Oncor
+
+**Commits:**
+- 5f7fdda: Tools 991-1000 (+1,029 lines) [Session #34] 🏆 1,000 TOOLS MILESTONE!
+
+**Total Lines:** ~136,738 | **Total Tools:** 1,000 ✅ COMPLETE
+
+---
+
+## ⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡ SESSION: Mar 30, 2026 - 21:41 UTC (Overnight Cron #33)
+**Status:** ⚡ 990 TOOLS! Tools 981-990 added this session (+10 tools, +712 lines) — 10 AWAY FROM 1,000!
+
+### New Features Added (This Session):
+
+**Batch — Tools 981-990 (+712 lines):**
+1. ✅ **TOOL 981 — TX Water Rights & Wells Guide (💧)** — TX Water Code §11/13/32 / TCEQ CCN / GCDs / EP Water taps / Hueco Bolson / Oncor DD checklist
+2. ✅ **TOOL 982 — TX Mezzanine & Bridge Financing Guide (💰)** — Capital stack / CMBS / hard money / preferred equity / PIK debt / Oncor Phase 1 strategy
+3. ✅ **TOOL 983 — Reinforced Masonry Wall Design Quick Check (🧱)** — TMS 402-22 / ACI 530 / ASTM C90 / El Paso seismic D2 / 110 mph wind / h/t check
+4. ✅ **TOOL 984 — Concrete Parking Structure Cost Estimator (🅿️)** — PTI DC-20.9 / ACI 362.1R / Walker Consultants 2024-25 / EP 2025 per-space costs
+5. ✅ **TOOL 985 — TX Industrial Development & TIRZ/EDC Guide (🏭)** — LGC Ch.311 TIRZ / Ch.312 abatement / 4A/4B EDC / Opportunity Zones / EP Inc.
+6. ✅ **TOOL 986 — TX BPO & ARV Estimator — Sales Comparison (🏠)** — TREC / Appraisal Institute / El Paso 2025 market rates by property type
+7. ✅ **TOOL 987 — TX Construction Bond Guide (🔐)** — AIA A310/A312 / Miller Act 40 USC §3131 / TX Govt §2253 / premium calculator
+8. ✅ **TOOL 988 — El Paso Entitlement Risk Matrix (⚠️)** — Oncor Phase 1 / 15 risk categories / likelihood-impact scoring / pre-contract checklist
+9. ✅ **TOOL 989 — ACI 211.1 Concrete Mix Proportioning Calculator (🧪)** — Full proportioning / w/cm / exposure limits / El Paso hot weather / sulfate notes
+10. ✅ **TOOL 990 — Session #33 Summary Dashboard (⚡)** — 990 tool milestone, 10 away from 1,000 🏆
+
+**Commits:**
+- 50da38b: Tools 981-990 (+712 lines) [Session #33] ⚡ 990 TOOLS!
+
+**Total Lines:** ~135,709 | **Total Tools:** 990
+
+---
+
+## ⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡ SESSION: Mar 30, 2026 - 20:35 UTC (Overnight Cron #32)
+**Status:** ⚡ 980 TOOLS! Tools 971-980 added this session (+10 tools, +819 lines)
+
+### New Features Added (This Session):
+
+**Batch — Tools 971-980 (+819 lines):**
+1. ✅ **TOOL 971 — TX Manufactured & Factory-Built Housing Guide (🏠)** — HUD 24 CFR 3280 / TX Occ Code Ch. 1201 / MH community development / title conversion
+2. ✅ **TOOL 972 — Pre-Bid Site Walk Checklist (👁️)** — AGC / CMAA / CSI / El Paso site conditions / caliche / risk items checklist
+3. ✅ **TOOL 973 — Residential Lot Development Cost Estimator (🏘️)** — NAHB / TX LGC §212 / EP infrastructure costs / Oncor entitlement flip analysis
+4. ✅ **TOOL 974 — Existing Slab Investigation & Load Rating (🔍)** — ACI 318-19 / ASTM C42 / GPR / NDT / ACI 437R / load capacity assessment
+5. ✅ **TOOL 975 — TX Ground Lease Guide (📜)** — TX Prop Code / TREC / ALTA Form 13 / 99-yr leasehold / Oncor development strategy
+6. ✅ **TOOL 976 — Construction Vibration Monitoring Guide (📳)** — USBM RI 8507 / ISEE / PPV calculator / El Paso caliche vibration conditions
+7. ✅ **TOOL 977 — El Paso Workforce Housing Feasibility (🏘️)** — TDHCA / HUD / LIHTC 9%/4% / AMI income limits / gap analysis / Fort Bliss demand
+8. ✅ **TOOL 978 — Concrete Shrinkage & Creep Estimator (📏)** — ACI 209.2R-08 / fib MC 2010 / El Paso arid climate (RH 30%) corrections
+9. ✅ **TOOL 979 — TX Title Commitment Review Checklist (📑)** — TX Ins Code / TREC / Schedule B-II exceptions / mineral rights / EP utility easements
+10. ✅ **TOOL 980 — Session #32 Summary Dashboard (⚡)** — 980 tool milestone, approaching 1,000 tools
+
+**Commits:**
+- 2bc8a25: Tools 971-980 (+819 lines) [Session #32] ⚡ 980 TOOLS!
+
+**Total Lines:** ~134,997 | **Total Tools:** 980
+
+---
+
 ## ⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡ SESSION: Mar 30, 2026 - 19:27 UTC (Overnight Cron #31)
 **Status:** ⚡ 970 TOOLS! Tools 961-970 added this session (+10 tools, +789 lines)
 
@@ -351,6 +423,9 @@
 
 | Milestone | Date | Session |
 |-----------|------|---------|
+| **🏆 1,000 TOOLS** | Mar 30, 2026 22:48 UTC | #34 🏆 COMPLETE |
+| **990 TOOLS** | Mar 30, 2026 21:41 UTC | #33 ⚡ |
+| **980 TOOLS** | Mar 30, 2026 20:35 UTC | #32 ⚡ |
 | **970 TOOLS** | Mar 30, 2026 19:27 UTC | #31 ⚡ |
 | **960 TOOLS** | Mar 30, 2026 18:21 UTC | #30 ⚡ |
 | **950 TOOLS** | Mar 30, 2026 17:13 UTC | #29 ⚡ |
@@ -380,8 +455,8 @@
 
 ## Suite Statistics (Current)
 
-- **Total Tools:** 970
-- **Total Lines:** ~134,178
+- **Total Tools:** 1,000 ✅ COMPLETE
+- **Total Lines:** ~136,738
 - **Standards Referenced:** 210+ (ACI, ASTM, OSHA, TxDOT, TX Property Code, AIA, PCI, CRSI, EPA, AASHTO, IBC, ICRI, AGC, ICC-ES, MUTCD, ADA, TAS, UL, ASME, AISC, PTI, NFPA, ASHRAE, ACCA, NRCA, SIA, AAMA, NFRC, DHI, BHMA, SDI, CSDA, NCCI, DWC, SMACNA, MPI, SSPC, PDCA, IPC, NEC, CPM, USACE, NCMA, TMS, BIA, FHWA, APWA, NESC, MBMA, PDI)
 - **Categories:** 16 major categories
 - **El Paso Calibrated:** Yes (2025 rates, local suppliers, caliche soil, heat/wind conditions, altitude)
@@ -409,6 +484,9 @@
 
 ## Previous Sessions Summary
 
+- **Session 34:** Tools 991-1000 (10 tools, 1,029 lines) 🏆 1,000 MILESTONE — COMPLETE
+- **Session 33:** Tools 981-990 (10 tools, 712 lines) ⚡ 990 MILESTONE
+- **Session 32:** Tools 971-980 (10 tools, 819 lines) ⚡ 980 MILESTONE
 - **Session 31:** Tools 961-970 (10 tools, 789 lines) ⚡ 970 MILESTONE
 - **Session 30:** Tools 951-960 (10 tools, 776 lines) ⚡ 960 MILESTONE
 - **Session 29:** Tools 941-950 (10 tools, 820 lines) ⚡ 950 MILESTONE
@@ -440,3 +518,111 @@
 - **Session 3:** Tools 360-385 (26 tools, 2,061 lines)
 - **Session 2:** 350 tool milestone, tools 342-359
 - **Session 1:** Tools 279-341 (63 tools)
+
+---
+
+## ☑ SESSION: Mar 31, 2026 - 03:12 UTC (Overnight Cron #38)
+**Status:** ✅ BULK MULTI-SELECT added (+338 lines)
+
+### What Was Added:
+
+**☑ Bulk Multi-Select System (Ctrl+B):**
+- `☑ Select` toggle button injected into the Measurements section header (turns amber when active)
+- `Ctrl+B` keyboard shortcut toggles bulk select mode on/off
+- Checkboxes appear on every measurement item when bulk mode is active
+- Click any measurement row to toggle its selection (or click the checkbox)
+- Selected items get amber left-border highlight (`bulk-checked` class)
+- **Floating bulk-action bar** appears at bottom-center of screen in bulk mode:
+  - **Count badge** — shows "N selected" with green flash feedback after each action
+  - **☑ All / ☐ None** — select/deselect all measurements in one click
+  - **Phase buttons** — set P1 / P2 / P3 / ✕ph (clear) on all selected at once
+  - **PSI buttons** — set 3k / 4k / 5k / ✕psi (clear PSI override) on selected
+  - **👁 Include / 🚫 Exclude** — bulk include/exclude from estimate
+  - **✏️ Prefix** — prompt for text prefix to prepend to all selected labels
+  - **🗑 Delete** — batch delete with confirmation prompt
+  - **✕ Done** — exits bulk select mode
+- All operations go through `snapshotHistory()` → fully Undo/Redo safe
+- Zero conflicts with existing search/filter/group-by — works on full measurements array
+
+**Why this matters:** With 50+ measurements (typical commercial job), making global changes one-by-one is brutal. Now JFS can select all footings, set them to P1 + 4000 PSI in two clicks.
+
+**Commits:**
+- f48b38b: ☑ Bulk Multi-Select (+338 lines) [Session #38]
+
+**Total Lines:** ~137,847 | **Total Tools:** 1,000 ✅ + Search + Favorites/Recent + Analytics + Bulk Select
+
+---
+
+## 📈 SESSION: Mar 31, 2026 - 02:05 UTC (Overnight Cron #37)
+**Status:** ✅ PROJECT ANALYTICS DASHBOARD added (+317 lines)
+
+### What Was Added:
+
+**📈 Project Analytics Dashboard (Ctrl+Shift+A):**
+- Full analytics modal triggered via `Ctrl+Shift+A` or the new `📈 Analytics Dashboard` button in the sidebar
+- **Project Vitals** — 6-card grid: measurements, total yd³, total bid, cost/yd³, cost/sf, pages used
+- **Element Type Breakdown** — table with visual progress bars: count, yd³, share% for each element type (Slab / Footing / Wall / Grade Beam / Curb / Pier)
+- **Cost Category Breakdown** — visual bar chart of every cost line item (concrete, rebar, forms, labor, fiber, base course, vapor barrier, overhead, profit, contingency, mobilization, misc, saw cutting, waste)
+- **Profitability Summary** — 4-card grid (Materials %, Labor %, Overhead %, Net Profit) + Gross Margin % and Net Margin % callout box
+- **Phase Breakdown** — appears when measurements span multiple phases (P1/P2/P3 + unassigned) with volume bars
+- **Top 5 Largest Elements** — ranked list with volume, SF, phase tag
+- Toggle: closes on Ctrl+Shift+A again or ESC backdrop click or ✕ button
+- Zero dependencies — pure vanilla JS + computed from live `window.measurements` + `window.lastEstimate`
+
+**Why this matters:** With complex jobs (50+ measurements, multiple phases), JFS can instantly see where the money is — what % is concrete vs labor, which phase has the most volume, what the biggest elements are — without exporting to Excel.
+
+**Commits:**
+- 962fd9b: 📈 Analytics Dashboard (Ctrl+Shift+A) (+317 lines) [Session #37]
+
+**Total Lines:** ~137,509 | **Total Tools:** 1,000 ✅ + Search + Favorites/Recent + Analytics Dashboard
+
+---
+
+## ⭐ SESSION: Mar 31, 2026 - 01:01 UTC (Overnight Cron #36)
+**Status:** ✅ FAVORITES & RECENT TOOLS added (+247 lines)
+
+### What Was Added:
+
+**⭐ Favorites & Recent Tools System:**
+- `⭐ Favorites` fixed button (bottom-right, above Search button) with live count badge
+- Favorites/Recent modal with tab switching
+- Star (⭐/☆) buttons injected into every search result row
+- **Favorites tab:** star any tool, persisted in `localStorage` (`oncor_favorites_v1`)
+- **Recent tab:** auto-tracks last 20 tools opened, persisted in `localStorage` (`oncor_recent_v1`)
+- "Clear Recent" button to wipe history
+- Click any item → launches/scrolls to tool; ESC / backdrop click → close
+- Star count badge on button updates live when favorites added/removed
+- Stars sync between search results and the favorites modal in real time
+- Zero dependencies — pure localStorage + vanilla JS
+
+**Why this matters:** With 1,000 tools, JFS probably has 15-20 he uses daily. Favorites = instant access. Recent = no hunting for "what was that tool I used 10 minutes ago?"
+
+**Commits:**
+- 8a8ccfd: Favorites & Recent Tools (⭐) (+247 lines) [Session #36]
+
+**Total Lines:** ~137,191 | **Total Tools:** 1,000 ✅ + Search + Favorites/Recent
+
+---
+
+## ⚡ SESSION: Mar 30, 2026 - 23:56 UTC (Overnight Cron #35)
+**Status:** ✅ POST-MILESTONE — Tool Search System added (+206 lines)
+
+### What Was Added:
+
+**🔍 Oncor Tool Search — Ctrl+K Launcher:**
+- Activated by `Ctrl+K` / `Cmd+K` or a fixed "🔍 Search Tools" button (bottom-right)
+- Builds a live index of all 1,000 tool buttons at runtime by scanning `data-category` / `data-tool` attributes
+- Full-text search across tool name + category
+- Category filter chips (All / Core Estimating / QC & Testing / Safety / Legal & Financial / Real Estate / Field Ops / Structural / Docs)
+- ↑↓ arrow key navigation + Enter to launch
+- Click result → closes modal + triggers original button click + scrolls to tool
+- Closes on ESC or backdrop click
+- Dark theme matching the rest of the app
+
+**Why this matters:** With 1,000 tools scattered across the app, finding any specific tool requires knowing it exists and scrolling. This search makes the entire suite instantly accessible.
+
+**Commits:**
+- 3d2fe0e: Tool Search (Ctrl+K) (+206 lines) [Session #35]
+
+**Total Lines:** ~136,944 | **Total Tools:** 1,000 ✅ + Search system
+
