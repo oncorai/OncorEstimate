@@ -521,6 +521,41 @@
 
 ---
 
+## § SESSION: Mar 31, 2026 - 04:17 UTC (Overnight Cron #39)
+**Status:** ✅ MEASUREMENT SECTIONS added (+551 lines)
+
+### What Was Added:
+
+**§ Measurement Sections (Ctrl+Shift+S):**
+- New `§ Sections (N)` button injected into the Measurements panel header (shows count badge when sections exist)
+- `Ctrl+Shift+S` keyboard shortcut opens the Section Manager
+- **Section Manager modal:**
+  - Add named sections with auto-assigned colors from a 10-color palette (Building A, Parking Lot, Phase 2 Footings, etc.)
+  - Rename sections inline (click name to edit)
+  - Delete section (measurements become unassigned)
+  - Shows count + yardage per section live
+  - **Assign All Visible** — select a section from dropdown, click button → moves all currently filtered/visible measurements to that section in one click
+  - **Clear Visible** — strips section assignment from all visible measurements
+- **Per-measurement section dropdown** — each row in the list has a compact colored `<select>` to assign/change section on the fly without opening the manager
+- **Collapsible section headers** in the measurement list:
+  - Click header to collapse/expand
+  - Shows section name, item count, total SF (when available), total yd³
+  - Color-coded left border matching section color
+  - "Unassigned" group shown at bottom when sections exist
+- Full Undo/Redo safe (uses `snapshotHistory()`)
+- Sections persisted in `localStorage` (`oncor_sections_v1`)
+- Sections embedded in project save/load
+- Works alongside existing group-by, phase filter, search filter, and bulk multi-select
+
+**Why this matters:** A commercial site with 60+ measurements (4" slab at Building A, footings at Building B, curbs at parking lot, grade beams at site retaining wall) is impossible to navigate in a flat list. Sections let JFS organize by building, area, or scope — subtotals per section, instant collapsing, and bulk assignment in 2 clicks.
+
+**Commits:**
+- 881bbd0: § Measurement Sections (+551 lines) [Session #39]
+
+**Total Lines:** ~138,397 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + **Sections**
+
+---
+
 ## ☑ SESSION: Mar 31, 2026 - 03:12 UTC (Overnight Cron #38)
 **Status:** ✅ BULK MULTI-SELECT added (+338 lines)
 
