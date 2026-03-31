@@ -1957,6 +1957,7 @@
                             </div>
                         </div>
                         <button class="recalc-btn" onclick="recalculateCosts()">🔄 Recalculate Costs</button>
+                        <button onclick="openPricingPresets()" id="pricingPresetsBtn" style="width:100%;margin-top:6px;background:rgba(251,191,36,0.10);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:6px;padding:6px;cursor:pointer;font-size:0.78rem;font-weight:600;" title="Save or load named pricing configurations — concrete prices, labor, markup, forms">💾 Pricing Presets</button>
                     </div>
                 </div>
                 
@@ -138394,4 +138395,303 @@ document.addEventListener('keydown', function(e){
 
 })();
 // ==================== END MEASUREMENT SECTIONS — Zeus ⚡ Session #39 ====================
+
+</script>
+<!-- ==================== PRICING PRESETS — Zeus ⚡ Session #40 ==================== -->
+<script>
+(function() {
+  'use strict';
+
+  var STORAGE_KEY = 'oncor_pricing_presets_v1';
+
+  // ── Built-in starter presets ──────────────────────────────────────────────
+  var BUILT_IN = [
+    {
+      id: 'builtin_ep_standard',
+      name: 'El Paso Standard 2026',
+      builtIn: true,
+      note: 'El Paso market rates, 4000 PSI, standard markup',
+      prices: {
+        concrete2500: 130, concrete3000: 145, concrete4000: 155, concrete5000: 170,
+        rebar4: 0.85, rebar5: 1.15, mesh: 0.35,
+        fiber: 0, baseCourse: 0, vaporBarrier: 0,
+        forms: 8.50, formsLinear: 7.00, formsWall: 18.00, formsPier: 25.00,
+        broomFinish: 0.75, stampFinish: 4.50,
+        labor: 85, pump: 45, sawCut: 1.50,
+        mobilization: 0, misc: 0,
+        overhead: 10, profit: 15, contingency: 0
+      }
+    },
+    {
+      id: 'builtin_competitive',
+      name: 'Competitive Bid (Win Mode)',
+      builtIn: true,
+      note: '8% overhead, 10% profit — tight bid to win work',
+      prices: {
+        concrete2500: 130, concrete3000: 145, concrete4000: 155, concrete5000: 170,
+        rebar4: 0.85, rebar5: 1.15, mesh: 0.35,
+        fiber: 0, baseCourse: 0, vaporBarrier: 0,
+        forms: 8.50, formsLinear: 7.00, formsWall: 18.00, formsPier: 25.00,
+        broomFinish: 0.75, stampFinish: 4.50,
+        labor: 85, pump: 45, sawCut: 1.50,
+        mobilization: 0, misc: 0,
+        overhead: 8, profit: 10, contingency: 0
+      }
+    },
+    {
+      id: 'builtin_premium',
+      name: 'Premium / Specialty Work',
+      builtIn: true,
+      note: '12% overhead, 22% profit — specialty or short-schedule jobs',
+      prices: {
+        concrete2500: 130, concrete3000: 145, concrete4000: 155, concrete5000: 170,
+        rebar4: 0.85, rebar5: 1.15, mesh: 0.35,
+        fiber: 8, baseCourse: 1.50, vaporBarrier: 0.20,
+        forms: 10.00, formsLinear: 8.50, formsWall: 22.00, formsPier: 30.00,
+        broomFinish: 1.00, stampFinish: 5.50,
+        labor: 95, pump: 55, sawCut: 2.00,
+        mobilization: 0, misc: 0,
+        overhead: 12, profit: 22, contingency: 3
+      }
+    },
+    {
+      id: 'builtin_public_works',
+      name: 'Public Works / Davis-Bacon',
+      builtIn: true,
+      note: 'Prevailing wage labor rate (~$110/hr burdened), 5% contingency',
+      prices: {
+        concrete2500: 135, concrete3000: 150, concrete4000: 160, concrete5000: 175,
+        rebar4: 0.90, rebar5: 1.20, mesh: 0.38,
+        fiber: 0, baseCourse: 1.50, vaporBarrier: 0.20,
+        forms: 9.00, formsLinear: 7.50, formsWall: 20.00, formsPier: 28.00,
+        broomFinish: 0.85, stampFinish: 0,
+        labor: 110, pump: 50, sawCut: 1.75,
+        mobilization: 1500, misc: 0,
+        overhead: 10, profit: 12, contingency: 5
+      }
+    },
+    {
+      id: 'builtin_residential',
+      name: 'Residential / Light Commercial',
+      builtIn: true,
+      note: 'Lower PSI, lower labor, tighter margins for homes and small jobs',
+      prices: {
+        concrete2500: 128, concrete3000: 142, concrete4000: 153, concrete5000: 168,
+        rebar4: 0.82, rebar5: 1.10, mesh: 0.32,
+        fiber: 0, baseCourse: 1.25, vaporBarrier: 0.18,
+        forms: 7.50, formsLinear: 6.00, formsWall: 16.00, formsPier: 22.00,
+        broomFinish: 0.65, stampFinish: 4.00,
+        labor: 75, pump: 40, sawCut: 1.25,
+        mobilization: 0, misc: 0,
+        overhead: 9, profit: 14, contingency: 0
+      }
+    }
+  ];
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  var _userPresets = [];
+
+  function _load() {
+    try { _userPresets = JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch(e) { _userPresets = []; }
+  }
+
+  function _save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(_userPresets));
+  }
+
+  // ── Read all current pricing fields into a prices object ─────────────────
+  function _capturePrices() {
+    function g(id) { var el = document.getElementById(id); return el ? parseFloat(el.value) || 0 : 0; }
+    function s(id) { var el = document.getElementById(id); return el ? (el.value || '') : ''; }
+    return {
+      concrete2500: g('price-concrete-2500'),
+      concrete3000: g('price-concrete-3000'),
+      concrete4000: g('price-concrete-4000'),
+      concrete5000: g('price-concrete-5000'),
+      rebar4: g('price-rebar-4'),
+      rebar5: g('price-rebar-5'),
+      mesh: g('price-mesh'),
+      fiber: g('price-fiber'),
+      baseCourse: g('price-base-course'),
+      vaporBarrier: g('price-vapor-barrier'),
+      forms: g('price-forms'),
+      formsLinear: g('price-forms-linear'),
+      formsWall: g('price-forms-wall'),
+      formsPier: g('price-forms-pier'),
+      broomFinish: g('price-finish-broom'),
+      stampFinish: g('price-finish-stamp'),
+      labor: g('price-labor'),
+      pump: g('price-pump'),
+      sawCut: g('price-saw-cut'),
+      mobilization: g('price-mobilization'),
+      misc: g('price-misc'),
+      miscLabel: s('price-misc-label'),
+      overhead: g('markup-overhead'),
+      profit: g('markup-profit'),
+      contingency: g('markup-contingency')
+    };
+  }
+
+  // ── Apply a prices object to all pricing fields ───────────────────────────
+  function _applyPrices(p) {
+    function s(id, val) { var el = document.getElementById(id); if (el && val !== undefined && val !== '') el.value = val; }
+    s('price-concrete-2500', p.concrete2500);
+    s('price-concrete-3000', p.concrete3000);
+    s('price-concrete-4000', p.concrete4000);
+    s('price-concrete-5000', p.concrete5000);
+    s('price-rebar-4', p.rebar4);
+    s('price-rebar-5', p.rebar5);
+    s('price-mesh', p.mesh);
+    s('price-fiber', p.fiber !== undefined ? p.fiber : 0);
+    s('price-base-course', p.baseCourse !== undefined ? p.baseCourse : 0);
+    s('price-vapor-barrier', p.vaporBarrier !== undefined ? p.vaporBarrier : 0);
+    s('price-forms', p.forms);
+    s('price-forms-linear', p.formsLinear);
+    s('price-forms-wall', p.formsWall);
+    s('price-forms-pier', p.formsPier);
+    s('price-finish-broom', p.broomFinish);
+    s('price-finish-stamp', p.stampFinish !== undefined ? p.stampFinish : 0);
+    s('price-labor', p.labor);
+    s('price-pump', p.pump);
+    s('price-saw-cut', p.sawCut !== undefined ? p.sawCut : p.sawcut || 0);
+    if (p.mobilization !== undefined) s('price-mobilization', p.mobilization);
+    if (p.misc !== undefined) s('price-misc', p.misc);
+    if (p.miscLabel !== undefined) s('price-misc-label', p.miscLabel);
+    if (p.overhead !== undefined) s('markup-overhead', p.overhead);
+    if (p.profit !== undefined) s('markup-profit', p.profit);
+    if (p.contingency !== undefined) s('markup-contingency', p.contingency);
+    // Update displayed % labels
+    var oel = document.getElementById('overhead-pct'); if (oel) oel.textContent = p.overhead || 10;
+    var pel = document.getElementById('profit-pct'); if (pel) pel.textContent = p.profit || 15;
+    // Trigger recalculate
+    if (typeof recalculateCosts === 'function') setTimeout(recalculateCosts, 50);
+  }
+
+  // ── Modal HTML ───────────────────────────────────────────────────────────
+  function _buildModal() {
+    var all = BUILT_IN.concat(_userPresets);
+    var rows = all.map(function(p) {
+      var isBuiltIn = !!p.builtIn;
+      var deleteBtn = isBuiltIn ? '' :
+        '<button onclick="window._ppDelete(\''+p.id+'\')" style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);color:#f87171;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:0.72rem;" title="Delete this preset">🗑</button>';
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid rgba(255,255,255,0.05);background:rgba(255,255,255,0.02);border-radius:4px;margin-bottom:4px;">' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-weight:600;font-size:0.85rem;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+            (isBuiltIn ? '<span style="color:#fbbf24;font-size:0.72rem;margin-right:4px;">★ BUILT-IN</span>' : '<span style="color:#4ecdc4;font-size:0.72rem;margin-right:4px;">★ SAVED</span>') +
+            _esc(p.name) + '</div>' +
+          (p.note ? '<div style="font-size:0.72rem;color:#666;margin-top:1px;">'+_esc(p.note)+'</div>' : '') +
+          '<div style="font-size:0.7rem;color:#4ecdc4;margin-top:2px;">Concrete: $'+p.prices.concrete4000+'/yd³ (4k) | Labor: $'+p.prices.labor+'/hr | OH: '+p.prices.overhead+'% | Profit: '+p.prices.profit+'%</div>' +
+        '</div>' +
+        '<button onclick="window._ppLoad(\''+p.id+'\')" style="background:rgba(78,205,196,0.15);border:1px solid rgba(78,205,196,0.35);color:#4ecdc4;border-radius:5px;padding:5px 12px;cursor:pointer;font-size:0.78rem;white-space:nowrap;font-weight:600;">⬇ Load</button>' +
+        deleteBtn +
+        '</div>';
+    }).join('');
+
+    return '<div id="pp-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9800;display:flex;align-items:center;justify-content:center;padding:12px;" onclick="if(event.target===this)closePricingPresets()">' +
+      '<div style="background:#1a1a2e;border:1px solid rgba(251,191,36,0.3);border-radius:12px;padding:20px;width:100%;max-width:520px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.8);">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
+          '<h3 style="margin:0;color:#fbbf24;font-size:1rem;">💾 Pricing Presets</h3>' +
+          '<button onclick="closePricingPresets()" style="background:none;border:none;color:#666;font-size:1.2rem;cursor:pointer;padding:0 4px;">✕</button>' +
+        '</div>' +
+
+        '<!-- Save current -->' +
+        '<div style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.2);border-radius:8px;padding:10px;margin-bottom:14px;">' +
+          '<div style="font-size:0.78rem;color:#a78bfa;font-weight:600;margin-bottom:6px;">💾 Save Current Prices as New Preset</div>' +
+          '<div style="display:flex;gap:6px;margin-bottom:6px;">' +
+            '<input id="pp-new-name" placeholder="Preset name (e.g. El Paso Q2 2026)" maxlength="50" style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:6px 8px;color:#fff;font-size:0.82rem;">' +
+          '</div>' +
+          '<div style="display:flex;gap:6px;">' +
+            '<input id="pp-new-note" placeholder="Note (optional, e.g. supplier quote from XYZ, valid Mar 2026)" maxlength="80" style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:5px 8px;color:#ccc;font-size:0.78rem;">' +
+            '<button onclick="window._ppSaveCurrent()" style="background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);color:#fbbf24;border-radius:6px;padding:5px 14px;cursor:pointer;font-size:0.8rem;white-space:nowrap;font-weight:600;">Save ⭐</button>' +
+          '</div>' +
+        '</div>' +
+
+        '<!-- List -->' +
+        '<div style="font-size:0.78rem;color:#666;margin-bottom:6px;">'+all.length+' presets ('+BUILT_IN.length+' built-in, '+_userPresets.length+' saved)</div>' +
+        '<div style="overflow-y:auto;flex:1;">' +
+          (rows || '<div style="color:#555;font-size:0.82rem;text-align:center;padding:20px;">No presets yet. Built-ins always available above.</div>') +
+        '</div>' +
+
+        '<div style="margin-top:12px;font-size:0.7rem;color:#444;text-align:center;">Load applies all prices immediately and triggers recalculate. Changes are not permanent until you save a new project.</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function _esc(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function _findPreset(id) {
+    return BUILT_IN.find(function(p){return p.id===id;}) || _userPresets.find(function(p){return p.id===id;});
+  }
+
+  // ── Public API ────────────────────────────────────────────────────────────
+  window.openPricingPresets = function() {
+    _load();
+    var existing = document.getElementById('pp-modal');
+    if (existing) existing.remove();
+    document.body.insertAdjacentHTML('beforeend', _buildModal());
+    setTimeout(function() {
+      var inp = document.getElementById('pp-new-name');
+      if (inp) inp.focus();
+    }, 100);
+  };
+
+  window.closePricingPresets = function() {
+    var m = document.getElementById('pp-modal');
+    if (m) m.remove();
+  };
+
+  window._ppLoad = function(id) {
+    var preset = _findPreset(id);
+    if (!preset) return;
+    _applyPrices(preset.prices);
+    // Flash the button
+    var btn = document.getElementById('pricingPresetsBtn');
+    if (btn) {
+      var orig = btn.textContent;
+      btn.textContent = '✅ ' + preset.name + ' loaded';
+      btn.style.color = '#4ecdc4';
+      setTimeout(function() { btn.textContent = '💾 Pricing Presets'; btn.style.color = '#fbbf24'; }, 2000);
+    }
+    window.closePricingPresets();
+  };
+
+  window._ppDelete = function(id) {
+    _load();
+    if (!confirm('Delete this preset?')) return;
+    _userPresets = _userPresets.filter(function(p) { return p.id !== id; });
+    _save();
+    // Reopen to refresh
+    window.openPricingPresets();
+  };
+
+  window._ppSaveCurrent = function() {
+    _load();
+    var nameEl = document.getElementById('pp-new-name');
+    var noteEl = document.getElementById('pp-new-note');
+    var name = nameEl ? nameEl.value.trim() : '';
+    if (!name) { if (nameEl) { nameEl.style.border='1px solid #f87171'; nameEl.focus(); } return; }
+    var note = noteEl ? noteEl.value.trim() : '';
+    var prices = _capturePrices();
+    var id = 'user_' + Date.now();
+    _userPresets.push({ id: id, name: name, note: note, prices: prices, savedAt: new Date().toISOString() });
+    _save();
+    // Reopen to refresh
+    window.openPricingPresets();
+  };
+
+  // Keyboard shortcut: Ctrl+Shift+P
+  document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey||e.metaKey) && e.shiftKey && e.key === 'P') {
+      if (document.activeElement && (document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA')) return;
+      e.preventDefault();
+      var m = document.getElementById('pp-modal');
+      if (m) { window.closePricingPresets(); } else { window.openPricingPresets(); }
+    }
+    if (e.key === 'Escape') { window.closePricingPresets(); }
+  });
+
+})();
+// ==================== END PRICING PRESETS — Zeus ⚡ Session #40 ====================
 </script>
