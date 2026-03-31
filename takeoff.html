@@ -139927,3 +139927,600 @@ document.addEventListener('keydown', function(e){
 })();
 // ==================== END PROPOSAL BID LETTER GENERATOR — Zeus ⚡ Session #43 ====================
 </script>
+
+<script>
+// ==================== POUR SCHEDULE & BATCH PLANT ORDER SHEET — Zeus ⚡ Session #44 ====================
+// Ctrl+Shift+O | Sidebar button: 🚚 Pour Schedule
+// Takes current measurements + estimate data → interactive pour scheduling → printable batch plant order sheets
+// Features: pour grouping by element/section, date/time picker, mix design per pour, CY + buffer calc,
+//   plant name/contact/mix code, truck count, delivery window, printable per-pour order slip, master schedule view
+
+(function() {
+  'use strict';
+
+  var STORE_KEY = 'oncor_pour_schedule_v1';
+
+  /* ─── Helpers ─── */
+  function _esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function _fmt$(n) { if(n>=1000000) return '$'+(n/1000000).toFixed(2)+'M'; if(n>=1000) return '$'+(n/1000).toFixed(1)+'k'; return '$'+Math.round(n); }
+  function _fmtCY(n) { return n.toFixed(2)+' CY'; }
+  function pad2(n) { return n<10?'0'+n:String(n); }
+
+  /* ─── State ─── */
+  var pourSchedule = { pours: [], plantName: '', plantPhone: '', plantMixCode: '', defaultBuffer: 10, defaultSlump: '4', defaultPSI: '4000', notes: '' };
+
+  function loadState() {
+    try {
+      var s = localStorage.getItem(STORE_KEY);
+      if (s) {
+        var p = JSON.parse(s);
+        if (p && Array.isArray(p.pours)) pourSchedule = p;
+      }
+    } catch(e) {}
+  }
+
+  function saveState() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(pourSchedule)); } catch(e) {}
+  }
+
+  /* ─── Get measurements from main app ─── */
+  function getMeasurements() {
+    var ms = window.measurements || [];
+    return ms.filter(function(m) { return !m.excluded; });
+  }
+
+  function totalCY(m) {
+    // CY = (length * width * depth_in / 12) / 27 for slabs, or volume from m.yd3
+    if (m.yd3 && m.yd3 > 0) return m.yd3;
+    if (m.volume) return m.volume;
+    // fallback: compute from dimensions
+    var l = parseFloat(m.length)||0, w = parseFloat(m.width)||0, d = parseFloat(m.depth)||0;
+    if (l && w && d) return (l * w * d) / 12 / 27;
+    return 0;
+  }
+
+  /* ─── PSI options per element type ─── */
+  var PSI_DEFAULTS = { slab: '4000', footing: '3500', wall: '4000', grade_beam: '4000', curb: '3500', pier: '5000', column: '5000', default: '4000' };
+  function defaultPSI(type) {
+    if (!type) return pourSchedule.defaultPSI || '4000';
+    var t = type.toLowerCase();
+    for (var k in PSI_DEFAULTS) { if (t.indexOf(k) >= 0) return PSI_DEFAULTS[k]; }
+    return pourSchedule.defaultPSI || '4000';
+  }
+
+  /* ─── Modal HTML ─── */
+  function buildModal() {
+    loadState();
+    var ms = getMeasurements();
+    var totalVolume = 0;
+    ms.forEach(function(m) { totalVolume += totalCY(m); });
+
+    // Build measurement assignment list
+    var assignRows = '';
+    ms.forEach(function(m, i) {
+      var cy = totalCY(m);
+      var label = m.label || m.name || ('Measurement '+(i+1));
+      var type = m.elementType || m.type || '';
+      var section = m.sectionId || '';
+      var sectionName = '';
+      // try to get section name
+      if (window._oncorSections && section) {
+        var sc = window._oncorSections.find(function(s) { return s.id === section; });
+        if (sc) sectionName = sc.name;
+      }
+
+      // find which pour this measurement is assigned to
+      var assignedPour = '';
+      pourSchedule.pours.forEach(function(p) {
+        if (p.measurementIds && p.measurementIds.indexOf(i) >= 0) assignedPour = p.id;
+      });
+
+      var pourOpts = '<option value="">— Unassigned —</option>';
+      pourSchedule.pours.forEach(function(p) {
+        pourOpts += '<option value="'+_esc(p.id)+'"'+(assignedPour===p.id?' selected':'')+'>'+_esc(p.name)+'</option>';
+      });
+
+      assignRows += '<tr>'
+        + '<td style="padding:5px 8px;font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+_esc(label)+'">'
+        + (sectionName ? '<span style="color:#64748b;font-size:9px;">['+_esc(sectionName)+'] </span>' : '')
+        + _esc(label)
+        + '</td>'
+        + '<td style="padding:5px 8px;font-size:11px;color:#94a3b8;">'+_esc(type)+'</td>'
+        + '<td style="padding:5px 8px;font-size:11px;text-align:right;color:#67e8f9;">'+cy.toFixed(2)+'</td>'
+        + '<td style="padding:5px 8px;">'
+        + '<select class="tool-input" style="font-size:10px;padding:3px 6px;min-width:120px;" onchange="window._pourAssignMeasurement('+i+', this.value)">'+pourOpts+'</select>'
+        + '</td>'
+        + '</tr>';
+    });
+    if (!assignRows) assignRows = '<tr><td colspan="4" style="padding:12px;color:#64748b;font-size:11px;text-align:center;">No measurements in current project. Add measurements first.</td></tr>';
+
+    // Build pour list
+    var pourCards = '';
+    pourSchedule.pours.forEach(function(p, pi) {
+      var assignedCY = 0;
+      var assignedCount = 0;
+      var ms2 = getMeasurements();
+      (p.measurementIds || []).forEach(function(idx) {
+        if (ms2[idx]) {
+          assignedCY += totalCY(ms2[idx]);
+          assignedCount++;
+        }
+      });
+      var bufferPct = parseFloat(p.buffer || pourSchedule.defaultBuffer) || 10;
+      var orderedCY = assignedCY * (1 + bufferPct/100);
+      var truckCY = parseFloat(p.truckSize || 10) || 10;
+      var trucks = Math.ceil(orderedCY / truckCY);
+
+      pourCards += '<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:10px;border:1px solid #334155;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">'
+        + '<div>'
+        + '<input value="'+_esc(p.name)+'" onchange="window._pourUpdateField('+pi+',\'name\',this.value)" class="tool-input" style="font-size:13px;font-weight:700;background:transparent;border:none;border-bottom:1px solid #475569;color:#e2e8f0;width:200px;padding:2px 4px;">'
+        + '<span style="font-size:10px;color:#94a3b8;margin-left:8px;">'+assignedCount+' items · '+assignedCY.toFixed(2)+' CY net</span>'
+        + '</div>'
+        + '<div style="display:flex;gap:6px;">'
+        + '<button onclick="window._pourPrintSlip('+pi+')" style="background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer;">🖨 Print Slip</button>'
+        + '<button onclick="window._pourDelete('+pi+')" style="background:#7f1d1d;border:1px solid #ef4444;color:#fca5a5;border-radius:5px;padding:4px 8px;font-size:11px;cursor:pointer;">✕</button>'
+        + '</div>'
+        + '</div>'
+        // Row 1: Date, Start Time, Truck Size
+        + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">'
+        + '<div><label style="font-size:9px;color:#94a3b8;display:block;">Pour Date</label>'
+        + '<input type="date" value="'+_esc(p.date||'')+'" onchange="window._pourUpdateField('+pi+',\'date\',this.value)" class="tool-input" style="font-size:11px;width:100%;"></div>'
+        + '<div><label style="font-size:9px;color:#94a3b8;display:block;">Start Time</label>'
+        + '<input type="time" value="'+_esc(p.startTime||'06:00')+'" onchange="window._pourUpdateField('+pi+',\'startTime\',this.value)" class="tool-input" style="font-size:11px;width:100%;"></div>'
+        + '<div><label style="font-size:9px;color:#94a3b8;display:block;">Truck Interval (min)</label>'
+        + '<input type="number" value="'+_esc(p.interval||'45')+'" onchange="window._pourUpdateField('+pi+',\'interval\',this.value)" class="tool-input" style="font-size:11px;width:100%;"></div>'
+        + '<div><label style="font-size:9px;color:#94a3b8;display:block;">Truck Size (CY)</label>'
+        + '<input type="number" value="'+_esc(p.truckSize||'10')+'" onchange="window._pourUpdateField('+pi+',\'truckSize\',this.value)" class="tool-input" style="font-size:11px;width:100%;"></div>'
+        + '</div>'
+        // Row 2: PSI, Slump, Buffer, Fiber
+        + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">'
+        + '<div><label style="font-size:9px;color:#94a3b8;display:block;">Mix PSI</label>'
+        + '<select onchange="window._pourUpdateField('+pi+',\'psi\',this.value)" class="tool-input" style="font-size:11px;width:100%;">'
+        + ['2500','3000','3500','4000','4500','5000','6000'].map(function(v){ return '<option value="'+v+'"'+(((p.psi||'4000')===v)?' selected':'')+'>'+v+' PSI</option>'; }).join('')
+        + '</select></div>'
+        + '<div><label style="font-size:9px;color:#94a3b8;display:block;">Slump (in)</label>'
+        + '<input type="number" value="'+_esc(p.slump||pourSchedule.defaultSlump||'4')+'" min="2" max="8" onchange="window._pourUpdateField('+pi+',\'slump\',this.value)" class="tool-input" style="font-size:11px;width:100%;"></div>'
+        + '<div><label style="font-size:9px;color:#94a3b8;display:block;">Buffer %</label>'
+        + '<input type="number" value="'+_esc(p.buffer||pourSchedule.defaultBuffer||'10')+'" min="3" max="20" onchange="window._pourUpdateField('+pi+',\'buffer\',this.value)" class="tool-input" style="font-size:11px;width:100%;"></div>'
+        + '<div><label style="font-size:9px;color:#94a3b8;display:block;">Fiber (lb/CY)</label>'
+        + '<input type="number" value="'+_esc(p.fiber||'0')+'" min="0" max="5" step="0.5" onchange="window._pourUpdateField('+pi+',\'fiber\',this.value)" class="tool-input" style="font-size:11px;width:100%;"></div>'
+        + '</div>'
+        // Row 3: Mix code, admix, notes
+        + '<div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:8px;margin-bottom:8px;">'
+        + '<div><label style="font-size:9px;color:#94a3b8;display:block;">Mix Code</label>'
+        + '<input value="'+_esc(p.mixCode||pourSchedule.plantMixCode||'')+'" placeholder="e.g. EP-4000-WR" onchange="window._pourUpdateField('+pi+',\'mixCode\',this.value)" class="tool-input" style="font-size:11px;width:100%;"></div>'
+        + '<div><label style="font-size:9px;color:#94a3b8;display:block;">Admixtures</label>'
+        + '<input value="'+_esc(p.admix||'')+'" placeholder="WR, AEA, retarder..." onchange="window._pourUpdateField('+pi+',\'admix\',this.value)" class="tool-input" style="font-size:11px;width:100%;"></div>'
+        + '<div><label style="font-size:9px;color:#94a3b8;display:block;">Pour Notes</label>'
+        + '<input value="'+_esc(p.notes||'')+'" placeholder="Pump location, access, crew notes..." onchange="window._pourUpdateField('+pi+',\'notes\',this.value)" class="tool-input" style="font-size:11px;width:100%;"></div>'
+        + '</div>'
+        // Summary bar
+        + '<div style="background:#0f172a;border-radius:6px;padding:8px 12px;display:flex;gap:20px;flex-wrap:wrap;">'
+        + '<span style="font-size:10px;color:#94a3b8;">Net CY: <strong style="color:#67e8f9;">'+assignedCY.toFixed(2)+'</strong></span>'
+        + '<span style="font-size:10px;color:#94a3b8;">+Buffer: <strong style="color:#a3e635;">'+orderedCY.toFixed(2)+'</strong></span>'
+        + '<span style="font-size:10px;color:#94a3b8;">Trucks: <strong style="color:#fbbf24;">'+trucks+'</strong></span>'
+        + (p.date ? '<span style="font-size:10px;color:#94a3b8;">Scheduled: <strong style="color:#c4b5fd;">'+p.date+' @ '+(p.startTime||'06:00')+'</strong></span>' : '')
+        + (assignedCY === 0 ? '<span style="font-size:10px;color:#fb923c;">⚠ No measurements assigned</span>' : '')
+        + '</div>'
+        + '</div>';
+    });
+
+    // Unassigned volume
+    var unassignedCY = 0;
+    ms.forEach(function(m, i) {
+      var assigned = pourSchedule.pours.some(function(p) { return p.measurementIds && p.measurementIds.indexOf(i) >= 0; });
+      if (!assigned) unassignedCY += totalCY(m);
+    });
+
+    return '<div id="pourSchedModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:10100;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px 10px;" onclick="if(event.target===this)window._closePourSched()">'
+      + '<div style="background:#0f172a;border-radius:12px;border:1px solid #334155;width:100%;max-width:900px;min-height:300px;padding:24px;position:relative;margin:auto;">'
+      // Header
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+      + '<div>'
+      + '<span style="font-size:18px;font-weight:800;color:#e2e8f0;">🚚 Pour Schedule & Batch Plant Orders</span>'
+      + '<span style="font-size:11px;color:#64748b;margin-left:12px;">ACI 304R · ASTM C94 · El Paso Ready-Mix</span>'
+      + '</div>'
+      + '<button onclick="window._closePourSched()" style="background:#1e293b;border:1px solid #475569;color:#94a3b8;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px;">✕ Close</button>'
+      + '</div>'
+      + '<div style="font-size:11px;color:#64748b;margin-bottom:18px;">Project total: <strong style="color:#67e8f9;">'+totalVolume.toFixed(2)+' CY</strong>'
+      + (unassignedCY > 0 ? ' · <span style="color:#fb923c;">'+unassignedCY.toFixed(2)+' CY unassigned</span>' : ' · <span style="color:#4ade80;">All CY assigned ✓</span>')
+      + '</div>'
+
+      // Plant Info
+      + '<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:16px;border:1px solid #334155;">'
+      + '<div style="font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:10px;">🏭 Batch Plant Info (prints on all order slips)</div>'
+      + '<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;">'
+      + '<div><label style="font-size:9px;color:#94a3b8;display:block;">Plant Name</label>'
+      + '<input id="ps_plantName" value="'+_esc(pourSchedule.plantName)+'" placeholder="e.g. Martin Marietta El Paso" onchange="window._pourUpdatePlant()" class="tool-input" style="font-size:11px;width:100%;"></div>'
+      + '<div><label style="font-size:9px;color:#94a3b8;display:block;">Plant Phone</label>'
+      + '<input id="ps_plantPhone" value="'+_esc(pourSchedule.plantPhone)+'" placeholder="(915) 555-0100" onchange="window._pourUpdatePlant()" class="tool-input" style="font-size:11px;width:100%;"></div>'
+      + '<div><label style="font-size:9px;color:#94a3b8;display:block;">Default Mix Code</label>'
+      + '<input id="ps_mixCode" value="'+_esc(pourSchedule.plantMixCode)+'" placeholder="e.g. EP-4000-WR" onchange="window._pourUpdatePlant()" class="tool-input" style="font-size:11px;width:100%;"></div>'
+      + '<div><label style="font-size:9px;color:#94a3b8;display:block;">Default Buffer %</label>'
+      + '<input id="ps_buffer" type="number" value="'+_esc(pourSchedule.defaultBuffer)+'" min="3" max="20" onchange="window._pourUpdatePlant()" class="tool-input" style="font-size:11px;width:100%;"></div>'
+      + '</div>'
+      + '</div>'
+
+      // Pour cards
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
+      + '<span style="font-size:13px;font-weight:700;color:#e2e8f0;">Pour Events ('+pourSchedule.pours.length+')</span>'
+      + '<div style="display:flex;gap:8px;">'
+      + '<button onclick="window._pourAddNew()" style="background:#064e3b;border:1px solid #10b981;color:#6ee7b7;border-radius:6px;padding:6px 14px;font-size:11px;cursor:pointer;font-weight:600;">+ Add Pour</button>'
+      + '<button onclick="window._pourAutoSplit()" style="background:#1e1b4b;border:1px solid #6366f1;color:#a5b4fc;border-radius:6px;padding:6px 14px;font-size:11px;cursor:pointer;">⚡ Auto-Split by Element</button>'
+      + '<button onclick="window._pourPrintMaster()" style="background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:6px;padding:6px 14px;font-size:11px;cursor:pointer;">📋 Master Schedule</button>'
+      + '</div>'
+      + '</div>'
+      + '<div id="pourCardsContainer">' + (pourCards || '<div style="background:#1e293b;border-radius:8px;padding:24px;text-align:center;color:#64748b;font-size:12px;">No pour events yet. Click <strong style="color:#6ee7b7">+ Add Pour</strong> to create one, or <strong style="color:#a5b4fc">⚡ Auto-Split</strong> to split by element type.</div>') + '</div>'
+
+      // Measurement assignment table
+      + '<div style="margin-top:20px;background:#1e293b;border-radius:8px;padding:14px;border:1px solid #334155;">'
+      + '<div style="font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:10px;">📐 Assign Measurements to Pours</div>'
+      + '<div style="overflow-x:auto;">'
+      + '<table style="width:100%;border-collapse:collapse;font-size:11px;">'
+      + '<thead><tr style="border-bottom:1px solid #334155;">'
+      + '<th style="padding:6px 8px;text-align:left;color:#64748b;font-weight:600;">Label</th>'
+      + '<th style="padding:6px 8px;text-align:left;color:#64748b;font-weight:600;">Type</th>'
+      + '<th style="padding:6px 8px;text-align:right;color:#64748b;font-weight:600;">CY</th>'
+      + '<th style="padding:6px 8px;text-align:left;color:#64748b;font-weight:600;">Assign to Pour</th>'
+      + '</tr></thead>'
+      + '<tbody>' + assignRows + '</tbody>'
+      + '</table>'
+      + '</div>'
+      + '</div>'
+
+      + '</div>'
+      + '</div>';
+  }
+
+  /* ─── Open / Close ─── */
+  window._openPourSched = function() {
+    var existing = document.getElementById('pourSchedModal');
+    if (existing) { existing.remove(); return; }
+    var div = document.createElement('div');
+    div.id = 'pourSchedContainer';
+    div.innerHTML = buildModal();
+    document.body.appendChild(div);
+  };
+
+  window._closePourSched = function() {
+    var el = document.getElementById('pourSchedContainer');
+    if (el) el.remove();
+    var el2 = document.getElementById('pourSchedModal');
+    if (el2) el2.remove();
+  };
+
+  function _refresh() {
+    saveState();
+    var el = document.getElementById('pourSchedContainer');
+    if (el) {
+      el.innerHTML = buildModal();
+    }
+  }
+
+  /* ─── Add new pour ─── */
+  window._pourAddNew = function() {
+    var idx = pourSchedule.pours.length + 1;
+    pourSchedule.pours.push({
+      id: 'pour_' + Date.now(),
+      name: 'Pour #' + idx,
+      date: '',
+      startTime: '06:00',
+      interval: '45',
+      truckSize: '10',
+      psi: pourSchedule.defaultPSI || '4000',
+      slump: pourSchedule.defaultSlump || '4',
+      buffer: pourSchedule.defaultBuffer || 10,
+      fiber: '0',
+      mixCode: pourSchedule.plantMixCode || '',
+      admix: '',
+      notes: '',
+      measurementIds: []
+    });
+    _refresh();
+  };
+
+  /* ─── Auto-split by element type ─── */
+  window._pourAutoSplit = function() {
+    if (!confirm('Auto-split will create one pour event per element type and assign measurements. This replaces existing pour assignments — continue?')) return;
+    pourSchedule.pours = [];
+    var ms = getMeasurements();
+    var typeMap = {};
+    ms.forEach(function(m, i) {
+      var t = m.elementType || m.type || 'General';
+      if (!typeMap[t]) typeMap[t] = [];
+      typeMap[t].push(i);
+    });
+    var idx = 1;
+    Object.keys(typeMap).forEach(function(t) {
+      pourSchedule.pours.push({
+        id: 'pour_' + Date.now() + '_' + idx,
+        name: 'Pour #' + idx + ' — ' + t,
+        date: '',
+        startTime: '06:00',
+        interval: '45',
+        truckSize: '10',
+        psi: defaultPSI(t),
+        slump: pourSchedule.defaultSlump || '4',
+        buffer: pourSchedule.defaultBuffer || 10,
+        fiber: '0',
+        mixCode: pourSchedule.plantMixCode || '',
+        admix: '',
+        notes: '',
+        measurementIds: typeMap[t]
+      });
+      idx++;
+    });
+    _refresh();
+  };
+
+  /* ─── Delete pour ─── */
+  window._pourDelete = function(pi) {
+    if (!confirm('Delete "' + pourSchedule.pours[pi].name + '"?')) return;
+    pourSchedule.pours.splice(pi, 1);
+    _refresh();
+  };
+
+  /* ─── Update field on a pour ─── */
+  window._pourUpdateField = function(pi, field, val) {
+    if (!pourSchedule.pours[pi]) return;
+    pourSchedule.pours[pi][field] = val;
+    saveState();
+    // re-render just the summary bars without full modal rebuild for date/time changes
+    _refresh();
+  };
+
+  /* ─── Update plant info ─── */
+  window._pourUpdatePlant = function() {
+    pourSchedule.plantName = (document.getElementById('ps_plantName') || {}).value || '';
+    pourSchedule.plantPhone = (document.getElementById('ps_plantPhone') || {}).value || '';
+    pourSchedule.plantMixCode = (document.getElementById('ps_mixCode') || {}).value || '';
+    pourSchedule.defaultBuffer = parseFloat((document.getElementById('ps_buffer') || {}).value) || 10;
+    saveState();
+  };
+
+  /* ─── Assign measurement to pour ─── */
+  window._pourAssignMeasurement = function(measIdx, pourId) {
+    // Remove from all pours first
+    pourSchedule.pours.forEach(function(p) {
+      if (p.measurementIds) {
+        p.measurementIds = p.measurementIds.filter(function(x) { return x !== measIdx; });
+      }
+    });
+    // Assign to new pour
+    if (pourId) {
+      var target = pourSchedule.pours.find(function(p) { return p.id === pourId; });
+      if (target) {
+        if (!target.measurementIds) target.measurementIds = [];
+        target.measurementIds.push(measIdx);
+      }
+    }
+    _refresh();
+  };
+
+  /* ─── Print single pour slip ─── */
+  window._pourPrintSlip = function(pi) {
+    var p = pourSchedule.pours[pi];
+    if (!p) return;
+    var ms = getMeasurements();
+    var proj = window.projectInfo || {};
+    var co = window.companyInfo || {};
+
+    var assignedCY = 0;
+    var itemRows = '';
+    (p.measurementIds || []).forEach(function(idx) {
+      var m = ms[idx];
+      if (!m) return;
+      var cy = totalCY(m);
+      assignedCY += cy;
+      var label = m.label || m.name || ('Item '+idx);
+      var type = m.elementType || m.type || '';
+      itemRows += '<tr><td>'+_esc(label)+'</td><td>'+_esc(type)+'</td><td style="text-align:right;">'+cy.toFixed(2)+'</td></tr>';
+    });
+    var bufPct = parseFloat(p.buffer) || 10;
+    var orderedCY = assignedCY * (1 + bufPct/100);
+    var truckCY = parseFloat(p.truckSize||10)||10;
+    var trucks = Math.ceil(orderedCY / truckCY);
+
+    // Calculate delivery times
+    var timeRows = '';
+    if (p.startTime) {
+      var parts = p.startTime.split(':');
+      var startH = parseInt(parts[0])||6, startM = parseInt(parts[1])||0;
+      var intervalMin = parseInt(p.interval||45)||45;
+      for (var t = 0; t < trucks; t++) {
+        var totalMin = startH*60 + startM + t*intervalMin;
+        var h = Math.floor(totalMin/60) % 24;
+        var m2 = totalMin % 60;
+        var ampm = h >= 12 ? 'PM' : 'AM';
+        var h12 = h % 12 || 12;
+        timeRows += '<tr><td style="text-align:center;">Truck #'+(t+1)+'</td><td style="text-align:center;">'+pad2(h12)+':'+pad2(m2)+' '+ampm+'</td><td style="text-align:center;">'+truckCY.toFixed(1)+' CY</td></tr>';
+      }
+    }
+
+    var html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Pour Order — '+_esc(p.name)+'</title>'
+      + '<style>body{font-family:"Segoe UI",Arial,sans-serif;margin:0;padding:0;color:#1a1a2e;background:#f5f5f5;}'
+      + '.page{max-width:780px;margin:20px auto;background:#fff;padding:40px 50px;box-shadow:0 2px 12px rgba(0,0,0,0.12);}'
+      + '@media print{body{background:#fff;}.page{box-shadow:none;margin:0;padding:30px 40px;}.no-print{display:none!important;}}'
+      + 'h1{font-size:1.5rem;color:#1e3a5f;margin:0 0 4px 0;}'
+      + 'h2{font-size:0.9rem;color:#64748b;font-weight:400;margin:0 0 20px 0;}'
+      + '.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e3a5f;padding-bottom:14px;margin-bottom:20px;}'
+      + '.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #d4d4d4;border-radius:6px;overflow:hidden;margin-bottom:16px;}'
+      + '.cell{padding:8px 14px;border-bottom:1px solid #e8e8e8;border-right:1px solid #e8e8e8;}'
+      + '.cell:nth-child(even){border-right:none;}'
+      + '.cell:nth-last-child(-n+2){border-bottom:none;}'
+      + '.lbl{font-size:0.68rem;text-transform:uppercase;letter-spacing:0.5px;color:#888;margin-bottom:2px;}'
+      + '.val{font-size:0.9rem;font-weight:700;color:#1a1a2e;}'
+      + '.order-box{background:#1e3a5f;color:#fff;border-radius:8px;padding:14px 20px;margin:16px 0;display:flex;justify-content:space-between;align-items:center;}'
+      + '.order-label{font-size:0.85rem;opacity:0.85;}'
+      + '.order-num{font-size:2rem;font-weight:800;}'
+      + 'table{width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:16px;}'
+      + 'th{background:#1e3a5f;color:#fff;padding:7px 12px;text-align:left;font-size:0.75rem;font-weight:600;}'
+      + 'td{padding:6px 12px;border-bottom:1px solid #eee;}'
+      + 'tr:nth-child(even){background:#f8f9fb;}'
+      + '.total-row{font-weight:700;background:#e8f0f9!important;}'
+      + '.total-row td{border-top:2px solid #1e3a5f;}'
+      + '.sig{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-top:24px;padding-top:18px;border-top:1px solid #d4d4d4;}'
+      + '.sig-line{border-bottom:1px solid #333;height:24px;margin-bottom:4px;}'
+      + '.sig-lbl{font-size:0.7rem;color:#666;}'
+      + '.print-btn{position:fixed;bottom:20px;right:20px;background:#1e3a5f;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:0.87rem;font-weight:600;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,0.2);}'
+      + '</style></head><body>'
+      + '<button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>'
+      + '<div class="page">'
+      + '<div class="header">'
+      + '<div>'
+      + '<h1>🚚 CONCRETE ORDER SLIP</h1>'
+      + '<h2>'+_esc(p.name)+(p.date ? ' · '+p.date : '')+'</h2>'
+      + '</div>'
+      + '<div style="text-align:right;font-size:0.8rem;color:#555;line-height:1.7;">'
+      + (co.name ? '<strong>'+_esc(co.name)+'</strong><br>' : '')
+      + (co.phone ? _esc(co.phone)+'<br>' : '')
+      + (proj.name ? 'Project: '+_esc(proj.name) : '')
+      + '</div>'
+      + '</div>'
+
+      + '<div class="grid2">'
+      + '<div class="cell"><div class="lbl">Batch Plant</div><div class="val">'+(pourSchedule.plantName||'__________________________')+'</div></div>'
+      + '<div class="cell"><div class="lbl">Plant Phone</div><div class="val">'+(pourSchedule.plantPhone||'__________________________')+'</div></div>'
+      + '<div class="cell"><div class="lbl">Pour Date</div><div class="val">'+(p.date||'__________________')+'</div></div>'
+      + '<div class="cell"><div class="lbl">First Truck Time</div><div class="val">'+(p.startTime||'06:00')+'</div></div>'
+      + '<div class="cell"><div class="lbl">Mix Code / Design</div><div class="val">'+(p.mixCode||pourSchedule.plantMixCode||'__________________')+'</div></div>'
+      + '<div class="cell"><div class="lbl">Mix PSI</div><div class="val">'+_esc(p.psi||'4000')+' PSI</div></div>'
+      + '<div class="cell"><div class="lbl">Slump</div><div class="val">'+_esc(p.slump||'4')+'" (ACI 305R max '+_esc(p.slump||'4')+'", no more)</div></div>'
+      + '<div class="cell"><div class="lbl">Admixtures</div><div class="val">'+(p.admix||'Per plant standard')+'</div></div>'
+      + (parseFloat(p.fiber||0) > 0 ? '<div class="cell"><div class="lbl">Fiber Reinforcement</div><div class="val">'+_esc(p.fiber)+' lb/CY (add at plant)</div></div><div class="cell"></div>' : '')
+      + '</div>'
+
+      + '<div class="order-box">'
+      + '<div><div class="order-label">TOTAL ORDER QUANTITY</div><div style="font-size:0.75rem;opacity:0.65;">Net: '+assignedCY.toFixed(2)+' CY + '+bufPct+'% buffer</div></div>'
+      + '<div style="text-align:right;"><div class="order-num">'+orderedCY.toFixed(1)+' CY</div><div style="font-size:0.75rem;opacity:0.7;">'+trucks+' trucks × '+truckCY.toFixed(1)+' CY</div></div>'
+      + '</div>'
+
+      + (itemRows ? '<div style="font-size:0.8rem;font-weight:700;color:#1e3a5f;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">Pour Items</div>'
+        + '<table><thead><tr><th>Concrete Element</th><th>Type</th><th style="text-align:right;">Net CY</th></tr></thead><tbody>'
+        + itemRows
+        + '<tr class="total-row"><td colspan="2">TOTAL (Net)</td><td style="text-align:right;">'+assignedCY.toFixed(2)+' CY</td></tr>'
+        + '<tr class="total-row"><td colspan="2">ORDERED (w/ '+bufPct+'% buffer)</td><td style="text-align:right;">'+orderedCY.toFixed(1)+' CY</td></tr>'
+        + '</tbody></table>' : '')
+
+      + (timeRows ? '<div style="font-size:0.8rem;font-weight:700;color:#1e3a5f;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">Delivery Schedule</div>'
+        + '<table><thead><tr><th style="text-align:center;">Truck</th><th style="text-align:center;">Arrival Time</th><th style="text-align:center;">Load</th></tr></thead><tbody>'
+        + timeRows + '</tbody></table>' : '')
+
+      + (p.notes ? '<div style="background:#f8f9fb;border-left:3px solid #1e3a5f;padding:10px 14px;font-size:0.82rem;line-height:1.6;border-radius:0 6px 6px 0;margin-bottom:16px;"><strong>Notes:</strong> '+_esc(p.notes)+'</div>' : '')
+
+      + '<div style="font-size:0.78rem;color:#64748b;background:#f8f9fb;padding:10px 14px;border-radius:6px;margin-bottom:16px;line-height:1.7;">'
+      + '⚠ <strong>Field Requirements (ACI 305R — El Paso Hot Weather):</strong> Pre-wet subgrade and forms night before. Concrete temp max 90°F at truck chute (ASTM C1064). Measure ambient evaporation rate before pour. Schedule initial cure immediately — use white burlap + water or evaporation retarder. No water additions on site. If slump exceeds spec, reject truck.'
+      + '</div>'
+
+      + '<div class="sig">'
+      + '<div><div class="sig-line"></div><div class="sig-lbl">Ordered By / Estimator</div></div>'
+      + '<div><div class="sig-line"></div><div class="sig-lbl">Plant Dispatcher Confirmation</div></div>'
+      + '<div><div class="sig-line"></div><div class="sig-lbl">Date / Time Confirmed</div></div>'
+      + '</div>'
+
+      + '</div></body></html>';
+
+    var win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); }
+  };
+
+  /* ─── Print master schedule ─── */
+  window._pourPrintMaster = function() {
+    var ms = getMeasurements();
+    var proj = window.projectInfo || {};
+    var co = window.companyInfo || {};
+
+    // Build sorted pour list
+    var sorted = pourSchedule.pours.slice().sort(function(a, b) {
+      if (!a.date && !b.date) return 0;
+      if (!a.date) return 1;
+      if (!b.date) return -1;
+      return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+    });
+
+    var rows = '';
+    var grandCY = 0;
+    var grandOrdered = 0;
+    sorted.forEach(function(p, i) {
+      var assignedCY = 0;
+      (p.measurementIds || []).forEach(function(idx) {
+        if (ms[idx]) assignedCY += totalCY(ms[idx]);
+      });
+      var bufPct = parseFloat(p.buffer) || 10;
+      var orderedCY = assignedCY * (1 + bufPct / 100);
+      grandCY += assignedCY;
+      grandOrdered += orderedCY;
+      rows += '<tr>'
+        + '<td>'+(i+1)+'</td>'
+        + '<td style="font-weight:600;">'+_esc(p.name)+'</td>'
+        + '<td>'+(p.date||'—')+'</td>'
+        + '<td>'+(p.startTime||'—')+'</td>'
+        + '<td style="text-align:right;">'+assignedCY.toFixed(2)+'</td>'
+        + '<td style="text-align:right;">'+orderedCY.toFixed(1)+'</td>'
+        + '<td>'+_esc(p.psi||'4000')+' PSI</td>'
+        + '<td>'+_esc(p.mixCode||pourSchedule.plantMixCode||'—')+'</td>'
+        + '<td>'+(p.notes||'')+'</td>'
+        + '</tr>';
+    });
+
+    var html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Master Pour Schedule</title>'
+      + '<style>body{font-family:"Segoe UI",Arial,sans-serif;margin:0;padding:0;color:#1a1a2e;background:#f5f5f5;}'
+      + '.page{max-width:1000px;margin:20px auto;background:#fff;padding:36px 46px;box-shadow:0 2px 12px rgba(0,0,0,0.12);}'
+      + '@media print{body{background:#fff;}.page{box-shadow:none;margin:0;padding:28px 36px;}.no-print{display:none!important;}}'
+      + 'h1{font-size:1.4rem;color:#1e3a5f;margin:0 0 4px 0;}'
+      + '.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e3a5f;padding-bottom:14px;margin-bottom:20px;}'
+      + 'table{width:100%;border-collapse:collapse;font-size:0.78rem;}'
+      + 'th{background:#1e3a5f;color:#fff;padding:7px 10px;text-align:left;font-size:0.72rem;font-weight:600;white-space:nowrap;}'
+      + 'td{padding:6px 10px;border-bottom:1px solid #eee;}'
+      + 'tr:nth-child(even){background:#f8f9fb;}'
+      + '.total-row{font-weight:700;background:#e8f0f9!important;}'
+      + '.total-row td{border-top:2px solid #1e3a5f;}'
+      + '.print-btn{position:fixed;bottom:20px;right:20px;background:#1e3a5f;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:0.87rem;font-weight:600;cursor:pointer;}'
+      + '</style></head><body>'
+      + '<button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>'
+      + '<div class="page">'
+      + '<div class="header"><div>'
+      + '<h1>📋 Master Pour Schedule</h1>'
+      + '<div style="font-size:0.82rem;color:#64748b;">'+(proj.name ? 'Project: '+_esc(proj.name)+' · ' : '')+(co.name ? _esc(co.name)+' · ' : '')+'Plant: '+(pourSchedule.plantName||'___________')+' · '+(pourSchedule.plantPhone||'___________')+'</div>'
+      + '</div>'
+      + '<div style="text-align:right;font-size:0.8rem;color:#555;line-height:1.7;">Generated: '+new Date().toLocaleDateString()+'<br>Total: <strong>'+grandOrdered.toFixed(1)+' CY ordered</strong></div>'
+      + '</div>'
+      + '<table><thead><tr>'
+      + '<th>#</th><th>Pour Event</th><th>Date</th><th>Start</th><th style="text-align:right;">Net CY</th><th style="text-align:right;">Ordered CY</th><th>Mix PSI</th><th>Mix Code</th><th>Notes</th>'
+      + '</tr></thead><tbody>'
+      + rows
+      + '<tr class="total-row"><td colspan="4">TOTALS</td><td style="text-align:right;">'+grandCY.toFixed(2)+'</td><td style="text-align:right;">'+grandOrdered.toFixed(1)+'</td><td colspan="3"></td></tr>'
+      + '</tbody></table>'
+      + '</div></body></html>';
+
+    var win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); }
+  };
+
+  /* ─── Keyboard shortcut: Ctrl+Shift+O ─── */
+  document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'O') {
+      e.preventDefault();
+      window._openPourSched();
+    }
+  });
+
+  /* ─── Inject sidebar button (after Proposal Letter button) ─── */
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      var proposalBtn = document.querySelector('button[onclick*="generateProposal"]');
+      if (proposalBtn) {
+        var row = proposalBtn.closest('div') || proposalBtn.parentNode;
+        if (row) {
+          var newRow = document.createElement('div');
+          newRow.innerHTML = '<button class="action-btn secondary" onclick="window._openPourSched()" title="Pour Schedule & Batch Plant Order Sheets — schedule pours, assign measurements, set mix specs, generate printable order slips (Ctrl+Shift+O)" style="background:rgba(6,78,59,0.15);border-color:rgba(16,185,129,0.4);color:#6ee7b7;">🚚 Pour Schedule</button>';
+          row.parentNode.insertBefore(newRow, row.nextSibling);
+        }
+      }
+    }, 600);
+  });
+
+})();
+// ==================== END POUR SCHEDULE & BATCH PLANT ORDER SHEET — Zeus ⚡ Session #44 ====================
+</script>
