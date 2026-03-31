@@ -1,5 +1,41 @@
 # Overnight Build Tasks - 2026-02-14
 
+## 📄 SESSION: Mar 31, 2026 - 08:43 UTC (Overnight Cron #43)
+**Status:** ✅ PROPOSAL BID LETTER GENERATOR added (+466 lines)
+
+### What Was Added:
+
+**📄 Proposal Bid Letter Generator (Ctrl+Shift+L):**
+- New `📄 Proposal Letter` button injected below the Alternates button in the sidebar
+- `Ctrl+Shift+L` keyboard shortcut opens the proposal in a new window
+- **Opens a fully formatted, printable HTML proposal letter** with a "🖨 Print / Save PDF" button (browser print → PDF)
+- **Data sources:** Company Info fields (name, phone, email, address, license) + project fields (name, client, estimator, bid date, validity period) + live measurements + lastEstimate + scope notes + alternates
+- **Proposal sections:**
+  - **Company header** — branding bar with company name, address, contact info (right-aligned)
+  - **Meta grid** — project name, prepared for, date, valid until, estimator, total yd³
+  - **Intro paragraph** — professional Dear [Client] opening, auto-references project name and company name
+  - **Scope of Work table** — one row per element type (Slab, Footing, Wall, Grade Beam, Curb, Pier) with yd³, item counts, total SF note
+  - **Scope Notes box** — scope clarifications/exclusions from projectNotes field (bullet list)
+  - **BASE BID box** — prominent dark blue callout box: total lump sum + $/yd³ secondary metric
+  - **Cost Breakdown table** — itemized: Concrete Materials, Labor, Formwork, Rebar, Pump, Saw Cutting, Fiber, Base Course, Vapor Barrier, Mobilization, Misc, Overhead, Contingency (only shows lines with non-zero values)
+  - **Alternates table** — Add Alt #1-5 from the Alternates system: item count, volume, estimated add amount
+  - **Payment Terms** — 5-item list: monthly progress billing, TX Prompt Payment Act 30-day rule, 5% retainage, written COs, material escalation clause
+  - **Exclusions** — 10-item standard concrete contractor exclusions (utilities, earthwork, waterproofing, embedded plates, testing/inspection, permits, bonding, differing site conditions, premium time, dewatering)
+  - **Dual signature block** — Submitted By (contractor) + Accepted By (client) with printed name, title, date lines
+  - **Footer** — company contact info + validity disclaimer
+- **Print styling** — `@media print` hides Print button, removes shadows, expands to full page
+- Zero breaking changes — pure vanilla JS addendum, no dependency on any existing function
+- HTML escape on all user-provided strings (XSS-safe)
+
+**Why this matters:** Writing a proposal letter manually for every bid takes 30-45 minutes. With this, JFS clicks one button and gets a print-ready professional proposal pulling from everything already in the estimator. Drop it in an email as PDF, hand it to the GC — looks like a real contractor, not a guy with a calculator.
+
+**Commits:**
+- d5ec89d: 📄 Proposal Bid Letter Generator (Ctrl+Shift+L) (+466 lines) [Session #43]
+
+**Total Lines:** ~139,929 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + **Proposal Letter**
+
+---
+
 ## 🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆🏆 SESSION: Mar 30, 2026 - 22:48 UTC (Overnight Cron #34)
 **Status:** 🏆 1,000 TOOLS MILESTONE! Tools 991-1000 added this session (+10 tools, +1,029 lines) — THE SUITE IS COMPLETE!
 
@@ -482,6 +518,54 @@
 
 ---
 
+## 🚚 SESSION: Mar 31, 2026 - 09:48 UTC (Overnight Cron #44)
+**Status:** ✅ POUR SCHEDULE & BATCH PLANT ORDER SHEETS added (+597 lines)
+
+### What Was Added:
+
+**🚚 Pour Schedule & Batch Plant Order Sheets (Ctrl+Shift+O):**
+- New `🚚 Pour Schedule` button injected in sidebar below the Proposal Letter button
+- `Ctrl+Shift+O` keyboard shortcut opens/closes the Pour Schedule modal
+- **Purpose:** Bridge the gap from "estimate accepted" to "job execution" — schedule concrete pours and generate printable order slips for the batch plant
+
+**Core Features:**
+- **Batch Plant Info panel** — Plant name, phone, default mix code, default buffer % (prints on all order slips)
+- **Pour Events list** — add as many pour events as needed (Pour #1, Pour #2, etc.)
+- **⚡ Auto-Split** — one click creates one pour per element type and auto-assigns measurements (Slab pours, Footing pours, etc.)
+- **Per-pour config:**
+  - Pour date + start time (delivery time picker)
+  - Truck interval (minutes between trucks)
+  - Truck size (CY per truck)
+  - Mix PSI (2500/3000/3500/4000/4500/5000/6000)
+  - Slump (inches, ACI 305R max enforced)
+  - Buffer % (default 10%, configurable 3-20%)
+  - Fiber lb/CY (if any)
+  - Mix code, admixtures, pour notes
+- **Per-pour summary bar** — shows Net CY, Ordered CY (with buffer), Truck count, scheduled date/time — live as you type
+- **Measurement Assignment table** — assign each measurement to a pour via dropdown; unassigned CY shown prominently in header
+- **localStorage persistence** (`oncor_pour_schedule_v1`) — survives page reload, embedded in project context
+
+**Printable Outputs:**
+- **🖨 Per-pour Order Slip** — professional batch plant order sheet with:
+  - Company header + project name
+  - Plant info (name, phone), pour date, first truck time
+  - Mix code, PSI, slump, admixtures, fiber
+  - ORDER QUANTITY callout box: Net CY + buffer → Ordered CY → trucks × CY per truck
+  - Pour items table (element, type, CY per item → total)
+  - Delivery schedule table (Truck #1 @ 6:00 AM, Truck #2 @ 6:45 AM, etc.)
+  - ACI 305R hot-weather field requirements reminder
+  - Signature block: Ordered By / Plant Dispatcher Confirmation / Date Confirmed
+- **📋 Master Schedule** — single-page summary of all pours: #, name, date, start time, net CY, ordered CY, PSI, mix code, notes → grand totals row
+
+**Why this matters:** JFS wins a bid, now needs to execute. This tool lets him schedule every pour (first trucks at 5:30 AM before El Paso summer heat kicks in), calculate exactly how much concrete to order per pour with buffer, print an order slip to fax/email the batch plant, and generate a master schedule for the super to work from. No more back-of-envelope on pour day.
+
+**Commits:**
+- 3e44b74: 🚚 Pour Schedule & Batch Plant Order Sheets (Ctrl+Shift+O) (+597 lines) [Session #44]
+
+**Total Lines:** ~140,526 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + **Pour Schedule**
+
+---
+
 ## Previous Sessions Summary
 
 - **Session 34:** Tools 991-1000 (10 tools, 1,029 lines) 🏆 1,000 MILESTONE — COMPLETE
@@ -518,6 +602,104 @@
 - **Session 3:** Tools 360-385 (26 tools, 2,061 lines)
 - **Session 2:** 350 tool milestone, tools 342-359
 - **Session 1:** Tools 279-341 (63 tools)
+
+---
+
+## 🔀 SESSION: Mar 31, 2026 - 07:35 UTC (Overnight Cron #42)
+**Status:** ✅ ALTERNATE BID ITEMS added (+390 lines)
+
+### What Was Added:
+
+**🔀 Alternate Bid Items (Ctrl+Shift+T):**
+- New `🔀 Alternates` button injected below Analytics Dashboard in sidebar
+- `Ctrl+Shift+T` keyboard shortcut opens/closes Alternates panel
+- **Up to 5 named alternates** — "Add Alt #1, #2..." with custom names (e.g. "Parking Lot", "Phase 2 Retaining Wall")
+- localStorage persistence (`oncor_alternates_v1`)
+- **Alternates Management Panel:**
+  - Full table showing Base Bid row + each alternate row
+  - Each row shows: count, yd³, SF/LF, estimated cost (derived from cost/yd³ from last estimate)
+  - Rename alternates inline — live save
+  - Add alternate (up to 5), delete alternate (with auto-reassign measurements to Base Bid)
+  - "No alternates" helper message prompts to add first
+- **Per-measurement assignment:**
+  - Quick-assign dropdown injected into each measurement list item (shows "Base" / "Alt #1" etc.) — click-to-assign without opening edit modal
+  - Orange "ALT" badge shows on each measurement row assigned to an alternate
+  - Edit modal (✏️) gets "🔀 Bid Item" dropdown injected — shows Base Bid or each named alternate
+  - Changes persist via `saveEditedMeasurement` hook
+- **PDF export hook** — `window._buildAltSummaryData()` exposes alternate cost table data for PDF export functions to consume
+- Zero breaking changes — all hooks use DOMContentLoaded late-bind pattern
+
+**Why this matters:** Commercial GC bids constantly request Base Bid + Add Alternates (Alt #1 = parking lot, Alt #2 = retaining wall, Alt #3 = site concrete). This is a core commercial bidding feature — now JFS can structure his estimate accordingly, see per-alternate costs, and present a clean Alternate Bid Summary.
+
+**Commits:**
+- f371917: 🔀 Alternate Bid Items (Ctrl+Shift+T) (+390 lines) [Session #42]
+
+**Total Lines:** ~139,465 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + **Alternate Bid Items**
+
+---
+
+## 📁 SESSION: Mar 31, 2026 - 06:29 UTC (Overnight Cron #41)
+**Status:** ✅ MULTI-PROJECT DASHBOARD added (+378 lines)
+
+### What Was Added:
+
+**📁 Multi-Project Dashboard (Ctrl+Shift+D):**
+- `showLoadModal()` is now fully replaced by a rich card-grid dashboard — the old flat list is gone
+- `Ctrl+Shift+D` keyboard shortcut opens/closes the dashboard
+- Click the `📂 Load` button in the sidebar to open it
+- **Full card grid layout:** each saved project gets its own card showing:
+  - Project name + client (bold, truncated cleanly)
+  - Status badge (Estimating / Submitted / Awarded 🏆 / In Progress / Complete ✅ / Lost / On Hold) with color-coded dot
+  - Bid total in large teal text (formatted: $45k, $1.2M, etc.)
+  - yd³ + measurement count
+  - Save date
+  - 3 action buttons: **📂 Load**, **📋 Copy (Duplicate)**, **🗑 Delete**
+- **Search bar** — live filter by project name, client name, or notes
+- **Sort dropdown** — Newest / Oldest / Name A→Z / Name Z→A / Bid high→low / Bid low→high / yd³ high→low
+- **Status filter chips** — All Projects / Estimating (N) / Submitted / Awarded / In Progress / Complete / Lost / On Hold — shows live counts
+- **Stats bar** — total project count, sum of all bid amounts, sum of all yd³, active project count
+- **Duplicate project** — one-click clone with "(Copy)" suffix and today's date
+- **+ New Project** button — calls `clearAll()` after confirmation
+- Toast notifications on actions (duplicate, new project)
+- Backdrop click to close, ESC to close
+- Zero breaking changes — `loadProject(index)`, `deleteProject()` unchanged
+
+**Why this matters:** With multiple projects saved, the old flat list was unusable. Now JFS gets a real project manager view — see all active bids at a glance, filter by status (how many "submitted"?), sort by bid amount to see biggest jobs, and instantly duplicate a template project for new bids.
+
+**Commits:**
+- 5e18445: 📁 Multi-Project Dashboard (Ctrl+Shift+D) (+378 lines) [Session #41]
+
+**Total Lines:** ~139,075 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + **Project Dashboard**
+
+---
+
+## 💾 SESSION: Mar 31, 2026 - 05:25 UTC (Overnight Cron #40)
+**Status:** ✅ PRICING PRESETS added (+300 lines)
+
+### What Was Added:
+
+**💾 Pricing Presets (Ctrl+Shift+P):**
+- New `💾 Pricing Presets` button injected below the Recalculate Costs button in the pricing panel
+- `Ctrl+Shift+P` keyboard shortcut toggles the modal open/close
+- **5 built-in starter presets:**
+  1. El Paso Standard 2026 — standard market rates, 4000 PSI, 10/15 markup
+  2. Competitive Bid (Win Mode) — 8% overhead, 10% profit — tight bid to win work
+  3. Premium / Specialty Work — 12% overhead, 22% profit, fiber + base course + vapor barrier
+  4. Public Works / Davis-Bacon — prevailing wage ~$110/hr, 5% contingency, $1,500 mobilization
+  5. Residential / Light Commercial — lower PSI, lower labor, tighter margins
+- **Save current preset** — enter name + optional note → stores all prices to localStorage (`oncor_pricing_presets_v1`)
+- **Load any preset** — applies all 25 price fields instantly (concrete, rebar, mesh, fiber, base course, vapor barrier, forms, finish, labor, pump, saw cut, mobilization, misc, overhead %, profit %, contingency %) and auto-triggers recalculate
+- **Delete user presets** — built-ins are permanent, user presets deleteable
+- Each preset card shows: 4000 PSI price, labor rate, overhead %, profit % as a quick reference
+- Flash confirmation on load (button briefly shows preset name)
+- Presets survive page reload (localStorage persisted)
+
+**Why this matters:** Every bid JFS starts from scratch re-entering prices. With presets he can switch from "El Paso Standard" to "Davis-Bacon Public Works" in 1 click, or lock in a supplier quote as a named preset with expiry note.
+
+**Commits:**
+- 054c22c: 💾 Pricing Presets (Ctrl+Shift+P) (+300 lines) [Session #40]
+
+**Total Lines:** ~138,697 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + **Pricing Presets**
 
 ---
 
@@ -660,4 +842,94 @@
 - 3d2fe0e: Tool Search (Ctrl+K) (+206 lines) [Session #35]
 
 **Total Lines:** ~136,944 | **Total Tools:** 1,000 ✅ + Search system
+
+
+---
+
+## 📝 SESSION: Mar 31, 2026 - 11:58 UTC (Overnight Cron #46)
+**Status:** ✅ CHANGE ORDER LOG & GENERATOR added (+600 lines)
+
+### What Was Added:
+
+**📝 Change Order Log & Generator (Ctrl+Shift+C):**
+- New `📝 Change Orders` button injected in sidebar below the Est. Report button
+- `Ctrl+Shift+C` keyboard shortcut opens the CO Log modal
+- **Purpose:** Track every change order on a project — log them, price them with line items, monitor signed vs pending value, print professional CO documents
+
+**CO Log View:**
+- Full CO table: CO #, title, type (color-coded badge), total (green/red), status (Draft/Pending/Signed/Rejected/Voided), date, actions
+- **4-card stats bar:** Total COs / Total CO Value / Signed Value / Pending Value — always visible at top
+- **Revised Contract bar** (when COs exist): Original Contract + Total CO Adjustments = Revised Contract Value in teal
+- + New CO button, Edit (pencil), Print (print CO doc), Delete (with confirmation)
+- "No COs yet" state with helpful prompt
+- **Per-project isolation** — CO list keyed by project name, stored in localStorage (`oncor_change_orders_v1`)
+
+**CO Form (New/Edit):**
+- CO Title, CO Type dropdown (10 types: Owner Request, Design Change, Differing Site Condition, Acceleration, Scope Addition/Reduction, Value Engineering, Unforeseen Condition, Error/Omission, Other)
+- Date picker, Status dropdown (Draft / Pending / Signed / Rejected / Voided)
+- Scope Description textarea
+- **Line items table** with + Add Line / ✕ remove buttons:
+  - Description, Qty, Unit (yd³/CY/SF/LF/EA/LS/HR/TON/LB/GAL/SQ), Unit Price, Subtotal (live)
+  - Subtotals update live as you type (green/red coloring)
+- **Markup % field** — applies OH+Profit on top of direct cost subtotal
+- **Schedule Impact (days)** — positive = extension, negative = reduction
+- **CO Total live display** — updates on every keystroke
+- Internal Notes field (not printed on CO document)
+- Cancel / Save CO — saves to localStorage, refreshes CO log
+
+**Printable CO Document (AIA G701-style):**
+- Company header (name, address, phone, email, license) — right-aligned branding
+- CO badge with CO # and project name
+- Meta grid: Project, Client/GC, CO Date, Prepared By, Status, Schedule Impact
+- Scope of Change paragraph (the description field)
+- **Cost Breakdown table** — all line items: Qty, Unit, Unit Price, Subtotal; footer rows: Direct Cost Subtotal + OH&P row
+- **Change Order Total box** — large dark blue callout, formatted with parentheses for negatives
+- **Contract Summary bar** (when original contract exists): Original / This CO / Revised Contract Value
+- Schedule impact note (yellow callout) — "extends schedule by X days" or "no schedule impact"
+- Payment terms note (green callout) — TX Prompt Payment Act reference
+- **Dual signature block** — Submitted By (Contractor) / Accepted By (Owner/GC) with printed name, title, date lines
+- Print styling: @media print hides button, clean white output, ready to PDF
+
+**Why this matters:** GCs send COs constantly. Without a CO log, JFS loses track of what's signed, what's pending, and what the revised contract value is. This puts all COs in one place per project. The print output is professional enough to fax/email to the GC — no more handwritten CO slips.
+
+**Commits:**
+- 21c9373: 📝 Change Order Log & Generator (Ctrl+Shift+C) (+600 lines) [Session #46]
+
+**Total Lines:** ~141,645 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + **Change Order Log**
+
+---
+
+## 📊 SESSION: Mar 31, 2026 - 10:53 UTC (Overnight Cron #45)
+**Status:** ✅ INTERNAL ESTIMATE BREAKDOWN REPORT added (+519 lines)
+
+### What Was Added:
+
+**📊 Internal Estimate Breakdown Report (Ctrl+Shift+R):**
+- New `📊 Est. Report` button injected in sidebar below the Pour Schedule button
+- `Ctrl+Shift+R` keyboard shortcut opens the report in a new window
+- **Purpose:** Detailed internal estimate document for job files, PM handoff, and principal review — the missing link between "estimate done" and "project handed off to the field team"
+
+**Report Sections:**
+- **CONFIDENTIAL header** — red "CONFIDENTIAL — INTERNAL USE ONLY" badge + company info block (right-aligned)
+- **Meta grid** — project name, client/GC, estimator, bid date, report timestamp, estimate status
+- **Summary callout box** — total yd³, measurement count, cost/yd³, TOTAL BID in large green text
+- **Measurement Detail Table** — every included measurement: #, label, type, dimensions (L/W/D/Dia/H), yd³, PSI, phase, section, bid item (base/alt) + excluded measurements shown at bottom with red "EXCLUDED" tag
+- **Element Type Summary** — subtotals by type (Slab, Footing, Wall, etc.) with count, yd³, share %
+- **Section Subtotals** — if sections used: yd³ per section (collapsible scope areas like Building A, Parking Lot)
+- **Phase Breakdown** — P1/P2/P3/Unphased with item counts, yd³, share %
+- **Unit Prices Used** — all 22 price fields captured (concrete by PSI, labor, rebar, fiber, formwork, pump, overhead %, profit %, contingency %, waste %)
+- **Cost Breakdown** — all lastEstimate line items: materials, labor, formwork, rebar, mesh, fiber, pump, saw cutting, base course, vapor barrier, mobilization, misc, subtotal (direct), overhead, contingency, profit, TOTAL BID — each with $/yd³ secondary column
+- **Alternate Summary** — if alternates exist: volume + estimated add amount per alternate
+- **Scope Notes** — project notes rendered as bullet list
+- **Three-box sign-off block** — Prepared By (Estimator) / Reviewed By (PM / Ops) / Approved By (Principal) with signature lines
+- **Footer** — company name + "Internal Use Only — Do Not Distribute" + timestamp
+
+**Print styling** — clean white-background print version (hides print button, dark → light theme, blue headings for branding)
+
+**Why this matters:** JFS wins a bid, needs to hand off to field ops. The Proposal Letter goes to the GC. The Pour Schedule goes to the batch plant. The Internal Report goes in the job file — shows every measurement, all cost assumptions, sign-off trail. Also useful for loan draws, bonding, and partner reviews.
+
+**Commits:**
+- 7c6d114: 📊 Internal Estimate Breakdown Report (Ctrl+Shift+R) (+519 lines) [Session #45]
+
+**Total Lines:** ~141,045 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + **Internal Estimate Report**
 
