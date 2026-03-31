@@ -139461,3 +139461,469 @@ document.addEventListener('keydown', function(e){
 })();
 // ==================== END ALTERNATE BID ITEMS — Zeus ⚡ Session #42 ====================
 </script>
+
+<script>
+// ==================== PROPOSAL BID LETTER GENERATOR — Zeus ⚡ Session #43 ====================
+// Ctrl+Shift+L  |  Sidebar button: 📄 Proposal Letter
+// Generates a professional formatted bid proposal from live estimate data.
+// Output: printable HTML in new window (browser Print → PDF) with Oncor branding.
+// Data sources: company settings, project fields, measurements, lastEstimate, scope notes, alternates.
+(function() {
+  'use strict';
+
+  /* ─── Helpers ─── */
+  function _fmt$(n) {
+    if (!n && n !== 0) return '—';
+    return '$' + Number(n).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  }
+  function _fmt$k(n) {
+    if (!n && n !== 0) return '—';
+    var abs = Math.abs(n);
+    if (abs >= 1000000) return '$' + (n / 1000000).toFixed(2) + 'M';
+    if (abs >= 1000) return '$' + (n / 1000).toFixed(1) + 'k';
+    return '$' + Number(n).toFixed(0);
+  }
+  function _fmtYd(n) {
+    if (!n && n !== 0) return '—';
+    return Number(n).toFixed(2) + ' yd³';
+  }
+  function _el(id) { return document.getElementById(id); }
+  function _val(id) { var e = _el(id); return e ? e.value.trim() : ''; }
+
+  function _getCompany() {
+    return {
+      name:    _val('company-name')    || 'Oncor Concrete LLC',
+      phone:   _val('company-phone')   || '',
+      email:   _val('company-email')   || '',
+      address: _val('company-address') || 'El Paso, TX',
+      license: _val('company-license') || ''
+    };
+  }
+
+  function _getProject() {
+    return {
+      name:      _val('projectName')   || 'Untitled Project',
+      client:    _val('clientName')    || '',
+      estimator: _val('estimatorName') || '',
+      bidDate:   _val('bidDate')       || new Date().toISOString().split('T')[0],
+      validDays: _val('bidValidDays')  || '45',
+      notes:     _val('projectNotes')  || '',
+      status:    _val('projectStatus') || 'estimating'
+    };
+  }
+
+  function _getAlts() {
+    try {
+      var raw = localStorage.getItem('oncor_alternates_v1');
+      if (!raw) return [];
+      var data = JSON.parse(raw);
+      return Array.isArray(data.alts) ? data.alts : [];
+    } catch(e) { return []; }
+  }
+
+  function _getAltAssignments() {
+    try {
+      var raw = localStorage.getItem('oncor_alternates_v1');
+      if (!raw) return {};
+      var data = JSON.parse(raw);
+      return data.assignments || {};
+    } catch(e) { return {}; }
+  }
+
+  /* ─── Compute alt costs from measurements ─── */
+  function _computeAltCosts(alts, assignments) {
+    if (!alts.length) return {};
+    var measurements = window.measurements || [];
+    var est = window.lastEstimate || {};
+    var totalYd = 0;
+    measurements.forEach(function(m) { if (!m.excluded) totalYd += (m.volume || 0); });
+    var costPerYd = (totalYd > 0 && est.total) ? est.total / totalYd : 0;
+
+    var costs = {};
+    alts.forEach(function(a) { costs[a.id] = { yd: 0, count: 0 }; });
+    measurements.forEach(function(m) {
+      var aid = assignments[m.id];
+      if (aid && costs[aid] !== undefined) {
+        costs[aid].yd += (m.volume || 0);
+        costs[aid].count++;
+      }
+    });
+    alts.forEach(function(a) {
+      costs[a.id].est = costs[a.id].yd * costPerYd;
+    });
+    return costs;
+  }
+
+  /* ─── Compute element type summary from measurements ─── */
+  function _elementSummary() {
+    var measurements = window.measurements || [];
+    var summary = {};
+    measurements.forEach(function(m) {
+      if (m.excluded) return;
+      var t = m.type || 'other';
+      if (!summary[t]) summary[t] = { count: 0, yd: 0, label: t };
+      summary[t].count++;
+      summary[t].yd += (m.volume || 0);
+    });
+    // Sort by yd desc
+    return Object.values(summary).sort(function(a, b) { return b.yd - a.yd; });
+  }
+
+  /* ─── Format date nicely ─── */
+  function _fmtDate(iso) {
+    if (!iso) return '';
+    try {
+      var d = new Date(iso + 'T12:00:00');
+      return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    } catch(e) { return iso; }
+  }
+
+  function _addDays(iso, days) {
+    try {
+      var d = new Date(iso + 'T12:00:00');
+      d.setDate(d.getDate() + parseInt(days));
+      return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    } catch(e) { return ''; }
+  }
+
+  /* ─── Element type labels ─── */
+  var TYPE_LABELS = {
+    slab: 'Slab on Grade', footing: 'Footing', wall: 'Concrete Wall',
+    gradebeam: 'Grade Beam', curb: 'Curb & Gutter', pier: 'Column Pier',
+    stair: 'Stair/Landing', sidewalk: 'Sidewalk', driveway: 'Driveway',
+    other: 'Other Concrete'
+  };
+
+  /* ─── Build and open proposal ─── */
+  function generateProposal(opts) {
+    opts = opts || {};
+    var co      = _getCompany();
+    var proj    = _getProject();
+    var est     = window.lastEstimate || {};
+    var meas    = window.measurements || [];
+    var alts    = _getAlts();
+    var assign  = _getAltAssignments();
+    var altCosts = _computeAltCosts(alts, assign);
+    var elSum   = _elementSummary();
+
+    var totalYd  = 0;
+    var totalSF  = 0;
+    var inclCount = 0;
+    meas.forEach(function(m) {
+      if (!m.excluded) {
+        totalYd += (m.volume || 0);
+        totalSF += (m.sf || 0);
+        inclCount++;
+      }
+    });
+
+    var bidTotal  = (est.total || 0);
+    var materialsCost = (est.material || 0);
+    var laborCost = (est.labor || 0);
+    var overheadCost = (est.overhead || 0);
+    var profitCost = (est.profit || 0);
+    var contingency = (est.contingency || 0);
+    var mobilization = (est.mobilization || 0);
+    var showLineItems = opts.showCostBreakdown !== false;
+    var showAltTable = alts.length > 0;
+
+    var expiresDate = _addDays(proj.bidDate, proj.validDays);
+    var bidDateFmt  = _fmtDate(proj.bidDate);
+
+    // Parse scope notes into paragraphs
+    var scopeLines = proj.notes ? proj.notes.split('\n').filter(function(l){ return l.trim(); }) : [];
+
+    /* Build element scope lines */
+    var scopeRows = elSum.map(function(s) {
+      var label = TYPE_LABELS[s.label] || s.label;
+      return '<tr><td>' + label + ' (' + s.count + ' item' + (s.count!==1?'s':'') + ')</td><td style="text-align:right;">' + _fmtYd(s.yd) + '</td></tr>';
+    }).join('');
+
+    /* Cost breakdown rows */
+    var costRows = '';
+    if (showLineItems && est.material) {
+      costRows += '<tr><td>Concrete Materials</td><td style="text-align:right;">' + _fmt$(materialsCost) + '</td></tr>';
+    }
+    if (showLineItems && est.labor) {
+      costRows += '<tr><td>Labor &amp; Finishing</td><td style="text-align:right;">' + _fmt$(laborCost) + '</td></tr>';
+    }
+    if (showLineItems && est.formwork) {
+      costRows += '<tr><td>Formwork</td><td style="text-align:right;">' + _fmt$(est.formwork) + '</td></tr>';
+    }
+    if (showLineItems && est.rebar) {
+      costRows += '<tr><td>Reinforcing Steel</td><td style="text-align:right;">' + _fmt$(est.rebar) + '</td></tr>';
+    }
+    if (showLineItems && est.pump) {
+      costRows += '<tr><td>Concrete Pump</td><td style="text-align:right;">' + _fmt$(est.pump) + '</td></tr>';
+    }
+    if (showLineItems && est.sawcut) {
+      costRows += '<tr><td>Saw Cutting</td><td style="text-align:right;">' + _fmt$(est.sawcut) + '</td></tr>';
+    }
+    if (showLineItems && est.fiber) {
+      costRows += '<tr><td>Fiber Reinforcement</td><td style="text-align:right;">' + _fmt$(est.fiber) + '</td></tr>';
+    }
+    if (showLineItems && est.basecoarse) {
+      costRows += '<tr><td>Base Course</td><td style="text-align:right;">' + _fmt$(est.basecoarse) + '</td></tr>';
+    }
+    if (showLineItems && est.vapor) {
+      costRows += '<tr><td>Vapor Barrier</td><td style="text-align:right;">' + _fmt$(est.vapor) + '</td></tr>';
+    }
+    if (showLineItems && mobilization) {
+      costRows += '<tr><td>Mobilization</td><td style="text-align:right;">' + _fmt$(mobilization) + '</td></tr>';
+    }
+    if (showLineItems && est.misc) {
+      costRows += '<tr><td>Miscellaneous</td><td style="text-align:right;">' + _fmt$(est.misc) + '</td></tr>';
+    }
+    if (showLineItems && overheadCost) {
+      costRows += '<tr><td>Overhead &amp; G&amp;A</td><td style="text-align:right;">' + _fmt$(overheadCost) + '</td></tr>';
+    }
+    if (showLineItems && contingency) {
+      costRows += '<tr><td>Contingency</td><td style="text-align:right;">' + _fmt$(contingency) + '</td></tr>';
+    }
+
+    /* Alternates table rows */
+    var altRows = '';
+    if (showAltTable) {
+      alts.forEach(function(a, i) {
+        var ac = altCosts[a.id] || { yd: 0, count: 0, est: 0 };
+        altRows += '<tr><td>Add Alt #' + (i+1) + ': ' + _escHtml(a.name) + '</td>'
+          + '<td style="text-align:center;">' + ac.count + '</td>'
+          + '<td style="text-align:right;">' + _fmtYd(ac.yd) + '</td>'
+          + '<td style="text-align:right;">' + _fmt$(ac.est) + '</td></tr>';
+      });
+    }
+
+    var coPhone = co.phone ? '<br>' + co.phone : '';
+    var coEmail = co.email ? '<br>' + co.email : '';
+    var coLicense = co.license ? '<br>' + co.license : '';
+
+    /* ─── Exclusions / standard boilerplate ─── */
+    var exclusions = [
+      'Underground utilities, utility relocations, or utility connections unless specifically noted',
+      'Earthwork, grading, or compaction unless specifically noted',
+      'Waterproofing, dampproofing, or membrane systems unless specifically noted',
+      'Structural steel, anchor bolts, or embedded plates unless specifically noted',
+      'Testing, inspection fees, geotechnical reports, or special inspections',
+      'Permit fees, plan review fees, or impact fees',
+      'Bonding (Performance or Payment) unless included as a line item',
+      'Work due to differing site conditions, subsurface obstructions, or unforeseen rock',
+      'Premium time, overtime, or shift work unless specifically noted',
+      'Dewatering or soil stabilization unless specifically noted'
+    ];
+
+    /* ─── Payment terms ─── */
+    var paymentTerms = [
+      'Progress billing on a monthly basis per schedule of values (AIA G702/G703 format)',
+      'Payment due within 30 days of invoice per Texas Prompt Payment Act (Gov. Code §2252.032)',
+      'Retainage: 5% held through substantial completion, released within 30 days of final acceptance',
+      'Change orders must be executed in writing before additional work proceeds',
+      'Material escalation clause applies if start is delayed more than 90 days from acceptance'
+    ];
+
+    /* ─── HTML document ─── */
+    var scopeNotesHtml = '';
+    if (scopeLines.length) {
+      scopeNotesHtml = '<p style="margin:0 0 6px 0;font-weight:600;color:#1e3a5f;">Scope Clarifications &amp; Special Conditions:</p>'
+        + '<ul style="margin:0;padding-left:18px;">'
+        + scopeLines.map(function(l){ return '<li>' + _escHtml(l) + '</li>'; }).join('')
+        + '</ul>';
+    }
+
+    var html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+      + '<title>Bid Proposal — ' + _escHtml(proj.name) + '</title>'
+      + '<style>'
+      + 'body{font-family:"Segoe UI",Arial,sans-serif;margin:0;padding:0;color:#1a1a2e;background:#f5f5f5;}'
+      + '.page{max-width:850px;margin:30px auto;background:#fff;padding:50px 60px;box-shadow:0 2px 12px rgba(0,0,0,0.12);}'
+      + '@media print{body{background:#fff;}.page{box-shadow:none;margin:0;padding:40px 50px;}}'
+      + '.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e3a5f;padding-bottom:18px;margin-bottom:24px;}'
+      + '.co-brand{font-size:1.7rem;font-weight:800;color:#1e3a5f;letter-spacing:1px;}'
+      + '.co-sub{font-size:0.78rem;color:#666;margin-top:2px;}'
+      + '.co-contact{text-align:right;font-size:0.8rem;color:#444;line-height:1.7;}'
+      + '.doc-title{font-size:1.3rem;font-weight:700;color:#1e3a5f;margin:0 0 18px 0;text-transform:uppercase;letter-spacing:0.5px;}'
+      + '.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-bottom:22px;border:1px solid #d4d4d4;border-radius:6px;overflow:hidden;}'
+      + '.meta-cell{padding:9px 14px;border-bottom:1px solid #e8e8e8;border-right:1px solid #e8e8e8;}'
+      + '.meta-cell:nth-child(even){border-right:none;}'
+      + '.meta-cell:nth-last-child(-n+2){border-bottom:none;}'
+      + '.meta-label{font-size:0.68rem;text-transform:uppercase;letter-spacing:0.5px;color:#888;margin-bottom:2px;}'
+      + '.meta-val{font-size:0.87rem;font-weight:600;color:#1a1a2e;}'
+      + '.section-heading{font-size:0.78rem;text-transform:uppercase;letter-spacing:1px;color:#1e3a5f;font-weight:700;border-bottom:1px solid #d4d4d4;padding-bottom:5px;margin:22px 0 10px 0;}'
+      + 'table{width:100%;border-collapse:collapse;font-size:0.85rem;}'
+      + 'th{background:#1e3a5f;color:#fff;padding:8px 12px;text-align:left;font-weight:600;font-size:0.78rem;}'
+      + 'tr:nth-child(even){background:#f8f9fb;}'
+      + 'td{padding:7px 12px;border-bottom:1px solid #eee;color:#333;}'
+      + '.total-row{font-weight:700;font-size:1rem;color:#1e3a5f;background:#e8f0f9!important;}'
+      + '.total-row td{border-top:2px solid #1e3a5f;padding:10px 12px;}'
+      + '.bid-box{background:#1e3a5f;color:#fff;border-radius:8px;padding:18px 24px;margin:22px 0;display:flex;justify-content:space-between;align-items:center;}'
+      + '.bid-box-label{font-size:0.9rem;opacity:0.85;}'
+      + '.bid-box-amount{font-size:1.8rem;font-weight:800;letter-spacing:0.5px;}'
+      + '.bid-box-sub{font-size:0.75rem;opacity:0.7;margin-top:3px;}'
+      + '.notes-box{background:#f8f9fb;border-left:3px solid #1e3a5f;padding:12px 16px;font-size:0.83rem;line-height:1.6;border-radius:0 6px 6px 0;margin:12px 0;}'
+      + '.sig-block{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:36px;border-top:1px solid #d4d4d4;padding-top:24px;}'
+      + '.sig-line{border-bottom:1px solid #333;height:28px;margin-bottom:6px;}'
+      + '.sig-label{font-size:0.75rem;color:#666;}'
+      + '.footer-bar{margin-top:32px;padding-top:14px;border-top:1px solid #d4d4d4;font-size:0.72rem;color:#888;text-align:center;line-height:1.6;}'
+      + '.exclusion-list{font-size:0.79rem;line-height:1.8;color:#444;}'
+      + '.print-btn{position:fixed;bottom:24px;right:24px;background:#1e3a5f;color:#fff;border:none;border-radius:8px;padding:12px 22px;font-size:0.9rem;font-weight:600;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,0.25);z-index:9999;}'
+      + '.print-btn:hover{background:#0f2744;}'
+      + '@media print{.print-btn{display:none;}}'
+      + '</style>'
+      + '</head><body>'
+      + '<button class="print-btn" onclick="window.print()">🖨 Print / Save PDF</button>'
+      + '<div class="page">'
+
+      // ── Header
+      + '<div class="header">'
+      + '<div>'
+      + '<div class="co-brand">⚡ ' + _escHtml(co.name) + '</div>'
+      + '<div class="co-sub">Professional Concrete Contractor</div>'
+      + (co.address ? '<div class="co-sub">' + _escHtml(co.address) + '</div>' : '')
+      + '</div>'
+      + '<div class="co-contact">'
+      + (co.phone ? _escHtml(co.phone) + '<br>' : '')
+      + (co.email ? _escHtml(co.email) + '<br>' : '')
+      + (co.license ? _escHtml(co.license) : '')
+      + '</div>'
+      + '</div>'
+
+      // ── Document title
+      + '<div class="doc-title">Bid Proposal</div>'
+
+      // ── Meta grid
+      + '<div class="meta-grid">'
+      + '<div class="meta-cell"><div class="meta-label">Project</div><div class="meta-val">' + _escHtml(proj.name) + '</div></div>'
+      + '<div class="meta-cell"><div class="meta-label">Prepared For</div><div class="meta-val">' + (proj.client ? _escHtml(proj.client) : '—') + '</div></div>'
+      + '<div class="meta-cell"><div class="meta-label">Date of Proposal</div><div class="meta-val">' + bidDateFmt + '</div></div>'
+      + '<div class="meta-cell"><div class="meta-label">Proposal Valid Until</div><div class="meta-val">' + (expiresDate || proj.validDays + ' days from issuance') + '</div></div>'
+      + (proj.estimator ? '<div class="meta-cell"><div class="meta-label">Estimator</div><div class="meta-val">' + _escHtml(proj.estimator) + '</div></div><div class="meta-cell"><div class="meta-label">Total Concrete Volume</div><div class="meta-val">' + totalYd.toFixed(2) + ' yd³ (' + inclCount + ' items)</div></div>' : '<div class="meta-cell" style="grid-column:span 2;"><div class="meta-label">Total Concrete Volume</div><div class="meta-val">' + totalYd.toFixed(2) + ' yd³ (' + inclCount + ' measurement items)</div></div>')
+      + '</div>'
+
+      // ── Dear/intro paragraph
+      + '<p style="font-size:0.88rem;line-height:1.7;color:#333;">'
+      + (proj.client ? 'Dear ' + _escHtml(proj.client) + ',' : 'To Whom It May Concern,')
+      + '</p>'
+      + '<p style="font-size:0.88rem;line-height:1.7;color:#333;margin-top:0;">'
+      + _escHtml(co.name) + ' is pleased to submit the following bid proposal for concrete work in connection with the '
+      + '<strong>' + _escHtml(proj.name) + '</strong> project. This proposal is based on our quantity takeoff and includes all labor, materials, equipment, and supervision required to complete the work as described below.'
+      + '</p>';
+
+      // ── Scope of Work
+    if (elSum.length) {
+      html += '<div class="section-heading">Scope of Work</div>'
+        + '<table><thead><tr><th>Concrete Element</th><th style="text-align:right;">Volume</th></tr></thead><tbody>'
+        + scopeRows;
+      if (totalSF > 0) {
+        html += '<tr><td colspan="2" style="font-size:0.75rem;color:#666;font-style:italic;">Total area: ~' + totalSF.toFixed(0) + ' SF</td></tr>';
+      }
+      html += '</tbody></table>';
+    }
+
+    if (scopeNotesHtml) {
+      html += '<div class="notes-box">' + scopeNotesHtml + '</div>';
+    }
+
+    // ── BASE BID total box
+    html += '<div class="bid-box">'
+      + '<div><div class="bid-box-label">BASE BID — Total Lump Sum Price</div><div class="bid-box-sub">All work described above, fully complete</div></div>'
+      + '<div style="text-align:right;"><div class="bid-box-amount">' + _fmt$(bidTotal) + '</div>'
+      + (totalYd > 0 ? '<div class="bid-box-sub">' + _fmt$k(bidTotal / totalYd) + ' / yd³</div>' : '')
+      + '</div></div>';
+
+    // ── Cost breakdown
+    if (costRows) {
+      html += '<div class="section-heading">Cost Breakdown</div>'
+        + '<table><thead><tr><th>Cost Category</th><th style="text-align:right;">Amount</th></tr></thead><tbody>'
+        + costRows
+        + '</tbody><tfoot><tr class="total-row"><td>TOTAL BASE BID</td><td style="text-align:right;">' + _fmt$(bidTotal) + '</td></tr></tfoot></table>';
+    }
+
+    // ── Alternates
+    if (showAltTable) {
+      html += '<div class="section-heading">Add Alternates</div>'
+        + '<p style="font-size:0.8rem;color:#555;margin:0 0 8px 0;">The following alternates are in addition to the Base Bid unless otherwise stated. Pricing assumes concurrent construction with Base Bid scope.</p>'
+        + '<table><thead><tr><th>Alternate</th><th style="text-align:center;">Items</th><th style="text-align:right;">Volume</th><th style="text-align:right;">Add Amount</th></tr></thead><tbody>'
+        + altRows
+        + '</tbody></table>';
+    }
+
+    // ── Payment Terms
+    html += '<div class="section-heading">Payment Terms</div>'
+      + '<ul class="exclusion-list">'
+      + paymentTerms.map(function(t){ return '<li>' + t + '</li>'; }).join('')
+      + '</ul>';
+
+    // ── Exclusions
+    html += '<div class="section-heading">Exclusions (Unless Specifically Noted)</div>'
+      + '<ul class="exclusion-list">'
+      + exclusions.map(function(e){ return '<li>' + e + '</li>'; }).join('')
+      + '</ul>';
+
+    // ── Signature block
+    html += '<div class="sig-block">'
+      + '<div><p style="font-size:0.82rem;font-weight:600;color:#1e3a5f;margin:0 0 6px 0;">SUBMITTED BY: ' + _escHtml(co.name) + '</p>'
+      + '<div class="sig-line"></div><div class="sig-label">Authorized Signature</div><br>'
+      + '<div class="sig-line"></div><div class="sig-label">Printed Name / Title</div><br>'
+      + '<div class="sig-line"></div><div class="sig-label">Date</div></div>'
+      + '<div><p style="font-size:0.82rem;font-weight:600;color:#1e3a5f;margin:0 0 6px 0;">ACCEPTED BY: ' + _escHtml(proj.client || '___________________') + '</p>'
+      + '<div class="sig-line"></div><div class="sig-label">Authorized Signature</div><br>'
+      + '<div class="sig-line"></div><div class="sig-label">Printed Name / Title</div><br>'
+      + '<div class="sig-line"></div><div class="sig-label">Date</div></div>'
+      + '</div>';
+
+    // ── Footer
+    html += '<div class="footer-bar">'
+      + _escHtml(co.name) + coPhone.replace('<br>','  |  ') + coEmail.replace('<br>','  |  ')
+      + '<br>This proposal is valid for ' + proj.validDays + ' days from ' + (bidDateFmt || 'date of issuance') + '.'
+      + ' Acceptance of this proposal constitutes a contract for the stated scope of work.'
+      + '<br>Estimate prepared with Oncor Takeoff Tool ⚡'
+      + '</div>'
+
+      + '</div></body></html>';
+
+    // Open in new window
+    var win = window.open('', '_blank', 'width=1000,height=800');
+    if (win) {
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+    } else {
+      alert('Popup blocked — please allow popups for this site, then try again.');
+    }
+  }
+
+  /* ─── HTML escape helper ─── */
+  function _escHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ─── Expose globally ─── */
+  window.generateProposal = generateProposal;
+
+  /* ─── Keyboard shortcut: Ctrl+Shift+L ─── */
+  document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey||e.metaKey) && e.shiftKey && e.key === 'L') {
+      if (document.activeElement && (document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA')) return;
+      e.preventDefault();
+      generateProposal();
+    }
+  });
+
+  /* ─── Inject sidebar button after Alternates button ─── */
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      var altBtn = document.querySelector('[onclick="window.toggleAlternatesPanel()"]');
+      if (altBtn) {
+        var row = altBtn.closest('.action-row') || altBtn.parentNode;
+        var newRow = document.createElement('div');
+        newRow.className = 'action-row';
+        newRow.innerHTML = '<button class="action-btn secondary" onclick="window.generateProposal()" title="Generate printable Bid Proposal Letter from current estimate — includes scope, cost breakdown, alternates, exclusions, signature block (Ctrl+Shift+L)" style="background:rgba(30,58,95,0.15);border-color:rgba(30,58,95,0.4);color:#93c5fd;">📄 Proposal Letter</button>';
+        if (row && row.parentNode) {
+          row.parentNode.insertBefore(newRow, row.nextSibling);
+        }
+      }
+    }, 500);
+  });
+
+})();
+// ==================== END PROPOSAL BID LETTER GENERATOR — Zeus ⚡ Session #43 ====================
+</script>
