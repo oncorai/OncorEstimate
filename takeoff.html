@@ -139072,4 +139072,392 @@ document.addEventListener('keydown', function(e){
 
 })();
 // ==================== END MULTI-PROJECT DASHBOARD — Zeus ⚡ Session #41 ====================
+
+// ==================== ALTERNATE BID ITEMS — Zeus ⚡ Session #42 ====================
+// Feature: Assign measurements to Base Bid or up to 5 named Alternates (Add Alt #1–5)
+// - Each alternate has a custom name (e.g. "Parking Lot", "Phase 2 Retaining Wall")
+// - Per-measurement alternate assignment via dropdown in edit modal + measurement list badge
+// - Alternates panel: shows subtotals per alternate with yd³, SF, estimated cost
+// - PDF export adds Alternate Bid Summary table at end
+// - Ctrl+Shift+T keyboard shortcut opens Alternates panel
+// ============================================================
+(function() {
+  'use strict';
+
+  /* ── Storage ──────────────────────────────────────────────── */
+  var ALT_KEY = 'oncor_alternates_v1';
+
+  function loadAlts() {
+    try { return JSON.parse(localStorage.getItem(ALT_KEY)) || []; } catch(e) { return []; }
+  }
+  function saveAlts(arr) {
+    localStorage.setItem(ALT_KEY, JSON.stringify(arr));
+  }
+
+  // Expose for save/load project
+  window._getAlternates = loadAlts;
+  window._setAlternates = function(arr) { saveAlts(arr || []); renderAltBadgesInList(); };
+
+  /* ── Helpers ──────────────────────────────────────────────── */
+  function _esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function getAltLabel(altId) {
+    if (!altId || altId === 'base') return '';
+    var alts = loadAlts();
+    var found = alts.find(function(a){ return a.id === altId; });
+    return found ? found.name : altId;
+  }
+
+  // Get the cost-per-yd³ from the current estimate (used to price alts)
+  function getCostPerYd() {
+    var est = window.lastEstimate;
+    if (!est || !est.costs || !est.quantities) return 0;
+    var yd = est.quantities.yards || 0;
+    if (yd === 0) return 0;
+    return est.costs.total / yd;
+  }
+
+  /* ── Alt Badge in Measurement List ───────────────────────── */
+  // Called from updateMeasurementsList override; adds alt badge to each item
+  function renderAltBadgesInList() {
+    if (!window.measurements) return;
+    window.measurements.forEach(function(m) {
+      if (!m.altId || m.altId === 'base') return;
+      var items = document.querySelectorAll('[data-id="'+m.id+'"]');
+      items.forEach(function(el) {
+        if (!el.querySelector('.alt-badge-inline')) {
+          var typeEl = el.querySelector('.type');
+          if (typeEl) {
+            var badge = document.createElement('span');
+            badge.className = 'alt-badge-inline';
+            badge.title = 'Alternate: ' + getAltLabel(m.altId);
+            badge.style.cssText = 'font-size:0.62rem;background:rgba(251,146,60,0.25);color:#fb923c;border-radius:3px;padding:1px 4px;margin-left:4px;vertical-align:middle;';
+            badge.textContent = 'ALT';
+            typeEl.appendChild(badge);
+          }
+        }
+      });
+    });
+  }
+
+  /* ── Alternates Panel ─────────────────────────────────────── */
+  window._altVisible = false;
+
+  window.toggleAlternatesPanel = function() {
+    window._altVisible = !window._altVisible;
+    if (window._altVisible) openAltPanel();
+    else closeAltPanel();
+  };
+
+  function openAltPanel() {
+    if (document.getElementById('alt-panel-overlay')) return;
+    var alts = loadAlts();
+    var costPerYd = getCostPerYd();
+    var msmts = window.measurements || [];
+
+    // Build per-alt stats
+    function altStats(altId) {
+      var items = msmts.filter(function(m){ return (m.altId || 'base') === altId && !m.excluded; });
+      var yd = items.reduce(function(s,m){ return s + (m.volume||0); }, 0);
+      var sf = items.reduce(function(s,m){ return s + (m.area||0); }, 0);
+      var lf = items.reduce(function(s,m){ return s + (m.length||0); }, 0);
+      var est = costPerYd * yd;
+      return { count: items.length, yd: yd, sf: sf, lf: lf, est: est };
+    }
+
+    var baseStats = altStats('base');
+
+    var altRows = alts.map(function(a, i) {
+      var s = altStats(a.id);
+      return '<tr style="border-top:1px solid rgba(255,255,255,0.07);">' +
+        '<td style="padding:8px 10px;color:#fb923c;font-weight:bold;">Add Alt #'+(i+1)+'</td>' +
+        '<td style="padding:8px 10px;"><input class="alt-name-input" data-id="'+_esc(a.id)+'" value="'+_esc(a.name)+'" placeholder="Alternate name…" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:3px 7px;color:#fff;font-size:0.8rem;width:100%;"></td>' +
+        '<td style="padding:8px 10px;text-align:center;color:#ccc;">'+s.count+'</td>' +
+        '<td style="padding:8px 10px;text-align:center;color:#4ecdc4;">'+s.yd.toFixed(2)+' yd³</td>' +
+        '<td style="padding:8px 10px;text-align:center;color:#aaa;">'+(s.sf>0 ? s.sf.toFixed(0)+' SF' : s.lf>0 ? s.lf.toFixed(0)+' LF' : '—')+'</td>' +
+        '<td style="padding:8px 10px;text-align:right;color:#f5a623;font-weight:bold;">'+(costPerYd>0 ? '$'+s.est.toLocaleString('en-US',{maximumFractionDigits:0}) : '—')+' <span style="font-size:0.7rem;color:#666;">'+(costPerYd>0?'est.':'(run estimate)')</span></td>' +
+        '<td style="padding:8px 10px;text-align:center;"><button onclick="window._altDelete(\''+_esc(a.id)+'\')" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.25);color:#f87171;border-radius:4px;padding:2px 7px;cursor:pointer;font-size:0.75rem;">🗑</button></td>' +
+      '</tr>';
+    }).join('');
+
+    var html =
+      '<div id="alt-panel-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9800;display:flex;align-items:center;justify-content:center;" onclick="if(event.target.id===\'alt-panel-overlay\') window.toggleAlternatesPanel();">' +
+        '<div id="alt-panel-box" style="background:#1e293b;border:1px solid rgba(255,255,255,0.12);border-radius:12px;width:min(820px,95vw);max-height:88vh;overflow-y:auto;padding:0;box-shadow:0 24px 48px rgba(0,0,0,0.5);">' +
+          '<div style="padding:18px 22px;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;gap:12px;">' +
+            '<h2 style="color:#f5a623;font-size:1.1rem;flex:1;margin:0;">🔀 Alternate Bid Items</h2>' +
+            '<button onclick="window._altAdd()" style="background:rgba(245,166,35,0.15);border:1px solid rgba(245,166,35,0.3);color:#f5a623;border-radius:6px;padding:5px 13px;font-size:0.82rem;cursor:pointer;">＋ Add Alternate</button>' +
+            '<button onclick="window.toggleAlternatesPanel()" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);color:#aaa;border-radius:6px;padding:5px 11px;font-size:0.82rem;cursor:pointer;">✕</button>' +
+          '</div>' +
+          '<div style="padding:14px 22px 6px;">' +
+            '<p style="font-size:0.8rem;color:#666;margin:0 0 12px;">Assign measurements to Base Bid or named Alternates. Each alternate shows its yd³, SF/LF, and estimated cost add-on separately on the PDF.</p>' +
+            '<table style="width:100%;border-collapse:collapse;">' +
+              '<thead><tr style="color:#888;font-size:0.75rem;">' +
+                '<th style="padding:6px 10px;text-align:left;">Bid Item</th>' +
+                '<th style="padding:6px 10px;text-align:left;">Name</th>' +
+                '<th style="padding:6px 10px;text-align:center;">Count</th>' +
+                '<th style="padding:6px 10px;text-align:center;">Volume</th>' +
+                '<th style="padding:6px 10px;text-align:center;">Area/Length</th>' +
+                '<th style="padding:6px 10px;text-align:right;">Est. Cost</th>' +
+                '<th></th>' +
+              '</tr></thead>' +
+              '<tbody>' +
+                '<tr style="border-top:1px solid rgba(255,255,255,0.07);">' +
+                  '<td style="padding:8px 10px;color:#4ecdc4;font-weight:bold;">Base Bid</td>' +
+                  '<td style="padding:8px 10px;color:#666;font-size:0.8rem;">Primary scope (default)</td>' +
+                  '<td style="padding:8px 10px;text-align:center;color:#ccc;">'+baseStats.count+'</td>' +
+                  '<td style="padding:8px 10px;text-align:center;color:#4ecdc4;">'+baseStats.yd.toFixed(2)+' yd³</td>' +
+                  '<td style="padding:8px 10px;text-align:center;color:#aaa;">'+(baseStats.sf>0 ? baseStats.sf.toFixed(0)+' SF' : baseStats.lf>0 ? baseStats.lf.toFixed(0)+' LF' : '—')+'</td>' +
+                  '<td style="padding:8px 10px;text-align:right;color:#f5a623;font-weight:bold;">'+(costPerYd>0 ? '$'+baseStats.est.toLocaleString('en-US',{maximumFractionDigits:0}) : '—')+'</td>' +
+                  '<td></td>' +
+                '</tr>' +
+                altRows +
+              '</tbody>' +
+            '</table>' +
+            (alts.length === 0 ? '<p style="color:#555;font-size:0.8rem;text-align:center;padding:16px 0 8px;">No alternates added yet. Click "+ Add Alternate" to create one.</p>' : '') +
+          '</div>' +
+          '<div style="padding:10px 22px 18px;">' +
+            '<p style="font-size:0.75rem;color:#555;">💡 Tip: To assign a measurement to an alternate, click ✏️ (edit) on any measurement and set its "Bid Item" dropdown. Alternates appear as a separate table in the PDF export.</p>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    var el = document.createElement('div');
+    el.innerHTML = html;
+    document.body.appendChild(el.firstChild);
+
+    // Save name changes live
+    document.getElementById('alt-panel-box').addEventListener('input', function(e) {
+      if (e.target.classList.contains('alt-name-input')) {
+        var id = e.target.getAttribute('data-id');
+        var alts2 = loadAlts();
+        var a = alts2.find(function(x){ return x.id === id; });
+        if (a) { a.name = e.target.value; saveAlts(alts2); }
+      }
+    });
+
+    // ESC
+    document._altEscHandler = function(ev) { if (ev.key === 'Escape') window.toggleAlternatesPanel(); };
+    document.addEventListener('keydown', document._altEscHandler);
+  }
+
+  function closeAltPanel() {
+    var el = document.getElementById('alt-panel-overlay');
+    if (el) el.remove();
+    if (document._altEscHandler) {
+      document.removeEventListener('keydown', document._altEscHandler);
+      document._altEscHandler = null;
+    }
+  }
+
+  /* ── Add / Delete Alternate ───────────────────────────────── */
+  window._altAdd = function() {
+    var alts = loadAlts();
+    if (alts.length >= 5) {
+      alert('Maximum 5 alternates supported.');
+      return;
+    }
+    var num = alts.length + 1;
+    alts.push({ id: 'alt' + Date.now(), name: 'Add Alternate #' + num });
+    saveAlts(alts);
+    closeAltPanel();
+    openAltPanel();
+    _altToast('Alternate #' + num + ' added');
+  };
+
+  window._altDelete = function(id) {
+    var alts = loadAlts();
+    var a = alts.find(function(x){ return x.id === id; });
+    if (!confirm('Delete alternate "' + (a ? a.name : id) + '"? Measurements assigned to it will revert to Base Bid.')) return;
+    alts = alts.filter(function(x){ return x.id !== id; });
+    saveAlts(alts);
+    // Reassign measurements
+    if (window.measurements) {
+      window.measurements.forEach(function(m) {
+        if (m.altId === id) delete m.altId;
+      });
+      if (typeof window.scheduleAutoSave === 'function') window.scheduleAutoSave();
+    }
+    closeAltPanel();
+    openAltPanel();
+  };
+
+  /* ── Edit Modal Integration ───────────────────────────────── */
+  // Hook into openEditModal — late-bind via DOMContentLoaded
+  document.addEventListener('DOMContentLoaded', function() {
+    var _origOpenEditModal = window.openEditModal;
+    window.openEditModal = function(id) {
+      window.__altEditId = id; // expose for saveEditedMeasurement hook
+      // Call original first
+      if (typeof _origOpenEditModal === 'function') _origOpenEditModal(id);
+      // After a brief delay, inject our field
+      setTimeout(function() {
+      var modal = document.getElementById('editModal') || document.querySelector('.edit-modal');
+      if (!modal) return;
+      if (modal.querySelector('.alt-bid-field')) return; // already injected
+      var m = (window.measurements || []).find(function(x){ return x.id === id; });
+      if (!m) return;
+      var alts = loadAlts();
+      if (alts.length === 0) return; // No alternates defined yet — nothing to inject
+
+      var opts = '<option value="base"'+((!m.altId||m.altId==='base')?' selected':'')+'>Base Bid</option>' +
+        alts.map(function(a,i) {
+          return '<option value="'+_esc(a.id)+'"'+(m.altId===a.id?' selected':'')+'>Add Alt #'+(i+1)+' — '+_esc(a.name)+'</option>';
+        }).join('');
+
+      var row = document.createElement('div');
+      row.className = 'alt-bid-field';
+      row.style.cssText = 'margin-top:10px;';
+      row.innerHTML = '<label style="font-size:0.78rem;color:#f5a623;display:block;margin-bottom:4px;">🔀 Bid Item</label>' +
+        '<select id="altBidSelect" style="width:100%;background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.15);border-radius:5px;padding:6px 8px;color:#fff;font-size:0.82rem;">' +
+        opts + '</select>';
+      // Find a good insertion point — after the notes field or at end of form
+      var notesEl = modal.querySelector('#editNotes') || modal.querySelector('textarea');
+      if (notesEl && notesEl.parentNode) {
+        notesEl.parentNode.insertBefore(row, notesEl.nextSibling);
+      } else {
+        var saveBtn = modal.querySelector('button[onclick*="saveEdit"]') || modal.querySelector('.save-btn');
+        if (saveBtn && saveBtn.parentNode) saveBtn.parentNode.insertBefore(row, saveBtn);
+        else modal.appendChild(row);
+      }
+    }, 60);
+    }; // end window.openEditModal
+  }); // end DOMContentLoaded (openEditModal hook)
+
+  // Hook saveEditedMeasurement to persist altId — use late-bind via DOMContentLoaded
+  document.addEventListener('DOMContentLoaded', function() {
+    var _origSaveEditedMeasurement = window.saveEditedMeasurement;
+    window.saveEditedMeasurement = function() {
+      var sel = document.getElementById('altBidSelect');
+      if (sel && window.measurements) {
+        var editId = window.__altEditId;
+        if (editId) {
+          var m = window.measurements.find(function(x){ return x.id === editId; });
+          if (m) {
+            var val = sel.value;
+            if (val === 'base') delete m.altId;
+            else m.altId = val;
+          }
+        }
+      }
+      if (typeof _origSaveEditedMeasurement === 'function') _origSaveEditedMeasurement.apply(this, arguments);
+      renderAltBadgesInList();
+    };
+  });
+
+  /* ── Quick-assign dropdown in measurement list ────────────── */
+  // Override updateMeasurementsList — use DOMContentLoaded for late-bind
+  document.addEventListener('DOMContentLoaded', function() {
+    var _origUpdateList = window.updateMeasurementsList;
+    window.updateMeasurementsList = function() {
+      if (typeof _origUpdateList === 'function') _origUpdateList.apply(this, arguments);
+      appendAltDropdownsToList();
+      renderAltBadgesInList();
+    };
+  });
+
+  function appendAltDropdownsToList() {
+    var alts = loadAlts();
+    if (alts.length === 0) return; // No alternates = no UI clutter
+    if (!window.measurements) return;
+    window.measurements.forEach(function(m) {
+      var items = document.querySelectorAll('[data-id="'+m.id+'"]');
+      items.forEach(function(el) {
+        if (el.querySelector('.alt-quick-select')) return;
+        var infoEl = el.querySelector('.info');
+        if (!infoEl) return;
+        var opts = '<option value="base"'+((!m.altId||m.altId==='base')?' selected':'')+'>Base</option>' +
+          alts.map(function(a,i){
+            return '<option value="'+_esc(a.id)+'"'+(m.altId===a.id?' selected':'')+'>Alt #'+(i+1)+'</option>';
+          }).join('');
+        var wrap = document.createElement('div');
+        wrap.style.cssText = 'margin-top:3px;';
+        wrap.innerHTML = '<select class="alt-quick-select" data-mid="'+m.id+'" title="Assign bid item" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08);border-radius:3px;padding:1px 4px;color:#888;font-size:0.65rem;cursor:pointer;" onclick="event.stopPropagation()" onchange="window._altQuickAssign('+m.id+',this.value)">'+opts+'</select>';
+        infoEl.appendChild(wrap);
+      });
+    });
+  }
+
+  window._altQuickAssign = function(id, val) {
+    if (!window.measurements) return;
+    var m = window.measurements.find(function(x){ return x.id === id; });
+    if (!m) return;
+    if (val === 'base') delete m.altId;
+    else m.altId = val;
+    if (typeof window.scheduleAutoSave === 'function') window.scheduleAutoSave();
+    renderAltBadgesInList();
+    _altToast(val === 'base' ? 'Moved to Base Bid' : 'Assigned to ' + getAltLabel(val));
+  };
+
+  /* ── PDF Export Hook ──────────────────────────────────────── */
+  // Intercept exportTakeoff to append Alternate Summary before save
+  var _origExportTakeoff = window.exportTakeoff;
+  window.exportTakeoff = function() {
+    // Store flag so PDF function can pick it up
+    window._altPendingForPDF = buildAltSummaryData();
+    if (typeof _origExportTakeoff === 'function') _origExportTakeoff.apply(this, arguments);
+  };
+
+  function buildAltSummaryData() {
+    var alts = loadAlts();
+    if (alts.length === 0) return null;
+    var msmts = window.measurements || [];
+    var costPerYd = getCostPerYd();
+    var rows = [];
+
+    function altRow(label, altId) {
+      var items = msmts.filter(function(m){ return (m.altId || 'base') === altId && !m.excluded; });
+      var yd = items.reduce(function(s,m){ return s+(m.volume||0); },0);
+      var sf = items.reduce(function(s,m){ return s+(m.area||0); },0);
+      var lf = items.reduce(function(s,m){ return s+(m.length||0); },0);
+      var est = costPerYd * yd;
+      return { label: label, count: items.length, yd: yd, sf: sf, lf: lf, est: est };
+    }
+
+    rows.push(altRow('Base Bid', 'base'));
+    alts.forEach(function(a, i) {
+      rows.push(altRow('Add Alt #'+(i+1)+': '+a.name, a.id));
+    });
+    return rows;
+  }
+
+  // Expose for PDF to call directly (added to window for PDF export function to use)
+  window._buildAltSummaryData = buildAltSummaryData;
+
+  /* ── Toast ────────────────────────────────────────────────── */
+  function _altToast(msg) {
+    var t = document.createElement('div');
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;border-radius:8px;padding:7px 16px;font-size:0.8rem;z-index:99999;pointer-events:none;white-space:nowrap;';
+    document.body.appendChild(t);
+    setTimeout(function(){ t.style.opacity='0'; t.style.transition='opacity 0.4s'; setTimeout(function(){ t.remove(); }, 400); }, 2000);
+  }
+
+  /* ── Keyboard shortcut: Ctrl+Shift+T ────────────────────── */
+  document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey||e.metaKey) && e.shiftKey && e.key === 'T') {
+      if (document.activeElement && (document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA')) return;
+      e.preventDefault();
+      window.toggleAlternatesPanel();
+    }
+  });
+
+  /* ── Inject sidebar button ───────────────────────────────── */
+  // Add "🔀 Alternates" button after the Analytics Dashboard button
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      var analyticsBtn = document.querySelector('[onclick="openAnalyticsDashboard()"]');
+      if (analyticsBtn) {
+        var row = analyticsBtn.closest('.action-row') || analyticsBtn.parentNode;
+        var newRow = document.createElement('div');
+        newRow.className = 'action-row';
+        newRow.innerHTML = '<button class="action-btn secondary" onclick="window.toggleAlternatesPanel()" title="Alternate Bid Items — define Add Alt #1, #2... scope items separate from base bid (Ctrl+Shift+T)" style="background:rgba(251,146,60,0.1);border-color:rgba(251,146,60,0.3);color:#fb923c;">🔀 Alternates</button>';
+        if (row && row.parentNode) {
+          row.parentNode.insertBefore(newRow, row.nextSibling);
+        }
+      }
+    }, 400);
+  });
+
+})();
+// ==================== END ALTERNATE BID ITEMS — Zeus ⚡ Session #42 ====================
 </script>
