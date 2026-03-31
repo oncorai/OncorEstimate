@@ -137506,3 +137506,341 @@ document.addEventListener('keydown', function(e){
   });
 })();
 </script>
+
+<!-- ==================== BULK MULTI-SELECT — Zeus ⚡ Session #38 ==================== -->
+<style>
+/* ── Bulk select mode styles ── */
+#oncorBulkBar {
+  display: none;
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0f172a;
+  border: 1px solid rgba(245,158,11,0.55);
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.7);
+  z-index: 99980;
+  padding: 10px 14px;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  max-width: 95vw;
+  font-size: 12px;
+  color: #e2e8f0;
+}
+#oncorBulkBar.visible { display: flex; }
+#oncorBulkCount {
+  background: rgba(245,158,11,0.15);
+  border: 1px solid rgba(245,158,11,0.3);
+  color: #f59e0b;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-weight: 700;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.oncor-bulk-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #cbd5e1;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.oncor-bulk-btn:hover { background: rgba(255,255,255,0.12); }
+.oncor-bulk-btn.danger { border-color: rgba(239,68,68,0.4); color: #f87171; }
+.oncor-bulk-btn.danger:hover { background: rgba(239,68,68,0.12); }
+.oncor-bulk-btn.primary { border-color: rgba(245,158,11,0.4); color: #f59e0b; }
+.oncor-bulk-btn.primary:hover { background: rgba(245,158,11,0.1); }
+/* Checkbox in measurement-item */
+.oncor-bulk-cb {
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  cursor: pointer;
+  accent-color: #f59e0b;
+  flex-shrink: 0;
+  align-self: center;
+}
+.bulk-select-mode .measurement-item { cursor: pointer; }
+.bulk-select-mode .measurement-item:hover { background: rgba(245,158,11,0.06); }
+.measurement-item.bulk-checked { background: rgba(245,158,11,0.1) !important; border-left: 3px solid #f59e0b; }
+/* Select toggle btn */
+#oncorBulkToggleBtn {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #888;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+#oncorBulkToggleBtn.active {
+  border-color: rgba(245,158,11,0.5);
+  color: #f59e0b;
+  background: rgba(245,158,11,0.1);
+}
+</style>
+
+<script>
+(function(){
+  'use strict';
+
+  // ── State ──
+  var _bulkMode = false;
+  var _bulkIds  = new Set(); // selected measurement IDs
+
+  // ── Inject "☑ Select" button into measurements header ──
+  function injectBulkToggleBtn() {
+    var h3 = document.querySelector('#measurementsList')?.closest('.section')?.querySelector('h3');
+    if (!h3 || document.getElementById('oncorBulkToggleBtn')) return;
+    var btn = document.createElement('button');
+    btn.id = 'oncorBulkToggleBtn';
+    btn.title = 'Multi-select mode — select measurements for batch operations (Ctrl+B)';
+    btn.textContent = '☑ Select';
+    btn.onclick = oncorBulkToggleMode;
+    h3.appendChild(btn);
+  }
+
+  // ── Inject bulk bar into DOM ──
+  function injectBulkBar() {
+    if (document.getElementById('oncorBulkBar')) return;
+    var bar = document.createElement('div');
+    bar.id = 'oncorBulkBar';
+    bar.innerHTML = [
+      '<span id="oncorBulkCount">0 selected</span>',
+      '<button class="oncor-bulk-btn primary" onclick="oncorBulkSelectAll()" title="Select all visible measurements">☑ All</button>',
+      '<button class="oncor-bulk-btn" onclick="oncorBulkDeselectAll()" title="Deselect all">☐ None</button>',
+      '<span style="width:1px;height:22px;background:rgba(255,255,255,0.1);display:inline-block;"></span>',
+      // Phase buttons
+      '<span style="font-size:10px;color:#64748b;">Phase:</span>',
+      '<button class="oncor-bulk-btn" style="color:#63b3ed;" onclick="oncorBulkSetPhase(\'1\')" title="Set selected → Phase 1">P1</button>',
+      '<button class="oncor-bulk-btn" style="color:#68d391;" onclick="oncorBulkSetPhase(\'2\')" title="Set selected → Phase 2">P2</button>',
+      '<button class="oncor-bulk-btn" style="color:#f6ad55;" onclick="oncorBulkSetPhase(\'3\')" title="Set selected → Phase 3">P3</button>',
+      '<button class="oncor-bulk-btn" style="color:#555;" onclick="oncorBulkSetPhase(\'\')" title="Clear phase on selected">✕ph</button>',
+      '<span style="width:1px;height:22px;background:rgba(255,255,255,0.1);display:inline-block;"></span>',
+      // PSI
+      '<span style="font-size:10px;color:#64748b;">PSI:</span>',
+      '<button class="oncor-bulk-btn" onclick="oncorBulkSetPSI(\'3000\')" title="Override PSI to 3000">3k</button>',
+      '<button class="oncor-bulk-btn" onclick="oncorBulkSetPSI(\'4000\')" title="Override PSI to 4000">4k</button>',
+      '<button class="oncor-bulk-btn" onclick="oncorBulkSetPSI(\'5000\')" title="Override PSI to 5000">5k</button>',
+      '<button class="oncor-bulk-btn" onclick="oncorBulkSetPSI(\'\')" title="Clear PSI override on selected">✕psi</button>',
+      '<span style="width:1px;height:22px;background:rgba(255,255,255,0.1);display:inline-block;"></span>',
+      // Include/exclude
+      '<button class="oncor-bulk-btn" onclick="oncorBulkSetExclude(false)" title="Include selected in estimate">👁 Include</button>',
+      '<button class="oncor-bulk-btn" onclick="oncorBulkSetExclude(true)" title="Exclude selected from estimate">🚫 Exclude</button>',
+      '<span style="width:1px;height:22px;background:rgba(255,255,255,0.1);display:inline-block;"></span>',
+      // Label prefix
+      '<button class="oncor-bulk-btn" onclick="oncorBulkLabelPrefix()" title="Add a text prefix to all selected labels">✏️ Prefix</button>',
+      '<span style="width:1px;height:22px;background:rgba(255,255,255,0.1);display:inline-block;"></span>',
+      // Delete
+      '<button class="oncor-bulk-btn danger" onclick="oncorBulkDelete()" title="Delete all selected measurements">🗑 Delete</button>',
+      '<button class="oncor-bulk-btn" onclick="oncorBulkToggleMode()" title="Exit multi-select mode">✕ Done</button>',
+    ].join('');
+    document.body.appendChild(bar);
+  }
+
+  // ── Toggle bulk mode ──
+  window.oncorBulkToggleMode = function() {
+    _bulkMode = !_bulkMode;
+    _bulkIds.clear();
+    var btn = document.getElementById('oncorBulkToggleBtn');
+    if (btn) {
+      btn.classList.toggle('active', _bulkMode);
+      btn.textContent = _bulkMode ? '☑ Done' : '☑ Select';
+    }
+    var list = document.getElementById('measurementsList');
+    if (list) list.classList.toggle('bulk-select-mode', _bulkMode);
+    oncorBulkRefreshBar();
+    if (typeof updateMeasurementsList === 'function') updateMeasurementsList();
+  };
+
+  // ── Update bar visibility & count ──
+  window.oncorBulkRefreshBar = function() {
+    var bar = document.getElementById('oncorBulkBar');
+    if (!bar) { injectBulkBar(); bar = document.getElementById('oncorBulkBar'); }
+    if (!bar) return;
+    if (_bulkMode) {
+      bar.classList.add('visible');
+      var countEl = document.getElementById('oncorBulkCount');
+      if (countEl) countEl.textContent = _bulkIds.size + ' selected';
+    } else {
+      bar.classList.remove('visible');
+    }
+  };
+
+  // ── Toggle a single item checked ──
+  window.oncorBulkToggleId = function(id, evt) {
+    if (evt) evt.stopPropagation();
+    if (!_bulkMode) return;
+    if (_bulkIds.has(id)) _bulkIds.delete(id);
+    else _bulkIds.add(id);
+    // Toggle CSS class
+    var el = document.querySelector('.measurement-item[data-id="' + id + '"]');
+    if (el) {
+      el.classList.toggle('bulk-checked', _bulkIds.has(id));
+      var cb = el.querySelector('.oncor-bulk-cb');
+      if (cb) cb.checked = _bulkIds.has(id);
+    }
+    oncorBulkRefreshBar();
+  };
+
+  // ── Select All / Deselect All ──
+  window.oncorBulkSelectAll = function() {
+    if (!window.measurements) return;
+    window.measurements.forEach(function(m){ _bulkIds.add(m.id); });
+    document.querySelectorAll('.measurement-item[data-id]').forEach(function(el){
+      el.classList.add('bulk-checked');
+      var cb = el.querySelector('.oncor-bulk-cb'); if(cb) cb.checked = true;
+    });
+    oncorBulkRefreshBar();
+  };
+  window.oncorBulkDeselectAll = function() {
+    _bulkIds.clear();
+    document.querySelectorAll('.measurement-item[data-id]').forEach(function(el){
+      el.classList.remove('bulk-checked');
+      var cb = el.querySelector('.oncor-bulk-cb'); if(cb) cb.checked = false;
+    });
+    oncorBulkRefreshBar();
+  };
+
+  // ── Batch operations ──
+  function bulkGetTargets() {
+    if (!window.measurements) return [];
+    return window.measurements.filter(function(m){ return _bulkIds.has(m.id); });
+  }
+
+  window.oncorBulkSetPhase = function(phase) {
+    var targets = bulkGetTargets();
+    if (!targets.length) { _bulkFeedback('Nothing selected'); return; }
+    if (typeof snapshotHistory === 'function') snapshotHistory();
+    targets.forEach(function(m){ m.phase = phase; });
+    if (typeof updateMeasurementsList === 'function') updateMeasurementsList();
+    if (typeof redrawMeasurements === 'function') redrawMeasurements();
+    _bulkFeedback(targets.length + ' → ' + (phase ? 'P'+phase : 'phase cleared'));
+  };
+
+  window.oncorBulkSetPSI = function(psi) {
+    var targets = bulkGetTargets();
+    if (!targets.length) { _bulkFeedback('Nothing selected'); return; }
+    if (typeof snapshotHistory === 'function') snapshotHistory();
+    targets.forEach(function(m){ m.psiOverride = psi || ''; });
+    if (typeof updateMeasurementsList === 'function') updateMeasurementsList();
+    _bulkFeedback(targets.length + ' → ' + (psi ? psi+' PSI' : 'PSI cleared'));
+  };
+
+  window.oncorBulkSetExclude = function(excluded) {
+    var targets = bulkGetTargets();
+    if (!targets.length) { _bulkFeedback('Nothing selected'); return; }
+    if (typeof snapshotHistory === 'function') snapshotHistory();
+    targets.forEach(function(m){ m.excluded = excluded; });
+    if (typeof updateMeasurementsList === 'function') updateMeasurementsList();
+    if (typeof redrawMeasurements === 'function') redrawMeasurements();
+    _bulkFeedback(targets.length + (excluded ? ' excluded' : ' included'));
+  };
+
+  window.oncorBulkLabelPrefix = function() {
+    var targets = bulkGetTargets();
+    if (!targets.length) { _bulkFeedback('Nothing selected'); return; }
+    var prefix = prompt('Enter label prefix to prepend to ' + targets.length + ' item(s):\n(leave blank to strip any common prefix)');
+    if (prefix === null) return; // cancelled
+    if (typeof snapshotHistory === 'function') snapshotHistory();
+    targets.forEach(function(m){
+      m.label = prefix + (m.label || '');
+    });
+    if (typeof updateMeasurementsList === 'function') updateMeasurementsList();
+    _bulkFeedback(targets.length + ' labels updated');
+  };
+
+  window.oncorBulkDelete = function() {
+    var targets = bulkGetTargets();
+    if (!targets.length) { _bulkFeedback('Nothing selected'); return; }
+    if (!confirm('Delete ' + targets.length + ' selected measurement(s)? This cannot be undone.')) return;
+    if (typeof snapshotHistory === 'function') snapshotHistory();
+    var ids = new Set(targets.map(function(m){ return m.id; }));
+    window.measurements = window.measurements.filter(function(m){ return !ids.has(m.id); });
+    _bulkIds.clear();
+    if (typeof updateMeasurementsList === 'function') updateMeasurementsList();
+    if (typeof redrawMeasurements === 'function') redrawMeasurements();
+    oncorBulkRefreshBar();
+    _bulkFeedback(targets.length + ' deleted');
+  };
+
+  // ── Feedback message ──
+  function _bulkFeedback(msg) {
+    var countEl = document.getElementById('oncorBulkCount');
+    if (!countEl) return;
+    var orig = countEl.textContent;
+    countEl.textContent = '✔ ' + msg;
+    countEl.style.color = '#4ade80';
+    setTimeout(function(){
+      countEl.textContent = _bulkIds.size + ' selected';
+      countEl.style.color = '';
+    }, 2200);
+  }
+
+  // ── Patch updateMeasurementsList to inject checkboxes ──
+  document.addEventListener('DOMContentLoaded', function(){
+    injectBulkToggleBtn();
+    injectBulkBar();
+
+    // Patch after a short delay to ensure original function is defined
+    setTimeout(function(){
+      if (typeof updateMeasurementsList !== 'function') return;
+      var _orig = updateMeasurementsList;
+      window.updateMeasurementsList = function(){
+        _orig.apply(this, arguments);
+        // Re-inject checkboxes if in bulk mode
+        if (!_bulkMode) return;
+        var items = document.querySelectorAll('.measurement-item[data-id]');
+        items.forEach(function(el){
+          if (el.querySelector('.oncor-bulk-cb')) return; // already injected
+          var id = parseInt(el.getAttribute('data-id'), 10);
+          var cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.className = 'oncor-bulk-cb';
+          cb.checked = _bulkIds.has(id);
+          cb.title = 'Select for bulk edit';
+          cb.addEventListener('change', function(e){
+            oncorBulkToggleId(id, e);
+          });
+          // Prevent row click from firing when clicking checkbox
+          cb.addEventListener('click', function(e){ e.stopPropagation(); });
+          el.insertBefore(cb, el.firstChild);
+          if (_bulkIds.has(id)) el.classList.add('bulk-checked');
+        });
+        // Clicking anywhere on measurement-item toggles selection
+        items.forEach(function(el){
+          if (el._bulkClickBound) return;
+          el._bulkClickBound = true;
+          var origClick = el.onclick;
+          el.addEventListener('click', function(e){
+            if (!_bulkMode) return;
+            // Don't intercept btn/input clicks
+            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+            var id = parseInt(el.getAttribute('data-id'), 10);
+            oncorBulkToggleId(id);
+          });
+        });
+      };
+    }, 500);
+
+    // Keyboard shortcut: Ctrl+B
+    document.addEventListener('keydown', function(e){
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        // Only if not in an input
+        if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
+        e.preventDefault();
+        oncorBulkToggleMode();
+      }
+    });
+  });
+
+})();
+// ==================== END BULK MULTI-SELECT — Zeus ⚡ Session #38 ====================
+</script>
