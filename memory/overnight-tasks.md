@@ -1,5 +1,117 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✔️ SESSION: Mar 31, 2026 - 21:14 UTC (Overnight Cron #54)
+**Status:** ✅ LIEN RIGHTS & NOTICES TRACKER added (+683 lines)
+
+### What Was Added:
+
+**⚖️ Lien Rights & Notices Tracker (Ctrl+Shift+N):**
+- New `⚖️ Lien Notices` button injected in sidebar below Punch List
+- `Ctrl+Shift+N` keyboard shortcut opens/toggles the lien tracker modal
+- **Purpose:** Texas Property Code Chapter 53 mechanics lien deadline tracker — the most critical legal protection for concrete subs. Missing a deadline by 1 day = lost payment rights forever.
+
+**Project Timeline Section:**
+- First Work Date — triggers NTO deadline calculation
+- Last Work Date — triggers lien affidavit + bond claim deadline calculations
+- Contract Amount — for lien amount tracking
+- Bonded Job checkbox — enables bond claim deadline
+- Residential checkbox — different rules apply (§53.254-255)
+- Property Owner Name + Property Address — required for lien filings
+
+**Auto-Calculated Critical Deadlines:**
+- **Notice to Owner (NTO)** — 30 days from first furnishing labor/materials (TX Prop. Code §53.056)
+- **Lien Affidavit Filing** — 15th of 4th month after last work (§53.052)
+- **Bond Claim Notice** — 15th of 3rd month after unpaid (§53.202) — only shown if bonded job
+- Live countdown: days remaining, urgent warning at ≤14 days, OVERDUE flag when past
+
+**Notice Log:**
+- 10 notice types: Notice to Owner, Retainage Notice, Monthly Billing Notice, Lien Affidavit Filing, Bond Claim Notice, Fund Trapping Notice, Partial Lien Release, Final Lien Release, Foreclosure, Other
+- Statuses: Pending / Sent / Received / Filed / Released / Expired / N/A (color-coded)
+- Fields: Type, Status, Date Sent, Sent To, Delivery Method (Certified Mail RRRR, Hand Delivered, Email, Fax, County Filed), Tracking #, Amount Claimed, Response Due, Notes
+- Filter by status
+- Edit (✏️), Delete (🗑) per notice
+
+**Printable Lien Summary:**
+- Company header (name, address, phone, email, license)
+- Property & Project Info grid (address, owner, contract amount, first/last work dates, bonded status)
+- Critical Deadlines section with visual urgency (yellow = upcoming, red = overdue)
+- Full Notice Log table
+- Legal disclaimer: "This is a tracking document, not legal advice"
+- Print button
+
+**TX Lien Law Quick Reference (built into modal):**
+- Notice to Owner (§53.056) — 30 days, send certified mail
+- Lien Affidavit (§53.052) — 15th of 4th month, file with County Clerk
+- Bond Claim (§53.202) — 15th of 3rd month, send to GC + surety
+- Fund Trapping (§53.081-084) — send before owner pays GC
+- Foreclosure (§53.154) — 2 years from lien filing
+- Residential rules (§53.254-255) — different disclosure requirements
+
+**Integration:**
+- `window._getLienStats()` exposed for Project Status Card (Ctrl+Shift+I)
+- Returns: totalNotices, pendingNotices, sentNotices, urgentDeadlines, overdueDeadlines, hasNTO, lienFiled
+- localStorage per project: `oncor_lien_notices_v1_[projectname]`
+
+**Why this matters:** On any job where you're a sub, you can lose your lien rights by missing a single deadline. Notice to Owner must go out within 30 days of starting work. Lien affidavit must be filed by 15th of the 4th month. No second chances. With this tracker, JFS gets automatic deadline calculations, urgent warnings, and a complete audit trail of every notice sent. This is the legal backbone that protects payment rights on every commercial job.
+
+**Commits:**
+- f03ddd3: ⚖️ Lien Rights & Notices Tracker (Ctrl+Shift+N) (+683 lines) [Session #54]
+
+**Total Lines:** ~146,205 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + Daily Field Log + Quick Communication Templates + Project Status Card + Keyboard Shortcuts + Pay Application Generator + RFI & Submittal Log + Punch List Tracker + **Lien Rights & Notices Tracker**
+
+---
+
+## ✔️ SESSION: Mar 31, 2026 - 19:14 UTC (Overnight Cron #53)
+**Status:** ✅ PUNCH LIST TRACKER added (+479 lines)
+
+### What Was Added:
+
+**✔️ Punch List Tracker (Ctrl+Shift+K):**
+- New `✔️ Punch List` button injected in sidebar below RFI / Submittals
+- `Ctrl+Shift+K` keyboard shortcut opens/toggles the punch list modal
+- **Purpose:** Track all punch items from GC/owner walkthroughs → completion → retainage release. The final step in project closeout.
+
+**Punch List Modal:**
+- **4-card stats bar:** Total Items / Open+In Progress / Complete / Overdue ⚠️
+- **Completion progress bar** — live % complete with color coding (red <60%, orange 60-99%, green 100%)
+- Full punch item table: Punch #, Status (color-coded), Category, Description, Location, Assigned To, Due Date (with overdue flag ⚠️), Date Completed
+- **Filter controls:** Status dropdown + Category dropdown + Overdue Only checkbox
+- **+New Punch Item** button, Edit (✏️), Delete (🗑) per row
+- 🖨 Print Punch List button
+
+**New/Edit Form:**
+- Punch # (auto-generated: P-001, P-002...), Status, Category (12 concrete-specific categories)
+- Description (required), Location/Grid Ref, Assigned To, Issued By (GC/Inspector)
+- Date Issued (defaults to today), Due Date, Date Completed
+- Resolution / Notes field
+
+**12 Punch Categories:**
+Concrete Flatwork, Concrete Finishing, Formwork & Shoring, Rebar & Embedded Items, Saw Cutting & Joints, Curing & Protection, Cleanup & Debris, Safety & Barriers, Documentation, Punch by GC, Owner Punch, Other
+
+**Printable Punch List Document:**
+- Company header (name, address, phone, email, license) — right-aligned branding
+- PUNCH LIST badge + project name + owner/GC + print date
+- 4-card stats grid (Total / Open+In Progress / Complete / Overdue)
+- Completion progress bar with status message (shows "Ready for retainage release ✅" when 100%)
+- Full punch table with overdue row highlighting in red
+- Resolution Notes section (items with notes shown below table)
+- **Dual signature block** — Contractor Certification (certifies all Complete items corrected) + Owner/GC Acceptance (retainage release acknowledgment)
+- TX Prompt Payment Act language included
+
+**Integration:**
+- `window._getPunchStats()` exposed for Project Status Card (Ctrl+Shift+I) to consume live punch counts
+- localStorage per project: `oncor_punch_list_v1_[projectname]`
+- Completion % surfaced in stats bar
+
+**Why this matters:** GCs hold 5-10% retainage until punch list is 100% complete and signed off. JFS needs to track every outstanding item, prove they're resolved, and get an owner signature to release retainage. This is the final step to getting paid in full on every job.
+
+**Commits:**
+- 7cc5cd7: ✔️ Punch List Tracker (Ctrl+Shift+K) (+479 lines) [Session #53]
+
+**Total Lines:** ~145,522 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + Daily Field Log + Quick Communication Templates + Project Status Card + Keyboard Shortcuts + Pay Application Generator + RFI & Submittal Log + **Punch List Tracker**
+
+---
+
 ## 📋 SESSION: Mar 31, 2026 - 18:14 UTC (Overnight Cron #52)
 **Status:** ✅ RFI & SUBMITTAL LOG added (+927 lines)
 
