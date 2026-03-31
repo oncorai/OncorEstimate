@@ -141043,3 +141043,603 @@ document.addEventListener('keydown', function(e){
 })();
 // ==================== END INTERNAL ESTIMATE BREAKDOWN REPORT — Zeus ⚡ Session #45 ====================
 </script>
+
+<script>
+// ==================== CHANGE ORDER GENERATOR — Zeus ⚡ Session #46 ====================
+// Ctrl+Shift+C — Create, manage, and print professional Change Orders for any project
+// CO Log persisted in localStorage (oncor_change_orders_v1)
+// Per-project keyed by projectName + saveDate for isolation
+// Each CO: number, title, type, description, measurements (qty + unit price), subtotal, markup %, total
+// Print-ready CO document: AIA G701-style format with scope table, pricing summary, schedule impact, signature blocks
+(function() {
+  'use strict';
+
+  /* ─── Storage helpers ─── */
+  var CO_KEY = 'oncor_change_orders_v1';
+
+  function _getCOs() {
+    try { return JSON.parse(localStorage.getItem(CO_KEY) || '{}'); } catch(e) { return {}; }
+  }
+  function _saveCOs(data) {
+    try { localStorage.setItem(CO_KEY, JSON.stringify(data)); } catch(e) {}
+  }
+  function _projectKey() {
+    var nm = (window.getProjectName ? window.getProjectName() : '') || document.getElementById('projectName')?.value || 'unnamed';
+    return 'proj_' + nm.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 40);
+  }
+  function _getProjectCOs() {
+    var all = _getCOs();
+    var k = _projectKey();
+    if (!all[k]) all[k] = [];
+    return { all: all, key: k, list: all[k] };
+  }
+  function _saveProjectCOs(list) {
+    var all = _getCOs();
+    all[_projectKey()] = list;
+    _saveCOs(all);
+  }
+
+  /* ─── Helpers ─── */
+  function _esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function _fmt$(n) {
+    n = parseFloat(n)||0;
+    return '$' + n.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+  function _fmtN(n,d) {
+    return (parseFloat(n)||0).toFixed(d||2);
+  }
+  function _nextCONum(list) {
+    if (!list.length) return 1;
+    return Math.max.apply(null, list.map(function(c){ return c.num||0; })) + 1;
+  }
+  function _totalCO(co) {
+    var sub = (co.lineItems||[]).reduce(function(a,li){
+      return a + (parseFloat(li.qty)||0) * (parseFloat(li.unitPrice)||0);
+    }, 0);
+    var markup = parseFloat(co.markup)||0;
+    return sub * (1 + markup/100);
+  }
+  function _subCO(co) {
+    return (co.lineItems||[]).reduce(function(a,li){
+      return a + (parseFloat(li.qty)||0) * (parseFloat(li.unitPrice)||0);
+    }, 0);
+  }
+
+  /* ─── Modal HTML ─── */
+  var MODAL_ID = 'coModal';
+
+  function _coTypeColor(t) {
+    var map = { 'Owner Request':'#3b82f6', 'Design Change':'#8b5cf6', 'Differing Site Condition':'#f59e0b',
+      'Acceleration':'#ef4444', 'Scope Addition':'#10b981', 'Scope Reduction':'#f87171',
+      'Value Engineering':'#06b6d4', 'Unforeseen Condition':'#f97316', 'Error/Omission':'#ec4899', 'Other':'#94a3b8' };
+    return map[t] || '#94a3b8';
+  }
+
+  function _buildCOModal() {
+    var existing = document.getElementById(MODAL_ID);
+    if (existing) existing.remove();
+
+    var data = _getProjectCOs();
+    var list = data.list;
+    var totalValue = list.reduce(function(a,c){ return a + _totalCO(c); }, 0);
+    var signedValue = list.filter(function(c){ return c.status==='Signed'; }).reduce(function(a,c){ return a + _totalCO(c); }, 0);
+    var pendingValue = list.filter(function(c){ return c.status==='Pending'; }).reduce(function(a,c){ return a + _totalCO(c); }, 0);
+
+    var coRows = '';
+    if (!list.length) {
+      coRows = '<tr><td colspan="7" style="color:#64748b;font-style:italic;text-align:center;padding:20px;">No change orders yet. Click + New CO to create the first one.</td></tr>';
+    } else {
+      list.forEach(function(co, idx) {
+        var total = _totalCO(co);
+        var statusColor = co.status==='Signed'?'#10b981':co.status==='Rejected'?'#ef4444':co.status==='Voided'?'#64748b':'#f59e0b';
+        coRows += '<tr style="border-bottom:1px solid #1e2a3a;">'
+          + '<td style="font-weight:700;color:#38bdf8;">CO #'+_esc(co.num)+'</td>'
+          + '<td>'+_esc(co.title||'Untitled')+'</td>'
+          + '<td><span style="background:'+_coTypeColor(co.type)+';padding:2px 8px;border-radius:12px;font-size:11px;white-space:nowrap;">'+_esc(co.type||'Other')+'</span></td>'
+          + '<td style="text-align:right;'+(total<0?'color:#f87171;':'color:#10b981;')+'font-weight:600;">'+_fmt$(total)+'</td>'
+          + '<td style="text-align:center;"><span style="color:'+statusColor+';">'+_esc(co.status||'Draft')+'</span></td>'
+          + '<td style="text-align:center;color:#94a3b8;font-size:12px;">'+(co.date||'')+'</td>'
+          + '<td style="text-align:right;">'
+          + '<button onclick="window._editCO('+idx+')" style="background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;padding:3px 10px;border-radius:4px;cursor:pointer;margin-right:4px;font-size:12px;">✏️ Edit</button>'
+          + '<button onclick="window._printCO('+idx+')" style="background:rgba(56,189,248,0.15);border:1px solid rgba(56,189,248,0.3);color:#38bdf8;padding:3px 10px;border-radius:4px;cursor:pointer;margin-right:4px;font-size:12px;">🖨 Print</button>'
+          + '<button onclick="window._deleteCO('+idx+')" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#f87171;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:12px;">🗑</button>'
+          + '</td>'
+          + '</tr>';
+      });
+    }
+
+    var html = '<div id="'+MODAL_ID+'" style="position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:10100;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;">'
+      + '<div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:12px;width:100%;max-width:1000px;max-height:90vh;overflow-y:auto;padding:28px;">'
+
+      // Header
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'
+      + '<div>'
+      + '<h2 style="margin:0;color:#38bdf8;font-size:20px;">📝 Change Order Log</h2>'
+      + '<div style="color:#64748b;font-size:13px;margin-top:2px;">Project: '+(document.getElementById('projectName')?.value||'Unnamed Project')+'</div>'
+      + '</div>'
+      + '<div style="display:flex;gap:10px;align-items:center;">'
+      + '<button onclick="window._newCO()" style="background:#2563eb;border:none;color:#fff;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:600;">+ New CO</button>'
+      + '<button onclick="document.getElementById(\''+MODAL_ID+'\').remove()" style="background:transparent;border:1px solid #334155;color:#94a3b8;padding:8px 12px;border-radius:6px;cursor:pointer;">✕</button>'
+      + '</div>'
+      + '</div>'
+
+      // Summary stats
+      + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">'
+      + '<div style="background:#1e2a3a;border-radius:8px;padding:12px;">'
+      + '<div style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;">Total COs</div>'
+      + '<div style="color:#e2e8f0;font-size:22px;font-weight:700;">'+list.length+'</div>'
+      + '</div>'
+      + '<div style="background:#1e2a3a;border-radius:8px;padding:12px;">'
+      + '<div style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;">Total Value</div>'
+      + '<div style="color:'+(totalValue>=0?'#10b981':'#f87171')+';font-size:22px;font-weight:700;">'+_fmt$(totalValue)+'</div>'
+      + '</div>'
+      + '<div style="background:#1e2a3a;border-radius:8px;padding:12px;">'
+      + '<div style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;">Signed</div>'
+      + '<div style="color:#10b981;font-size:22px;font-weight:700;">'+_fmt$(signedValue)+'</div>'
+      + '</div>'
+      + '<div style="background:#1e2a3a;border-radius:8px;padding:12px;">'
+      + '<div style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;">Pending</div>'
+      + '<div style="color:#f59e0b;font-size:22px;font-weight:700;">'+_fmt$(pendingValue)+'</div>'
+      + '</div>'
+      + '</div>'
+
+      // CO table
+      + '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+      + '<thead><tr style="border-bottom:2px solid #1e3a5f;color:#94a3b8;font-size:11px;text-transform:uppercase;">'
+      + '<th style="padding:8px 6px;text-align:left;">CO #</th>'
+      + '<th style="padding:8px 6px;text-align:left;">Title</th>'
+      + '<th style="padding:8px 6px;text-align:left;">Type</th>'
+      + '<th style="padding:8px 6px;text-align:right;">Total</th>'
+      + '<th style="padding:8px 6px;text-align:center;">Status</th>'
+      + '<th style="padding:8px 6px;text-align:center;">Date</th>'
+      + '<th style="padding:8px 6px;text-align:right;">Actions</th>'
+      + '</tr></thead>'
+      + '<tbody>'+coRows+'</tbody>'
+      + '</table>'
+
+      // Original contract + revised total bar
+      + (list.length ? (
+        '<div style="margin-top:16px;background:#1e2a3a;border-radius:8px;padding:14px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;">'
+        + '<div><span style="color:#64748b;font-size:12px;">Original Contract:</span> <span style="color:#e2e8f0;font-weight:600;">'+(document.getElementById('lastEstimateDisplay')?.textContent || _fmt$(window.lastEstimate||0))+'</span></div>'
+        + '<div><span style="color:#64748b;font-size:12px;">Total CO Adjustments:</span> <span style="color:'+(totalValue>=0?'#10b981':'#f87171')+';font-weight:600;">'+_fmt$(totalValue)+'</span></div>'
+        + '<div><span style="color:#64748b;font-size:12px;">Revised Contract Value:</span> <span style="color:#38bdf8;font-weight:700;font-size:16px;">'+_fmt$((window.lastEstimate||0)+totalValue)+'</span></div>'
+        + '</div>'
+      ) : '')
+
+      + '</div>'
+      + '</div>';
+
+    document.body.insertAdjacentHTML('beforeend', html);
+    document.getElementById(MODAL_ID).addEventListener('click', function(e) {
+      if (e.target === this) this.remove();
+    });
+  }
+
+  /* ─── New / Edit CO form ─── */
+  var FORM_ID = 'coFormModal';
+
+  function _openCOForm(co, idx) {
+    var existing = document.getElementById(FORM_ID);
+    if (existing) existing.remove();
+
+    var isNew = (idx === undefined || idx === null);
+    co = co || {};
+    var lineItems = co.lineItems || [{ desc:'', qty:'', unit:'yd³', unitPrice:'', notes:'' }];
+
+    var lineRows = '';
+    lineItems.forEach(function(li, i) {
+      lineRows += _lineRow(li, i);
+    });
+
+    var typeOpts = ['Owner Request','Design Change','Differing Site Condition','Acceleration','Scope Addition','Scope Reduction','Value Engineering','Unforeseen Condition','Error/Omission','Other'];
+    var typeSelOpts = typeOpts.map(function(t){ return '<option value="'+_esc(t)+'"'+(co.type===t?' selected':'')+'>'+_esc(t)+'</option>'; }).join('');
+
+    var statusOpts = ['Draft','Pending','Signed','Rejected','Voided'];
+    var statusSelOpts = statusOpts.map(function(s){ return '<option value="'+_esc(s)+'"'+(co.status===s?' selected':'')+'>'+_esc(s)+'</option>'; }).join('');
+
+    var html = '<div id="'+FORM_ID+'" style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:10200;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;">'
+      + '<div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:12px;width:100%;max-width:760px;padding:28px;">'
+
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'
+      + '<h2 style="margin:0;color:#38bdf8;font-size:18px;">'+(isNew?'+ New Change Order':'✏️ Edit CO #'+_esc(co.num))+'</h2>'
+      + '<button onclick="document.getElementById(\''+FORM_ID+'\').remove()" style="background:transparent;border:1px solid #334155;color:#94a3b8;padding:6px 12px;border-radius:6px;cursor:pointer;">✕</button>'
+      + '</div>'
+
+      // CO metadata
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">'
+      + '<div>'
+      + '<label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px;">CO Title *</label>'
+      + '<input id="co_title" value="'+_esc(co.title||'')+'" placeholder="e.g. Additional Footings — East Wing" style="width:100%;background:#1e2a3a;border:1px solid #334155;color:#e2e8f0;padding:8px;border-radius:6px;box-sizing:border-box;">'
+      + '</div>'
+      + '<div>'
+      + '<label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px;">CO Type</label>'
+      + '<select id="co_type" style="width:100%;background:#1e2a3a;border:1px solid #334155;color:#e2e8f0;padding:8px;border-radius:6px;box-sizing:border-box;">'+typeSelOpts+'</select>'
+      + '</div>'
+      + '<div>'
+      + '<label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px;">CO Date</label>'
+      + '<input id="co_date" type="date" value="'+(co.date||new Date().toISOString().slice(0,10))+'" style="width:100%;background:#1e2a3a;border:1px solid #334155;color:#e2e8f0;padding:8px;border-radius:6px;box-sizing:border-box;">'
+      + '</div>'
+      + '<div>'
+      + '<label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px;">Status</label>'
+      + '<select id="co_status" style="width:100%;background:#1e2a3a;border:1px solid #334155;color:#e2e8f0;padding:8px;border-radius:6px;box-sizing:border-box;">'+statusSelOpts+'</select>'
+      + '</div>'
+      + '</div>'
+
+      // Description
+      + '<div style="margin-bottom:16px;">'
+      + '<label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px;">Scope Description</label>'
+      + '<textarea id="co_desc" rows="3" placeholder="Describe the change in scope, cause, and justification..." style="width:100%;background:#1e2a3a;border:1px solid #334155;color:#e2e8f0;padding:8px;border-radius:6px;box-sizing:border-box;resize:vertical;">'+_esc(co.description||'')+'</textarea>'
+      + '</div>'
+
+      // Line items
+      + '<div style="margin-bottom:16px;">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+      + '<label style="color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.05em;">Line Items</label>'
+      + '<button onclick="window._addCOLine()" style="background:rgba(56,189,248,0.15);border:1px solid rgba(56,189,248,0.3);color:#38bdf8;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;">+ Add Line</button>'
+      + '</div>'
+      + '<table style="width:100%;border-collapse:collapse;font-size:12px;" id="co_lines_table">'
+      + '<thead><tr style="color:#64748b;border-bottom:1px solid #1e2a3a;">'
+      + '<th style="text-align:left;padding:4px 4px;">Description</th>'
+      + '<th style="width:70px;text-align:right;padding:4px;">Qty</th>'
+      + '<th style="width:60px;text-align:center;padding:4px;">Unit</th>'
+      + '<th style="width:90px;text-align:right;padding:4px;">Unit Price</th>'
+      + '<th style="width:90px;text-align:right;padding:4px;">Subtotal</th>'
+      + '<th style="width:30px;"></th>'
+      + '</tr></thead>'
+      + '<tbody id="co_lines_body">'+lineRows+'</tbody>'
+      + '</table>'
+      + '</div>'
+
+      // Markup + schedule
+      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">'
+      + '<div>'
+      + '<label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px;">Markup % (OH+Profit)</label>'
+      + '<input id="co_markup" type="number" value="'+(co.markup!=null?co.markup:20)+'" min="-100" max="200" step="0.5" style="width:100%;background:#1e2a3a;border:1px solid #334155;color:#e2e8f0;padding:8px;border-radius:6px;box-sizing:border-box;" oninput="window._updateCOTotal()">'
+      + '</div>'
+      + '<div>'
+      + '<label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px;">Schedule Impact (days)</label>'
+      + '<input id="co_days" type="number" value="'+(co.scheduleDays||0)+'" min="-365" max="365" style="width:100%;background:#1e2a3a;border:1px solid #334155;color:#e2e8f0;padding:8px;border-radius:6px;box-sizing:border-box;">'
+      + '</div>'
+      + '<div>'
+      + '<label style="color:#64748b;font-size:12px;display:block;margin-bottom:4px;">CO Total (live)</label>'
+      + '<div id="co_total_display" style="background:#1e2a3a;border:1px solid #1e3a5f;color:#10b981;padding:8px;border-radius:6px;font-weight:700;font-size:16px;text-align:right;">$0.00</div>'
+      + '</div>'
+      + '</div>'
+
+      // Internal notes
+      + '<div style="margin-bottom:20px;">'
+      + '<label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px;">Internal Notes (not on CO document)</label>'
+      + '<textarea id="co_notes" rows="2" placeholder="Risk, negotiation notes, who requested..." style="width:100%;background:#1e2a3a;border:1px solid #334155;color:#e2e8f0;padding:8px;border-radius:6px;box-sizing:border-box;resize:vertical;">'+_esc(co.internalNotes||'')+'</textarea>'
+      + '</div>'
+
+      // Save/Cancel
+      + '<div style="display:flex;gap:10px;justify-content:flex-end;">'
+      + '<button onclick="document.getElementById(\''+FORM_ID+'\').remove()" style="background:transparent;border:1px solid #334155;color:#94a3b8;padding:8px 20px;border-radius:6px;cursor:pointer;">Cancel</button>'
+      + '<button onclick="window._saveCOForm('+(isNew?'null':idx)+')" style="background:#2563eb;border:none;color:#fff;padding:8px 24px;border-radius:6px;cursor:pointer;font-weight:600;">💾 Save CO</button>'
+      + '</div>'
+
+      + '</div>'
+      + '</div>';
+
+    document.body.insertAdjacentHTML('beforeend', html);
+
+    // Pre-populate total
+    setTimeout(window._updateCOTotal, 50);
+  }
+
+  function _lineRow(li, i) {
+    var unitOpts = ['yd³','CY','SF','LF','EA','LS','HR','TON','LB','GAL','SQ'].map(function(u){
+      return '<option value="'+u+'"'+(li.unit===u?' selected':'')+'>'+u+'</option>';
+    }).join('');
+    var sub = (parseFloat(li.qty)||0) * (parseFloat(li.unitPrice)||0);
+    return '<tr id="co_line_'+i+'">'
+      + '<td style="padding:3px 4px;"><input class="co_line_desc" data-idx="'+i+'" value="'+_esc(li.desc||'')+'" placeholder="Labor, materials, equipment..." style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px;border-radius:4px;font-size:12px;" oninput="window._updateCOTotal()"></td>'
+      + '<td style="padding:3px 4px;"><input class="co_line_qty" data-idx="'+i+'" type="number" value="'+(li.qty||'')+'" placeholder="0" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px;border-radius:4px;font-size:12px;text-align:right;" oninput="window._updateCOTotal()"></td>'
+      + '<td style="padding:3px 4px;"><select class="co_line_unit" data-idx="'+i+'" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px;border-radius:4px;font-size:12px;">'+unitOpts+'</select></td>'
+      + '<td style="padding:3px 4px;"><input class="co_line_up" data-idx="'+i+'" type="number" value="'+(li.unitPrice||'')+'" placeholder="0.00" step="0.01" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px;border-radius:4px;font-size:12px;text-align:right;" oninput="window._updateCOTotal()"></td>'
+      + '<td style="padding:3px 4px;text-align:right;color:'+(sub<0?'#f87171':'#10b981')+';font-weight:600;font-size:12px;" id="co_line_sub_'+i+'">'+_fmt$(sub)+'</td>'
+      + '<td style="padding:3px 4px;text-align:center;"><button onclick="window._removeCOLine('+i+')" style="background:transparent;border:none;color:#f87171;cursor:pointer;font-size:14px;">✕</button></td>'
+      + '</tr>';
+  }
+
+  window._addCOLine = function() {
+    var tbody = document.getElementById('co_lines_body');
+    if (!tbody) return;
+    var count = tbody.querySelectorAll('tr').length;
+    tbody.insertAdjacentHTML('beforeend', _lineRow({}, count));
+    window._updateCOTotal();
+  };
+
+  window._removeCOLine = function(i) {
+    var row = document.getElementById('co_line_'+i);
+    if (row) row.remove();
+    window._updateCOTotal();
+  };
+
+  window._updateCOTotal = function() {
+    var tbody = document.getElementById('co_lines_body');
+    if (!tbody) return;
+    var rows = tbody.querySelectorAll('tr');
+    var sub = 0;
+    rows.forEach(function(row, ri) {
+      var qty = parseFloat(row.querySelector('.co_line_qty')?.value)||0;
+      var up = parseFloat(row.querySelector('.co_line_up')?.value)||0;
+      var lineSub = qty * up;
+      sub += lineSub;
+      var subCell = row.querySelector('[id^="co_line_sub_"]');
+      if (subCell) {
+        subCell.textContent = _fmt$(lineSub);
+        subCell.style.color = lineSub < 0 ? '#f87171' : '#10b981';
+      }
+    });
+    var markup = parseFloat(document.getElementById('co_markup')?.value)||0;
+    var total = sub * (1 + markup/100);
+    var disp = document.getElementById('co_total_display');
+    if (disp) {
+      disp.textContent = _fmt$(total);
+      disp.style.color = total < 0 ? '#f87171' : total === 0 ? '#94a3b8' : '#10b981';
+    }
+  };
+
+  window._saveCOForm = function(editIdx) {
+    var data = _getProjectCOs();
+    var list = data.list;
+
+    // Collect line items
+    var tbody = document.getElementById('co_lines_body');
+    var lineItems = [];
+    if (tbody) {
+      tbody.querySelectorAll('tr').forEach(function(row) {
+        lineItems.push({
+          desc: row.querySelector('.co_line_desc')?.value || '',
+          qty: parseFloat(row.querySelector('.co_line_qty')?.value)||0,
+          unit: row.querySelector('.co_line_unit')?.value || 'LS',
+          unitPrice: parseFloat(row.querySelector('.co_line_up')?.value)||0
+        });
+      });
+    }
+
+    var co = {
+      num: editIdx !== null ? list[editIdx].num : _nextCONum(list),
+      title: document.getElementById('co_title')?.value?.trim() || 'Change Order',
+      type: document.getElementById('co_type')?.value || 'Other',
+      date: document.getElementById('co_date')?.value || new Date().toISOString().slice(0,10),
+      status: document.getElementById('co_status')?.value || 'Draft',
+      description: document.getElementById('co_desc')?.value?.trim() || '',
+      lineItems: lineItems,
+      markup: parseFloat(document.getElementById('co_markup')?.value)||20,
+      scheduleDays: parseInt(document.getElementById('co_days')?.value)||0,
+      internalNotes: document.getElementById('co_notes')?.value?.trim() || ''
+    };
+
+    if (editIdx !== null) {
+      list[editIdx] = co;
+    } else {
+      list.push(co);
+    }
+
+    _saveProjectCOs(list);
+    document.getElementById(FORM_ID)?.remove();
+    _buildCOModal(); // refresh log view
+  };
+
+  window._newCO = function() { _openCOForm(null, null); };
+  window._editCO = function(idx) {
+    var data = _getProjectCOs();
+    _openCOForm(data.list[idx], idx);
+  };
+  window._deleteCO = function(idx) {
+    if (!confirm('Delete this change order? This cannot be undone.')) return;
+    var data = _getProjectCOs();
+    data.list.splice(idx, 1);
+    _saveProjectCOs(data.list);
+    _buildCOModal();
+  };
+
+  /* ─── Print CO document ─── */
+  window._printCO = function(idx) {
+    var data = _getProjectCOs();
+    var co = data.list[idx];
+    if (!co) return;
+
+    var co_elem = document.getElementById;
+    var co_v = function(id){ return (document.getElementById(id)?.value||'').trim(); };
+
+    // Company info
+    var coName = co_v('companyName') || 'ONCOR';
+    var coPhone = co_v('companyPhone') || '';
+    var coEmail = co_v('companyEmail') || '';
+    var coAddr = co_v('companyAddress') || '';
+    var coLic = co_v('companyLicense') || '';
+
+    // Project info
+    var projName = co_v('projectName') || 'Project';
+    var client = co_v('clientName') || '';
+    var estimator = co_v('estimatorName') || '';
+
+    var sub = _subCO(co);
+    var markup = parseFloat(co.markup)||0;
+    var markupAmt = sub * (markup/100);
+    var total = sub + markupAmt;
+
+    var origContract = window.lastEstimate || 0;
+    var revisedContract = origContract + total;
+
+    // Line items table
+    var lineRows = (co.lineItems||[]).map(function(li) {
+      var lineSub = (parseFloat(li.qty)||0) * (parseFloat(li.unitPrice)||0);
+      return '<tr>'
+        + '<td>'+_esc(li.desc||'')+'</td>'
+        + '<td style="text-align:right;">'+_fmtN(li.qty,2)+'</td>'
+        + '<td style="text-align:center;">'+_esc(li.unit||'LS')+'</td>'
+        + '<td style="text-align:right;">'+_fmt$(li.unitPrice)+'</td>'
+        + '<td style="text-align:right;font-weight:600;">'+_fmt$(lineSub)+'</td>'
+        + '</tr>';
+    }).join('');
+
+    var scheduleNote = co.scheduleDays > 0
+      ? '⚠️ This change order extends the contract schedule by <strong>'+co.scheduleDays+' calendar day(s)</strong>.'
+      : co.scheduleDays < 0
+        ? '✅ This change order reduces the schedule by <strong>'+Math.abs(co.scheduleDays)+' calendar day(s)</strong>.'
+        : 'No schedule impact claimed with this change order.';
+
+    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Change Order #'+_esc(String(co.num))+' — '+_esc(projName)+'</title>'
+      + '<style>'
+      + 'body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background:#fff;margin:0;padding:0;}'
+      + '.page{max-width:800px;margin:0 auto;padding:30px 40px;}'
+      + 'h1{font-size:22px;margin:0;} h2{font-size:15px;margin:0 0 6px;}'
+      + 'table{width:100%;border-collapse:collapse;margin-bottom:14px;}'
+      + 'th{background:#1e3a5f;color:#fff;padding:7px 10px;text-align:left;font-size:12px;}'
+      + 'td{padding:6px 10px;border-bottom:1px solid #e5e7eb;}'
+      + 'tr:last-child td{border-bottom:none;}'
+      + '.section{margin-bottom:22px;}'
+      + '.label{color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;}'
+      + '.val{font-size:13px;font-weight:600;}'
+      + '.co-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;border-bottom:3px solid #1e3a5f;padding-bottom:16px;}'
+      + '.co-badge{background:#1e3a5f;color:#fff;padding:8px 16px;border-radius:6px;font-size:20px;font-weight:700;letter-spacing:0.05em;}'
+      + '.meta-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px;background:#f8fafc;border-radius:6px;padding:14px;}'
+      + '.total-box{background:#1e3a5f;color:#fff;padding:18px 24px;border-radius:8px;text-align:center;margin:16px 0;}'
+      + '.total-box .lbl{font-size:12px;text-transform:uppercase;letter-spacing:0.08em;opacity:0.8;}'
+      + '.total-box .amt{font-size:32px;font-weight:700;margin-top:4px;}'
+      + '.sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:16px;}'
+      + '.sig-block{border-top:2px solid #111;padding-top:6px;}'
+      + '.sig-role{font-weight:700;font-size:12px;}'
+      + '.sig-line{height:48px;}'
+      + '.sig-label{font-size:11px;color:#64748b;}'
+      + '.footer{text-align:center;font-size:11px;color:#64748b;margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;}'
+      + '.type-badge{display:inline-block;background:#e0f2fe;color:#0369a1;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;}'
+      + '.status-badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;}'
+      + '.schedule-note{background:#fefce8;border:1px solid #fde047;padding:10px 14px;border-radius:6px;font-size:12px;margin-bottom:14px;}'
+      + '.co-number{font-size:14px;color:#64748b;margin-top:4px;}'
+      + '@media print{'
+      + '.print-btn{display:none!important;}'
+      + 'body{padding:0;}'
+      + '.page{padding:20px 24px;}'
+      + '}'
+      + '</style></head><body>'
+      + '<div class="page">'
+
+      // Print button
+      + '<div class="print-btn" style="margin-bottom:16px;">'
+      + '<button onclick="window.print()" style="background:#1e3a5f;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;">🖨 Print / Save PDF</button>'
+      + '</div>'
+
+      // CO Header
+      + '<div class="co-header">'
+      + '<div>'
+      + '<h1>Change Order</h1>'
+      + '<div class="co-number">CO #'+_esc(String(co.num))+' — '+_esc(projName)+'</div>'
+      + '<div style="margin-top:6px;"><span class="type-badge">'+_esc(co.type||'Other')+'</span></div>'
+      + '</div>'
+      + '<div style="text-align:right;">'
+      + '<div style="font-weight:700;font-size:15px;">'+_esc(coName)+'</div>'
+      + (coAddr?'<div style="color:#64748b;font-size:12px;">'+_esc(coAddr)+'</div>':'')
+      + (coPhone?'<div style="color:#64748b;font-size:12px;">'+_esc(coPhone)+'</div>':'')
+      + (coEmail?'<div style="color:#64748b;font-size:12px;">'+_esc(coEmail)+'</div>':'')
+      + (coLic?'<div style="color:#64748b;font-size:12px;">Lic: '+_esc(coLic)+'</div>':'')
+      + '</div>'
+      + '</div>'
+
+      // Meta grid
+      + '<div class="meta-grid">'
+      + '<div><div class="label">Project</div><div class="val">'+_esc(projName)+'</div></div>'
+      + '<div><div class="label">Client / GC</div><div class="val">'+_esc(client||'—')+'</div></div>'
+      + '<div><div class="label">CO Date</div><div class="val">'+_esc(co.date||'')+'</div></div>'
+      + '<div><div class="label">Prepared By</div><div class="val">'+_esc(estimator||coName)+'</div></div>'
+      + '<div><div class="label">Status</div><div class="val">'+_esc(co.status||'Draft')+'</div></div>'
+      + '<div><div class="label">Schedule Impact</div><div class="val">'+(co.scheduleDays>0?'+':'')+_esc(String(co.scheduleDays||0))+' days</div></div>'
+      + '</div>'
+
+      // Description
+      + (co.description
+        ? '<div class="section"><h2>Scope of Change</h2><p style="margin:6px 0;line-height:1.6;">'+_esc(co.description)+'</p></div>'
+        : '')
+
+      // Line items
+      + '<div class="section">'
+      + '<h2>Cost Breakdown</h2>'
+      + '<table><thead><tr><th>Description</th><th style="text-align:right;">Qty</th><th style="text-align:center;">Unit</th><th style="text-align:right;">Unit Price</th><th style="text-align:right;">Subtotal</th></tr></thead>'
+      + '<tbody>'+lineRows+'</tbody>'
+      + '<tfoot>'
+      + '<tr style="background:#f8fafc;"><td colspan="4" style="text-align:right;font-weight:600;">Direct Cost Subtotal</td><td style="text-align:right;font-weight:700;">'+_fmt$(sub)+'</td></tr>'
+      + (markup?'<tr style="background:#f8fafc;"><td colspan="4" style="text-align:right;font-weight:600;">Overhead & Profit ('+markup+'%)</td><td style="text-align:right;font-weight:700;">'+_fmt$(markupAmt)+'</td></tr>':'')
+      + '</tfoot>'
+      + '</table>'
+      + '</div>'
+
+      // Total box
+      + '<div class="total-box">'
+      + '<div class="lbl">Change Order Total</div>'
+      + '<div class="amt">'+(total<0?'('+_fmt$(Math.abs(total))+')':_fmt$(total))+'</div>'
+      + '</div>'
+
+      // Contract summary
+      + (origContract
+        ? '<div style="background:#f8fafc;border-radius:6px;padding:14px;margin-bottom:18px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
+          + '<div><div class="label">Original Contract</div><div class="val">'+_fmt$(origContract)+'</div></div>'
+          + '<div><div class="label">Previous COs</div><div class="val">—</div></div>'
+          + '<div><div class="label">This CO</div><div class="val" style="color:'+(total>=0?'#059669':'#dc2626')+';">'+(total>=0?'+':'')+_fmt$(total)+'</div></div>'
+          + '<div><div class="label">Revised Contract</div><div class="val" style="font-size:15px;">'+_fmt$(revisedContract)+'</div></div>'
+          + '</div>'
+        : '')
+
+      // Schedule note
+      + '<div class="schedule-note">'+scheduleNote+'</div>'
+
+      // Payment terms note
+      + '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:10px 14px;margin-bottom:18px;font-size:12px;">'
+      + '<strong>Payment Terms:</strong> This change order amount is due per the terms of the original contract. '
+      + 'Texas Prompt Payment Act (Gov\'t Code §2252) applies to public work. '
+      + 'Payment within 30 days of invoice unless otherwise agreed in writing.'
+      + '</div>'
+
+      // Signature blocks
+      + '<div class="section">'
+      + '<h2>Authorization & Acceptance</h2>'
+      + '<p style="font-size:12px;color:#64748b;margin:6px 0 16px;">By signing below, both parties agree that the above change order represents the complete compensation for the described scope change, including all direct costs, overhead, profit, and schedule impact. No additional compensation will be made for this scope unless agreed in a subsequent written change order.</p>'
+      + '<div class="sig-grid">'
+      + '<div class="sig-block"><div class="sig-role">Submitted By — Contractor</div><div class="sig-line"></div><div class="sig-label">'+_esc(coName)+' · Name / Signature / Date</div></div>'
+      + '<div class="sig-block"><div class="sig-role">Accepted By — Owner / GC</div><div class="sig-line"></div><div class="sig-label">'+_esc(client||'Owner / GC')+'· Name / Signature / Date</div></div>'
+      + '</div>'
+      + '</div>'
+
+      + '<div class="footer">'+(coName?_esc(coName)+' · ':'')+'CO #'+_esc(String(co.num))+' · '+_esc(projName)+'</div>'
+
+      + '</div></body></html>';
+
+    var win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); }
+  };
+
+  /* ─── Open CO Log ─── */
+  window._openCOLog = function() { _buildCOModal(); };
+
+  /* ─── Keyboard shortcut: Ctrl+Shift+C ─── */
+  document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey||e.metaKey) && e.shiftKey && (e.key==='C'||e.key==='c')) {
+      e.preventDefault();
+      _buildCOModal();
+    }
+  });
+
+  /* ─── Inject sidebar button (after Est. Report button) ─── */
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      // find est report button
+      var reportBtn = document.querySelector('button[onclick*="generateEstReport"]');
+      if (reportBtn) {
+        var row = reportBtn.closest('div') || reportBtn.parentNode;
+        if (row) {
+          var newRow = document.createElement('div');
+          newRow.innerHTML = '<button class="action-btn secondary" onclick="window._openCOLog()" title="Change Order Log & Generator — track, price, and print professional Change Orders (AIA G701-style) for any project (Ctrl+Shift+C)" style="background:rgba(251,191,36,0.1);border-color:rgba(251,191,36,0.35);color:#fbbf24;">📝 Change Orders</button>';
+          row.parentNode.insertBefore(newRow, row.nextSibling);
+        }
+      }
+    }, 800);
+  });
+
+})();
+// ==================== END CHANGE ORDER GENERATOR — Zeus ⚡ Session #46 ====================
+</script>
