@@ -2732,6 +2732,9 @@
                     <button class="action-btn secondary" onclick="toggleChangeLog()" title="Project Change Log — timestamped call/decision/spec notes for dispute protection">📓 Change Log</button>
                     <button class="action-btn secondary" onclick="clearAll()">🗑️ Clear All</button>
                 </div>
+                <div class="action-row">
+                    <button class="action-btn secondary" onclick="openAnalyticsDashboard()" title="Project Analytics Dashboard — visual cost breakdown, element stats, phase split, profitability (Ctrl+Shift+A)" style="background:rgba(168,85,247,0.12);border-color:rgba(168,85,247,0.3);color:#c084fc;">📈 Analytics Dashboard</button>
+                </div>
             </div>
         </div>
         
@@ -2869,6 +2872,23 @@
                 <button class="btn-secondary" onclick="closeEditModal()">Cancel</button>
             </div>
         </div>
+    </div>
+
+    <!-- Analytics Dashboard Modal -->
+    <div id="oncorAnalyticsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:99990;overflow-y:auto;padding:20px 12px;" onclick="if(event.target===this)closeAnalyticsDashboard()">
+      <div style="max-width:780px;margin:0 auto;background:#1a1a2e;border:1px solid rgba(168,85,247,0.35);border-radius:14px;padding:24px 22px;position:relative;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+          <div>
+            <div style="font-size:1.1rem;font-weight:700;color:#c084fc;">📈 Project Analytics Dashboard</div>
+            <div id="oncorAnalyticsProjectName" style="font-size:0.8rem;color:#666;margin-top:2px;"></div>
+          </div>
+          <button onclick="closeAnalyticsDashboard()" style="background:none;border:none;color:#555;font-size:1.3rem;cursor:pointer;padding:0;">✕</button>
+        </div>
+        <div id="oncorAnalyticsBody" style="color:#ccc;font-size:0.85rem;"></div>
+        <div style="margin-top:16px;text-align:right;">
+          <button onclick="closeAnalyticsDashboard()" style="background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.3);color:#c084fc;border-radius:7px;padding:7px 18px;cursor:pointer;font-size:0.82rem;">Close</button>
+        </div>
+      </div>
     </div>
 
     <!-- Load Project Modal -->
@@ -136734,6 +136754,303 @@ window.t1000calc=function(){
 };
 var tgt=document.getElementById('tools-section')||document.body;
 tgt.appendChild(btn);tgt.appendChild(wrap);
+})();
+</script>
+
+<!-- ==================== PROJECT ANALYTICS DASHBOARD — Zeus ⚡ Session #37 ==================== -->
+<script>
+(function(){
+'use strict';
+
+// ============================================================
+// PROJECT ANALYTICS DASHBOARD
+// Ctrl+Shift+A or button — visual breakdown of the current
+// project: cost by category, element type breakdown, phase
+// split, profitability waterfall, and project vitals.
+// Zero dependencies — pure vanilla JS + CSS.
+// Zeus ⚡ for Oncor — Session #37
+// ============================================================
+
+var ANALYTICS_VERSION = '1.0 — Session #37';
+
+function fmtCur(n){
+  if(!n||isNaN(n))return '$0';
+  if(n>=1000000)return '$'+(n/1000000).toFixed(2)+'M';
+  if(n>=1000)return '$'+(n/1000).toFixed(1)+'k';
+  return '$'+Math.round(n).toLocaleString();
+}
+function fmtPct(n,total){
+  if(!total||!n)return '0%';
+  return (n/total*100).toFixed(1)+'%';
+}
+function pct(n,total){
+  if(!total||!n)return 0;
+  return Math.min(100,Math.max(0,n/total*100));
+}
+
+// Bar helper
+function bar(value,max,color,height){
+  height=height||8;
+  var w=pct(value,max);
+  return '<div style="background:rgba(255,255,255,0.06);border-radius:4px;height:'+height+'px;overflow:hidden;margin-top:4px;">'
+    +'<div style="width:'+w+'%;height:100%;background:'+color+';border-radius:4px;transition:width 0.4s;"></div></div>';
+}
+
+function vitalsCard(icon,label,value,sub,color){
+  color=color||'#94a3b8';
+  return '<div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:10px 12px;text-align:center;">'
+    +'<div style="font-size:1.3rem;margin-bottom:4px;">'+icon+'</div>'
+    +'<div style="font-size:0.95rem;font-weight:700;color:'+color+';">'+value+'</div>'
+    +'<div style="font-size:0.7rem;color:#64748b;margin-top:2px;">'+label+'</div>'
+    +(sub?'<div style="font-size:0.68rem;color:#475569;margin-top:1px;">'+sub+'</div>':'')
+    +'</div>';
+}
+
+function sectionHead(title,icon){
+  return '<div style="display:flex;align-items:center;gap:6px;margin:18px 0 10px;border-bottom:1px solid rgba(255,255,255,0.07);padding-bottom:6px;">'
+    +'<span style="font-size:0.95rem;">'+icon+'</span>'
+    +'<span style="font-weight:700;font-size:0.9rem;color:#e2e8f0;">'+title+'</span>'
+    +'</div>';
+}
+
+function buildAnalytics(){
+  // Get current project state from the main app
+  var measurements = window.measurements || [];
+  var est = window.lastEstimate || null;
+  var projectName = (document.getElementById('projectName')||{}).value || 'Untitled Project';
+  var clientName  = (document.getElementById('clientName')||{}).value || '';
+  var active = measurements.filter(function(m){return !m.excluded;});
+  var totalYards = active.reduce(function(s,m){return s+m.volume;},0);
+
+  var html = '';
+
+  // ── PROJECT VITALS ─────────────────────────────────────────
+  html += sectionHead('Project Vitals','📊');
+
+  var totalItems = active.length;
+  var totalExcl  = measurements.length - active.length;
+  var pagesUsed  = active.length > 0 ? [...new Set(active.map(function(m){return m.page||1;}))].length : 0;
+  var phases     = [...new Set(active.map(function(m){return m.phase||'';}).filter(Boolean))];
+  var totalBid   = est ? (est.costs.total||0) : 0;
+  var perYd3     = (totalYards > 0 && totalBid > 0) ? totalBid/totalYards : 0;
+  var perSF      = 0;
+  if(est){
+    var slabSF = (window.measurements||[]).filter(function(m){return !m.excluded&&m.config.type==='slab';})
+      .reduce(function(s,m){return s+(m.area||0);},0);
+    perSF = (slabSF>0&&totalBid>0)?totalBid/slabSF:0;
+  }
+
+  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:4px;">';
+  html += vitalsCard('📐','Measurements',totalItems+(totalExcl?' <span style="font-size:0.65rem;color:#475569;">('+totalExcl+' excl.)</span>':''),'Active items','#63b3ed');
+  html += vitalsCard('🏗️','Total Volume',totalYards>0?totalYards.toFixed(2)+' yd³':'—','Concrete (net)','#4ecdc4');
+  html += vitalsCard('💵','Total Bid',totalBid>0?fmtCur(totalBid):'Run estimate first',totalBid>0?(clientName||''):'','#f5a623');
+  html += '</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">';
+  html += vitalsCard('📏','Cost / yd³',perYd3>0?fmtCur(perYd3):'—','Blended rate','#a78bfa');
+  html += vitalsCard('🧮','Cost / SF',perSF>0?fmtCur(perSF)+'/sf':'—','Slab SF only','#34d399');
+  html += vitalsCard('📄','Plan Pages',pagesUsed>0?pagesUsed:'—',phases.length>0?phases.length+' phases':null,'#f87171');
+  html += '</div>';
+
+  // ── ELEMENT TYPE BREAKDOWN ─────────────────────────────────
+  html += sectionHead('Element Type Breakdown','🏛️');
+
+  var typeLabels = {slab:'Slab',footing:'Footing',wall:'Wall',gradebeam:'Grade Beam',curb:'Curb/Gutter',pier:'Pier/Column'};
+  var typeColors = {slab:'#4ecdc4',footing:'#f5a623',wall:'#a855f7',gradebeam:'#f97316',curb:'#f43f5e',pier:'#fb923c'};
+  var typeOrder  = ['slab','footing','wall','gradebeam','curb','pier'];
+  var typeStats  = {};
+  typeOrder.forEach(function(t){
+    var items = active.filter(function(m){return m.config.type===t;});
+    if(!items.length)return;
+    var vol = items.reduce(function(s,m){return s+m.volume;},0);
+    var sf  = items.reduce(function(s,m){return s+(m.area||0);},0);
+    typeStats[t]={count:items.length,vol:vol,sf:sf};
+  });
+  var knownTypes = Object.keys(typeStats);
+
+  if(knownTypes.length===0){
+    html += '<div style="color:#475569;font-style:italic;font-size:0.82rem;">No measurements yet. Draw elements on the canvas first.</div>';
+  } else {
+    html += '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;">';
+    html += '<tr style="color:#64748b;font-size:0.72rem;border-bottom:1px solid rgba(255,255,255,0.07);">'
+      +'<th style="text-align:left;padding:3px 6px;">Type</th>'
+      +'<th style="text-align:center;padding:3px 6px;">Items</th>'
+      +'<th style="text-align:right;padding:3px 6px;">yd³</th>'
+      +'<th style="text-align:right;padding:3px 6px;">Share</th>'
+      +'<th style="padding:3px 6px 3px 12px;min-width:120px;">Volume Split</th>'
+      +'</tr>';
+    knownTypes.forEach(function(t){
+      var s  = typeStats[t];
+      var c  = typeColors[t]||'#94a3b8';
+      var lbl= typeLabels[t]||t;
+      html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">'
+        +'<td style="padding:5px 6px;color:'+c+';font-weight:600;">'+lbl+'</td>'
+        +'<td style="text-align:center;padding:5px 6px;color:#94a3b8;">'+s.count+'</td>'
+        +'<td style="text-align:right;padding:5px 6px;color:#e2e8f0;font-weight:600;">'+s.vol.toFixed(2)+'</td>'
+        +'<td style="text-align:right;padding:5px 6px;color:#64748b;">'+fmtPct(s.vol,totalYards)+'</td>'
+        +'<td style="padding:5px 6px 5px 12px;">'+bar(s.vol,totalYards,c,6)+'</td>'
+        +'</tr>';
+    });
+    html += '</table>';
+  }
+
+  // ── COST BREAKDOWN ─────────────────────────────────────────
+  if(est && totalBid > 0){
+    html += sectionHead('Cost Category Breakdown','💰');
+
+    var costs = est.costs;
+    var catDefs = [
+      {key:'concrete', label:'Concrete Material', color:'#4ecdc4'},
+      {key:'rebar',    label:'Rebar / Steel',      color:'#f5a623'},
+      {key:'forms',    label:'Formwork',            color:'#a855f7'},
+      {key:'labor',    label:'Labor (Finishing)',   color:'#63b3ed'},
+      {key:'fiber',    label:'Fiber Reinforcement', color:'#34d399'},
+      {key:'baseCourse',label:'Base Course (Flex)', color:'#fb923c'},
+      {key:'vaporBarrier',label:'Vapor Barrier',    color:'#f87171'},
+      {key:'overhead', label:'Overhead',            color:'#94a3b8'},
+      {key:'profit',   label:'Profit',              color:'#4ade80'},
+      {key:'contingency',label:'Contingency',       color:'#fbbf24'},
+      {key:'mobilization',label:'Mobilization',     color:'#e879f9'},
+      {key:'misc',     label:'Misc / Sub-items',    color:'#cbd5e1'},
+      {key:'subItems', label:'Sub-items (manual)',  color:'#a3e635'},
+      {key:'sawCut',   label:'Saw Cutting',         color:'#7dd3fc'},
+      {key:'waste',    label:'Waste Allowance',     color:'#6b7280'},
+    ];
+
+    var maxCostVal = 0;
+    catDefs.forEach(function(d){var v=costs[d.key]||0;if(v>maxCostVal)maxCostVal=v;});
+
+    html += '<div style="display:flex;flex-direction:column;gap:5px;">';
+    catDefs.forEach(function(d){
+      var v = costs[d.key]||0;
+      if(v<=0)return;
+      html += '<div style="display:grid;grid-template-columns:160px 1fr 70px 55px;align-items:center;gap:8px;">'
+        +'<div style="font-size:0.77rem;color:'+d.color+';">'+d.label+(d.key==='misc'&&costs.miscLabel?' ('+costs.miscLabel+')':'')+'</div>'
+        +'<div>'+bar(v,maxCostVal,d.color,7)+'</div>'
+        +'<div style="text-align:right;font-size:0.77rem;color:#e2e8f0;font-weight:600;">'+fmtCur(v)+'</div>'
+        +'<div style="text-align:right;font-size:0.72rem;color:#64748b;">'+fmtPct(v,totalBid)+'</div>'
+        +'</div>';
+    });
+    html += '</div>';
+
+    // Profitability summary
+    html += sectionHead('Profitability Summary','📉');
+    var materialTotal  = (costs.concrete||0)+(costs.rebar||0)+(costs.fiber||0)+(costs.forms||0)+(costs.baseCourse||0)+(costs.vaporBarrier||0);
+    var laborTotal     = costs.labor||0;
+    var overheadTotal  = costs.overhead||0;
+    var profitTotal    = costs.profit||0;
+    var contingencyTot = costs.contingency||0;
+    var otherTotal     = totalBid - materialTotal - laborTotal - overheadTotal - profitTotal - contingencyTot;
+    var profitMargin   = totalBid>0 ? (profitTotal/totalBid*100).toFixed(1) : '—';
+    var grossMargin    = totalBid>0 ? ((profitTotal+overheadTotal)/totalBid*100).toFixed(1) : '—';
+
+    html += '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:8px;">';
+    html += vitalsCard('🪨','Materials',fmtCur(materialTotal),fmtPct(materialTotal,totalBid)+' of bid','#4ecdc4');
+    html += vitalsCard('👷','Labor',fmtCur(laborTotal),fmtPct(laborTotal,totalBid)+' of bid','#63b3ed');
+    html += vitalsCard('🏢','Overhead',fmtCur(overheadTotal),fmtPct(overheadTotal,totalBid)+' of bid','#94a3b8');
+    html += vitalsCard('💚','Net Profit',fmtCur(profitTotal),profitMargin+'% margin','#4ade80');
+    html += '</div>';
+    html += '<div style="background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.2);border-radius:7px;padding:10px 14px;font-size:0.8rem;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;">'
+      +'<span style="color:#94a3b8;">Gross Margin (OH+Profit)</span>'
+      +'<span style="font-weight:700;color:#4ade80;font-size:1rem;">'+grossMargin+'%</span>'
+      +'</div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">'
+      +'<span style="color:#94a3b8;">Net Profit Margin</span>'
+      +'<span style="font-weight:700;color:#4ade80;font-size:1rem;">'+profitMargin+'%</span>'
+      +'</div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">'
+      +'<span style="color:#94a3b8;">Material %</span>'
+      +'<span style="font-weight:600;color:#4ecdc4;">'+fmtPct(materialTotal,totalBid)+'</span>'
+      +'</div>';
+    html += '</div>';
+  }
+
+  // ── PHASE BREAKDOWN ────────────────────────────────────────
+  var phaseMap = {};
+  active.forEach(function(m){
+    var ph = m.phase||'—';
+    if(!phaseMap[ph])phaseMap[ph]={count:0,vol:0};
+    phaseMap[ph].count++;
+    phaseMap[ph].vol+=m.volume;
+  });
+  var phaseKeys = Object.keys(phaseMap);
+  if(phaseKeys.length>1){
+    html += sectionHead('Phase Breakdown','📅');
+    var phaseColors = {'1':'#63b3ed','2':'#4ade80','3':'#f6ad55','—':'#475569'};
+    html += '<div style="display:flex;flex-direction:column;gap:6px;">';
+    phaseKeys.sort().forEach(function(ph){
+      var s = phaseMap[ph];
+      var c = phaseColors[ph]||'#94a3b8';
+      var label = ph==='—'?'Unassigned':'Phase '+ph;
+      html += '<div style="display:grid;grid-template-columns:110px 1fr 65px 55px;align-items:center;gap:8px;">'
+        +'<div style="font-size:0.78rem;color:'+c+';font-weight:600;">'+label+'</div>'
+        +'<div>'+bar(s.vol,totalYards,c,7)+'</div>'
+        +'<div style="text-align:right;font-size:0.78rem;color:#e2e8f0;">'+s.vol.toFixed(2)+" yd³"+'</div>'
+        +'<div style="text-align:right;font-size:0.72rem;color:#64748b;">'+fmtPct(s.vol,totalYards)+'</div>'
+        +'</div>';
+    });
+    html += '</div>';
+  }
+
+  // ── LARGEST ELEMENTS ──────────────────────────────────────
+  if(active.length>0){
+    html += sectionHead('Top 5 Largest Elements','🔝');
+    var sorted = active.slice().sort(function(a,b){return b.volume-a.volume;}).slice(0,5);
+    html += '<div style="display:flex;flex-direction:column;gap:4px;">';
+    sorted.forEach(function(m,i){
+      var c = typeColors[m.config.type]||'#94a3b8';
+      var lbl = m.label||((typeLabels[m.config.type]||m.config.type)+' '+(i+1));
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:5px 8px;background:rgba(0,0,0,0.2);border-radius:6px;">'
+        +'<div style="width:20px;text-align:center;font-size:0.72rem;color:#475569;">'+(i+1)+'</div>'
+        +'<div style="flex:1;font-size:0.8rem;color:'+c+';font-weight:600;">'+lbl+'</div>'
+        +'<div style="font-size:0.78rem;color:#e2e8f0;font-weight:600;">'+m.volume.toFixed(2)+' yd³</div>'
+        +(m.area?'<div style="font-size:0.72rem;color:#64748b;min-width:55px;text-align:right;">'+m.area.toFixed(0)+' sf</div>':'')
+        +(m.phase?'<div style="font-size:0.68rem;color:#475569;background:rgba(255,255,255,0.05);border-radius:4px;padding:2px 6px;">P'+m.phase+'</div>':'')
+        +'</div>';
+    });
+    html += '</div>';
+  }
+
+  // ── FOOTER NOTE ───────────────────────────────────────────
+  html += '<div style="margin-top:16px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);font-size:0.7rem;color:#334155;text-align:right;">'
+    +'Generated by Zeus ⚡ — Oncor Analytics '+ANALYTICS_VERSION+' — '+new Date().toLocaleString()
+    +'</div>';
+
+  return html;
+}
+
+window.openAnalyticsDashboard = function(){
+  var modal = document.getElementById('oncorAnalyticsModal');
+  var body  = document.getElementById('oncorAnalyticsBody');
+  var nameEl= document.getElementById('oncorAnalyticsProjectName');
+  if(!modal||!body)return;
+
+  var pname = (document.getElementById('projectName')||{}).value||'Untitled Project';
+  var cname = (document.getElementById('clientName')||{}).value||'';
+  if(nameEl) nameEl.textContent = pname + (cname?' — '+cname:'');
+
+  body.innerHTML = buildAnalytics();
+  modal.style.display = 'block';
+};
+
+window.closeAnalyticsDashboard = function(){
+  var modal = document.getElementById('oncorAnalyticsModal');
+  if(modal) modal.style.display = 'none';
+};
+
+// Keyboard shortcut: Ctrl+Shift+A
+document.addEventListener('keydown', function(e){
+  if((e.ctrlKey||e.metaKey) && e.shiftKey && e.key.toLowerCase()==='a'){
+    e.preventDefault();
+    var modal = document.getElementById('oncorAnalyticsModal');
+    if(modal && modal.style.display==='block'){
+      window.closeAnalyticsDashboard();
+    } else {
+      window.openAnalyticsDashboard();
+    }
+  }
+});
+
 })();
 </script>
 
