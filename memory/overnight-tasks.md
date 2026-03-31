@@ -1,5 +1,61 @@
 # Overnight Build Tasks - 2026-02-14
 
+## 🧪 SESSION: Mar 31, 2026 - 22:19 UTC (Overnight Cron #55)
+**Status:** ✅ CONCRETE QC LOG added (+746 lines)
+
+### What Was Added:
+
+**🧪 Concrete QC Log (Ctrl+Shift+Q):**
+- New `🧪 QC Log` button injected in sidebar below Lien Notices
+- `Ctrl+Shift+Q` keyboard shortcut opens/toggles the QC log modal
+- **Purpose:** Field test documentation for every concrete pour — slump, air content, temperature, unit weight, cylinder breaks, evaluated against ACI 318-19 §26.12.3. On commercial jobs, the GC/owner's testing lab submits break results to the engineer. JFS needs his own log to track them and catch failures before the GC does.
+
+**Concrete Field Test Form:**
+- Pour identification: Test Date, Pour Name/Location, Ticket/Load #, Cylinder Set ID
+- Mix design: Spec PSI (f'c), Mix Code/Plant, w/cm ratio, Discharge Time
+- Field tests (ASTM C172 composite): Slump (ASTM C143), Max Allowed Slump, Air Content (ASTM C231), Concrete Temp (ASTM C1064), Ambient Temp, Unit Weight (ASTM C138)
+- Water added on site (flags ⚠️ if any gallons added — ASTM C94 issue)
+- Curing method dropdown (8 options: curing compound, wet burlap, ponding, insulating blankets, etc.)
+- Cylinder breaks: 7-day, 28-day #1, 28-day #2, 56-day, Break Date
+- Personnel: Sampled By (ACI Tech name/cert), Testing Lab
+- Field Notes textarea
+
+**ACI 318 Strength Evaluation (automatic):**
+- **✅ PASS** — avg of 28-day cylinders ≥ f'c AND min cylinder ≥ f'c - 500 psi (ACI 318-19 §26.12.3)
+- **❌ FAIL** — avg < f'c AND min < f'c - 500 psi (§26.12.4 investigation required)
+- **⚠️ LOW AVG** — avg < f'c alone
+- **⚠️ LOW MIN** — min < threshold alone
+- **Pending** — no 28-day breaks entered yet
+
+**Slump & Temperature Flags:**
+- Slump over max: yellow ⚠️ warning inline + on print
+- Concrete temp > 90°F: ACI 305R hot weather flag
+- Concrete temp < 50°F: ACI 306R cold weather flag
+- Water added on site: red warning note on card and print
+
+**QC List View:**
+- Stats bar: Total / Pass / Warning / Fail / Pending Breaks
+- Filter by result (Pass / Warn / Fail / Pending) + by Pour Name + Fails & Warnings Only checkbox
+- Each test card shows all key metrics, color-coded result badge, ACI evaluation note
+- Edit (✏️), Print individual (🖨), Delete (🗑) per test
+
+**Printable Reports:**
+- **Individual Test Report** — company header, pour identification grid, field test results grid, warning callouts (water added, hot/cold temp, over-slump), cylinder break table, ACI 318 result box (color-coded), personnel sign-off block, standards footer (ASTM C172/C143/C231/C1064/C138/C39/C31, ACI 305R/306R/318-19)
+- **Full QC Log** — all tests in chronological table: date, pour, ticket, cylinder set, f'c, slump, air, temp, 7-day, 28-day breaks, ACI 318 result. Stats header (pass/warn/fail/pending counts). Totals row.
+
+**Integration:**
+- `window._getQCStats()` exposed for Project Status Card (Ctrl+Shift+I)
+- localStorage per project: `oncor_qc_log_v1_[projectname]`
+
+**Why this matters:** On any commercial concrete job, the owner's testing lab takes cylinders. When 28-day breaks come back, the engineer reviews them. If JFS doesn't have his own log, he's flying blind — he might get a "low break" phone call from the GC with no context. With this log, he tracks every set, evaluates them against ACI 318, and knows before anyone else if there's a problem. Also creates a professional QC record for the job file.
+
+**Commits:**
+- 6dcfa1d: 🧪 Concrete QC Log (Ctrl+Shift+Q) (+746 lines) [Session #55]
+
+**Total Lines:** ~146,951 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + Daily Field Log + Quick Communication Templates + Project Status Card + Keyboard Shortcuts + Pay Application Generator + RFI & Submittal Log + Punch List Tracker + Lien Rights & Notices Tracker + **Concrete QC Log**
+
+---
+
 ## ✔️ SESSION: Mar 31, 2026 - 21:14 UTC (Overnight Cron #54)
 **Status:** ✅ LIEN RIGHTS & NOTICES TRACKER added (+683 lines)
 
