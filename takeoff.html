@@ -144114,3 +144114,930 @@ function copyStatus() {
 })();
 // ==================== END PAY APPLICATION GENERATOR — Zeus ⚡ Session #51 ====================
 </script>
+
+<script>
+// ==================== RFI & SUBMITTAL LOG — Zeus ⚡ Session #52 ====================
+(function() {
+  'use strict';
+
+  // ─── Storage Keys ───
+  const RFI_KEY = 'oncor_rfi_log_v1';
+  const SUB_KEY = 'oncor_submittal_log_v1';
+
+  function getProject() {
+    return (document.getElementById('projectName') || {}).value || 'Default Project';
+  }
+
+  function loadRFIs() {
+    try { return JSON.parse(localStorage.getItem(RFI_KEY) || '{}'); } catch(e) { return {}; }
+  }
+  function saveRFIs(data) { localStorage.setItem(RFI_KEY, JSON.stringify(data)); }
+  function getProjectRFIs() { const d = loadRFIs(); return d[getProject()] || []; }
+  function setProjectRFIs(arr) { const d = loadRFIs(); d[getProject()] = arr; saveRFIs(d); }
+
+  function loadSubs() {
+    try { return JSON.parse(localStorage.getItem(SUB_KEY) || '{}'); } catch(e) { return {}; }
+  }
+  function saveSubs(data) { localStorage.setItem(SUB_KEY, JSON.stringify(data)); }
+  function getProjectSubs() { const d = loadSubs(); return d[getProject()] || []; }
+  function setProjectSubs(arr) { const d = loadSubs(); d[getProject()] = arr; saveSubs(d); }
+
+  function today() { return new Date().toISOString().slice(0,10); }
+  function formatDate(s) { if (!s) return '—'; const [y,m,d] = s.split('-'); return `${m}/${d}/${y}`; }
+  function daysOpen(s) { if (!s) return '—'; const ms = Date.now() - new Date(s).getTime(); return Math.floor(ms/86400000); }
+  function isOverdue(item) {
+    if (!item.dueDate) return false;
+    if (item.status === 'Closed' || item.status === 'Void' || item.status === 'Approved' || item.status === 'Rejected') return false;
+    return new Date(item.dueDate) < new Date();
+  }
+  function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  // ─── RFI Status Colors ───
+  const RFI_STATUS_COLOR = {
+    'Open': '#f59e0b',
+    'Answered': '#34d399',
+    'Under Review': '#60a5fa',
+    'Closed': '#6b7280',
+    'Void': '#ef4444',
+  };
+  const SUB_STATUS_COLOR = {
+    'Pending': '#f59e0b',
+    'Submitted': '#60a5fa',
+    'Under Review': '#a78bfa',
+    'Approved': '#34d399',
+    'Approved as Noted': '#10b981',
+    'Revise & Resubmit': '#fb923c',
+    'Rejected': '#ef4444',
+    'Void': '#6b7280',
+  };
+
+  // ─── Main Modal ───
+  function showRFILog() {
+    let existing = document.getElementById('rfi-sub-modal');
+    if (existing) { existing.remove(); return; }
+
+    const modal = document.createElement('div');
+    modal.id = 'rfi-sub-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99998;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#0f172a;border:1px solid #334155;border-radius:12px;width:100%;max-width:900px;max-height:90vh;overflow-y:auto;color:#e2e8f0;font-family:sans-serif;position:relative;';
+    box.innerHTML = buildRFIModalHTML();
+    modal.appendChild(box);
+
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+
+    // bind tabs
+    modal.querySelectorAll('.rfi-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => switchTab(modal, btn.dataset.tab));
+    });
+
+    renderRFIList(modal);
+    renderSubList(modal);
+  }
+
+  function buildRFIModalHTML() {
+    return `
+<div style="padding:20px 24px 16px;border-bottom:1px solid #1e293b;display:flex;align-items:center;justify-content:space-between;">
+  <div>
+    <div style="font-size:1.15rem;font-weight:700;color:#60a5fa;">📋 RFI & Submittal Log</div>
+    <div style="font-size:0.75rem;color:#64748b;margin-top:2px;">Track RFIs and submittals — status, response times, overdue items</div>
+  </div>
+  <button onclick="document.getElementById('rfi-sub-modal').remove()" style="background:none;border:none;color:#64748b;font-size:1.3rem;cursor:pointer;padding:4px 8px;">✕</button>
+</div>
+
+<!-- Tabs -->
+<div style="display:flex;gap:4px;padding:12px 24px 0;border-bottom:1px solid #1e293b;">
+  <button class="rfi-tab-btn" data-tab="rfis" style="padding:8px 18px;border-radius:8px 8px 0 0;border:none;cursor:pointer;font-size:0.85rem;font-weight:600;background:#1e3a5f;color:#60a5fa;">📝 RFIs</button>
+  <button class="rfi-tab-btn" data-tab="subs" style="padding:8px 18px;border-radius:8px 8px 0 0;border:none;cursor:pointer;font-size:0.85rem;font-weight:600;background:#1e293b;color:#64748b;">📁 Submittals</button>
+</div>
+
+<!-- RFI Tab -->
+<div id="rfi-tab-rfis" style="padding:20px 24px;">
+  <div id="rfi-stats-bar" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;"></div>
+  <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap;">
+    <button onclick="window._openRFIForm(null)" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:6px;font-size:0.82rem;font-weight:600;cursor:pointer;">+ New RFI</button>
+    <button onclick="window._printRFILog()" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:8px 14px;border-radius:6px;font-size:0.8rem;cursor:pointer;">🖨 Print Log</button>
+    <select id="rfi-filter-status" onchange="window._renderRFIList()" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:7px 10px;border-radius:6px;font-size:0.8rem;">
+      <option value="">All Statuses</option>
+      <option>Open</option><option>Under Review</option><option>Answered</option><option>Closed</option><option>Void</option>
+    </select>
+    <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:#94a3b8;cursor:pointer;">
+      <input type="checkbox" id="rfi-filter-overdue" onchange="window._renderRFIList()" style="cursor:pointer;">
+      Overdue only
+    </label>
+  </div>
+  <div id="rfi-list-container"></div>
+</div>
+
+<!-- Submittal Tab -->
+<div id="rfi-tab-subs" style="padding:20px 24px;display:none;">
+  <div id="sub-stats-bar" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;"></div>
+  <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap;">
+    <button onclick="window._openSubForm(null)" style="background:#8b5cf6;border:none;color:#fff;padding:8px 16px;border-radius:6px;font-size:0.82rem;font-weight:600;cursor:pointer;">+ New Submittal</button>
+    <button onclick="window._printSubLog()" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:8px 14px;border-radius:6px;font-size:0.8rem;cursor:pointer;">🖨 Print Log</button>
+    <select id="sub-filter-status" onchange="window._renderSubList()" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:7px 10px;border-radius:6px;font-size:0.8rem;">
+      <option value="">All Statuses</option>
+      <option>Pending</option><option>Submitted</option><option>Under Review</option><option>Approved</option><option>Approved as Noted</option><option>Revise &amp; Resubmit</option><option>Rejected</option><option>Void</option>
+    </select>
+    <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:#94a3b8;cursor:pointer;">
+      <input type="checkbox" id="sub-filter-overdue" onchange="window._renderSubList()" style="cursor:pointer;">
+      Overdue only
+    </label>
+  </div>
+  <div id="sub-list-container"></div>
+</div>
+`;
+  }
+
+  function switchTab(modal, tab) {
+    modal.querySelectorAll('.rfi-tab-btn').forEach(btn => {
+      const active = btn.dataset.tab === tab;
+      btn.style.background = active ? '#1e3a5f' : '#1e293b';
+      btn.style.color = active ? '#60a5fa' : '#64748b';
+    });
+    const tabs = modal.querySelectorAll('[id^="rfi-tab-"]');
+    tabs.forEach(t => t.style.display = t.id === `rfi-tab-${tab}` ? '' : 'none');
+  }
+
+  // ─── RFI List ───
+  function renderRFIList(modal) {
+    modal = modal || document.getElementById('rfi-sub-modal');
+    if (!modal) return;
+
+    const rfis = getProjectRFIs();
+    const statusFilter = (modal.querySelector('#rfi-filter-status') || {}).value || '';
+    const overdueOnly = (modal.querySelector('#rfi-filter-overdue') || {}).checked;
+
+    // Stats
+    const open = rfis.filter(r => r.status === 'Open').length;
+    const answered = rfis.filter(r => r.status === 'Answered').length;
+    const overdue = rfis.filter(r => isOverdue(r)).length;
+    const avgDays = rfis.length ? Math.round(rfis.map(r => parseInt(daysOpen(r.dateIssued))||0).reduce((a,b)=>a+b,0) / rfis.length) : 0;
+
+    const statsBar = modal.querySelector('#rfi-stats-bar');
+    if (statsBar) {
+      statsBar.innerHTML = [
+        ['Total RFIs', rfis.length, '#60a5fa'],
+        ['Open', open, '#f59e0b'],
+        ['Answered/Closed', answered, '#34d399'],
+        ['Overdue ⚠️', overdue, overdue > 0 ? '#ef4444' : '#6b7280'],
+      ].map(([label, val, color]) => `
+        <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px;text-align:center;">
+          <div style="font-size:1.4rem;font-weight:700;color:${color};">${val}</div>
+          <div style="font-size:0.72rem;color:#64748b;margin-top:2px;">${label}</div>
+        </div>
+      `).join('');
+    }
+
+    // Filter
+    let filtered = rfis.filter(r => {
+      if (statusFilter && r.status !== statusFilter) return false;
+      if (overdueOnly && !isOverdue(r)) return false;
+      return true;
+    });
+
+    const container = modal.querySelector('#rfi-list-container');
+    if (!container) return;
+
+    if (!filtered.length) {
+      container.innerHTML = `<div style="text-align:center;color:#475569;padding:30px;font-size:0.85rem;">${rfis.length ? 'No RFIs match filter.' : 'No RFIs yet. Click + New RFI to get started.'}</div>`;
+      return;
+    }
+
+    container.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
+      <thead>
+        <tr style="background:#1e293b;color:#64748b;text-transform:uppercase;font-size:0.68rem;">
+          <th style="padding:8px;text-align:left;width:50px;">RFI #</th>
+          <th style="padding:8px;text-align:left;">Subject</th>
+          <th style="padding:8px;text-align:center;width:90px;">Status</th>
+          <th style="padding:8px;text-align:center;width:85px;">Issued</th>
+          <th style="padding:8px;text-align:center;width:85px;">Due</th>
+          <th style="padding:8px;text-align:center;width:60px;">Days Open</th>
+          <th style="padding:8px;text-align:left;width:100px;">Directed To</th>
+          <th style="padding:8px;text-align:center;width:80px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${filtered.map((r, i) => {
+          const idx = rfis.indexOf(r);
+          const ov = isOverdue(r);
+          const statusColor = RFI_STATUS_COLOR[r.status] || '#94a3b8';
+          return `<tr style="border-bottom:1px solid #1e293b;${ov ? 'background:rgba(239,68,68,0.05);' : ''}">
+            <td style="padding:8px;color:#94a3b8;font-weight:600;">${escHtml(r.rfiNum||'')}</td>
+            <td style="padding:8px;">
+              <div style="color:#e2e8f0;font-weight:500;">${escHtml(r.subject)}</div>
+              ${r.description ? `<div style="color:#64748b;font-size:0.72rem;margin-top:2px;">${escHtml(r.description.slice(0,80))}${r.description.length>80?'…':''}</div>` : ''}
+              ${ov ? '<div style="color:#ef4444;font-size:0.7rem;font-weight:600;margin-top:2px;">⚠️ OVERDUE</div>' : ''}
+            </td>
+            <td style="padding:8px;text-align:center;"><span style="background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}55;border-radius:4px;padding:3px 7px;font-size:0.7rem;font-weight:600;">${escHtml(r.status)}</span></td>
+            <td style="padding:8px;text-align:center;color:#94a3b8;">${formatDate(r.dateIssued)}</td>
+            <td style="padding:8px;text-align:center;color:${ov?'#ef4444':'#94a3b8'};">${formatDate(r.dueDate)}</td>
+            <td style="padding:8px;text-align:center;color:#94a3b8;">${r.dateIssued ? daysOpen(r.dateIssued) : '—'}</td>
+            <td style="padding:8px;color:#94a3b8;">${escHtml(r.directedTo||'')}</td>
+            <td style="padding:8px;text-align:center;">
+              <button onclick="window._openRFIForm(${idx})" style="background:#1e3a5f;border:none;color:#60a5fa;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:0.72rem;margin-right:2px;">✏️</button>
+              <button onclick="window._printRFI(${idx})" style="background:#1e293b;border:none;color:#94a3b8;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:0.72rem;margin-right:2px;">🖨</button>
+              <button onclick="window._deleteRFI(${idx})" style="background:#2d0f0f;border:none;color:#ef4444;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:0.72rem;">🗑</button>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+  }
+  window._renderRFIList = function() { renderRFIList(); };
+
+  // ─── Submittal List ───
+  function renderSubList(modal) {
+    modal = modal || document.getElementById('rfi-sub-modal');
+    if (!modal) return;
+
+    const subs = getProjectSubs();
+    const statusFilter = (modal.querySelector('#sub-filter-status') || {}).value || '';
+    const overdueOnly = (modal.querySelector('#sub-filter-overdue') || {}).checked;
+
+    const pending = subs.filter(s => s.status === 'Pending' || s.status === 'Submitted' || s.status === 'Under Review').length;
+    const approved = subs.filter(s => s.status === 'Approved' || s.status === 'Approved as Noted').length;
+    const overdue = subs.filter(s => isOverdue(s)).length;
+    const rrs = subs.filter(s => s.status === 'Revise & Resubmit').length;
+
+    const statsBar = modal.querySelector('#sub-stats-bar');
+    if (statsBar) {
+      statsBar.innerHTML = [
+        ['Total', subs.length, '#a78bfa'],
+        ['Pending/In Review', pending, '#f59e0b'],
+        ['Approved', approved, '#34d399'],
+        ['Revise & Resubmit', rrs, rrs > 0 ? '#fb923c' : '#6b7280'],
+      ].map(([label, val, color]) => `
+        <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px;text-align:center;">
+          <div style="font-size:1.4rem;font-weight:700;color:${color};">${val}</div>
+          <div style="font-size:0.72rem;color:#64748b;margin-top:2px;">${label}</div>
+        </div>
+      `).join('');
+    }
+
+    let filtered = subs.filter(s => {
+      if (statusFilter && s.status !== statusFilter) return false;
+      if (overdueOnly && !isOverdue(s)) return false;
+      return true;
+    });
+
+    const container = modal.querySelector('#sub-list-container');
+    if (!container) return;
+
+    if (!filtered.length) {
+      container.innerHTML = `<div style="text-align:center;color:#475569;padding:30px;font-size:0.85rem;">${subs.length ? 'No submittals match filter.' : 'No submittals yet. Click + New Submittal to get started.'}</div>`;
+      return;
+    }
+
+    container.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
+      <thead>
+        <tr style="background:#1e293b;color:#64748b;text-transform:uppercase;font-size:0.68rem;">
+          <th style="padding:8px;text-align:left;width:60px;">Sub #</th>
+          <th style="padding:8px;text-align:left;">Description</th>
+          <th style="padding:8px;text-align:center;width:110px;">Status</th>
+          <th style="padding:8px;text-align:center;width:90px;">Submitted</th>
+          <th style="padding:8px;text-align:center;width:90px;">Required By</th>
+          <th style="padding:8px;text-align:left;width:90px;">Spec Section</th>
+          <th style="padding:8px;text-align:center;width:80px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${filtered.map((s) => {
+          const idx = subs.indexOf(s);
+          const ov = isOverdue(s);
+          const statusColor = SUB_STATUS_COLOR[s.status] || '#94a3b8';
+          return `<tr style="border-bottom:1px solid #1e293b;${ov ? 'background:rgba(239,68,68,0.05);' : ''}">
+            <td style="padding:8px;color:#94a3b8;font-weight:600;">${escHtml(s.subNum||'')}</td>
+            <td style="padding:8px;">
+              <div style="color:#e2e8f0;font-weight:500;">${escHtml(s.description)}</div>
+              ${s.submittalType ? `<div style="color:#64748b;font-size:0.71rem;margin-top:1px;">${escHtml(s.submittalType)}</div>` : ''}
+              ${ov ? '<div style="color:#ef4444;font-size:0.7rem;font-weight:600;margin-top:2px;">⚠️ OVERDUE</div>' : ''}
+              ${s.status==='Revise & Resubmit' ? '<div style="color:#fb923c;font-size:0.7rem;font-weight:600;margin-top:2px;">↩ REVISE & RESUBMIT</div>' : ''}
+            </td>
+            <td style="padding:8px;text-align:center;"><span style="background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}55;border-radius:4px;padding:3px 7px;font-size:0.7rem;font-weight:600;">${escHtml(s.status)}</span></td>
+            <td style="padding:8px;text-align:center;color:#94a3b8;">${formatDate(s.dateSubmitted)}</td>
+            <td style="padding:8px;text-align:center;color:${ov?'#ef4444':'#94a3b8'};">${formatDate(s.requiredBy)}</td>
+            <td style="padding:8px;color:#64748b;">${escHtml(s.specSection||'')}</td>
+            <td style="padding:8px;text-align:center;">
+              <button onclick="window._openSubForm(${idx})" style="background:#2d1f4a;border:none;color:#a78bfa;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:0.72rem;margin-right:2px;">✏️</button>
+              <button onclick="window._printSub(${idx})" style="background:#1e293b;border:none;color:#94a3b8;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:0.72rem;margin-right:2px;">🖨</button>
+              <button onclick="window._deleteSub(${idx})" style="background:#2d0f0f;border:none;color:#ef4444;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:0.72rem;">🗑</button>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+  }
+  window._renderSubList = function() { renderSubList(); };
+
+  // ─── RFI Form ───
+  window._openRFIForm = function(idx) {
+    const rfis = getProjectRFIs();
+    const isEdit = idx !== null && idx !== undefined;
+    const rfi = isEdit ? rfis[idx] : {};
+    const nextNum = `RFI-${String(rfis.length + 1).padStart(3,'0')}`;
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:999999;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+    overlay.innerHTML = `
+<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;width:100%;max-width:620px;padding:24px;color:#e2e8f0;font-family:sans-serif;">
+  <div style="font-size:1rem;font-weight:700;color:#60a5fa;margin-bottom:18px;">${isEdit ? '✏️ Edit RFI' : '+ New RFI'}</div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">RFI # *</label>
+      <input id="rfi-f-num" type="text" value="${escHtml(rfi.rfiNum||nextNum)}" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;box-sizing:border-box;">
+    </div>
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Status</label>
+      <select id="rfi-f-status" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;">
+        ${['Open','Under Review','Answered','Closed','Void'].map(s => `<option ${(rfi.status||'Open')===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>
+  </div>
+
+  <div style="margin-bottom:12px;">
+    <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Subject / Question *</label>
+    <input id="rfi-f-subject" type="text" value="${escHtml(rfi.subject||'')}" placeholder="Rebar placement at column grid B-4?" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;box-sizing:border-box;">
+  </div>
+
+  <div style="margin-bottom:12px;">
+    <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Description / Question Detail</label>
+    <textarea id="rfi-f-desc" rows="3" placeholder="Describe the issue, conflicting information, or clarification needed..." style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.8rem;resize:vertical;box-sizing:border-box;">${escHtml(rfi.description||'')}</textarea>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Date Issued</label>
+      <input id="rfi-f-issued" type="date" value="${rfi.dateIssued||today()}" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;box-sizing:border-box;">
+    </div>
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Response Due</label>
+      <input id="rfi-f-due" type="date" value="${rfi.dueDate||''}" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;box-sizing:border-box;">
+    </div>
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Date Answered</label>
+      <input id="rfi-f-answered" type="date" value="${rfi.dateAnswered||''}" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;box-sizing:border-box;">
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Directed To (GC / Architect / Engineer)</label>
+      <input id="rfi-f-to" type="text" value="${escHtml(rfi.directedTo||'')}" placeholder="ABC General Contractors" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;box-sizing:border-box;">
+    </div>
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Submitted By</label>
+      <input id="rfi-f-by" type="text" value="${escHtml(rfi.submittedBy||(document.getElementById('estimatorName')||{}).value||'')}" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;box-sizing:border-box;">
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Spec / Drawing Reference</label>
+      <input id="rfi-f-ref" type="text" value="${escHtml(rfi.reference||'')}" placeholder="Sheet S-2.1, Detail 4" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;box-sizing:border-box;">
+    </div>
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Cost Impact?</label>
+      <select id="rfi-f-cost" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;">
+        ${['Unknown','None','Potential CO','No Cost Impact'].map(s => `<option ${(rfi.costImpact||'Unknown')===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>
+  </div>
+
+  <div style="margin-bottom:16px;">
+    <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Response / Answer</label>
+    <textarea id="rfi-f-response" rows="2" placeholder="Architect/GC response goes here..." style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.8rem;resize:vertical;box-sizing:border-box;">${escHtml(rfi.response||'')}</textarea>
+  </div>
+
+  <div style="display:flex;gap:10px;justify-content:flex-end;">
+    <button onclick="this.closest('[style]').remove()" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:9px 18px;border-radius:6px;font-size:0.83rem;cursor:pointer;">Cancel</button>
+    <button onclick="window._saveRFI(${isEdit ? idx : 'null'})" style="background:#3b82f6;border:none;color:#fff;padding:9px 22px;border-radius:6px;font-size:0.83rem;font-weight:600;cursor:pointer;">💾 Save RFI</button>
+  </div>
+</div>`;
+
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+  };
+
+  window._saveRFI = function(idx) {
+    const isEdit = idx !== null && idx !== undefined;
+    const rfis = getProjectRFIs();
+    const rfi = {
+      rfiNum: document.getElementById('rfi-f-num').value.trim(),
+      subject: document.getElementById('rfi-f-subject').value.trim(),
+      description: document.getElementById('rfi-f-desc').value.trim(),
+      status: document.getElementById('rfi-f-status').value,
+      dateIssued: document.getElementById('rfi-f-issued').value,
+      dueDate: document.getElementById('rfi-f-due').value,
+      dateAnswered: document.getElementById('rfi-f-answered').value,
+      directedTo: document.getElementById('rfi-f-to').value.trim(),
+      submittedBy: document.getElementById('rfi-f-by').value.trim(),
+      reference: document.getElementById('rfi-f-ref').value.trim(),
+      costImpact: document.getElementById('rfi-f-cost').value,
+      response: document.getElementById('rfi-f-response').value.trim(),
+    };
+    if (!rfi.subject) { alert('Subject is required.'); return; }
+    if (isEdit) rfis[idx] = rfi;
+    else rfis.push(rfi);
+    setProjectRFIs(rfis);
+    // close form overlay
+    const overlays = document.querySelectorAll('[style*="z-index: 999999"], [style*="z-index:999999"]');
+    overlays.forEach(o => { if (o.querySelector('#rfi-f-num')) o.remove(); });
+    renderRFIList();
+    showToast('RFI saved ✓');
+  };
+
+  window._deleteRFI = function(idx) {
+    if (!confirm('Delete this RFI?')) return;
+    const rfis = getProjectRFIs();
+    rfis.splice(idx, 1);
+    setProjectRFIs(rfis);
+    renderRFIList();
+    showToast('RFI deleted');
+  };
+
+  // ─── Submittal Form ───
+  window._openSubForm = function(idx) {
+    const subs = getProjectSubs();
+    const isEdit = idx !== null && idx !== undefined;
+    const sub = isEdit ? subs[idx] : {};
+    const nextNum = `SUB-${String(subs.length + 1).padStart(3,'0')}`;
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:999999;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+    overlay.innerHTML = `
+<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;width:100%;max-width:620px;padding:24px;color:#e2e8f0;font-family:sans-serif;">
+  <div style="font-size:1rem;font-weight:700;color:#a78bfa;margin-bottom:18px;">${isEdit ? '✏️ Edit Submittal' : '+ New Submittal'}</div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Submittal # *</label>
+      <input id="sub-f-num" type="text" value="${escHtml(sub.subNum||nextNum)}" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;box-sizing:border-box;">
+    </div>
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Status</label>
+      <select id="sub-f-status" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;">
+        ${['Pending','Submitted','Under Review','Approved','Approved as Noted','Revise & Resubmit','Rejected','Void'].map(s => `<option ${(sub.status||'Pending')===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>
+  </div>
+
+  <div style="margin-bottom:12px;">
+    <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Description *</label>
+    <input id="sub-f-desc" type="text" value="${escHtml(sub.description||'')}" placeholder="Concrete Mix Design — 4000 PSI" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;box-sizing:border-box;">
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Submittal Type</label>
+      <select id="sub-f-type" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;">
+        ${['Shop Drawing','Product Data','Mix Design','Sample','Test Report','Certificate','O&M Manual','Warranty','Other'].map(s => `<option ${(sub.submittalType||'Shop Drawing')===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Spec Section</label>
+      <input id="sub-f-spec" type="text" value="${escHtml(sub.specSection||'')}" placeholder="03 30 00" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;box-sizing:border-box;">
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Date Submitted</label>
+      <input id="sub-f-submitted" type="date" value="${sub.dateSubmitted||today()}" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;box-sizing:border-box;">
+    </div>
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Required By</label>
+      <input id="sub-f-reqby" type="date" value="${sub.requiredBy||''}" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;box-sizing:border-box;">
+    </div>
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Date Approved</label>
+      <input id="sub-f-approved" type="date" value="${sub.dateApproved||''}" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;box-sizing:border-box;">
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Submitted To (GC / Architect)</label>
+      <input id="sub-f-to" type="text" value="${escHtml(sub.submittedTo||'')}" placeholder="Architect / GC name" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;box-sizing:border-box;">
+    </div>
+    <div>
+      <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Submitted By</label>
+      <input id="sub-f-by" type="text" value="${escHtml(sub.submittedBy||(document.getElementById('estimatorName')||{}).value||'')}" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.83rem;box-sizing:border-box;">
+    </div>
+  </div>
+
+  <div style="margin-bottom:12px;">
+    <label style="font-size:0.75rem;color:#64748b;display:block;margin-bottom:4px;">Reviewer Comments / Notes</label>
+    <textarea id="sub-f-notes" rows="2" placeholder="Approved as noted: use 4&quot; slump max per ACI 305R..." style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.8rem;resize:vertical;box-sizing:border-box;">${escHtml(sub.notes||'')}</textarea>
+  </div>
+
+  <div style="display:flex;gap:10px;justify-content:flex-end;">
+    <button onclick="this.closest('[style]').remove()" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:9px 18px;border-radius:6px;font-size:0.83rem;cursor:pointer;">Cancel</button>
+    <button onclick="window._saveSub(${isEdit ? idx : 'null'})" style="background:#8b5cf6;border:none;color:#fff;padding:9px 22px;border-radius:6px;font-size:0.83rem;font-weight:600;cursor:pointer;">💾 Save Submittal</button>
+  </div>
+</div>`;
+
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+  };
+
+  window._saveSub = function(idx) {
+    const isEdit = idx !== null && idx !== undefined;
+    const subs = getProjectSubs();
+    const sub = {
+      subNum: document.getElementById('sub-f-num').value.trim(),
+      description: document.getElementById('sub-f-desc').value.trim(),
+      submittalType: document.getElementById('sub-f-type').value,
+      specSection: document.getElementById('sub-f-spec').value.trim(),
+      status: document.getElementById('sub-f-status').value,
+      dateSubmitted: document.getElementById('sub-f-submitted').value,
+      requiredBy: document.getElementById('sub-f-reqby').value,
+      dateApproved: document.getElementById('sub-f-approved').value,
+      submittedTo: document.getElementById('sub-f-to').value.trim(),
+      submittedBy: document.getElementById('sub-f-by').value.trim(),
+      notes: document.getElementById('sub-f-notes').value.trim(),
+    };
+    if (!sub.description) { alert('Description is required.'); return; }
+    if (isEdit) subs[idx] = sub;
+    else subs.push(sub);
+    setProjectSubs(subs);
+    const overlays = document.querySelectorAll('[style*="z-index: 999999"], [style*="z-index:999999"]');
+    overlays.forEach(o => { if (o.querySelector('#sub-f-num')) o.remove(); });
+    renderSubList();
+    showToast('Submittal saved ✓');
+  };
+
+  window._deleteSub = function(idx) {
+    if (!confirm('Delete this submittal?')) return;
+    const subs = getProjectSubs();
+    subs.splice(idx, 1);
+    setProjectSubs(subs);
+    renderSubList();
+    showToast('Submittal deleted');
+  };
+
+  // ─── Print RFI ───
+  window._printRFI = function(idx) {
+    const rfis = getProjectRFIs();
+    const r = rfis[idx];
+    if (!r) return;
+    const proj = getProject();
+    const comp = {
+      name: (document.getElementById('companyName')||{}).value || '',
+      phone: (document.getElementById('companyPhone')||{}).value || '',
+      email: (document.getElementById('companyEmail')||{}).value || '',
+      address: (document.getElementById('companyAddress')||{}).value || '',
+      license: (document.getElementById('contractorLicense')||{}).value || '',
+    };
+    const statusColor = RFI_STATUS_COLOR[r.status] || '#94a3b8';
+    const html = `<!DOCTYPE html><html><head><title>RFI ${escHtml(r.rfiNum)} — ${escHtml(proj)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Arial,sans-serif;font-size:10pt;color:#1a1a1a;padding:28px 36px;}
+.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1d4ed8;padding-bottom:12px;margin-bottom:16px;}
+.comp-name{font-size:14pt;font-weight:700;color:#1d4ed8;}
+.comp-info{font-size:8.5pt;color:#555;line-height:1.5;}
+.rfi-badge{background:#1d4ed8;color:#fff;padding:6px 14px;border-radius:6px;font-size:11pt;font-weight:700;text-align:right;}
+.meta-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
+.meta-cell{background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:8px 10px;}
+.meta-label{font-size:7.5pt;color:#666;text-transform:uppercase;font-weight:600;}
+.meta-value{font-size:9.5pt;font-weight:700;color:#1a1a1a;margin-top:2px;}
+.section-title{font-size:9pt;font-weight:700;color:#1d4ed8;text-transform:uppercase;margin:12px 0 6px;border-bottom:1px solid #dbeafe;padding-bottom:3px;}
+.field-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:10px 12px;font-size:9.5pt;line-height:1.5;min-height:40px;margin-bottom:10px;white-space:pre-wrap;}
+.status-badge{display:inline-block;background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor};border-radius:4px;padding:3px 10px;font-size:9pt;font-weight:700;}
+.response-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:10px 12px;font-size:9.5pt;line-height:1.5;min-height:50px;white-space:pre-wrap;}
+.sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;}
+.sig-block{border-top:1px solid #ccc;padding-top:6px;}
+.sig-label{font-size:8pt;color:#555;margin-top:8px;}
+.sig-line{border-bottom:1px solid #aaa;height:20px;}
+.footer{margin-top:20px;font-size:7.5pt;color:#888;text-align:center;border-top:1px solid #e2e8f0;padding-top:8px;}
+@media print{body{padding:15px 20px;}}
+</style></head><body>
+<div class="header">
+  <div>
+    <div class="comp-name">${escHtml(comp.name||'Contractor')}</div>
+    <div class="comp-info">${escHtml(comp.address)}<br>${escHtml(comp.phone)}${comp.email?' · '+escHtml(comp.email):''}<br>${comp.license?'License: '+escHtml(comp.license):''}</div>
+  </div>
+  <div style="text-align:right;">
+    <div class="rfi-badge">RFI ${escHtml(r.rfiNum)}</div>
+    <div style="font-size:8.5pt;color:#555;margin-top:4px;">${escHtml(proj)}</div>
+    <div class="status-badge" style="margin-top:6px;">${escHtml(r.status)}</div>
+  </div>
+</div>
+
+<div class="meta-grid">
+  <div class="meta-cell"><div class="meta-label">Date Issued</div><div class="meta-value">${formatDate(r.dateIssued)}</div></div>
+  <div class="meta-cell"><div class="meta-label">Response Due</div><div class="meta-value" style="color:${isOverdue(r)?'#dc2626':'#1a1a1a'}">${formatDate(r.dueDate)}</div></div>
+  <div class="meta-cell"><div class="meta-label">Date Answered</div><div class="meta-value">${formatDate(r.dateAnswered)}</div></div>
+  <div class="meta-cell"><div class="meta-label">Directed To</div><div class="meta-value">${escHtml(r.directedTo||'—')}</div></div>
+  <div class="meta-cell"><div class="meta-label">Submitted By</div><div class="meta-value">${escHtml(r.submittedBy||'—')}</div></div>
+  <div class="meta-cell"><div class="meta-label">Cost Impact</div><div class="meta-value">${escHtml(r.costImpact||'Unknown')}</div></div>
+</div>
+
+<div class="section-title">Subject</div>
+<div class="field-box" style="font-weight:600;font-size:10pt;">${escHtml(r.subject)}</div>
+
+${r.description ? `<div class="section-title">Question / Description</div><div class="field-box">${escHtml(r.description)}</div>` : ''}
+${r.reference ? `<div class="section-title">Drawing / Spec Reference</div><div class="field-box">${escHtml(r.reference)}</div>` : ''}
+
+<div class="section-title">Response / Answer</div>
+<div class="response-box">${escHtml(r.response || '(No response recorded)')}</div>
+
+<div class="sig-grid">
+  <div class="sig-block">
+    <div style="font-size:8pt;font-weight:600;">Requested By (Contractor)</div>
+    <div class="sig-line" style="margin-top:24px;"></div>
+    <div class="sig-label">Authorized Signature</div>
+    <div class="sig-line" style="margin-top:16px;"></div>
+    <div class="sig-label">Printed Name & Title / Date</div>
+  </div>
+  <div class="sig-block">
+    <div style="font-size:8pt;font-weight:600;">Responded By (GC / Architect / Engineer)</div>
+    <div class="sig-line" style="margin-top:24px;"></div>
+    <div class="sig-label">Authorized Signature</div>
+    <div class="sig-line" style="margin-top:16px;"></div>
+    <div class="sig-label">Printed Name & Title / Date</div>
+  </div>
+</div>
+
+<div class="footer">${escHtml(comp.name||'Contractor')} · RFI ${escHtml(r.rfiNum)} · ${escHtml(proj)} · Printed ${new Date().toLocaleDateString()}<br>
+<button onclick="window.print()" style="margin-top:6px;padding:5px 14px;background:#1d4ed8;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:9pt;">🖨 Print / Save PDF</button></div>
+</body></html>`;
+    const win = window.open('', '_blank', 'width=800,height=700');
+    if (!win) { alert('Pop-up blocked.'); return; }
+    win.document.write(html);
+    win.document.close();
+  };
+
+  // ─── Print RFI Log ───
+  window._printRFILog = function() {
+    const rfis = getProjectRFIs();
+    const proj = getProject();
+    const comp = { name: (document.getElementById('companyName')||{}).value || '' };
+    const open = rfis.filter(r => r.status === 'Open').length;
+    const answered = rfis.filter(r => r.status === 'Answered').length;
+    const overdue = rfis.filter(r => isOverdue(r)).length;
+    const html = `<!DOCTYPE html><html><head><title>RFI Log — ${escHtml(proj)}</title>
+<style>
+*{box-sizing:border-box;}body{font-family:Arial,sans-serif;font-size:9pt;padding:24px 32px;color:#1a1a1a;}
+h1{font-size:13pt;color:#1d4ed8;margin-bottom:4px;}
+.meta{font-size:8pt;color:#555;margin-bottom:12px;}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;}
+.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:8px;text-align:center;}
+.stat-val{font-size:13pt;font-weight:700;color:#1d4ed8;}
+.stat-lbl{font-size:7pt;color:#666;text-transform:uppercase;}
+table{width:100%;border-collapse:collapse;font-size:8.5pt;}
+th{background:#1d4ed8;color:#fff;padding:6px 8px;text-align:left;font-size:8pt;}
+td{padding:6px 8px;border-bottom:1px solid #e2e8f0;vertical-align:top;}
+.ov{background:#fff5f5;}
+.status-pill{display:inline-block;border-radius:3px;padding:2px 6px;font-size:7.5pt;font-weight:600;}
+.footer{margin-top:16px;font-size:7.5pt;color:#888;text-align:center;border-top:1px solid #e2e8f0;padding-top:6px;}
+@media print{body{padding:12px 16px;}}
+</style></head><body>
+<h1>📝 RFI Log — ${escHtml(proj)}</h1>
+<div class="meta">${escHtml(comp.name||'')} · Printed ${new Date().toLocaleDateString()} · ${rfis.length} RFIs total</div>
+<div class="stats">
+  <div class="stat"><div class="stat-val">${rfis.length}</div><div class="stat-lbl">Total RFIs</div></div>
+  <div class="stat"><div class="stat-val" style="color:#f59e0b;">${open}</div><div class="stat-lbl">Open</div></div>
+  <div class="stat"><div class="stat-val" style="color:#34d399;">${answered}</div><div class="stat-lbl">Answered/Closed</div></div>
+  <div class="stat"><div class="stat-val" style="color:#ef4444;">${overdue}</div><div class="stat-lbl">Overdue</div></div>
+</div>
+<table>
+<thead><tr><th>RFI #</th><th>Subject</th><th>Status</th><th>Issued</th><th>Due</th><th>Days Open</th><th>Directed To</th><th>Cost Impact</th></tr></thead>
+<tbody>
+${rfis.map(r => {
+  const ov = isOverdue(r);
+  const col = RFI_STATUS_COLOR[r.status] || '#888';
+  return `<tr class="${ov?'ov':''}">
+    <td style="font-weight:600;">${escHtml(r.rfiNum||'')}</td>
+    <td>${escHtml(r.subject)}${r.description?`<br><span style="color:#666;font-size:7.5pt;">${escHtml(r.description.slice(0,60))}${r.description.length>60?'…':''}</span>`:''}</td>
+    <td><span class="status-pill" style="background:${col}22;color:${col};border:1px solid ${col};">${escHtml(r.status)}</span></td>
+    <td>${formatDate(r.dateIssued)}</td>
+    <td style="color:${ov?'#dc2626':'#1a1a1a'}">${formatDate(r.dueDate)}</td>
+    <td>${r.dateIssued ? daysOpen(r.dateIssued) : '—'}</td>
+    <td>${escHtml(r.directedTo||'—')}</td>
+    <td>${escHtml(r.costImpact||'—')}</td>
+  </tr>`;
+}).join('')}
+</tbody></table>
+<div class="footer">${escHtml(comp.name||'Contractor')} · RFI Log · ${escHtml(proj)}<br>
+<button onclick="window.print()" style="margin-top:6px;padding:5px 14px;background:#1d4ed8;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:9pt;">🖨 Print / Save PDF</button></div>
+</body></html>`;
+    const win = window.open('', '_blank', 'width=1000,height=700');
+    if (!win) { alert('Pop-up blocked.'); return; }
+    win.document.write(html);
+    win.document.close();
+  };
+
+  // ─── Print Submittal ───
+  window._printSub = function(idx) {
+    const subs = getProjectSubs();
+    const s = subs[idx];
+    if (!s) return;
+    const proj = getProject();
+    const comp = {
+      name: (document.getElementById('companyName')||{}).value || '',
+      phone: (document.getElementById('companyPhone')||{}).value || '',
+      email: (document.getElementById('companyEmail')||{}).value || '',
+      address: (document.getElementById('companyAddress')||{}).value || '',
+      license: (document.getElementById('contractorLicense')||{}).value || '',
+    };
+    const statusColor = SUB_STATUS_COLOR[s.status] || '#94a3b8';
+    const html = `<!DOCTYPE html><html><head><title>Submittal ${escHtml(s.subNum)} — ${escHtml(proj)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Arial,sans-serif;font-size:10pt;color:#1a1a1a;padding:28px 36px;}
+.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #7c3aed;padding-bottom:12px;margin-bottom:16px;}
+.comp-name{font-size:14pt;font-weight:700;color:#7c3aed;}
+.sub-badge{background:#7c3aed;color:#fff;padding:6px 14px;border-radius:6px;font-size:11pt;font-weight:700;text-align:right;}
+.meta-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
+.meta-cell{background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:8px 10px;}
+.meta-label{font-size:7.5pt;color:#666;text-transform:uppercase;font-weight:600;}
+.meta-value{font-size:9.5pt;font-weight:700;color:#1a1a1a;margin-top:2px;}
+.section-title{font-size:9pt;font-weight:700;color:#7c3aed;text-transform:uppercase;margin:12px 0 6px;border-bottom:1px solid #ede9fe;padding-bottom:3px;}
+.field-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:10px 12px;font-size:9.5pt;line-height:1.5;min-height:40px;margin-bottom:10px;white-space:pre-wrap;}
+.status-badge{display:inline-block;background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor};border-radius:4px;padding:3px 10px;font-size:9pt;font-weight:700;}
+.sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;}
+.sig-block{border-top:1px solid #ccc;padding-top:6px;}
+.sig-label{font-size:8pt;color:#555;margin-top:8px;}
+.sig-line{border-bottom:1px solid #aaa;height:20px;}
+.footer{margin-top:20px;font-size:7.5pt;color:#888;text-align:center;border-top:1px solid #e2e8f0;padding-top:8px;}
+@media print{body{padding:15px 20px;}}
+</style></head><body>
+<div class="header">
+  <div>
+    <div class="comp-name">${escHtml(comp.name||'Contractor')}</div>
+    <div style="font-size:8.5pt;color:#555;line-height:1.5;">${escHtml(comp.address)}<br>${escHtml(comp.phone)}${comp.email?' · '+escHtml(comp.email):''}<br>${comp.license?'License: '+escHtml(comp.license):''}</div>
+  </div>
+  <div style="text-align:right;">
+    <div class="sub-badge">Submittal ${escHtml(s.subNum)}</div>
+    <div style="font-size:8.5pt;color:#555;margin-top:4px;">${escHtml(proj)}</div>
+    <div class="status-badge" style="margin-top:6px;">${escHtml(s.status)}</div>
+  </div>
+</div>
+
+<div class="meta-grid">
+  <div class="meta-cell"><div class="meta-label">Submittal Type</div><div class="meta-value">${escHtml(s.submittalType||'—')}</div></div>
+  <div class="meta-cell"><div class="meta-label">Spec Section</div><div class="meta-value">${escHtml(s.specSection||'—')}</div></div>
+  <div class="meta-cell"><div class="meta-label">Date Submitted</div><div class="meta-value">${formatDate(s.dateSubmitted)}</div></div>
+  <div class="meta-cell"><div class="meta-label">Required By</div><div class="meta-value" style="color:${isOverdue(s)?'#dc2626':'#1a1a1a'}">${formatDate(s.requiredBy)}</div></div>
+  <div class="meta-cell"><div class="meta-label">Date Approved</div><div class="meta-value">${formatDate(s.dateApproved)}</div></div>
+  <div class="meta-cell"><div class="meta-label">Submitted To</div><div class="meta-value">${escHtml(s.submittedTo||'—')}</div></div>
+</div>
+
+<div class="section-title">Description</div>
+<div class="field-box" style="font-weight:600;font-size:10pt;">${escHtml(s.description)}</div>
+
+${s.notes ? `<div class="section-title">Reviewer Comments / Notes</div><div class="field-box" style="background:#f0fdf4;border-color:#bbf7d0;">${escHtml(s.notes)}</div>` : ''}
+
+<div class="sig-grid">
+  <div class="sig-block">
+    <div style="font-size:8pt;font-weight:600;">Submitted By (Contractor)</div>
+    <div class="sig-line" style="margin-top:24px;"></div>
+    <div class="sig-label">Authorized Signature</div>
+    <div class="sig-line" style="margin-top:16px;"></div>
+    <div class="sig-label">Printed Name & Title / Date</div>
+  </div>
+  <div class="sig-block">
+    <div style="font-size:8pt;font-weight:600;">Reviewed By (GC / Architect)</div>
+    <div class="sig-line" style="margin-top:24px;"></div>
+    <div class="sig-label">Authorized Signature</div>
+    <div class="sig-line" style="margin-top:16px;"></div>
+    <div class="sig-label">Printed Name & Title / Date</div>
+  </div>
+</div>
+
+<div class="footer">${escHtml(comp.name||'Contractor')} · Submittal ${escHtml(s.subNum)} · ${escHtml(proj)} · Printed ${new Date().toLocaleDateString()}<br>
+<button onclick="window.print()" style="margin-top:6px;padding:5px 14px;background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:9pt;">🖨 Print / Save PDF</button></div>
+</body></html>`;
+    const win = window.open('', '_blank', 'width=800,height=700');
+    if (!win) { alert('Pop-up blocked.'); return; }
+    win.document.write(html);
+    win.document.close();
+  };
+
+  // ─── Print Submittal Log ───
+  window._printSubLog = function() {
+    const subs = getProjectSubs();
+    const proj = getProject();
+    const comp = { name: (document.getElementById('companyName')||{}).value || '' };
+    const pending = subs.filter(s => s.status === 'Pending' || s.status === 'Submitted' || s.status === 'Under Review').length;
+    const approved = subs.filter(s => s.status === 'Approved' || s.status === 'Approved as Noted').length;
+    const rrs = subs.filter(s => s.status === 'Revise & Resubmit').length;
+    const html = `<!DOCTYPE html><html><head><title>Submittal Log — ${escHtml(proj)}</title>
+<style>
+*{box-sizing:border-box;}body{font-family:Arial,sans-serif;font-size:9pt;padding:24px 32px;color:#1a1a1a;}
+h1{font-size:13pt;color:#7c3aed;margin-bottom:4px;}
+.meta{font-size:8pt;color:#555;margin-bottom:12px;}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;}
+.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:8px;text-align:center;}
+.stat-val{font-size:13pt;font-weight:700;color:#7c3aed;}
+.stat-lbl{font-size:7pt;color:#666;text-transform:uppercase;}
+table{width:100%;border-collapse:collapse;font-size:8.5pt;}
+th{background:#7c3aed;color:#fff;padding:6px 8px;text-align:left;font-size:8pt;}
+td{padding:6px 8px;border-bottom:1px solid #e2e8f0;vertical-align:top;}
+.ov{background:#fff5f5;}
+.status-pill{display:inline-block;border-radius:3px;padding:2px 6px;font-size:7.5pt;font-weight:600;}
+.footer{margin-top:16px;font-size:7.5pt;color:#888;text-align:center;border-top:1px solid #e2e8f0;padding-top:6px;}
+@media print{body{padding:12px 16px;}}
+</style></head><body>
+<h1>📁 Submittal Log — ${escHtml(proj)}</h1>
+<div class="meta">${escHtml(comp.name||'')} · Printed ${new Date().toLocaleDateString()} · ${subs.length} submittals total</div>
+<div class="stats">
+  <div class="stat"><div class="stat-val">${subs.length}</div><div class="stat-lbl">Total Submittals</div></div>
+  <div class="stat"><div class="stat-val" style="color:#f59e0b;">${pending}</div><div class="stat-lbl">Pending/In Review</div></div>
+  <div class="stat"><div class="stat-val" style="color:#34d399;">${approved}</div><div class="stat-lbl">Approved</div></div>
+  <div class="stat"><div class="stat-val" style="color:#fb923c;">${rrs}</div><div class="stat-lbl">Revise &amp; Resubmit</div></div>
+</div>
+<table>
+<thead><tr><th>Sub #</th><th>Description</th><th>Type</th><th>Spec</th><th>Status</th><th>Submitted</th><th>Required By</th><th>Approved</th></tr></thead>
+<tbody>
+${subs.map(s => {
+  const ov = isOverdue(s);
+  const col = SUB_STATUS_COLOR[s.status] || '#888';
+  return `<tr class="${ov?'ov':''}">
+    <td style="font-weight:600;">${escHtml(s.subNum||'')}</td>
+    <td>${escHtml(s.description)}${s.notes?`<br><span style="color:#666;font-size:7.5pt;">${escHtml(s.notes.slice(0,60))}${s.notes.length>60?'…':''}</span>`:''}</td>
+    <td>${escHtml(s.submittalType||'—')}</td>
+    <td>${escHtml(s.specSection||'—')}</td>
+    <td><span class="status-pill" style="background:${col}22;color:${col};border:1px solid ${col};">${escHtml(s.status)}</span></td>
+    <td>${formatDate(s.dateSubmitted)}</td>
+    <td style="color:${ov?'#dc2626':'#1a1a1a'}">${formatDate(s.requiredBy)}</td>
+    <td>${formatDate(s.dateApproved)}</td>
+  </tr>`;
+}).join('')}
+</tbody></table>
+<div class="footer">${escHtml(comp.name||'Contractor')} · Submittal Log · ${escHtml(proj)}<br>
+<button onclick="window.print()" style="margin-top:6px;padding:5px 14px;background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:9pt;">🖨 Print / Save PDF</button></div>
+</body></html>`;
+    const win = window.open('', '_blank', 'width=1000,height=700');
+    if (!win) { alert('Pop-up blocked.'); return; }
+    win.document.write(html);
+    win.document.close();
+  };
+
+  // ─── Toast ───
+  function showToast(msg) {
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;color:#34d399;border:1px solid #334155;border-radius:8px;padding:10px 20px;font-size:0.82rem;z-index:999999;font-weight:600;pointer-events:none;';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2500);
+  }
+
+  // ─── Keyboard Shortcut ───
+  document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.shiftKey && e.key === 'X') {
+      e.preventDefault();
+      showRFILog();
+    }
+  });
+
+  // ─── Sidebar Button ───
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      const actionsDiv = document.querySelector('.actions');
+      if (!actionsDiv) return;
+
+      const rows = actionsDiv.querySelectorAll('.action-row');
+      let targetRow = null;
+      rows.forEach(row => {
+        if (row.textContent.includes('Pay Applications')) {
+          targetRow = row;
+        }
+      });
+
+      const newRow = document.createElement('div');
+      newRow.className = 'action-row';
+      newRow.innerHTML = `
+        <button class="action-btn secondary" onclick="window._showRFILog()" title="RFI & Submittal Log — Track RFIs and submittals. Status, overdue flags, response times. Print individual RFI/submittal docs or full project logs. (Ctrl+Shift+X)" style="background:rgba(96,165,250,0.1);border-color:rgba(96,165,250,0.3);color:#60a5fa;">📋 RFI / Submittals</button>
+      `;
+
+      if (targetRow && targetRow.parentNode) {
+        targetRow.parentNode.insertBefore(newRow, targetRow.nextSibling);
+      } else {
+        actionsDiv.appendChild(newRow);
+      }
+    }, 980);
+  });
+
+  window._showRFILog = showRFILog;
+
+  // ─── Expose data for Project Status Card integration ───
+  window._getRFIStats = function() {
+    const rfis = getProjectRFIs();
+    const subs = getProjectSubs();
+    return {
+      rfis: { total: rfis.length, open: rfis.filter(r=>r.status==='Open').length, overdue: rfis.filter(r=>isOverdue(r)).length },
+      submittals: { total: subs.length, pending: subs.filter(s=>s.status==='Pending'||s.status==='Submitted'||s.status==='Under Review').length, approved: subs.filter(s=>s.status==='Approved'||s.status==='Approved as Noted').length, rrs: subs.filter(s=>s.status==='Revise & Resubmit').length }
+    };
+  };
+
+})();
+// ==================== END RFI & SUBMITTAL LOG — Zeus ⚡ Session #52 ====================
+</script>
