@@ -140524,3 +140524,522 @@ document.addEventListener('keydown', function(e){
 })();
 // ==================== END POUR SCHEDULE & BATCH PLANT ORDER SHEET — Zeus ⚡ Session #44 ====================
 </script>
+<script>
+// ==================== INTERNAL ESTIMATE BREAKDOWN REPORT — Zeus ⚡ Session #45 ====================
+// Ctrl+Shift+R  |  Sidebar button: 📊 Est. Report
+// Generates a detailed internal estimate report for job files, PM handoff, and principal review.
+// Output: printable HTML in new window (browser Print → PDF).
+
+(function() {
+  'use strict';
+
+  /* ─── helpers ─── */
+  function _esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function _fmt$(n) {
+    if (!n && n!==0) return '—';
+    return '$' + Number(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+  function _fmtN(n, dec) {
+    if (!n && n!==0) return '—';
+    return Number(n).toLocaleString('en-US', {minimumFractionDigits:dec||2, maximumFractionDigits:dec||2});
+  }
+  function _getCoInfo() {
+    return {
+      name:  (document.getElementById('companyName')  ||{}).value || '',
+      phone: (document.getElementById('companyPhone') ||{}).value || '',
+      email: (document.getElementById('companyEmail') ||{}).value || '',
+      addr:  (document.getElementById('companyAddress')||{}).value || '',
+      lic:   (document.getElementById('companyLicense')||{}).value || ''
+    };
+  }
+  function _getProjInfo() {
+    return {
+      name:      (document.getElementById('projectName')  ||{}).value || '',
+      client:    (document.getElementById('clientName')   ||{}).value || '',
+      estimator: (document.getElementById('estimatorName')||{}).value || '',
+      bidDate:   (document.getElementById('bidDate')      ||{}).value || '',
+      notes:     (document.getElementById('projectNotes') ||{}).value || ''
+    };
+  }
+  function _getPrices() {
+    var ids = ['concrete2500','concrete3000','concrete3500','concrete4000','concrete4500','concrete5000','concrete6000',
+               'laborRate','formCost','rebarCost','meshCost','fiberCost','pumpCost','sawCutRate',
+               'baseCourseRate','vaporBarrierRate','mobilizationCost','miscRate',
+               'overheadPct','profitPct','contingencyPct','wastePct'];
+    var out = {};
+    ids.forEach(function(id) {
+      var el = document.getElementById(id);
+      out[id] = el ? el.value : '';
+    });
+    return out;
+  }
+  function _getSections() {
+    try {
+      return JSON.parse(localStorage.getItem('oncor_sections_v1') || '[]');
+    } catch(e) { return []; }
+  }
+  function _getSectionAssignments() {
+    try {
+      return JSON.parse(localStorage.getItem('oncor_section_assignments_v1') || '{}');
+    } catch(e) { return {}; }
+  }
+  function _getAlts() {
+    try {
+      return JSON.parse(localStorage.getItem('oncor_alternates_v1') || '[]');
+    } catch(e) { return []; }
+  }
+  function _getAltAssign() {
+    try {
+      return JSON.parse(localStorage.getItem('oncor_alt_assignments_v1') || '{}');
+    } catch(e) { return {}; }
+  }
+
+  /* ─── Generate and open report ─── */
+  function generateEstReport() {
+    var co   = _getCoInfo();
+    var proj = _getProjInfo();
+    var est  = window.lastEstimate || {};
+    var meas = window.measurements || [];
+    var prices = _getPrices();
+    var sections = _getSections();
+    var secAssign = _getSectionAssignments();
+    var alts = _getAlts();
+    var altAssign = _getAltAssign();
+    var today = new Date();
+    var dateStr = today.toLocaleDateString('en-US', {year:'numeric',month:'long',day:'numeric'});
+    var timeStr = today.toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit'});
+
+    /* ─── Measurement detail table rows ─── */
+    var measRows = '';
+    var includedMeas = meas.filter(function(m){ return m.include !== false; });
+    var totalMeasYd = 0;
+    includedMeas.forEach(function(m, i) {
+      var secName = '—';
+      if (secAssign[m.id] && sections.length) {
+        var sec = sections.find(function(s){ return s.id === secAssign[m.id]; });
+        if (sec) secName = sec.name;
+      }
+      var altName = '—';
+      if (altAssign[m.id] !== undefined && altAssign[m.id] !== null && alts.length) {
+        var ai = altAssign[m.id];
+        if (ai === 'base') { altName = 'Base'; }
+        else {
+          var a = alts[parseInt(ai)];
+          if (a) altName = 'Alt '+_esc(a.name||('#'+(parseInt(ai)+1)));
+        }
+      } else { altName = 'Base'; }
+      var yd3 = parseFloat(m.yd3||m.yards||0);
+      totalMeasYd += yd3;
+      var dimStr = '';
+      if (m.length || m.width || m.depth || m.thickness) {
+        var parts = [];
+        if (m.length) parts.push('L:'+m.length+"'");
+        if (m.width)  parts.push('W:'+m.width+"'");
+        if (m.depth || m.thickness) parts.push('D:'+(m.depth||m.thickness)+'"');
+        if (m.diameter) parts.push('Dia:'+m.diameter+'"');
+        if (m.height) parts.push('H:'+m.height+"'");
+        dimStr = parts.join(' ');
+      }
+      var psi = m.psiOverride || prices.concrete4000 ? (m.psiOverride || '4000') : '—';
+      var phase = m.phase ? 'P'+m.phase : '—';
+      measRows += '<tr>'
+        + '<td style="color:#94a3b8;font-size:0.78rem;">'+(i+1)+'</td>'
+        + '<td style="font-weight:500;">'+_esc(m.label||m.name||m.type||'—')+'</td>'
+        + '<td>'+_esc(m.type||m.elementType||'—')+'</td>'
+        + '<td style="font-size:0.8rem;color:#94a3b8;">'+_esc(dimStr||'—')+'</td>'
+        + '<td style="text-align:right;font-weight:600;">'+_fmtN(yd3,2)+'</td>'
+        + '<td style="text-align:center;">'+_esc(psi)+'</td>'
+        + '<td style="text-align:center;">'+_esc(phase)+'</td>'
+        + '<td style="text-align:center;font-size:0.8rem;">'+_esc(secName)+'</td>'
+        + '<td style="text-align:center;font-size:0.8rem;">'+_esc(altName)+'</td>'
+        + '</tr>';
+    });
+    // Excluded measurements
+    var excludedMeas = meas.filter(function(m){ return m.include === false; });
+    if (excludedMeas.length) {
+      measRows += '<tr><td colspan="9" style="background:#1e2a3a;color:#64748b;font-size:0.78rem;font-style:italic;padding:4px 8px;">— '+excludedMeas.length+' measurement(s) EXCLUDED from estimate below —</td></tr>';
+      excludedMeas.forEach(function(m, i) {
+        var yd3 = parseFloat(m.yd3||m.yards||0);
+        measRows += '<tr style="opacity:0.45;font-style:italic;">'
+          + '<td style="color:#64748b;">'+_esc('X')+'</td>'
+          + '<td>'+_esc(m.label||m.name||m.type||'—')+'</td>'
+          + '<td>'+_esc(m.type||m.elementType||'—')+'</td>'
+          + '<td>—</td>'
+          + '<td style="text-align:right;">'+_fmtN(yd3,2)+'</td>'
+          + '<td colspan="4" style="text-align:center;color:#ef4444;font-size:0.78rem;">EXCLUDED</td>'
+          + '</tr>';
+      });
+    }
+
+    /* ─── Element type summary ─── */
+    var typeMap = {};
+    includedMeas.forEach(function(m) {
+      var t = m.type||m.elementType||'Other';
+      if (!typeMap[t]) typeMap[t] = {count:0, yd3:0};
+      typeMap[t].count++;
+      typeMap[t].yd3 += parseFloat(m.yd3||m.yards||0);
+    });
+    var typeRows = '';
+    var typeTotal = {count:0, yd3:0};
+    Object.keys(typeMap).sort().forEach(function(t) {
+      var d = typeMap[t];
+      typeTotal.count += d.count; typeTotal.yd3 += d.yd3;
+      var pct = totalMeasYd > 0 ? (d.yd3/totalMeasYd*100).toFixed(1) : '0.0';
+      typeRows += '<tr>'
+        + '<td>'+_esc(t)+'</td>'
+        + '<td style="text-align:center;">'+d.count+'</td>'
+        + '<td style="text-align:right;font-weight:600;">'+_fmtN(d.yd3,2)+' yd³</td>'
+        + '<td style="text-align:right;">'+pct+'%</td>'
+        + '</tr>';
+    });
+    typeRows += '<tr style="font-weight:700;background:#1e2a3a;">'
+      + '<td>TOTAL</td><td style="text-align:center;">'+typeTotal.count+'</td>'
+      + '<td style="text-align:right;">'+_fmtN(typeTotal.yd3,2)+' yd³</td>'
+      + '<td style="text-align:right;">100%</td></tr>';
+
+    /* ─── Section subtotals ─── */
+    var secRows = '';
+    if (sections.length) {
+      var secMap = {};
+      sections.forEach(function(s){ secMap[s.id]={name:s.name,yd3:0,count:0}; });
+      secMap['__none__'] = {name:'(Unassigned)',yd3:0,count:0};
+      includedMeas.forEach(function(m) {
+        var sid = secAssign[m.id] || '__none__';
+        if (!secMap[sid]) sid = '__none__';
+        secMap[sid].yd3 += parseFloat(m.yd3||m.yards||0);
+        secMap[sid].count++;
+      });
+      Object.keys(secMap).forEach(function(sid) {
+        var s = secMap[sid];
+        if (s.count === 0) return;
+        secRows += '<tr>'
+          + '<td>'+_esc(s.name)+'</td>'
+          + '<td style="text-align:center;">'+s.count+'</td>'
+          + '<td style="text-align:right;font-weight:600;">'+_fmtN(s.yd3,2)+' yd³</td>'
+          + '</tr>';
+      });
+    }
+
+    /* ─── Phase breakdown ─── */
+    var phaseMap = {P1:{yd3:0,count:0},P2:{yd3:0,count:0},P3:{yd3:0,count:0},'None':{yd3:0,count:0}};
+    includedMeas.forEach(function(m) {
+      var ph = m.phase ? 'P'+m.phase : 'None';
+      if (!phaseMap[ph]) phaseMap[ph] = {yd3:0,count:0};
+      phaseMap[ph].yd3 += parseFloat(m.yd3||m.yards||0);
+      phaseMap[ph].count++;
+    });
+    var phaseRows = '';
+    ['P1','P2','P3','None'].forEach(function(p) {
+      var d = phaseMap[p];
+      if (d.count === 0) return;
+      var pct = totalMeasYd > 0 ? (d.yd3/totalMeasYd*100).toFixed(1) : '0.0';
+      phaseRows += '<tr>'
+        + '<td>'+_esc(p==='None'?'Unphased':p)+'</td>'
+        + '<td style="text-align:center;">'+d.count+'</td>'
+        + '<td style="text-align:right;font-weight:600;">'+_fmtN(d.yd3,2)+' yd³</td>'
+        + '<td style="text-align:right;">'+pct+'%</td>'
+        + '</tr>';
+    });
+
+    /* ─── Unit prices table ─── */
+    var priceRows = [
+      ['Concrete 2500 PSI', _fmt$(prices.concrete2500)+'/yd³'],
+      ['Concrete 3000 PSI', _fmt$(prices.concrete3000)+'/yd³'],
+      ['Concrete 3500 PSI', _fmt$(prices.concrete3500)+'/yd³'],
+      ['Concrete 4000 PSI', _fmt$(prices.concrete4000)+'/yd³'],
+      ['Concrete 4500 PSI', _fmt$(prices.concrete4500)+'/yd³'],
+      ['Concrete 5000 PSI', _fmt$(prices.concrete5000)+'/yd³'],
+      ['Concrete 6000 PSI', _fmt$(prices.concrete6000)+'/yd³'],
+      ['Labor Rate', _fmt$(prices.laborRate)+'/hr'],
+      ['Formwork', _fmt$(prices.formCost)+'/SF'],
+      ['Rebar', _fmt$(prices.rebarCost)+'/lb'],
+      ['WWM/Mesh', _fmt$(prices.meshCost)+'/SF'],
+      ['Fiber', _fmt$(prices.fiberCost)+'/lb'],
+      ['Pump', _fmt$(prices.pumpCost)+'/load'],
+      ['Saw Cutting', _fmt$(prices.sawCutRate)+'/LF'],
+      ['Base Course', _fmt$(prices.baseCourseRate)+'/ton'],
+      ['Vapor Barrier', _fmt$(prices.vaporBarrierRate)+'/SF'],
+      ['Mobilization', _fmt$(prices.mobilizationCost)],
+      ['Misc Rate', _fmt$(prices.miscRate)+'/yd³'],
+      ['Overhead', (prices.overheadPct||0)+'%'],
+      ['Profit', (prices.profitPct||0)+'%'],
+      ['Contingency', (prices.contingencyPct||0)+'%'],
+      ['Waste', (prices.wastePct||0)+'%']
+    ].map(function(r) {
+      return '<tr><td>'+_esc(r[0])+'</td><td style="text-align:right;">'+_esc(r[1])+'</td></tr>';
+    }).join('');
+
+    /* ─── Cost breakdown from lastEstimate ─── */
+    var costBreakRows = '';
+    var costItems = [
+      ['Concrete Materials', est.concreteCost||est.materialCost],
+      ['Labor', est.laborCost],
+      ['Formwork', est.formworkCost],
+      ['Rebar', est.rebarCost],
+      ['Mesh/WWM', est.meshCost||est.wwmCost],
+      ['Fiber', est.fiberCost],
+      ['Pump', est.pumpCost],
+      ['Saw Cutting', est.sawCutCost],
+      ['Base Course', est.baseCourseCost],
+      ['Vapor Barrier', est.vaporBarrierCost],
+      ['Mobilization', est.mobilizationCost],
+      ['Misc', est.miscCost],
+      ['Subtotal (Direct)', est.directCost||est.subtotal],
+      ['Overhead', est.overheadCost],
+      ['Contingency', est.contingencyCost],
+      ['Profit/Margin', est.profitCost||est.profit],
+      ['TOTAL BID', est.totalCost||est.total]
+    ];
+    costItems.forEach(function(item) {
+      if (!item[1] && item[1] !== 0) return;
+      var isTotal = item[0].indexOf('TOTAL') === 0 || item[0].indexOf('Subtotal') === 0;
+      var ydRate = (totalMeasYd > 0 && item[1]) ? ' ('+_fmt$(item[1]/totalMeasYd)+'/yd³)' : '';
+      costBreakRows += '<tr'+(isTotal?' style="font-weight:700;background:#1e2a3a;"':'')+'>'
+        + '<td>'+_esc(item[0])+'</td>'
+        + '<td style="text-align:right;font-weight:'+(isTotal?'700':'500')+';">'+_fmt$(item[1])+'</td>'
+        + '<td style="text-align:right;color:#94a3b8;font-size:0.8rem;">'+_esc(ydRate)+'</td>'
+        + '</tr>';
+    });
+
+    /* ─── Alternates summary ─── */
+    var altBlock = '';
+    if (alts.length) {
+      var altRows = alts.map(function(a, ai) {
+        var altMeas = includedMeas.filter(function(m){ return altAssign[m.id] == ai; });
+        var altYd = altMeas.reduce(function(s,m){ return s+parseFloat(m.yd3||m.yards||0); },0);
+        var concPrice = parseFloat(prices.concrete4000||0);
+        var estAmt = altYd * concPrice * 1.4; // rough estimate if lastEstimate doesn't break out alts
+        return '<tr>'
+          + '<td>'+_esc(a.name||'Alt #'+(ai+1))+'</td>'
+          + '<td style="text-align:center;">'+altMeas.length+'</td>'
+          + '<td style="text-align:right;">'+_fmtN(altYd,2)+' yd³</td>'
+          + '<td style="text-align:right;color:#fb923c;">'+_fmt$(estAmt)+'</td>'
+          + '</tr>';
+      }).join('');
+      altBlock = '<div class="section">'
+        + '<div class="section-title">🔀 Alternate Bid Items</div>'
+        + '<table><thead><tr><th>Alternate</th><th>Items</th><th style="text-align:right;">yd³</th><th style="text-align:right;">Est. Add Amount</th></tr></thead>'
+        + '<tbody>'+altRows+'</tbody></table>'
+        + '<div style="font-size:0.75rem;color:#64748b;margin-top:6px;">* Alternate amounts are estimates based on volume × $/yd³. Recalculate per alternate for precise pricing.</div>'
+        + '</div>';
+    }
+
+    /* ─── Notes block ─── */
+    var notesBlock = '';
+    if (proj.notes && proj.notes.trim()) {
+      var noteLines = proj.notes.trim().split('\n').map(function(l){ return '<li>'+_esc(l)+'</li>'; }).join('');
+      notesBlock = '<div class="section">'
+        + '<div class="section-title">📝 Scope Notes / Clarifications</div>'
+        + '<ul style="margin:0;padding-left:1.4em;line-height:1.8;">'+noteLines+'</ul>'
+        + '</div>';
+    }
+
+    /* ─── Section subtotals block ─── */
+    var secBlock = '';
+    if (sections.length && secRows) {
+      secBlock = '<div class="section">'
+        + '<div class="section-title">§ Section Subtotals</div>'
+        + '<table><thead><tr><th>Section</th><th>Items</th><th style="text-align:right;">Total yd³</th></tr></thead>'
+        + '<tbody>'+secRows+'</tbody></table>'
+        + '</div>';
+    }
+
+    /* ─── Phase block ─── */
+    var phaseBlock = '';
+    if (phaseRows) {
+      phaseBlock = '<div class="section">'
+        + '<div class="section-title">📆 Phase Breakdown</div>'
+        + '<table><thead><tr><th>Phase</th><th>Items</th><th style="text-align:right;">yd³</th><th style="text-align:right;">% of Total</th></tr></thead>'
+        + '<tbody>'+phaseRows+'</tbody></table>'
+        + '</div>';
+    }
+
+    /* ─── Assemble HTML ─── */
+    var totalBid = est.totalCost || est.total || 0;
+    var bidPerYd  = totalMeasYd > 0 ? totalBid / totalMeasYd : 0;
+    var measCount = includedMeas.length;
+
+    var html = '<!DOCTYPE html><html><head><meta charset="utf-8">'
+      + '<title>Internal Estimate Report — '+_esc(proj.name||'Untitled')+'</title>'
+      + '<style>'
+      + 'body{margin:0;padding:0;font-family:system-ui,sans-serif;font-size:13px;background:#0f172a;color:#e2e8f0;}'
+      + '.page{max-width:1000px;margin:0 auto;padding:28px 32px;}'
+      + '.report-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #38bdf8;padding-bottom:14px;margin-bottom:18px;}'
+      + '.report-title{font-size:1.5rem;font-weight:800;color:#38bdf8;letter-spacing:-0.5px;}'
+      + '.confidential{display:inline-block;background:#dc2626;color:#fff;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:3px;letter-spacing:1px;margin-top:4px;}'
+      + '.co-info{text-align:right;font-size:0.8rem;color:#94a3b8;line-height:1.6;}'
+      + '.co-name{font-weight:700;color:#e2e8f0;font-size:0.9rem;}'
+      + '.meta-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;}'
+      + '.meta-card{background:#1e293b;border-radius:6px;padding:10px 14px;}'
+      + '.meta-label{font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;}'
+      + '.meta-val{font-size:1rem;font-weight:700;color:#e2e8f0;margin-top:2px;}'
+      + '.summary-box{background:linear-gradient(135deg,#0f3460,#1e3a5f);border:1px solid #38bdf8;border-radius:8px;padding:16px 20px;margin-bottom:20px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}'
+      + '.sum-item{text-align:center;}'
+      + '.sum-label{font-size:0.72rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;}'
+      + '.sum-val{font-size:1.15rem;font-weight:800;color:#38bdf8;margin-top:3px;}'
+      + '.bid-val{color:#4ade80;font-size:1.4rem;}'
+      + '.section{margin-bottom:20px;}'
+      + '.section-title{font-size:0.85rem;font-weight:700;color:#38bdf8;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #1e3a5f;}'
+      + 'table{width:100%;border-collapse:collapse;font-size:0.82rem;}'
+      + 'th{background:#1e293b;color:#94a3b8;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;padding:7px 10px;text-align:left;border-bottom:1px solid #334155;}'
+      + 'td{padding:6px 10px;border-bottom:1px solid #1e293b;}'
+      + 'tr:hover{background:#1e293b;}'
+      + '.signoff-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:30px;}'
+      + '.sig-block{border-top:1px solid #475569;padding-top:10px;}'
+      + '.sig-role{font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:28px;}'
+      + '.sig-line{border-top:1px solid #475569;margin-bottom:4px;}'
+      + '.sig-label{font-size:0.72rem;color:#64748b;}'
+      + '.footer{margin-top:24px;padding-top:12px;border-top:1px solid #1e293b;font-size:0.72rem;color:#64748b;display:flex;justify-content:space-between;}'
+      + '.print-btn{position:fixed;top:16px;right:16px;background:#38bdf8;color:#0f172a;border:none;padding:10px 20px;border-radius:6px;font-weight:700;cursor:pointer;font-size:0.9rem;z-index:999;}'
+      + '.two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px;}'
+      + '@media print{'
+      + '.print-btn{display:none!important;}'
+      + 'body{background:#fff;color:#000;}'
+      + '.meta-card,.summary-box{background:#f0f4f8!important;border-color:#ccc!important;}'
+      + 'th{background:#e2e8f0!important;color:#374151!important;}'
+      + '.section-title{color:#1e40af!important;}'
+      + '.report-title{color:#1e40af!important;}'
+      + '.sum-val,.bid-val{color:#1e40af!important;}'
+      + '.co-info,.meta-val,.sum-label,.meta-label{color:#374151!important;}'
+      + 'td{border-color:#e5e7eb!important;}'
+      + '}'
+      + '</style></head><body>'
+      + '<button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>'
+      + '<div class="page">'
+
+      /* Header */
+      + '<div class="report-header">'
+      + '<div>'
+      + '<div class="report-title">📊 Internal Estimate Breakdown Report</div>'
+      + '<div class="confidential">CONFIDENTIAL — INTERNAL USE ONLY</div>'
+      + '</div>'
+      + '<div class="co-info">'
+      + (co.name ? '<div class="co-name">'+_esc(co.name)+'</div>' : '')
+      + (co.addr ? '<div>'+_esc(co.addr)+'</div>' : '')
+      + (co.phone ? '<div>'+_esc(co.phone)+'</div>' : '')
+      + (co.email ? '<div>'+_esc(co.email)+'</div>' : '')
+      + (co.lic ? '<div>Lic #: '+_esc(co.lic)+'</div>' : '')
+      + '</div>'
+      + '</div>'
+
+      /* Meta grid */
+      + '<div class="meta-grid">'
+      + '<div class="meta-card"><div class="meta-label">Project</div><div class="meta-val">'+_esc(proj.name||'—')+'</div></div>'
+      + '<div class="meta-card"><div class="meta-label">Client / GC</div><div class="meta-val">'+_esc(proj.client||'—')+'</div></div>'
+      + '<div class="meta-card"><div class="meta-label">Estimator</div><div class="meta-val">'+_esc(proj.estimator||'—')+'</div></div>'
+      + '<div class="meta-card"><div class="meta-label">Bid Date</div><div class="meta-val">'+_esc(proj.bidDate||'—')+'</div></div>'
+      + '<div class="meta-card"><div class="meta-label">Report Generated</div><div class="meta-val">'+_esc(dateStr)+' '+_esc(timeStr)+'</div></div>'
+      + '<div class="meta-card"><div class="meta-label">Estimate Status</div><div class="meta-val">Internal Draft</div></div>'
+      + '</div>'
+
+      /* Summary box */
+      + '<div class="summary-box">'
+      + '<div class="sum-item"><div class="sum-label">Total yd³</div><div class="sum-val">'+_fmtN(totalMeasYd,2)+'</div></div>'
+      + '<div class="sum-item"><div class="sum-label">Measurements</div><div class="sum-val">'+measCount+'</div></div>'
+      + '<div class="sum-item"><div class="sum-label">Cost / yd³</div><div class="sum-val">'+_fmt$(bidPerYd)+'</div></div>'
+      + '<div class="sum-item"><div class="sum-label">TOTAL BID</div><div class="sum-val bid-val">'+_fmt$(totalBid)+'</div></div>'
+      + '</div>'
+
+      /* Measurement Detail */
+      + '<div class="section">'
+      + '<div class="section-title">📐 Measurement Detail ('+measCount+' included)</div>'
+      + '<table><thead><tr>'
+      + '<th>#</th><th>Label</th><th>Type</th><th>Dimensions</th><th style="text-align:right;">yd³</th>'
+      + '<th style="text-align:center;">PSI</th><th style="text-align:center;">Phase</th>'
+      + '<th style="text-align:center;">Section</th><th style="text-align:center;">Bid Item</th>'
+      + '</tr></thead><tbody>'
+      + measRows
+      + '<tr style="font-weight:700;background:#1e2a3a;">'
+      + '<td colspan="4" style="text-align:right;">INCLUDED TOTAL</td>'
+      + '<td style="text-align:right;">'+_fmtN(totalMeasYd,2)+' yd³</td>'
+      + '<td colspan="4"></td>'
+      + '</tr>'
+      + '</tbody></table>'
+      + '</div>'
+
+      /* Element type + section + phase (two-column where possible) */
+      + '<div class="two-col">'
+      + '<div class="section">'
+      + '<div class="section-title">🏗 Element Type Summary</div>'
+      + '<table><thead><tr><th>Type</th><th>Items</th><th style="text-align:right;">yd³</th><th style="text-align:right;">%</th></tr></thead>'
+      + '<tbody>'+typeRows+'</tbody></table>'
+      + '</div>'
+      + '<div>'
+      + secBlock
+      + phaseBlock
+      + '</div>'
+      + '</div>'
+
+      /* Unit prices + cost breakdown (two-column) */
+      + '<div class="two-col">'
+      + '<div class="section">'
+      + '<div class="section-title">💲 Unit Prices Used</div>'
+      + '<table><thead><tr><th>Item</th><th style="text-align:right;">Rate</th></tr></thead>'
+      + '<tbody>'+priceRows+'</tbody></table>'
+      + '</div>'
+      + '<div class="section">'
+      + '<div class="section-title">💰 Cost Breakdown</div>'
+      + '<table><thead><tr><th>Line Item</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Per yd³</th></tr></thead>'
+      + '<tbody>'+(costBreakRows||'<tr><td colspan="3" style="color:#64748b;font-style:italic;">Run estimate to populate cost breakdown.</td></tr>')+'</tbody></table>'
+      + '</div>'
+      + '</div>'
+
+      /* Alternates */
+      + altBlock
+
+      /* Notes */
+      + notesBlock
+
+      /* Sign-off */
+      + '<div class="section">'
+      + '<div class="section-title">✍ Estimate Review & Sign-Off</div>'
+      + '<div class="signoff-grid">'
+      + '<div class="sig-block"><div class="sig-role">Prepared By (Estimator)</div><div class="sig-line"></div><div class="sig-label">Name / Signature / Date</div></div>'
+      + '<div class="sig-block"><div class="sig-role">Reviewed By (PM / Ops)</div><div class="sig-line"></div><div class="sig-label">Name / Signature / Date</div></div>'
+      + '<div class="sig-block"><div class="sig-role">Approved By (Principal)</div><div class="sig-line"></div><div class="sig-label">Name / Signature / Date</div></div>'
+      + '</div>'
+      + '</div>'
+
+      /* Footer */
+      + '<div class="footer">'
+      + '<div>'+(co.name?_esc(co.name)+' · ':'')+'Internal Use Only — Do Not Distribute</div>'
+      + '<div>Generated: '+_esc(dateStr)+' '+_esc(timeStr)+'</div>'
+      + '</div>'
+
+      + '</div></body></html>';
+
+    var win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); }
+  }
+
+  window.generateEstReport = generateEstReport;
+
+  /* ─── Keyboard shortcut: Ctrl+Shift+R ─── */
+  document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'R' || e.key === 'r')) {
+      e.preventDefault();
+      generateEstReport();
+    }
+  });
+
+  /* ─── Inject sidebar button (after Pour Schedule button) ─── */
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      // find the Pour Schedule button to inject after it
+      var pourBtn = document.querySelector('button[onclick*="_openPourSched"]');
+      if (pourBtn) {
+        var row = pourBtn.closest('div') || pourBtn.parentNode;
+        if (row) {
+          var newRow = document.createElement('div');
+          newRow.innerHTML = '<button class="action-btn secondary" onclick="window.generateEstReport()" title="Internal Estimate Breakdown Report — full measurement table, unit prices, cost breakdown, sign-off block — for job files and PM handoff (Ctrl+Shift+R)" style="background:rgba(56,189,248,0.1);border-color:rgba(56,189,248,0.35);color:#38bdf8;">📊 Est. Report</button>';
+          row.parentNode.insertBefore(newRow, row.nextSibling);
+        }
+      }
+    }, 700);
+  });
+
+})();
+// ==================== END INTERNAL ESTIMATE BREAKDOWN REPORT — Zeus ⚡ Session #45 ====================
+</script>
