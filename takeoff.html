@@ -153183,3 +153183,344 @@ ${d.totalYds > 0 ? `Cost/yd³: ${fmtMoney(d.totalBid/d.totalYds)}` : ''}
 })();
 // ==================== END QUICK CALCULATORS — Zeus ⚡ Session #67 ====================
 </script>
+
+<script>
+// ==================== BID PIPELINE & WIN/LOSS TRACKER — Zeus ⚡ Session #68 ====================
+(function(){
+  'use strict';
+  var MODAL_ID = 'oncor-pipeline-modal';
+  var STORE_KEY = 'oncor_pipeline_v1';
+
+  /* ---- helpers ---- */
+  function loadBids(){ try{ return JSON.parse(localStorage.getItem(STORE_KEY)||'[]'); }catch(e){ return []; } }
+  function saveBids(arr){ localStorage.setItem(STORE_KEY, JSON.stringify(arr)); }
+  function fmtMoney(n){ if(!n&&n!==0) return '—'; var v=parseFloat(n)||0; if(v>=1000000) return '$'+(v/1000000).toFixed(2)+'M'; if(v>=1000) return '$'+(v/1000).toFixed(0)+'k'; return '$'+v.toFixed(0); }
+  function fmtDate(s){ if(!s) return '—'; var d=new Date(s+'T12:00:00'); return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+  function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function daysUntil(dateStr){ if(!dateStr) return null; var d=new Date(dateStr+'T12:00:00'); var now=new Date(); var diff=Math.round((d-now)/(1000*60*60*24)); return diff; }
+  var STATUS_COLORS = {
+    'Preparing':'#6366f1','Submitted':'#0ea5e9','Under Review':'#f59e0b',
+    'Won':'#22c55e','Lost':'#ef4444','No Bid':'#64748b','On Hold':'#a78bfa','Withdrawn':'#f97316'
+  };
+
+  /* ---- stats ---- */
+  function calcStats(bids){
+    var total=bids.length, won=0, lost=0, wonVal=0, lostVal=0, pipeVal=0, pipeCount=0;
+    bids.forEach(function(b){
+      var v=parseFloat(b.bidAmount)||0;
+      if(b.status==='Won'){ won++; wonVal+=v; }
+      else if(b.status==='Lost'){ lost++; lostVal+=v; }
+      else if(['Preparing','Submitted','Under Review'].indexOf(b.status)>=0){ pipeVal+=v; pipeCount++; }
+    });
+    var decided=won+lost;
+    var winRate=decided>0?Math.round(100*won/decided):null;
+    return {total,won,lost,wonVal,lostVal,pipeVal,pipeCount,winRate,decided};
+  }
+
+  /* ---- render modal ---- */
+  function showPipeline(){
+    var el=document.getElementById(MODAL_ID);
+    if(el){ el.style.display='flex'; renderPipeline(); return; }
+    el=document.createElement('div');
+    el.id=MODAL_ID;
+    el.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:9100;font-family:Inter,system-ui,sans-serif;';
+    el.innerHTML='<div id="oncor-pipeline-inner" style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;width:min(900px,96vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;"></div>';
+    el.addEventListener('click',function(ev){ if(ev.target===el) closePipeline(); });
+    document.body.appendChild(el);
+    renderPipeline();
+  }
+  function closePipeline(){ var el=document.getElementById(MODAL_ID); if(el) el.style.display='none'; }
+  window.showPipeline=showPipeline;
+  window.closePipeline=closePipeline;
+
+  function renderPipeline(filter, search){
+    var inner=document.getElementById('oncor-pipeline-inner');
+    if(!inner) return;
+    filter=filter||'All';
+    search=search||'';
+    var bids=loadBids();
+    var s=calcStats(bids);
+    var filtered=bids.filter(function(b){
+      if(filter!=='All'&&b.status!==filter) return false;
+      if(search){ var q=search.toLowerCase(); if(!((b.project||'').toLowerCase().includes(q)||(b.client||'').toLowerCase().includes(q)||(b.notes||'').toLowerCase().includes(q))) return false; }
+      return true;
+    });
+    filtered.sort(function(a,b){ return (b.bidDate||'') > (a.bidDate||'') ? 1 : -1; });
+
+    var winRateBadge = s.winRate!==null
+      ? '<span style="font-size:1.3rem;font-weight:700;color:'+(s.winRate>=50?'#22c55e':s.winRate>=30?'#f59e0b':'#ef4444')+';">'+s.winRate+'%</span>'
+      : '<span style="font-size:1.3rem;color:#64748b;">—</span>';
+
+    var followUpSoon = bids.filter(function(b){ var d=daysUntil(b.followUpDate); return d!==null&&d>=0&&d<=7&&['Submitted','Under Review'].indexOf(b.status)>=0; });
+
+    var statCards = [
+      {label:'Total Bids',val:s.total,color:'#0ea5e9'},
+      {label:'Win Rate',val:winRateBadge,color:'#22c55e',raw:true},
+      {label:'Won Value',val:fmtMoney(s.wonVal),color:'#22c55e'},
+      {label:'Pipeline',val:fmtMoney(s.pipeVal),color:'#f59e0b'},
+      {label:'Lost Value',val:fmtMoney(s.lostVal),color:'#ef4444'},
+      {label:'Follow-Up Due',val:followUpSoon.length+(followUpSoon.length>0?' ⚡':''),color:followUpSoon.length>0?'#f59e0b':'#64748b'},
+    ];
+
+    var statusTabs=['All','Preparing','Submitted','Under Review','Won','Lost','No Bid','On Hold'];
+
+    var rowsHtml='';
+    if(filtered.length===0){
+      rowsHtml='<tr><td colspan="8" style="text-align:center;padding:24px;color:#64748b;">No bids found. Add your first bid opportunity above.</td></tr>';
+    } else {
+      filtered.forEach(function(b,i){
+        var idx=bids.indexOf(b);
+        var sc=STATUS_COLORS[b.status]||'#64748b';
+        var fu=daysUntil(b.followUpDate);
+        var fuBadge='';
+        if(b.followUpDate){
+          if(fu<0) fuBadge='<span style="font-size:0.65rem;background:#ef4444;color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px;">OVERDUE</span>';
+          else if(fu<=7) fuBadge='<span style="font-size:0.65rem;background:#f59e0b;color:#0f172a;padding:1px 5px;border-radius:4px;margin-left:4px;">'+fu+'d</span>';
+        }
+        var gc=b.client?(b.client.length>18?b.client.substring(0,18)+'…':b.client):'—';
+        var proj=b.project?(b.project.length>22?b.project.substring(0,22)+'…':b.project):'(unnamed)';
+        rowsHtml+='<tr style="border-bottom:1px solid #1e293b;">'
+          +'<td style="padding:8px 10px;color:#e2e8f0;font-weight:500;">'+esc(proj)+'</td>'
+          +'<td style="padding:8px 10px;color:#94a3b8;font-size:0.8rem;">'+esc(gc)+'</td>'
+          +'<td style="padding:8px 10px;color:#94a3b8;font-size:0.8rem;">'+fmtDate(b.bidDate)+'</td>'
+          +'<td style="padding:8px 10px;color:#14b8a6;font-weight:600;font-size:0.9rem;">'+fmtMoney(b.bidAmount)+'</td>'
+          +'<td style="padding:8px 10px;"><span style="font-size:0.72rem;padding:2px 8px;border-radius:4px;background:'+sc+'22;color:'+sc+';border:1px solid '+sc+'44;">'+esc(b.status||'—')+'</span></td>'
+          +'<td style="padding:8px 10px;color:#94a3b8;font-size:0.75rem;">'+(b.followUpDate?fmtDate(b.followUpDate)+''+fuBadge:'—')+'</td>'
+          +'<td style="padding:8px 10px;color:#64748b;font-size:0.75rem;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(b.notes||'')+'</td>'
+          +'<td style="padding:8px 10px;white-space:nowrap;">'
+            +'<button onclick="editBid('+idx+')" style="background:none;border:1px solid #334155;color:#94a3b8;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:0.7rem;margin-right:4px;">✏️</button>'
+            +'<button onclick="deleteBid('+idx+')" style="background:none;border:1px solid #ef444433;color:#ef4444;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:0.7rem;">🗑</button>'
+          +'</td>'
+        +'</tr>';
+      });
+    }
+
+    inner.innerHTML=
+      '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #1e293b;">'
+        +'<div style="display:flex;align-items:center;gap:10px;">'
+          +'<span style="font-size:1.2rem;">📈</span>'
+          +'<h2 style="margin:0;font-size:1.1rem;color:#e2e8f0;">Bid Pipeline & Win/Loss Tracker</h2>'
+          +'<span style="font-size:0.7rem;background:#1e293b;color:#64748b;padding:2px 8px;border-radius:10px;">Alt+P</span>'
+        +'</div>'
+        +'<div style="display:flex;gap:8px;">'
+          +'<button onclick="printPipelineReport()" style="background:rgba(14,165,233,0.1);border:1px solid rgba(14,165,233,0.3);color:#38bdf8;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;">🖨️ Print Report</button>'
+          +'<button onclick="showAddBidForm()" style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);color:#4ade80;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;">+ Add Bid</button>'
+          +'<button onclick="closePipeline()" style="background:none;border:1px solid #334155;color:#94a3b8;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:0.8rem;">✕</button>'
+        +'</div>'
+      +'</div>'
+      // stats bar
+      +'<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;padding:12px 20px;border-bottom:1px solid #1e293b;">'
+        +statCards.map(function(c){ return '<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:0.65rem;color:#64748b;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;">'+c.label+'</div><div style="color:'+c.color+';font-size:'+(c.raw?'1rem':'1.1rem')+';font-weight:700;">'+c.val+'</div></div>'; }).join('')
+      +'</div>'
+      // tabs + search
+      +'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:1px solid #1e293b;gap:12px;flex-wrap:wrap;">'
+        +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+          +statusTabs.map(function(t){
+            var cnt=t==='All'?bids.length:bids.filter(function(b){return b.status===t;}).length;
+            var active=t===filter;
+            return '<button onclick="renderPipeline(\''+t+'\',document.getElementById(\'pipe-search\').value)" style="background:'+(active?'rgba(14,165,233,0.2)':'rgba(30,41,59,0.5)')+';border:1px solid '+(active?'rgba(14,165,233,0.5)':'#334155')+';color:'+(active?'#38bdf8':'#64748b')+';padding:4px 10px;border-radius:6px;cursor:pointer;font-size:0.75rem;">'+t+' ('+cnt+')</button>';
+          }).join('')
+        +'</div>'
+        +'<input id="pipe-search" placeholder="🔍 Search project / client…" oninput="renderPipeline(\''+filter+'\',this.value)" value="'+esc(search)+'" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:6px 12px;border-radius:6px;font-size:0.8rem;width:220px;">'
+      +'</div>'
+      // table
+      +'<div style="overflow-y:auto;flex:1;">'
+        +'<table style="width:100%;border-collapse:collapse;">'
+          +'<thead><tr style="background:#1e293b;font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">'
+            +'<th style="padding:8px 10px;text-align:left;">Project</th>'
+            +'<th style="padding:8px 10px;text-align:left;">Client/GC</th>'
+            +'<th style="padding:8px 10px;text-align:left;">Bid Date</th>'
+            +'<th style="padding:8px 10px;text-align:left;">Bid Amount</th>'
+            +'<th style="padding:8px 10px;text-align:left;">Status</th>'
+            +'<th style="padding:8px 10px;text-align:left;">Follow-Up</th>'
+            +'<th style="padding:8px 10px;text-align:left;">Notes</th>'
+            +'<th style="padding:8px 10px;text-align:left;"></th>'
+          +'</tr></thead>'
+          +'<tbody>'+rowsHtml+'</tbody>'
+        +'</table>'
+      +'</div>'
+      // follow-up alert bar
+      +(followUpSoon.length>0?'<div style="padding:10px 20px;background:rgba(245,158,11,0.1);border-top:1px solid rgba(245,158,11,0.3);color:#fbbf24;font-size:0.78rem;">⚡ <strong>'+followUpSoon.length+' bid'+(followUpSoon.length>1?'s':'')+' need follow-up in the next 7 days:</strong> '+followUpSoon.map(function(b){ return esc(b.project||'(unnamed)')+' ('+fmtDate(b.followUpDate)+')'; }).join(', ')+'</div>':'')
+    ;
+    window._pipeFilter=filter;
+  }
+  window.renderPipeline=renderPipeline;
+
+  /* ---- add/edit form ---- */
+  function showAddBidForm(bid, idx){
+    var id='oncor-pipeline-form-overlay';
+    var existing=document.getElementById(id);
+    if(existing) existing.remove();
+    var ov=document.createElement('div');
+    ov.id=id;
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9200;font-family:Inter,system-ui,sans-serif;';
+    var b=bid||{};
+    var isEdit=typeof idx==='number';
+    var statusOpts=['Preparing','Submitted','Under Review','Won','Lost','No Bid','On Hold','Withdrawn'];
+    var typeOpts=['Commercial','Industrial','Municipal/Gov','Residential','Infrastructure','Site Concrete','Private Owner','Other'];
+
+    ov.innerHTML='<div style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;width:min(560px,94vw);max-height:90vh;overflow-y:auto;padding:24px;">'
+      +'<h3 style="margin:0 0 16px;color:#e2e8f0;font-size:1rem;">'+(isEdit?'✏️ Edit Bid':'+ Add Bid Opportunity')+'</h3>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
+        +'<div style="grid-column:span 2;"><label style="color:#94a3b8;font-size:0.78rem;display:block;margin-bottom:4px;">Project Name *</label><input id="bf-project" value="'+esc(b.project||'')+'" placeholder="XYZ Warehouse — 85,000 SF Slab" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.85rem;box-sizing:border-box;"></div>'
+        +'<div><label style="color:#94a3b8;font-size:0.78rem;display:block;margin-bottom:4px;">Client / GC</label><input id="bf-client" value="'+esc(b.client||'')+'" placeholder="Sundt Construction" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.85rem;box-sizing:border-box;"></div>'
+        +'<div><label style="color:#94a3b8;font-size:0.78rem;display:block;margin-bottom:4px;">Bid Type</label><select id="bf-type" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.85rem;box-sizing:border-box;">'+typeOpts.map(function(o){ return '<option value="'+o+'" '+(b.bidType===o?'selected':'')+'>'+o+'</option>'; }).join('')+'</select></div>'
+        +'<div><label style="color:#94a3b8;font-size:0.78rem;display:block;margin-bottom:4px;">Bid Date</label><input id="bf-biddate" type="date" value="'+esc(b.bidDate||'')+'" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.85rem;box-sizing:border-box;"></div>'
+        +'<div><label style="color:#94a3b8;font-size:0.78rem;display:block;margin-bottom:4px;">Bid Amount ($)</label><input id="bf-amount" type="number" value="'+esc(b.bidAmount||'')+'" placeholder="145000" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.85rem;box-sizing:border-box;"></div>'
+        +'<div><label style="color:#94a3b8;font-size:0.78rem;display:block;margin-bottom:4px;">Estimated yd³</label><input id="bf-yds" type="number" value="'+esc(b.yds||'')+'" placeholder="600" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.85rem;box-sizing:border-box;"></div>'
+        +'<div><label style="color:#94a3b8;font-size:0.78rem;display:block;margin-bottom:4px;">Status</label><select id="bf-status" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.85rem;box-sizing:border-box;">'+statusOpts.map(function(o){ return '<option value="'+o+'" '+(b.status===o?'selected':'')+'>'+o+'</option>'; }).join('')+'</select></div>'
+        +'<div><label style="color:#94a3b8;font-size:0.78rem;display:block;margin-bottom:4px;">Decision / Award Date</label><input id="bf-decision" type="date" value="'+esc(b.decisionDate||'')+'" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.85rem;box-sizing:border-box;"></div>'
+        +'<div><label style="color:#94a3b8;font-size:0.78rem;display:block;margin-bottom:4px;">Follow-Up Date</label><input id="bf-followup" type="date" value="'+esc(b.followUpDate||'')+'" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.85rem;box-sizing:border-box;"></div>'
+        +'<div><label style="color:#94a3b8;font-size:0.78rem;display:block;margin-bottom:4px;">$/yd³ (auto)</label><input id="bf-cpyd" value="'+esc(b.costPerYd||'')+'" placeholder="auto" readonly style="width:100%;background:#1e293b;border:1px solid #334155;color:#64748b;padding:8px 10px;border-radius:6px;font-size:0.85rem;box-sizing:border-box;"></div>'
+        +'<div style="grid-column:span 2;"><label style="color:#94a3b8;font-size:0.78rem;display:block;margin-bottom:4px;">Why Won / Why Lost / Notes</label><textarea id="bf-notes" placeholder="Key deciding factor, competitor info, lessons learned…" rows="3" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.85rem;box-sizing:border-box;resize:vertical;">'+esc(b.notes||'')+'</textarea></div>'
+        +'<div style="grid-column:span 2;"><label style="color:#94a3b8;font-size:0.78rem;display:block;margin-bottom:4px;">Competitor / Awarded To (if lost)</label><input id="bf-competitor" value="'+esc(b.competitor||'')+'" placeholder="Competitor name / award price (if known)" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:0.85rem;box-sizing:border-box;"></div>'
+      +'</div>'
+      +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">'
+        +'<button onclick="document.getElementById(\''+id+'\').remove()" style="background:none;border:1px solid #334155;color:#94a3b8;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.85rem;">Cancel</button>'
+        +'<button onclick="saveBidForm('+idx+')" style="background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);color:#4ade80;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:0.85rem;">'+(isEdit?'💾 Update':'💾 Save Bid')+'</button>'
+      +'</div>'
+    +'</div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click',function(e){ if(e.target===ov) ov.remove(); });
+
+    // auto-calc $/yd³
+    function updateCpYd(){
+      var amt=parseFloat(document.getElementById('bf-amount').value)||0;
+      var yds=parseFloat(document.getElementById('bf-yds').value)||0;
+      document.getElementById('bf-cpyd').value=(amt&&yds)?'$'+(amt/yds).toFixed(2)+'/yd³':'';
+    }
+    document.getElementById('bf-amount').addEventListener('input',updateCpYd);
+    document.getElementById('bf-yds').addEventListener('input',updateCpYd);
+    updateCpYd();
+  }
+  window.showAddBidForm=showAddBidForm;
+
+  window.saveBidForm=function(idx){
+    var proj=document.getElementById('bf-project').value.trim();
+    if(!proj){ alert('Project name is required.'); return; }
+    var amt=parseFloat(document.getElementById('bf-amount').value)||0;
+    var yds=parseFloat(document.getElementById('bf-yds').value)||0;
+    var entry={
+      project:proj,
+      client:document.getElementById('bf-client').value.trim(),
+      bidType:document.getElementById('bf-type').value,
+      bidDate:document.getElementById('bf-biddate').value,
+      bidAmount:amt||null,
+      yds:yds||null,
+      costPerYd:(amt&&yds)?(amt/yds).toFixed(2):null,
+      status:document.getElementById('bf-status').value,
+      decisionDate:document.getElementById('bf-decision').value,
+      followUpDate:document.getElementById('bf-followup').value,
+      notes:document.getElementById('bf-notes').value.trim(),
+      competitor:document.getElementById('bf-competitor').value.trim(),
+      created:(typeof idx==='number'?null:new Date().toISOString())
+    };
+    var bids=loadBids();
+    if(typeof idx==='number') bids[idx]=Object.assign(bids[idx],entry);
+    else bids.push(entry);
+    saveBids(bids);
+    var ov=document.getElementById('oncor-pipeline-form-overlay');
+    if(ov) ov.remove();
+    renderPipeline(window._pipeFilter||'All','');
+  };
+
+  window.editBid=function(idx){
+    var bids=loadBids();
+    showAddBidForm(bids[idx],idx);
+  };
+  window.deleteBid=function(idx){
+    if(!confirm('Delete this bid?')) return;
+    var bids=loadBids();
+    bids.splice(idx,1);
+    saveBids(bids);
+    renderPipeline(window._pipeFilter||'All','');
+  };
+
+  /* ---- print report ---- */
+  window.printPipelineReport=function(){
+    var bids=loadBids();
+    var s=calcStats(bids);
+    var sorted=bids.slice().sort(function(a,b){ return (b.bidDate||'')>(a.bidDate||'')?1:-1; });
+    var company=(document.getElementById('companyName')||{}).value||'Oncor Construction';
+    var phone=(document.getElementById('companyPhone')||{}).value||'';
+    var email=(document.getElementById('companyEmail')||{}).value||'';
+
+    var rows=sorted.map(function(b,i){
+      var sc=STATUS_COLORS[b.status]||'#64748b';
+      return '<tr style="border-bottom:1px solid #e2e8f0;'+(b.status==='Won'?'background:#f0fdf4;':b.status==='Lost'?'background:#fff5f5;':'')+'">'
+        +'<td style="padding:7px 10px;font-size:0.8rem;font-weight:500;">'+(b.project||'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:0.78rem;color:#64748b;">'+(b.client||'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:0.78rem;">'+(b.bidType||'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:0.78rem;">'+(b.bidDate?fmtDate(b.bidDate):'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:0.85rem;font-weight:600;color:#0f766e;">'+(b.bidAmount?fmtMoney(b.bidAmount):'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:0.78rem;">'+(b.yds?b.yds+' yd³':'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:0.78rem;">'+(b.costPerYd?'$'+b.costPerYd+'/yd³':'—')+'</td>'
+        +'<td style="padding:7px 10px;"><span style="font-size:0.72rem;padding:2px 8px;border-radius:4px;background:'+sc+'22;color:'+sc+';border:1px solid '+sc+'44;">'+(b.status||'—')+'</span></td>'
+        +'<td style="padding:7px 10px;font-size:0.75rem;color:#64748b;">'+(b.notes?b.notes.substring(0,40)+(b.notes.length>40?'…':''):'—')+'</td>'
+      +'</tr>';
+    }).join('');
+
+    var html='<!DOCTYPE html><html><head><title>Bid Pipeline Report</title><style>body{font-family:Inter,Arial,sans-serif;margin:32px;color:#1e293b;}h1{font-size:1.3rem;}table{width:100%;border-collapse:collapse;}th{background:#1e293b;color:#e2e8f0;padding:8px 10px;text-align:left;font-size:0.72rem;text-transform:uppercase;}@media print{button{display:none;}}</style></head><body>'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;">'
+        +'<div><div style="font-size:0.8rem;color:#64748b;margin-bottom:4px;">BID PIPELINE REPORT</div><h1 style="margin:0 0 4px;">'+esc(company)+'</h1>'+(phone?'<div style="font-size:0.8rem;color:#64748b;">'+esc(phone)+(email?' · '+esc(email):'')+'</div>':'')+'</div>'
+        +'<div style="text-align:right;font-size:0.78rem;color:#64748b;">Printed: '+new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})+'<br>'+sorted.length+' bids total</div>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:24px;">'
+        +[
+          {l:'Total Bids',v:s.total,c:'#0ea5e9'},
+          {l:'Win Rate',v:(s.winRate!==null?s.winRate+'%':'—'),c:s.winRate>=50?'#22c55e':'#f59e0b'},
+          {l:'Won Value',v:fmtMoney(s.wonVal),c:'#22c55e'},
+          {l:'Active Pipeline',v:fmtMoney(s.pipeVal),c:'#f59e0b'},
+          {l:'Won Count',v:s.won+' bids',c:'#22c55e'},
+          {l:'Lost Count',v:s.lost+' bids',c:'#ef4444'},
+        ].map(function(c){ return '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;margin-bottom:4px;">'+c.l+'</div><div style="font-size:1.1rem;font-weight:700;color:'+c.c+';">'+c.v+'</div></div>'; }).join('')
+      +'</div>'
+      +'<table><thead><tr><th>Project</th><th>Client/GC</th><th>Type</th><th>Bid Date</th><th>Bid Amount</th><th>yd³</th><th>$/yd³</th><th>Status</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody>'
+        +'<tfoot><tr style="background:#f8fafc;font-weight:600;"><td colspan="4" style="padding:8px 10px;font-size:0.8rem;">TOTAL ('+sorted.length+' bids)</td>'
+          +'<td style="padding:8px 10px;font-size:0.85rem;color:#0f766e;">'+fmtMoney(sorted.reduce(function(a,b){return a+(parseFloat(b.bidAmount)||0);},0))+'</td>'
+          +'<td style="padding:8px 10px;font-size:0.8rem;">'+(sorted.reduce(function(a,b){return a+(parseFloat(b.yds)||0);},0)||0)+' yd³</td>'
+          +'<td colspan="3"></td>'
+        +'</tr></tfoot>'
+      +'</table>'
+      +'<div style="margin-top:24px;font-size:0.7rem;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:12px;">CONFIDENTIAL — INTERNAL USE ONLY · Oncor Bid Pipeline · Generated by Oncor Takeoff Estimator</div>'
+      +'<button onclick="window.print()" style="margin-top:16px;padding:8px 20px;background:#1e293b;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer;">🖨️ Print / Save PDF</button>'
+    +'</body></html>';
+    var w=window.open('','_blank');
+    w.document.write(html);
+    w.document.close();
+  };
+
+  /* ---- stats hook ---- */
+  window._getPipelineStats=function(){
+    var bids=loadBids();
+    var s=calcStats(bids);
+    return {total:s.total,won:s.won,lost:s.lost,wonVal:s.wonVal,pipeVal:s.pipeVal,winRate:s.winRate};
+  };
+
+  /* ---- keyboard shortcut: Alt+P ---- */
+  document.addEventListener('keydown',function(e){
+    if(e.altKey && e.key.toLowerCase()==='p'){
+      e.preventDefault();
+      var m=document.getElementById(MODAL_ID);
+      if(m && m.style.display==='flex') closePipeline();
+      else showPipeline();
+    }
+  });
+
+  /* ---- inject sidebar button ---- */
+  document.addEventListener('DOMContentLoaded',function(){
+    setTimeout(function(){
+      var calcBtn=document.querySelector('button[onclick*="showCalcTools"]');
+      if(!calcBtn) return;
+      var parentRow=calcBtn.closest('div');
+      if(!parentRow||!parentRow.parentNode) return;
+      var newRow=document.createElement('div');
+      newRow.style.cssText='display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML='<button class="action-btn secondary" onclick="showPipeline()" title="Bid Pipeline & Win/Loss Tracker — track all bids, win rate, pipeline value, follow-up alerts (Alt+P)" style="background:rgba(34,197,94,0.1);border-color:rgba(34,197,94,0.3);color:#4ade80;">📈 Bid Pipeline</button>';
+      parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 2700);
+  });
+
+})();
+// ==================== END BID PIPELINE & WIN/LOSS TRACKER — Zeus ⚡ Session #68 ====================
+</script>
