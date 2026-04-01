@@ -147896,3 +147896,501 @@ td{padding:6px 8px;border-bottom:1px solid #e2e8f0;}
 })();
 // ==================== END SUBCONTRACTOR MANAGEMENT TRACKER — Zeus ⚡ Session #57 ====================
 </script>
+
+<script>
+// ==================== EQUIPMENT RENTAL TRACKER — Zeus ⚡ Session #58 ====================
+(function() {
+  'use strict';
+
+  /* ── helpers ── */
+  function getProj() {
+    const n = (document.getElementById('projectName')||{}).value||'';
+    return n.trim() || 'default';
+  }
+  function escH(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function fmt$(n) {
+    return '$' + (n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  }
+  function fmtDate(d) {
+    if (!d) return '—';
+    const dt = new Date(d + 'T00:00:00');
+    return dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  }
+  function daysLeft(end) {
+    if (!end) return null;
+    const diff = (new Date(end + 'T00:00:00') - new Date()) / 86400000;
+    return Math.ceil(diff);
+  }
+  function getRentals() {
+    try { return JSON.parse(localStorage.getItem('oncor_rental_v1_' + getProj())) || []; }
+    catch(e) { return []; }
+  }
+  function saveRentals(arr) {
+    localStorage.setItem('oncor_rental_v1_' + getProj(), JSON.stringify(arr));
+  }
+
+  /* ── EQUIPMENT CATEGORIES ── */
+  var EQUIP_CATS = [
+    'Concrete Pump (Boom)',
+    'Concrete Pump (Line/Trailer)',
+    'Concrete Mixer / Transit',
+    'Concrete Vibrator',
+    'Plate Compactor',
+    'Jumping Jack Compactor',
+    'Walk-Behind Saw',
+    'Ride-On Concrete Saw',
+    'Trowel Machine (Walk-Behind)',
+    'Trowel Machine (Ride-On)',
+    'Screed (Vibrating)',
+    'Laser Screed',
+    'Concrete Float / Fresno',
+    'Crane (Mobile)',
+    'Forklift / Telehandler',
+    'Boom Lift / Man Lift',
+    'Scissor Lift',
+    'Skid Steer / Bobcat',
+    'Mini Excavator',
+    'Grade Laser / Level',
+    'Formwork System',
+    'Shoring / Scaffold',
+    'Generator',
+    'Light Tower',
+    'Water Pump / Dewatering',
+    'Concrete Buggy',
+    'Rubber-Tire Buggy',
+    'Core Drill Rig',
+    'Jackhammer / Breaker',
+    'Rebar Bender/Cutter',
+    'Welder',
+    'Pressure Washer',
+    'Temporary Fence / Barrier',
+    'Portable Restroom / Trailer',
+    'Storage Container',
+    'Other'
+  ];
+
+  /* ── RATE UNIT OPTIONS ── */
+  var RATE_UNITS = ['Day','Week','Month','Mobilization (flat)','Per Pour','Hourly'];
+
+  /* ── STATUS OPTIONS ── */
+  var STATUSES = ['On Rent','Returned','Scheduled','Cancelled'];
+
+  /* ── MODAL ── */
+  var _modal = null;
+  var _editIdx = -1;
+
+  function showEquipTracker() {
+    if (_modal) { _modal.style.display = _modal.style.display === 'none' ? 'flex' : 'none'; refreshList(); return; }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'equip-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9500;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+    overlay.innerHTML = `
+<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;width:100%;max-width:900px;min-width:300px;font-family:sans-serif;position:relative;margin:auto;">
+  <button onclick="document.getElementById('equip-modal').style.display='none'" style="position:absolute;top:12px;right:14px;background:none;border:none;color:#94a3b8;font-size:1.3rem;cursor:pointer;line-height:1;">✕</button>
+  <div style="font-size:1.05rem;font-weight:700;color:#38bdf8;margin-bottom:14px;">🔧 Equipment &amp; Tool Rental Tracker</div>
+
+  <!-- Stats bar -->
+  <div id="eq-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px;"></div>
+
+  <!-- Controls -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+    <select id="eq-filter-status" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px 10px;font-size:0.82rem;">
+      <option value="">All Statuses</option>
+      <option>On Rent</option><option>Returned</option><option>Scheduled</option><option>Cancelled</option>
+    </select>
+    <select id="eq-filter-cat" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px 10px;font-size:0.82rem;">
+      <option value="">All Categories</option>
+    </select>
+    <input id="eq-search" type="text" placeholder="Search vendor, description…" style="flex:1;min-width:160px;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px 10px;font-size:0.82rem;">
+    <button id="eq-add-btn" style="background:#0ea5e9;border:none;color:#fff;border-radius:6px;padding:6px 14px;font-size:0.82rem;cursor:pointer;white-space:nowrap;">+ Add Equipment</button>
+    <button id="eq-print-btn" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:6px 12px;font-size:0.82rem;cursor:pointer;white-space:nowrap;">🖨 Print Report</button>
+  </div>
+
+  <!-- List -->
+  <div id="eq-list" style="display:flex;flex-direction:column;gap:8px;max-height:440px;overflow-y:auto;padding-right:4px;"></div>
+
+  <!-- Form (hidden by default) -->
+  <div id="eq-form-wrap" style="display:none;margin-top:14px;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:16px;">
+    <div id="eq-form-title" style="font-size:0.85rem;font-weight:700;color:#38bdf8;margin-bottom:12px;">New Equipment Entry</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">
+      <div><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:4px;">Equipment Category *</label>
+        <select id="eq-cat" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;"></select></div>
+      <div><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:4px;">Description / Model *</label>
+        <input id="eq-desc" type="text" placeholder="e.g. 36m boom pump, #VIB-1" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;"></div>
+      <div><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:4px;">Rental Company</label>
+        <input id="eq-vendor" type="text" placeholder="e.g. United Rentals, Sunbelt" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;"></div>
+      <div><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:4px;">Vendor Phone</label>
+        <input id="eq-phone" type="text" placeholder="(915) 000-0000" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;"></div>
+      <div><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:4px;">Contract / PO #</label>
+        <input id="eq-po" type="text" placeholder="Rental agreement #" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;"></div>
+      <div><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:4px;">Rate *</label>
+        <input id="eq-rate" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;"></div>
+      <div><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:4px;">Rate Unit</label>
+        <select id="eq-rate-unit" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;"></select></div>
+      <div><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:4px;">Quantity / Units Used</label>
+        <input id="eq-qty" type="number" min="1" step="0.5" value="1" placeholder="e.g. 3 (days)" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;"></div>
+      <div><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:4px;">Start Date</label>
+        <input id="eq-start" type="date" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;"></div>
+      <div><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:4px;">Return Date</label>
+        <input id="eq-end" type="date" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;"></div>
+      <div><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:4px;">Status</label>
+        <select id="eq-status" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;"></select></div>
+      <div><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:4px;">Budgeted Amount</label>
+        <input id="eq-budget" type="number" min="0" step="0.01" placeholder="0.00 (from estimate)" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;"></div>
+    </div>
+    <div style="margin-top:10px;">
+      <label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:4px;">Notes (delivery req, operator, fuel terms, damage waiver, etc.)</label>
+      <textarea id="eq-notes" rows="2" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:8px 10px;font-size:0.82rem;box-sizing:border-box;resize:vertical;" placeholder="Operator provided by vendor? Fuel included? Damage waiver taken?"></textarea>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
+      <button id="eq-cancel-btn" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:8px 16px;font-size:0.82rem;cursor:pointer;">Cancel</button>
+      <button id="eq-save-btn" style="background:#0ea5e9;border:none;color:#fff;border-radius:6px;padding:8px 20px;font-size:0.82rem;cursor:pointer;">Save Equipment</button>
+    </div>
+  </div>
+</div>`;
+    document.body.appendChild(overlay);
+    _modal = overlay;
+
+    // populate selects
+    const catSel = document.getElementById('eq-cat');
+    const filterCat = document.getElementById('eq-filter-cat');
+    EQUIP_CATS.forEach(c => {
+      catSel.innerHTML += `<option>${escH(c)}</option>`;
+      filterCat.innerHTML += `<option>${escH(c)}</option>`;
+    });
+    const rateUnitSel = document.getElementById('eq-rate-unit');
+    RATE_UNITS.forEach(u => rateUnitSel.innerHTML += `<option>${escH(u)}</option>`);
+    const statusSel = document.getElementById('eq-status');
+    STATUSES.forEach(s => statusSel.innerHTML += `<option>${escH(s)}</option>`);
+
+    // live calc: rate × qty
+    function updateTotal() {
+      const r = parseFloat(document.getElementById('eq-rate').value)||0;
+      const q = parseFloat(document.getElementById('eq-qty').value)||1;
+      const tot = r * q;
+      const el = document.getElementById('eq-total-display');
+      if (el) el.textContent = fmt$(tot);
+    }
+    document.getElementById('eq-rate').addEventListener('input', updateTotal);
+    document.getElementById('eq-qty').addEventListener('input', updateTotal);
+
+    document.getElementById('eq-add-btn').addEventListener('click', () => showForm(null));
+    document.getElementById('eq-cancel-btn').addEventListener('click', () => {
+      document.getElementById('eq-form-wrap').style.display = 'none';
+      _editIdx = -1;
+    });
+    document.getElementById('eq-save-btn').addEventListener('click', saveEntry);
+    document.getElementById('eq-filter-status').addEventListener('change', refreshList);
+    document.getElementById('eq-filter-cat').addEventListener('change', refreshList);
+    document.getElementById('eq-search').addEventListener('input', refreshList);
+    document.getElementById('eq-print-btn').addEventListener('click', printReport);
+
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) overlay.style.display = 'none';
+    });
+
+    refreshList();
+  }
+
+  function showForm(idx) {
+    _editIdx = (idx === null) ? -1 : idx;
+    const wrap = document.getElementById('eq-form-wrap');
+    wrap.style.display = 'block';
+    document.getElementById('eq-form-title').textContent = _editIdx >= 0 ? 'Edit Equipment Entry' : 'New Equipment Entry';
+
+    const rentals = getRentals();
+    const e = _editIdx >= 0 ? rentals[_editIdx] : {};
+
+    document.getElementById('eq-cat').value = e.cat || EQUIP_CATS[0];
+    document.getElementById('eq-desc').value = e.desc || '';
+    document.getElementById('eq-vendor').value = e.vendor || '';
+    document.getElementById('eq-phone').value = e.phone || '';
+    document.getElementById('eq-po').value = e.po || '';
+    document.getElementById('eq-rate').value = e.rate || '';
+    document.getElementById('eq-rate-unit').value = e.rateUnit || 'Day';
+    document.getElementById('eq-qty').value = e.qty !== undefined ? e.qty : 1;
+    document.getElementById('eq-start').value = e.startDate || '';
+    document.getElementById('eq-end').value = e.endDate || '';
+    document.getElementById('eq-status').value = e.status || 'Scheduled';
+    document.getElementById('eq-budget').value = e.budget || '';
+    document.getElementById('eq-notes').value = e.notes || '';
+    wrap.scrollIntoView({behavior:'smooth', block:'nearest'});
+  }
+
+  function saveEntry() {
+    const cat = document.getElementById('eq-cat').value;
+    const desc = document.getElementById('eq-desc').value.trim();
+    if (!desc) { alert('Description is required.'); return; }
+    const rate = parseFloat(document.getElementById('eq-rate').value) || 0;
+    const qty = parseFloat(document.getElementById('eq-qty').value) || 1;
+    const entry = {
+      cat,
+      desc,
+      vendor: document.getElementById('eq-vendor').value.trim(),
+      phone: document.getElementById('eq-phone').value.trim(),
+      po: document.getElementById('eq-po').value.trim(),
+      rate,
+      rateUnit: document.getElementById('eq-rate-unit').value,
+      qty,
+      total: rate * qty,
+      startDate: document.getElementById('eq-start').value,
+      endDate: document.getElementById('eq-end').value,
+      status: document.getElementById('eq-status').value,
+      budget: parseFloat(document.getElementById('eq-budget').value) || 0,
+      notes: document.getElementById('eq-notes').value.trim(),
+      savedAt: new Date().toISOString()
+    };
+    const rentals = getRentals();
+    if (_editIdx >= 0) rentals[_editIdx] = entry;
+    else rentals.push(entry);
+    saveRentals(rentals);
+    document.getElementById('eq-form-wrap').style.display = 'none';
+    _editIdx = -1;
+    refreshList();
+    showEqToast(_editIdx >= 0 ? 'Entry updated.' : 'Equipment added.');
+  }
+
+  function deleteEntry(idx) {
+    if (!confirm('Delete this equipment entry?')) return;
+    const rentals = getRentals();
+    rentals.splice(idx, 1);
+    saveRentals(rentals);
+    refreshList();
+  }
+
+  function refreshList() {
+    const rentals = getRentals();
+    const filterStatus = (document.getElementById('eq-filter-status')||{}).value || '';
+    const filterCat = (document.getElementById('eq-filter-cat')||{}).value || '';
+    const search = ((document.getElementById('eq-search')||{}).value || '').toLowerCase();
+
+    const filtered = rentals.filter((r, origIdx) => {
+      r._origIdx = origIdx;
+      if (filterStatus && r.status !== filterStatus) return false;
+      if (filterCat && r.cat !== filterCat) return false;
+      if (search && !(r.desc.toLowerCase().includes(search) || (r.vendor||'').toLowerCase().includes(search) || r.cat.toLowerCase().includes(search))) return false;
+      return true;
+    });
+
+    // stats
+    const totalRentals = rentals.length;
+    const totalCost = rentals.reduce((s,r)=>s+(r.total||0),0);
+    const totalBudget = rentals.reduce((s,r)=>s+(r.budget||0),0);
+    const variance = totalBudget - totalCost;
+    const onRent = rentals.filter(r=>r.status==='On Rent').length;
+    const overdue = rentals.filter(r=>r.status==='On Rent' && r.endDate && daysLeft(r.endDate) < 0).length;
+
+    const statsEl = document.getElementById('eq-stats');
+    if (statsEl) {
+      statsEl.innerHTML = [
+        {label:'Equipment Items', val: totalRentals, color:'#38bdf8'},
+        {label:'Total Cost', val: fmt$(totalCost), color:'#f59e0b'},
+        {label:'Budgeted', val: totalBudget ? fmt$(totalBudget) : '—', color:'#8b5cf6'},
+        {label:'Variance', val: totalBudget ? (variance >= 0 ? '+' : '') + fmt$(variance) : '—', color: variance >= 0 ? '#10b981' : '#ef4444'},
+        {label:'On Rent Now', val: onRent, color:'#22c55e'},
+        {label:'Overdue Returns', val: overdue, color: overdue > 0 ? '#ef4444' : '#64748b'}
+      ].map(s=>`
+        <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;padding:10px 12px;text-align:center;">
+          <div style="font-size:1.1rem;font-weight:700;color:${s.color};">${s.val}</div>
+          <div style="font-size:0.7rem;color:#64748b;margin-top:2px;">${s.label}</div>
+        </div>`).join('');
+    }
+
+    const listEl = document.getElementById('eq-list');
+    if (!listEl) return;
+
+    if (!filtered.length) {
+      listEl.innerHTML = `<div style="text-align:center;color:#64748b;padding:40px;">No equipment entries${filterStatus||filterCat||search?' match your filters':' yet. Click "+ Add Equipment" to start.'}.</div>`;
+      return;
+    }
+
+    listEl.innerHTML = filtered.map(r => {
+      const idx = r._origIdx;
+      const dl = r.endDate ? daysLeft(r.endDate) : null;
+      const overdueFlag = r.status === 'On Rent' && dl !== null && dl < 0;
+      const urgentFlag = r.status === 'On Rent' && dl !== null && dl >= 0 && dl <= 3;
+      const statusColors = {'On Rent':'#22c55e','Returned':'#64748b','Scheduled':'#f59e0b','Cancelled':'#ef4444'};
+      const statusColor = statusColors[r.status] || '#64748b';
+      const budgVar = r.budget ? (r.budget - r.total) : null;
+
+      return `<div style="background:#0f172a;border:1px solid ${overdueFlag?'#ef4444':'#334155'};border-radius:8px;padding:12px 14px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px;">
+          <div style="flex:1;min-width:200px;">
+            <div style="font-size:0.88rem;font-weight:700;color:#e2e8f0;">${escH(r.desc)}</div>
+            <div style="font-size:0.75rem;color:#94a3b8;margin-top:2px;">${escH(r.cat)}${r.vendor ? ' · ' + escH(r.vendor) : ''}${r.phone ? ' · ' + escH(r.phone) : ''}</div>
+            ${r.po ? `<div style="font-size:0.72rem;color:#64748b;">PO/Agreement: ${escH(r.po)}</div>` : ''}
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44;border-radius:4px;padding:2px 8px;font-size:0.72rem;font-weight:600;">${escH(r.status)}</span>
+            ${overdueFlag ? `<span style="background:#ef444422;color:#ef4444;border:1px solid #ef444444;border-radius:4px;padding:2px 8px;font-size:0.72rem;font-weight:700;">OVERDUE ${Math.abs(dl)}d</span>` : ''}
+            ${urgentFlag ? `<span style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44;border-radius:4px;padding:2px 8px;font-size:0.72rem;font-weight:700;">DUE IN ${dl}d</span>` : ''}
+            <button onclick="window._eqEdit(${idx})" style="background:none;border:none;color:#94a3b8;font-size:0.85rem;cursor:pointer;padding:2px 6px;" title="Edit">✏️</button>
+            <button onclick="window._eqDelete(${idx})" style="background:none;border:none;color:#94a3b8;font-size:0.85rem;cursor:pointer;padding:2px 6px;" title="Delete">🗑</button>
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;font-size:0.78rem;color:#94a3b8;">
+          <span>💰 <span style="color:#f59e0b;font-weight:700;">${fmt$(r.total)}</span> (${escH(r.rateUnit)}: ${fmt$(r.rate)} × ${r.qty})</span>
+          ${r.budget ? `<span>Budget: <span style="color:${budgVar>=0?'#10b981':'#ef4444'};font-weight:600;">${fmt$(r.budget)}</span> <span style="color:${budgVar>=0?'#10b981':'#ef4444'};">(${budgVar>=0?'+':''}${fmt$(budgVar)})</span></span>` : ''}
+          ${r.startDate ? `<span>Start: ${fmtDate(r.startDate)}</span>` : ''}
+          ${r.endDate ? `<span>Return: ${fmtDate(r.endDate)}${dl!==null?` (${dl<0?'<span style="color:#ef4444">':dl<=3?'<span style="color:#f59e0b">':'<span style="color:#64748b;">'}${dl<0?Math.abs(dl)+'d overdue':dl+'d left'}</span>)`:''}` : ''}
+        </div>
+        ${r.notes ? `<div style="font-size:0.75rem;color:#64748b;margin-top:6px;padding:6px 8px;background:#1e293b;border-radius:4px;">${escH(r.notes)}</div>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  /* ── PRINT REPORT ── */
+  function printReport() {
+    const rentals = getRentals();
+    const proj = getProj();
+    const comp = {};
+    ['companyName','companyAddress','companyPhone','companyEmail'].forEach(id => {
+      comp[id] = (document.getElementById(id)||{}).value || '';
+    });
+
+    const totalCost = rentals.reduce((s,r)=>s+(r.total||0),0);
+    const totalBudget = rentals.reduce((s,r)=>s+(r.budget||0),0);
+    const variance = totalBudget - totalCost;
+    const onRent = rentals.filter(r=>r.status==='On Rent').length;
+    const returned = rentals.filter(r=>r.status==='Returned').length;
+    const scheduled = rentals.filter(r=>r.status==='Scheduled').length;
+
+    const rows = rentals.map(r => {
+      const dl = r.endDate ? daysLeft(r.endDate) : null;
+      const overdueFlag = r.status === 'On Rent' && dl !== null && dl < 0;
+      return `<tr style="${overdueFlag?'background:#fff0f0;':''}">
+        <td>${escH(r.cat)}</td>
+        <td>${escH(r.desc)}</td>
+        <td>${escH(r.vendor||'—')}</td>
+        <td>${escH(r.po||'—')}</td>
+        <td style="text-align:right;">${fmt$(r.rate)} / ${escH(r.rateUnit)}</td>
+        <td style="text-align:center;">${r.qty}</td>
+        <td style="text-align:right;font-weight:600;">${fmt$(r.total)}</td>
+        <td style="text-align:right;">${r.budget ? fmt$(r.budget) : '—'}</td>
+        <td>${fmtDate(r.startDate)}</td>
+        <td>${fmtDate(r.endDate)}${overdueFlag?' <span style="color:red;font-weight:700;">OVERDUE</span>':''}</td>
+        <td style="font-weight:600;color:${r.status==='On Rent'?'green':r.status==='Returned'?'#666':r.status==='Scheduled'?'darkorange':'red'}">${escH(r.status)}</td>
+      </tr>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html><html><head><title>Equipment Rental Report — ${escH(proj)}</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 9pt; color: #222; margin: 0; padding: 20px; }
+  h1 { font-size: 14pt; color: #1e3a5f; margin: 0 0 4px; }
+  .hdr { display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 2px solid #1e3a5f; padding-bottom: 8px; }
+  .hdr-right { text-align: right; font-size: 8pt; color: #555; }
+  .badge { background: #1e3a5f; color: #fff; font-size: 7pt; padding: 2px 8px; border-radius: 3px; display: inline-block; margin-bottom: 6px; letter-spacing: 0.05em; }
+  .stats { display: flex; gap: 12px; margin: 12px 0; }
+  .stat { border: 1px solid #ddd; border-radius: 6px; padding: 8px 14px; text-align: center; min-width: 90px; }
+  .stat .val { font-size: 11pt; font-weight: 700; }
+  .stat .lbl { font-size: 7pt; color: #777; margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 8pt; }
+  th { background: #1e3a5f; color: #fff; padding: 5px 6px; text-align: left; font-weight: 600; }
+  td { padding: 4px 6px; border-bottom: 1px solid #eee; }
+  tr:nth-child(even) td { background: #f9f9f9; }
+  .total-row td { font-weight: 700; background: #f0f4f8; border-top: 2px solid #1e3a5f; }
+  .footer { font-size: 7pt; color: #999; margin-top: 14px; border-top: 1px solid #eee; padding-top: 8px; text-align: center; }
+  @media print { .no-print { display: none !important; } }
+</style></head><body>
+<div class="hdr">
+  <div>
+    <div class="badge">EQUIPMENT RENTAL REPORT — INTERNAL USE ONLY</div>
+    <h1>${escH(comp.companyName || 'Oncor Concrete')}</h1>
+    <div style="font-size:8pt;color:#555;">${escH(comp.companyAddress || '')} ${comp.companyPhone ? '· ' + escH(comp.companyPhone) : ''} ${comp.companyEmail ? '· ' + escH(comp.companyEmail) : ''}</div>
+  </div>
+  <div class="hdr-right">
+    <div><strong>Project:</strong> ${escH(proj)}</div>
+    <div><strong>Printed:</strong> ${new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="val">${rentals.length}</div><div class="lbl">Total Items</div></div>
+  <div class="stat"><div class="val" style="color:#b45309;">${fmt$(totalCost)}</div><div class="lbl">Total Cost</div></div>
+  <div class="stat"><div class="val" style="color:#6d28d9;">${totalBudget ? fmt$(totalBudget) : '—'}</div><div class="lbl">Budgeted</div></div>
+  <div class="stat"><div class="val" style="color:${variance>=0?'green':'red'}">${totalBudget ? (variance>=0?'+':'')+fmt$(variance) : '—'}</div><div class="lbl">Variance</div></div>
+  <div class="stat"><div class="val" style="color:green;">${onRent}</div><div class="lbl">On Rent</div></div>
+  <div class="stat"><div class="val" style="color:#555;">${returned}</div><div class="lbl">Returned</div></div>
+  <div class="stat"><div class="val" style="color:darkorange;">${scheduled}</div><div class="lbl">Scheduled</div></div>
+</div>
+
+<table>
+  <thead><tr>
+    <th>Category</th><th>Description</th><th>Vendor</th><th>PO #</th>
+    <th style="text-align:right;">Rate</th><th style="text-align:center;">Qty</th>
+    <th style="text-align:right;">Total</th><th style="text-align:right;">Budget</th>
+    <th>Start</th><th>Return</th><th>Status</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+  <tfoot><tr class="total-row">
+    <td colspan="6">TOTALS</td>
+    <td style="text-align:right;">${fmt$(totalCost)}</td>
+    <td style="text-align:right;">${totalBudget ? fmt$(totalBudget) : '—'}</td>
+    <td colspan="3"></td>
+  </tr></tfoot>
+</table>
+
+<button class="no-print" onclick="window.print()" style="margin-top:14px;padding:8px 18px;background:#1e3a5f;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:9pt;">🖨 Print / Save PDF</button>
+<div class="footer">${escH(comp.companyName || 'Oncor Concrete')} · Equipment Rental Report · ${escH(proj)} · Printed: ${new Date().toLocaleDateString()}<br>CONFIDENTIAL — INTERNAL USE ONLY</div>
+</body></html>`;
+
+    const w = window.open('','_blank');
+    if (w) { w.document.write(html); w.document.close(); }
+  }
+
+  /* ── TOAST ── */
+  function showEqToast(msg) {
+    let t = document.getElementById('eq-toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'eq-toast';
+      t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#10b981;color:#fff;padding:8px 18px;border-radius:8px;font-size:0.82rem;font-weight:600;z-index:99999;opacity:0;transition:opacity 0.3s;pointer-events:none;';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.opacity = '1';
+    setTimeout(() => { t.style.opacity = '0'; }, 2200);
+  }
+
+  /* ── EXPOSE GLOBALS ── */
+  window.showEquipTracker = showEquipTracker;
+  window._eqEdit = function(idx) { showForm(idx); };
+  window._eqDelete = deleteEntry;
+
+  /* ── KEYBOARD SHORTCUT Ctrl+Shift+E ── */
+  document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey||e.metaKey) && e.shiftKey && (e.key==='E'||e.key==='e')) {
+      e.preventDefault();
+      showEquipTracker();
+    }
+  });
+
+  /* ── SIDEBAR BUTTON (inject after Subcontractors button) ── */
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      const subBtn = document.querySelector('button[onclick*="showSubTracker"]');
+      if (!subBtn) return;
+      const newRow = document.createElement('div');
+      newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML = `<button class="action-btn secondary" onclick="showEquipTracker()" title="Equipment &amp; Tool Rental Tracker — Track rented equipment (pumps, lifts, saws, vibrators) with rental rates, return dates, budget variance, and overdue alerts. Print rental report. (Ctrl+Shift+E)" style="background:rgba(59,130,246,0.1);border-color:rgba(59,130,246,0.3);color:#3b82f6;">🔧 Equipment Rentals</button>`;
+      const parentRow = subBtn.closest('div');
+      if (parentRow && parentRow.parentNode) parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 1400);
+  });
+
+  /* ── EXPOSE STATS FOR PROJECT STATUS CARD ── */
+  window._getEquipStats = function() {
+    const rentals = getRentals();
+    const totalCost = rentals.reduce((s,r)=>s+(r.total||0),0);
+    const totalBudget = rentals.reduce((s,r)=>s+(r.budget||0),0);
+    const onRent = rentals.filter(r=>r.status==='On Rent').length;
+    const overdue = rentals.filter(r=>r.status==='On Rent' && r.endDate && daysLeft(r.endDate) < 0).length;
+    return { count: rentals.length, totalCost, totalBudget, variance: totalBudget - totalCost, onRent, overdue };
+  };
+
+})();
+// ==================== END EQUIPMENT RENTAL TRACKER — Zeus ⚡ Session #58 ====================
+</script>
