@@ -155342,4 +155342,472 @@ ${(p.followDue.length > 0 || c.overdueFollowUp > 0) ? `
 
 })();
 // ==================== END ACCOUNTS RECEIVABLE & INVOICE TRACKER — Zeus ⚡ Session #72 ====================
+
+// ==================== SUPPLIER QUOTE COMPARISON & VENDOR PRICE HISTORY — Zeus ⚡ Session #73 ====================
+// Alt+Q — Compare quotes from multiple suppliers, track price history over time, identify best value
+// On every bid JFS gets quotes from 2-4 batch plants, rebar suppliers, pump companies. This tool:
+// - Logs quotes by material/supplier with date, expiry, price, terms
+// - Side-by-side comparison of active quotes for a material
+// - Price history chart per supplier/material combo over time
+// - Award tracking (which supplier won the work)
+// - Printable quote comparison sheet
+(function(){
+  'use strict';
+  var QUOTE_ID = 'oncor-supplier-quotes-modal';
+  var SK_QUOTES = 'oncor_quotes_v1';
+  var SK_VENDORS = 'oncor_vendors_v1';
+
+  function getQuotes(){ try{ return JSON.parse(localStorage.getItem(SK_QUOTES))||[]; }catch(e){ return []; }}
+  function saveQuotes(q){ localStorage.setItem(SK_QUOTES, JSON.stringify(q)); }
+  function getVendors(){ try{ return JSON.parse(localStorage.getItem(SK_VENDORS))||[]; }catch(e){ return []; }}
+  function saveVendors(v){ localStorage.setItem(SK_VENDORS, JSON.stringify(v)); }
+
+  var MATERIALS = [
+    'Ready-Mix Concrete (3000 PSI)','Ready-Mix Concrete (3500 PSI)','Ready-Mix Concrete (4000 PSI)','Ready-Mix Concrete (4500 PSI)','Ready-Mix Concrete (5000 PSI)','Ready-Mix Concrete (6000 PSI)',
+    'Rebar #3','Rebar #4','Rebar #5','Rebar #6','Rebar #7','Rebar #8',
+    'Wire Mesh 6x6 W1.4/W1.4','Wire Mesh 6x6 W2.9/W2.9',
+    'Fiber (Synthetic)','Fiber (Steel)',
+    'Concrete Pump (Boom)','Concrete Pump (Line/Trailer)',
+    'Curing Compound','Sealer','Form Release','Expansion Joint Filler',
+    'Base Course / Flex Base','Vapor Barrier 10 mil','Vapor Barrier 15 mil',
+    'Saw Cutting (per LF)','Core Drilling (per inch-dia)',
+    'Admixture - Retarder','Admixture - Accelerator','Admixture - Water Reducer',
+    'Anchor Bolts','Embeds / Plates','Dowel Bars',
+    'Other'
+  ];
+  var UNITS = ['per CY','per yd³','per ton','per lb','per SF','per LF','per EA','per HR','per day','per pour','LS','per gal','per roll','per sheet','per bag'];
+
+  function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function fmtMoney(n){ n=parseFloat(n)||0; if(Math.abs(n)>=1e6) return '$'+(n/1e6).toFixed(2)+'M'; if(Math.abs(n)>=1e3) return '$'+(n/1e3).toFixed(1)+'k'; return '$'+n.toFixed(2); }
+  function fmtMoneyFull(n){ return '$'+((parseFloat(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})); }
+  function fmtDate(d){ if(!d) return '—'; var dt=new Date(d); return isNaN(dt)?'—':dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+  function daysBetween(d1,d2){ var a=new Date(d1),b=new Date(d2); return Math.round((b-a)/(1000*60*60*24)); }
+  function uid(){ return 'q'+Date.now().toString(36)+Math.random().toString(36).substr(2,5); }
+
+  function buildModal(){
+    if(document.getElementById(QUOTE_ID)) return;
+    var m = document.createElement('div');
+    m.id = QUOTE_ID;
+    m.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:10200;align-items:center;justify-content:center;';
+    m.innerHTML = '<div style="background:#1e293b;border-radius:12px;width:95%;max-width:1100px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 25px 50px rgba(0,0,0,0.5);">'
+      +'<div style="padding:14px 18px;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center;">'
+      +'<div><span style="font-size:18px;font-weight:700;color:#f8fafc;">🏷️ Supplier Quotes & Price History</span><span style="font-size:11px;color:#94a3b8;margin-left:10px;">Alt+Q</span></div>'
+      +'<button onclick="closeQuoteModal()" style="background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;">✕</button>'
+      +'</div>'
+      +'<div id="quote-stats" style="padding:10px 18px;border-bottom:1px solid #334155;background:#0f172a;"></div>'
+      +'<div style="padding:10px 18px;border-bottom:1px solid #334155;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">'
+      +'<select id="quote-mat-filter" onchange="renderQuotes()" style="padding:6px 10px;border-radius:6px;background:#0f172a;color:#e2e8f0;border:1px solid #475569;font-size:12px;"><option value="">All Materials</option></select>'
+      +'<select id="quote-vendor-filter" onchange="renderQuotes()" style="padding:6px 10px;border-radius:6px;background:#0f172a;color:#e2e8f0;border:1px solid #475569;font-size:12px;"><option value="">All Vendors</option></select>'
+      +'<select id="quote-status-filter" onchange="renderQuotes()" style="padding:6px 10px;border-radius:6px;background:#0f172a;color:#e2e8f0;border:1px solid #475569;font-size:12px;"><option value="">All Statuses</option><option value="active">Active Only</option><option value="expired">Expired</option><option value="awarded">Awarded</option></select>'
+      +'<input id="quote-search" type="text" placeholder="Search..." oninput="renderQuotes()" style="padding:6px 10px;border-radius:6px;background:#0f172a;color:#e2e8f0;border:1px solid #475569;font-size:12px;width:140px;">'
+      +'<div style="flex:1;"></div>'
+      +'<button onclick="showCompareView()" style="padding:6px 12px;background:#7c3aed;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">📊 Compare</button>'
+      +'<button onclick="showAddQuote()" style="padding:6px 12px;background:#0ea5e9;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">+ New Quote</button>'
+      +'<button onclick="printQuoteReport()" style="padding:6px 12px;background:#64748b;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">🖨️ Report</button>'
+      +'</div>'
+      +'<div id="quote-content" style="flex:1;overflow-y:auto;padding:14px 18px;"></div>'
+      +'</div>';
+    m.onclick = function(e){ if(e.target===m) closeQuoteModal(); };
+    document.body.appendChild(m);
+  }
+
+  function getStats(){
+    var qs = getQuotes(), today = new Date().toISOString().slice(0,10);
+    var total=qs.length, active=0, expired=0, awarded=0, expiring=0, totalValue=0;
+    var vendors = new Set(), materials = new Set();
+    qs.forEach(function(q){
+      vendors.add(q.vendor);
+      materials.add(q.material);
+      var isExp = q.expiry && q.expiry < today;
+      if(q.status==='awarded') awarded++;
+      else if(isExp) expired++;
+      else{ active++; totalValue += (parseFloat(q.price)||0)*(parseFloat(q.qty)||1); }
+      if(!isExp && q.expiry){
+        var d = daysBetween(today, q.expiry);
+        if(d>=0 && d<=7) expiring++;
+      }
+    });
+    return {total:total,active:active,expired:expired,awarded:awarded,expiring:expiring,vendors:vendors.size,materials:materials.size,value:totalValue};
+  }
+
+  function renderStats(){
+    var st = getStats();
+    var h = '<div style="display:flex;gap:14px;flex-wrap:wrap;">'
+      +'<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#f8fafc;">'+st.total+'</div><div style="font-size:10px;color:#94a3b8;">Total Quotes</div></div>'
+      +'<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#22c55e;">'+st.active+'</div><div style="font-size:10px;color:#94a3b8;">Active</div></div>'
+      +'<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#f59e0b;">'+st.expiring+'</div><div style="font-size:10px;color:#94a3b8;">Expiring ≤7d</div></div>'
+      +'<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#ef4444;">'+st.expired+'</div><div style="font-size:10px;color:#94a3b8;">Expired</div></div>'
+      +'<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#8b5cf6;">'+st.awarded+'</div><div style="font-size:10px;color:#94a3b8;">Awarded</div></div>'
+      +'<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#38bdf8;">'+st.vendors+'</div><div style="font-size:10px;color:#94a3b8;">Vendors</div></div>'
+      +'<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#a78bfa;">'+st.materials+'</div><div style="font-size:10px;color:#94a3b8;">Materials</div></div>'
+      +'</div>';
+    document.getElementById('quote-stats').innerHTML = h;
+  }
+
+  function populateFilters(){
+    var qs = getQuotes();
+    var mats = new Set(), vends = new Set();
+    qs.forEach(function(q){ mats.add(q.material); vends.add(q.vendor); });
+    var matSel = document.getElementById('quote-mat-filter');
+    var vendSel = document.getElementById('quote-vendor-filter');
+    var curMat = matSel.value, curVend = vendSel.value;
+    matSel.innerHTML = '<option value="">All Materials</option>' + Array.from(mats).sort().map(function(m){ return '<option value="'+escH(m)+'">'+escH(m)+'</option>'; }).join('');
+    vendSel.innerHTML = '<option value="">All Vendors</option>' + Array.from(vends).sort().map(function(v){ return '<option value="'+escH(v)+'">'+escH(v)+'</option>'; }).join('');
+    matSel.value = curMat; vendSel.value = curVend;
+  }
+
+  function renderQuotes(){
+    renderStats();
+    populateFilters();
+    var qs = getQuotes(), today = new Date().toISOString().slice(0,10);
+    var matF = document.getElementById('quote-mat-filter').value;
+    var vendF = document.getElementById('quote-vendor-filter').value;
+    var statF = document.getElementById('quote-status-filter').value;
+    var searchF = (document.getElementById('quote-search').value||'').toLowerCase();
+
+    var filtered = qs.filter(function(q){
+      if(matF && q.material !== matF) return false;
+      if(vendF && q.vendor !== vendF) return false;
+      var isExp = q.expiry && q.expiry < today;
+      if(statF==='active' && (isExp || q.status==='awarded')) return false;
+      if(statF==='expired' && !isExp) return false;
+      if(statF==='awarded' && q.status!=='awarded') return false;
+      if(searchF){
+        var txt = [q.material,q.vendor,q.project,q.notes,q.contact].join(' ').toLowerCase();
+        if(txt.indexOf(searchF)<0) return false;
+      }
+      return true;
+    });
+
+    filtered.sort(function(a,b){
+      if(a.status==='awarded' && b.status!=='awarded') return 1;
+      if(b.status==='awarded' && a.status!=='awarded') return -1;
+      return new Date(b.quoteDate||0) - new Date(a.quoteDate||0);
+    });
+
+    if(filtered.length===0){
+      document.getElementById('quote-content').innerHTML = '<div style="text-align:center;padding:60px 20px;color:#64748b;"><div style="font-size:40px;margin-bottom:12px;">🏷️</div><div>No quotes found. Click <b>+ New Quote</b> to log a supplier quote.</div></div>';
+      return;
+    }
+
+    var html = '<div style="display:grid;gap:10px;">';
+    filtered.forEach(function(q){
+      var isExp = q.expiry && q.expiry < today;
+      var daysLeft = q.expiry ? daysBetween(today, q.expiry) : null;
+      var expBadge = '';
+      if(q.status==='awarded') expBadge = '<span style="background:#8b5cf6;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:6px;">✓ AWARDED</span>';
+      else if(isExp) expBadge = '<span style="background:#dc2626;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:6px;">EXPIRED</span>';
+      else if(daysLeft!==null && daysLeft<=7) expBadge = '<span style="background:#f59e0b;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:6px;">'+daysLeft+'d left</span>';
+
+      var borderColor = q.status==='awarded'?'#8b5cf6':(isExp?'#dc2626':'#334155');
+
+      html += '<div style="background:#0f172a;border:1px solid '+borderColor+';border-radius:8px;padding:12px;'+(isExp&&q.status!=='awarded'?'opacity:0.7;':')+'">'
+        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">'
+        +'<div><span style="font-weight:600;color:#f8fafc;">'+escH(q.material)+'</span>'+expBadge+'</div>'
+        +'<div style="display:flex;gap:6px;">'
+        +'<button onclick="editQuote(\''+q.id+'\')" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:14px;" title="Edit">✏️</button>'
+        +(q.status!=='awarded'?'<button onclick="awardQuote(\''+q.id+'\')" style="background:none;border:none;color:#22c55e;cursor:pointer;font-size:14px;" title="Award to this vendor">✓</button>':'')
+        +'<button onclick="deleteQuote(\''+q.id+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;" title="Delete">🗑</button>'
+        +'</div></div>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px;color:#94a3b8;">'
+        +'<div><span style="color:#64748b;">Vendor:</span> <span style="color:#e2e8f0;">'+escH(q.vendor)+'</span></div>'
+        +'<div><span style="color:#64748b;">Contact:</span> <span style="color:#e2e8f0;">'+(q.contact||'—')+'</span></div>'
+        +'<div><span style="color:#64748b;">Phone:</span> <span style="color:#e2e8f0;">'+(q.phone||'—')+'</span></div>'
+        +'</div>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;font-size:12px;margin-top:8px;">'
+        +'<div><span style="color:#64748b;">Price:</span> <span style="color:#22c55e;font-weight:600;">'+fmtMoneyFull(q.price)+'</span> <span style="color:#64748b;">'+escH(q.unit||'')+'</span></div>'
+        +'<div><span style="color:#64748b;">Qty:</span> <span style="color:#e2e8f0;">'+(q.qty||'—')+'</span></div>'
+        +'<div><span style="color:#64748b;">Quote Date:</span> <span style="color:#e2e8f0;">'+fmtDate(q.quoteDate)+'</span></div>'
+        +'<div><span style="color:#64748b;">Expires:</span> <span style="color:'+(isExp?'#ef4444':'#e2e8f0')+';">'+fmtDate(q.expiry)+'</span></div>'
+        +'</div>'
+        +(q.project?'<div style="font-size:11px;color:#64748b;margin-top:6px;">Project: <span style="color:#94a3b8;">'+escH(q.project)+'</span></div>':'')
+        +(q.terms?'<div style="font-size:11px;color:#64748b;margin-top:4px;">Terms: <span style="color:#94a3b8;">'+escH(q.terms)+'</span></div>':'')
+        +(q.notes?'<div style="font-size:11px;color:#94a3b8;margin-top:6px;padding:6px;background:#1e293b;border-radius:4px;">'+escH(q.notes)+'</div>':'')
+        +'</div>';
+    });
+    html += '</div>';
+    document.getElementById('quote-content').innerHTML = html;
+  }
+  window.renderQuotes = renderQuotes;
+
+  // ---- Add / Edit Quote ----
+  function showAddQuote(existingId){
+    var qs = getQuotes();
+    var q = existingId ? qs.find(function(x){ return x.id===existingId; }) : null;
+    var isEdit = !!q;
+    if(!q) q = {id:uid(),material:'',vendor:'',contact:'',phone:'',price:'',unit:'per CY',qty:'',quoteDate:new Date().toISOString().slice(0,10),expiry:'',project:'',terms:'',notes:'',status:''};
+
+    var matOpts = MATERIALS.map(function(m){ return '<option value="'+escH(m)+'"'+(q.material===m?' selected':'')+'>'+escH(m)+'</option>'; }).join('');
+    var unitOpts = UNITS.map(function(u){ return '<option value="'+escH(u)+'"'+(q.unit===u?' selected':'')+'>'+escH(u)+'</option>'; }).join('');
+    var vendors = getVendors();
+    var vendorList = vendors.map(function(v){ return '<option value="'+escH(v.name)+'">'; }).join('');
+
+    var html = '<div style="max-width:700px;margin:0 auto;">'
+      +'<div style="font-size:15px;font-weight:600;color:#f8fafc;margin-bottom:14px;">'+(isEdit?'Edit Quote':'New Supplier Quote')+'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Material *</label><select id="qf-material" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;">'+matOpts+'</select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Vendor / Supplier *</label><input id="qf-vendor" list="vendor-list" value="'+escH(q.vendor)+'" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"><datalist id="vendor-list">'+vendorList+'</datalist></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Contact Name</label><input id="qf-contact" value="'+escH(q.contact)+'" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Phone</label><input id="qf-phone" value="'+escH(q.phone)+'" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Unit Price *</label><input id="qf-price" type="number" step="0.01" value="'+escH(q.price)+'" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Unit</label><select id="qf-unit" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;">'+unitOpts+'</select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Quantity (for this project)</label><input id="qf-qty" type="number" step="0.1" value="'+escH(q.qty)+'" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Project (optional)</label><input id="qf-project" value="'+escH(q.project)+'" placeholder="e.g. Mesa Verde Apartments" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Quote Date *</label><input id="qf-quoteDate" type="date" value="'+escH(q.quoteDate)+'" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Quote Expiry</label><input id="qf-expiry" type="date" value="'+escH(q.expiry)+'" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'</div>'
+      +'<div style="margin-top:12px;"><label style="font-size:11px;color:#94a3b8;">Payment Terms / Delivery Notes</label><input id="qf-terms" value="'+escH(q.terms)+'" placeholder="e.g. Net 30, FOB jobsite, 45 min unload" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'<div style="margin-top:12px;"><label style="font-size:11px;color:#94a3b8;">Notes</label><textarea id="qf-notes" rows="2" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;resize:vertical;">'+escH(q.notes)+'</textarea></div>'
+      +'<div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end;">'
+      +'<button onclick="renderQuotes()" style="padding:8px 16px;background:#475569;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancel</button>'
+      +'<button onclick="saveQuoteForm(\''+q.id+'\','+isEdit+')" style="padding:8px 16px;background:#0ea5e9;color:#fff;border:none;border-radius:6px;cursor:pointer;">'+(isEdit?'Update Quote':'Save Quote')+'</button>'
+      +'</div></div>';
+    document.getElementById('quote-content').innerHTML = html;
+  }
+  window.showAddQuote = showAddQuote;
+
+  function saveQuoteForm(id, isEdit){
+    var mat = document.getElementById('qf-material').value;
+    var vendor = document.getElementById('qf-vendor').value.trim();
+    var price = document.getElementById('qf-price').value;
+    var quoteDate = document.getElementById('qf-quoteDate').value;
+    if(!mat||!vendor||!price||!quoteDate){ alert('Material, Vendor, Price, and Quote Date are required.'); return; }
+
+    var q = {
+      id: id,
+      material: mat,
+      vendor: vendor,
+      contact: document.getElementById('qf-contact').value.trim(),
+      phone: document.getElementById('qf-phone').value.trim(),
+      price: parseFloat(price)||0,
+      unit: document.getElementById('qf-unit').value,
+      qty: document.getElementById('qf-qty').value,
+      quoteDate: quoteDate,
+      expiry: document.getElementById('qf-expiry').value,
+      project: document.getElementById('qf-project').value.trim(),
+      terms: document.getElementById('qf-terms').value.trim(),
+      notes: document.getElementById('qf-notes').value.trim(),
+      status: ''
+    };
+
+    var qs = getQuotes();
+    if(isEdit){
+      var idx = qs.findIndex(function(x){ return x.id===id; });
+      if(idx>=0){ q.status = qs[idx].status; qs[idx] = q; }
+    } else {
+      qs.push(q);
+    }
+    saveQuotes(qs);
+
+    // Save vendor to vendor list if new
+    var vendors = getVendors();
+    if(!vendors.find(function(v){ return v.name.toLowerCase()===vendor.toLowerCase(); })){
+      vendors.push({name:vendor, phone:q.phone, contact:q.contact});
+      saveVendors(vendors);
+    }
+
+    renderQuotes();
+  }
+  window.saveQuoteForm = saveQuoteForm;
+
+  function editQuote(id){ showAddQuote(id); }
+  window.editQuote = editQuote;
+
+  function deleteQuote(id){
+    if(!confirm('Delete this quote?')) return;
+    var qs = getQuotes().filter(function(q){ return q.id!==id; });
+    saveQuotes(qs);
+    renderQuotes();
+  }
+  window.deleteQuote = deleteQuote;
+
+  function awardQuote(id){
+    if(!confirm('Mark this quote as AWARDED? This will mark the vendor as selected for this material.')) return;
+    var qs = getQuotes();
+    var q = qs.find(function(x){ return x.id===id; });
+    if(q){ q.status = 'awarded'; saveQuotes(qs); renderQuotes(); }
+  }
+  window.awardQuote = awardQuote;
+
+  // ---- Compare View ----
+  function showCompareView(){
+    var qs = getQuotes(), today = new Date().toISOString().slice(0,10);
+    var activeByMat = {};
+    qs.forEach(function(q){
+      if(q.status==='awarded') return;
+      if(q.expiry && q.expiry < today) return;
+      if(!activeByMat[q.material]) activeByMat[q.material] = [];
+      activeByMat[q.material].push(q);
+    });
+
+    var mats = Object.keys(activeByMat).filter(function(m){ return activeByMat[m].length >= 2; }).sort();
+    if(mats.length===0){
+      document.getElementById('quote-content').innerHTML = '<div style="text-align:center;padding:60px 20px;color:#64748b;"><div style="font-size:40px;margin-bottom:12px;">📊</div><div>Need at least 2 active quotes for the same material to compare.</div><button onclick="renderQuotes()" style="margin-top:16px;padding:8px 16px;background:#475569;color:#fff;border:none;border-radius:6px;cursor:pointer;">← Back</button></div>';
+      return;
+    }
+
+    var html = '<div style="margin-bottom:14px;display:flex;align-items:center;gap:12px;">'
+      +'<button onclick="renderQuotes()" style="padding:6px 12px;background:#475569;color:#fff;border:none;border-radius:6px;cursor:pointer;">← Back</button>'
+      +'<span style="font-size:15px;font-weight:600;color:#f8fafc;">📊 Quote Comparison</span>'
+      +'</div>';
+
+    mats.forEach(function(mat){
+      var quotes = activeByMat[mat].sort(function(a,b){ return (parseFloat(a.price)||0)-(parseFloat(b.price)||0); });
+      var lowest = parseFloat(quotes[0].price)||0;
+
+      html += '<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:12px;">'
+        +'<div style="font-weight:600;color:#f8fafc;margin-bottom:10px;">'+escH(mat)+' <span style="font-size:11px;color:#64748b;">('+quotes.length+' quotes)</span></div>'
+        +'<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+        +'<tr style="background:#1e293b;"><th style="padding:8px;text-align:left;color:#94a3b8;">Vendor</th><th style="padding:8px;text-align:right;color:#94a3b8;">Price</th><th style="padding:8px;text-align:left;color:#94a3b8;">Unit</th><th style="padding:8px;text-align:left;color:#94a3b8;">Terms</th><th style="padding:8px;text-align:left;color:#94a3b8;">Expires</th><th style="padding:8px;text-align:center;color:#94a3b8;">vs Low</th><th style="padding:8px;text-align:center;color:#94a3b8;">Action</th></tr>';
+
+      quotes.forEach(function(q,i){
+        var price = parseFloat(q.price)||0;
+        var diff = lowest>0 ? ((price - lowest)/lowest*100) : 0;
+        var diffStr = i===0 ? '<span style="color:#22c55e;font-weight:600;">LOWEST</span>' : '<span style="color:#f59e0b;">+'+diff.toFixed(1)+'%</span>';
+        var rowBg = i===0 ? 'background:rgba(34,197,94,0.1);' : '';
+
+        html += '<tr style="border-bottom:1px solid #334155;'+rowBg+'">'
+          +'<td style="padding:8px;color:#e2e8f0;">'+escH(q.vendor)+(q.contact?' <span style="color:#64748b;">('+escH(q.contact)+')</span>':'')+'</td>'
+          +'<td style="padding:8px;text-align:right;color:#22c55e;font-weight:600;">'+fmtMoneyFull(q.price)+'</td>'
+          +'<td style="padding:8px;color:#94a3b8;">'+escH(q.unit)+'</td>'
+          +'<td style="padding:8px;color:#94a3b8;">'+(q.terms||'—')+'</td>'
+          +'<td style="padding:8px;color:#94a3b8;">'+fmtDate(q.expiry)+'</td>'
+          +'<td style="padding:8px;text-align:center;">'+diffStr+'</td>'
+          +'<td style="padding:8px;text-align:center;"><button onclick="awardQuote(\''+q.id+'\');showCompareView();" style="padding:4px 8px;background:#8b5cf6;color:#fff;border:none;border-radius:4px;font-size:10px;cursor:pointer;">Award</button></td>'
+          +'</tr>';
+      });
+      html += '</table></div>';
+    });
+
+    document.getElementById('quote-content').innerHTML = html;
+  }
+  window.showCompareView = showCompareView;
+
+  // ---- Print Report ----
+  function printQuoteReport(){
+    var qs = getQuotes(), today = new Date().toISOString().slice(0,10);
+    var st = getStats();
+    var coName = (document.getElementById('coName')||{}).value||'Oncor Concrete';
+    var coPhone = (document.getElementById('coPhone')||{}).value||'';
+    var coEmail = (document.getElementById('coEmail')||{}).value||'';
+
+    var html = '<!DOCTYPE html><html><head><title>Supplier Quote Report</title><style>'
+      +'body{font-family:system-ui,-apple-system,sans-serif;padding:20px;max-width:1100px;margin:0 auto;font-size:11pt;}'
+      +'.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #0ea5e9;}'
+      +'.badge{display:inline-block;background:#0ea5e9;color:#fff;padding:4px 10px;border-radius:4px;font-size:10pt;font-weight:600;}'
+      +'.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px;}'
+      +'.kpi{background:#f1f5f9;padding:10px;border-radius:6px;text-align:center;}'
+      +'.kpi-label{font-size:9pt;color:#64748b;}'
+      +'.kpi-value{font-size:14pt;font-weight:700;}'
+      +'table{width:100%;border-collapse:collapse;margin-bottom:16px;}'
+      +'th,td{border:1px solid #e2e8f0;padding:6px 8px;text-align:left;font-size:10pt;}'
+      +'th{background:#f1f5f9;font-weight:600;}'
+      +'.lowest{background:#dcfce7;}'
+      +'.expired{background:#fee2e2;color:#991b1b;}'
+      +'.awarded{background:#ede9fe;}'
+      +'.footer{margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:9pt;color:#64748b;text-align:center;}'
+      +'@media print{.no-print{display:none!important;}}'
+      +'</style></head><body>';
+
+    html += '<div class="header"><div><div style="font-size:14pt;font-weight:700;">'+escH(coName)+'</div>'
+      +'<div style="font-size:9pt;color:#64748b;">'+escH(coPhone)+(coEmail?' · '+coEmail:'')+'</div></div>'
+      +'<div style="text-align:right;"><div class="badge">SUPPLIER QUOTE REPORT</div>'
+      +'<div style="font-size:9pt;color:#64748b;margin-top:4px;">Generated: '+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})+'</div>'
+      +'</div></div>';
+
+    html += '<div class="kpi-grid">'
+      +'<div class="kpi"><div class="kpi-label">Total Quotes</div><div class="kpi-value">'+st.total+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label">Active</div><div class="kpi-value" style="color:#16a34a;">'+st.active+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label">Expiring ≤7d</div><div class="kpi-value" style="color:#d97706;">'+st.expiring+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label">Expired</div><div class="kpi-value" style="color:#dc2626;">'+st.expired+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label">Awarded</div><div class="kpi-value" style="color:#7c3aed;">'+st.awarded+'</div></div>'
+      +'</div>';
+
+    // Group by material for comparison
+    var byMat = {};
+    qs.forEach(function(q){ if(!byMat[q.material]) byMat[q.material]=[]; byMat[q.material].push(q); });
+
+    Object.keys(byMat).sort().forEach(function(mat){
+      var quotes = byMat[mat].sort(function(a,b){ return (parseFloat(a.price)||0)-(parseFloat(b.price)||0); });
+      var activeQuotes = quotes.filter(function(q){ return q.status!=='awarded' && (!q.expiry || q.expiry >= today); });
+      var lowest = activeQuotes.length>0 ? (parseFloat(activeQuotes[0].price)||0) : 0;
+
+      html += '<div style="font-size:10pt;font-weight:600;margin:14px 0 6px 0;">'+escH(mat)+' ('+quotes.length+' quotes)</div>';
+      html += '<table><tr><th>Vendor</th><th>Contact</th><th style="text-align:right;">Price</th><th>Unit</th><th>Quote Date</th><th>Expires</th><th>Terms</th><th>Status</th></tr>';
+
+      quotes.forEach(function(q){
+        var price = parseFloat(q.price)||0;
+        var isExp = q.expiry && q.expiry < today;
+        var isLowest = !isExp && q.status!=='awarded' && price===lowest && lowest>0;
+        var rowClass = q.status==='awarded'?'awarded':(isExp?'expired':(isLowest?'lowest':''));
+        var statusTxt = q.status==='awarded'?'✓ Awarded':(isExp?'Expired':'Active');
+
+        html += '<tr class="'+rowClass+'">'
+          +'<td>'+escH(q.vendor)+'</td>'
+          +'<td>'+escH(q.contact||'')+(q.phone?' · '+escH(q.phone):'')+'</td>'
+          +'<td style="text-align:right;font-weight:600;">'+fmtMoneyFull(q.price)+'</td>'
+          +'<td>'+escH(q.unit)+'</td>'
+          +'<td>'+fmtDate(q.quoteDate)+'</td>'
+          +'<td>'+fmtDate(q.expiry)+'</td>'
+          +'<td>'+escH(q.terms||'')+'</td>'
+          +'<td>'+statusTxt+(isLowest?' ⭐':'')+'</td>'
+          +'</tr>';
+      });
+      html += '</table>';
+    });
+
+    html += '<div class="footer">CONFIDENTIAL — INTERNAL USE ONLY · '+escH(coName)+' · Oncor Takeoff Estimator · Supplier Quote Report</div>'
+      +'<button class="no-print" onclick="window.print()" style="margin-top:14px;padding:8px 18px;background:#0ea5e9;color:#fff;border:none;border-radius:6px;cursor:pointer;">🖨️ Print / Save PDF</button>'
+      +'</body></html>';
+
+    var w = window.open('','_blank');
+    w.document.write(html);
+    w.document.close();
+  }
+  window.printQuoteReport = printQuoteReport;
+
+  // ---- Expose stats for Project Status Card ----
+  window._getQuoteStats = function(){
+    return getStats();
+  };
+
+  // ---- Show / Close ----
+  function showQuoteModal(){
+    buildModal();
+    var m = document.getElementById(QUOTE_ID);
+    if(m){ m.style.display='flex'; renderQuotes(); }
+  }
+  function closeQuoteModal(){
+    var m = document.getElementById(QUOTE_ID);
+    if(m) m.style.display='none';
+  }
+  window.showQuoteModal = showQuoteModal;
+  window.closeQuoteModal = closeQuoteModal;
+
+  // ---- Keyboard shortcut Alt+Q ----
+  document.addEventListener('keydown',function(e){
+    if(e.altKey && e.key.toLowerCase()==='q'){
+      e.preventDefault();
+      var m = document.getElementById(QUOTE_ID);
+      if(m && m.style.display==='flex') closeQuoteModal();
+      else showQuoteModal();
+    }
+  });
+
+  // ---- Sidebar button — inject below AR & Invoices ----
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){
+      var arBtn = document.querySelector('button[onclick*="showARModal"]');
+      if(!arBtn) return;
+      var parentRow = arBtn.closest('div');
+      if(!parentRow||!parentRow.parentNode) return;
+      var newRow = document.createElement('div');
+      newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML = '<button class="action-btn secondary" onclick="showQuoteModal()" title="Supplier Quote Comparison & Price History — compare vendor quotes, track pricing over time (Alt+Q)" style="background:rgba(139,92,246,0.1);border-color:rgba(139,92,246,0.3);color:#a78bfa;">🏷️ Supplier Quotes</button>';
+      parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 3500);
+  });
+
+})();
+// ==================== END SUPPLIER QUOTE COMPARISON & PRICE HISTORY — Zeus ⚡ Session #73 ====================
 </script>
