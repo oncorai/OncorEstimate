@@ -1,5 +1,98 @@
 # Overnight Build Tasks - 2026-02-14
 
+## 📧 SESSION: Apr 1, 2026 - 09:12 UTC (Overnight Cron #66)
+**Status:** ✅ EMAIL DRAFT GENERATOR + PROFITABILITY ANALYZER added (+907 lines)
+
+### What Was Added:
+
+**📧 Email Draft Generator:**
+- New `📧 Email Drafts` button injected in sidebar below Bid History
+- **Purpose:** Generate professional, ready-to-send email templates pre-filled with project data. No more typing the same transmittal letters from scratch.
+
+**12 Professional Templates:**
+1. 📬 **Bid Submission** — cover letter for proposal/bid submission with bid summary
+2. 🧪 **Mix Design Submittal** — concrete mix design transmittal with spec checklist
+3. 📅 **Schedule Submittal** — construction schedule transmittal with milestones
+4. ❓ **RFI Submission** — Request for Information cover with impact section
+5. 💰 **Pay Application** — progress payment request with AIA G702/G703 reference
+6. 📝 **Change Order Request** — CO request/notice with cost breakdown
+7. 🚚 **Pour Notification** — advance notice of concrete pour with specs/crew
+8. ✅ **Substantial Completion** — notice of substantial completion
+9. 📋 **Lien Waiver Transmittal** — lien waiver/release cover (TX Property Code)
+10. ⚠️ **Delay Notice** — formal notice of delay with impact assessment
+11. ✔️ **Punch List Response** — punch list completion notice
+12. 🛡️ **Warranty Letter** — warranty/guarantee letter with coverage/exclusions
+
+**Auto-Fill Features:**
+- Project name, client name from sidebar
+- Company name, phone, email, address, license from Company Info
+- Estimator name
+- Total bid amount, total yd³
+- Mix design specs (PSI, slump, w/c ratio, aggregate size, air)
+- Today's date formatted
+
+**Actions:**
+- 📋 Copy Subject — copies just the subject line
+- 📋 Copy Body — copies the email body
+- 📋 Copy Both — copies "Subject: [line]\n\n[body]"
+- 📬 Open in Email App — opens mailto: link with subject and body pre-filled
+- 🖨️ Print — opens printable draft in new window
+
+---
+
+**📊 Profitability Analyzer:**
+- New `📊 Profit Analyzer` button injected in sidebar below Email Drafts
+- **Purpose:** Real-time profitability analysis. See gross margin, net margin, break-even point, and cost composition at a glance. Run what-if scenarios to stress-test your bid.
+
+**Dashboard Cards:**
+1. 💵 **Gross Profit** — Total Bid minus Direct Cost, with gross margin %
+2. 📊 **Net Margin** — profit as % of revenue (what GCs ask for)
+3. 🎯 **Break-Even** — minimum bid to cover direct cost + overhead (no profit)
+
+**Visual Cost Composition:**
+- Color-coded bar chart showing % breakdown:
+  - 🔴 Materials (concrete + rebar)
+  - 🔵 Labor
+  - 🟣 Other (forms, finishing, pump, etc.)
+  - 🟢 Profit
+
+**Key Metrics Table:**
+- Total Bid
+- Direct Cost (Subtotal)
+- Overhead ($)
+- Profit ($)
+- Contingency (if applicable)
+- Cost per yd³
+- Break-even bid
+- Safety cushion ($) — how much "room" you have before break-even
+
+**🎯 What-If Calculator:**
+- Input: Material cost increase % (default 10%)
+- Input: Labor cost increase % (default 10%)
+- Calculate Impact → shows:
+  - New direct cost increase
+  - New gross profit
+  - New margin with color-coded health indicator:
+    - ✅ Healthy (≥20% margin)
+    - ⚠️ Tight margin (10-20%)
+    - ⚠️ Below target! (<10%)
+
+**Actions:**
+- 📋 Copy Report — copies text summary to clipboard
+- 🖨️ Print — prints the modal
+
+**Why these matter:**
+1. **Email Drafts** saves JFS 10-15 minutes per transmittal. Instead of typing out the same bid submission cover letter for every project, he clicks a button and gets a professionally formatted email with all his project data pre-filled. The Texas-specific lien waiver and delay notice templates include the right legal language.
+
+2. **Profitability Analyzer** gives JFS instant visibility into whether a bid is actually profitable. Before, he'd set 10% overhead + 15% profit without seeing the actual dollar impact. Now he sees: "Break-even is $45,000 — your $52,000 bid has $7,000 cushion." The what-if calculator lets him stress-test: "If concrete goes up 10% and labor goes up 10%, am I still making money?" Answer in one click.
+
+**Commits:**
+- 786c138: 📧📊 Email Draft Generator + Profitability Analyzer (+907 lines) [Session #66]
+
+**Total Lines:** ~152,677 | **All 26 Ctrl+Shift shortcuts used (A-Z)**
+
+---
+
 ## 📦 SESSION: Apr 1, 2026 - 05:55 UTC (Overnight Cron #62)
 **Status:** ✅ MATERIAL PROCUREMENT & PO TRACKER added (+648 lines)
 
