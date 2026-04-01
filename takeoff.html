@@ -151191,3 +151191,339 @@ td{padding:6px 8px;border-bottom:1px solid #e2e8f0;}
 })();
 // ==================== END MEETING MINUTES & ACTION ITEMS LOG — Zeus ⚡ Session #63 ====================
 </script>
+<script>
+// ==================== WARRANTY & CLOSEOUT TRACKER — Zeus ⚡ Session #64 ====================
+(function(){
+  'use strict';
+
+  function getWCKey(){ const p=(document.getElementById('projectName')||{}).value||'default'; return 'oncor_warranty_v1_'+p.replace(/\s+/g,'_'); }
+  function getWCData(){ try{ return JSON.parse(localStorage.getItem(getWCKey()))||{items:[],docs:[]}; }catch(e){ return {items:[],docs:[]}; } }
+  function saveWCData(d){ localStorage.setItem(getWCKey(), JSON.stringify(d)); }
+
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  function fmtDate(d){ if(!d) return '—'; try{ return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }catch(e){return d;} }
+  function daysUntil(d){ if(!d) return null; const diff=new Date(d+'T12:00:00')-new Date(); return Math.ceil(diff/86400000); }
+
+  const WARRANTY_TYPES = ['Concrete Flatwork','Concrete Finishing','Formwork & Shoring','Rebar & Embedded','Curing & Protection','Sealer / Coating','Saw Cutting & Joints','Repair / Patch Work','Subcontractor Work','Materials','Equipment','Other'];
+  const DOC_TYPES = ['As-Built Drawings','Mix Design Submittal','Curing Compound Data Sheet','Sealer/Epoxy SDS','Concrete Test Reports','Cylinder Break Reports','ACI 318 Strength Eval','Lien Releases (Final)','COI — General Liability','COI — Workers Comp','Pay Application (Final)','Change Order Log (Final)','Punch List (Signed)','Certificate of Substantial Completion','Certificate of Final Completion','Warranty Letter','O&M Manual','Other'];
+  const DOC_STATUSES = ['Not Started','In Progress','Submitted','Approved','Rejected','N/A'];
+  const WARRANTY_STATUSES = ['Active','Claim Open','Claim Resolved','Expired','Voided'];
+
+  function genId(){ return 'W'+(Date.now()%1e7)+(Math.random()*9999|0); }
+
+  window.showWarrantyTracker = function(){
+    let modal = document.getElementById('warrantyTrackerModal');
+    if(!modal){
+      modal = document.createElement('div');
+      modal.id = 'warrantyTrackerModal';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10100;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+      modal.innerHTML = `<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;width:100%;max-width:1000px;max-height:90vh;overflow-y:auto;padding:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #334155;position:sticky;top:0;background:#1e293b;z-index:1;">
+          <div><div style="font-size:14pt;font-weight:700;color:#e2e8f0;">🏁 Warranty & Closeout Tracker</div>
+          <div style="font-size:8.5pt;color:#64748b;">Track warranty periods, claims, and closeout document submissions</div></div>
+          <button onclick="closeWarrantyTracker()" style="background:#374151;border:none;color:#9ca3af;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:10pt;">✕</button>
+        </div>
+        <div style="padding:16px 20px;">
+          <div id="wcStatsBar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;"></div>
+          <!-- TABS -->
+          <div style="display:flex;gap:0;margin-bottom:14px;border-bottom:1px solid #334155;">
+            <button id="wcTab_warranty" onclick="switchWCTab('warranty')" style="background:#0d9488;border:none;color:#fff;padding:7px 18px;cursor:pointer;font-size:9pt;font-weight:700;border-radius:6px 6px 0 0;">🛡 Warranty Items</button>
+            <button id="wcTab_docs" onclick="switchWCTab('docs')" style="background:#334155;border:none;color:#94a3b8;padding:7px 18px;cursor:pointer;font-size:9pt;border-radius:6px 6px 0 0;margin-left:4px;">📄 Closeout Documents</button>
+          </div>
+          <div id="wcWarrantyPane"></div>
+          <div id="wcDocsPane" style="display:none;"></div>
+        </div>
+      </div>`;
+      modal.addEventListener('click', function(e){ if(e.target===modal) closeWarrantyTracker(); });
+      document.body.appendChild(modal);
+    }
+    modal.style.display = 'flex';
+    renderWCStats();
+    switchWCTab('warranty');
+  };
+
+  window.closeWarrantyTracker = function(){
+    const m = document.getElementById('warrantyTrackerModal');
+    if(m) m.style.display = 'none';
+  };
+
+  window.switchWCTab = function(tab){
+    document.getElementById('wcWarrantyPane').style.display = tab==='warranty'?'block':'none';
+    document.getElementById('wcDocsPane').style.display = tab==='docs'?'block':'none';
+    document.getElementById('wcTab_warranty').style.background = tab==='warranty'?'#0d9488':'#334155';
+    document.getElementById('wcTab_warranty').style.color = tab==='warranty'?'#fff':'#94a3b8';
+    document.getElementById('wcTab_docs').style.background = tab==='docs'?'#0d9488':'#334155';
+    document.getElementById('wcTab_docs').style.color = tab==='docs'?'#fff':'#94a3b8';
+    if(tab==='warranty') renderWarrantyList();
+    else renderDocsList();
+  };
+
+  function renderWCStats(){
+    const d = getWCData();
+    const items = d.items||[];
+    const docs = d.docs||[];
+    const activeClaims = items.filter(i=>i.status==='Claim Open');
+    const expiringSoon = items.filter(i=>{
+      const days = daysUntil(i.endDate);
+      return days!==null && days<=90 && days>0 && i.status==='Active';
+    });
+    const expired = items.filter(i=>{ const days=daysUntil(i.endDate); return days!==null && days<=0 && i.status==='Active'; });
+    const docsComplete = docs.filter(d=>d.status==='Approved').length;
+    const el = document.getElementById('wcStatsBar');
+    if(!el) return;
+    el.innerHTML = `
+      <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 14px;text-align:center;min-width:80px;"><div style="font-size:13pt;font-weight:700;color:#0d9488;">${items.length}</div><div style="font-size:7pt;color:#64748b;">Warranties</div></div>
+      <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 14px;text-align:center;min-width:80px;"><div style="font-size:13pt;font-weight:700;color:${activeClaims.length>0?'#ef4444':'#22c55e'};">${activeClaims.length}</div><div style="font-size:7pt;color:#64748b;">Open Claims</div></div>
+      <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 14px;text-align:center;min-width:80px;"><div style="font-size:13pt;font-weight:700;color:${expiringSoon.length>0?'#f59e0b':'#e2e8f0'};">${expiringSoon.length}</div><div style="font-size:7pt;color:#64748b;">Expiring ≤90d</div></div>
+      <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 14px;text-align:center;min-width:80px;"><div style="font-size:13pt;font-weight:700;color:#e2e8f0;">${docs.length}</div><div style="font-size:7pt;color:#64748b;">Closeout Docs</div></div>
+      <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 14px;text-align:center;min-width:80px;"><div style="font-size:13pt;font-weight:700;color:#22c55e;">${docsComplete}</div><div style="font-size:7pt;color:#64748b;">Docs Approved</div></div>
+      ${docs.length>0?`<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 14px;text-align:center;min-width:80px;"><div style="font-size:13pt;font-weight:700;color:${docsComplete===docs.length?'#22c55e':'#f59e0b'};">${Math.round(docsComplete/docs.length*100)}%</div><div style="font-size:7pt;color:#64748b;">Closeout %</div></div>`:''}`;
+  }
+
+  /* WARRANTY LIST */
+  function renderWarrantyList(){
+    const d = getWCData();
+    const items = (d.items||[]).slice().sort((a,b)=>new Date(a.endDate||0)-new Date(b.endDate||0));
+    const el = document.getElementById('wcWarrantyPane');
+    if(!el) return;
+    const typeOpts = WARRANTY_TYPES.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
+    const statOpts = WARRANTY_STATUSES.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    let html = `<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+      <button onclick="addWarrantyItem()" style="background:#0d9488;border:none;color:#fff;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:9pt;font-weight:700;">+ Add Warranty</button>
+      <button onclick="printWarrantyReport()" style="background:#374151;border:none;color:#e2e8f0;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:9pt;">🖨 Print Report</button>
+    </div>
+    <div id="warrantyItemsArea">`;
+    if(!items.length){
+      html += `<div style="text-align:center;padding:30px;color:#64748b;"><div style="font-size:22pt;">🛡</div><div style="margin-top:8px;">No warranty items logged. Add warranties issued on this project.</div></div>`;
+    } else {
+      html += items.map(item=>{
+        const days = daysUntil(item.endDate);
+        const isExpired = days!==null && days<=0;
+        const isExpiringSoon = days!==null && days>0 && days<=90;
+        const stColor = {'Active':'#22c55e','Claim Open':'#ef4444','Claim Resolved':'#f59e0b','Expired':'#64748b','Voided':'#64748b'}[item.status||'Active']||'#22c55e';
+        return `<div style="background:#0f172a;border:1px solid ${item.status==='Claim Open'?'#ef4444':isExpired?'#64748b':isExpiringSoon?'#f59e0b':'#334155'};border-radius:8px;padding:12px 16px;margin-bottom:7px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+            <div style="flex:1;min-width:200px;">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span style="font-weight:700;color:#e2e8f0;font-size:10pt;">${esc(item.type||'Warranty')}</span>
+                <span style="background:${stColor};color:#fff;font-size:7pt;padding:2px 7px;border-radius:3px;font-weight:700;">${esc(item.status||'Active')}</span>
+                ${isExpired && item.status==='Active'?'<span style="background:#ef4444;color:#fff;font-size:6.5pt;padding:2px 7px;border-radius:3px;font-weight:700;">EXPIRED</span>':''}
+                ${isExpiringSoon?`<span style="background:#f59e0b;color:#111;font-size:6.5pt;padding:2px 7px;border-radius:3px;font-weight:700;">EXPIRES IN ${days}d</span>`:''}
+              </div>
+              <div style="font-size:8pt;color:#94a3b8;margin-top:4px;">
+                ${item.description?esc(item.description):''} 
+                ${item.startDate?`· Start: ${fmtDate(item.startDate)}`:''}
+                · End: <span style="${isExpired?'color:#ef4444;font-weight:700;':''}>${fmtDate(item.endDate)}</span>
+                ${item.duration?`· ${esc(item.duration)}`:''}
+              </div>
+              ${item.claimDescription?`<div style="font-size:8.5pt;color:#fca5a5;margin-top:4px;border-left:3px solid #ef4444;padding-left:8px;">⚠️ Claim: ${esc(item.claimDescription)}</div>`:''}
+              ${item.notes?`<div style="font-size:8pt;color:#94a3b8;margin-top:3px;font-style:italic;">${esc(item.notes)}</div>`:''}
+            </div>
+            <div style="display:flex;gap:5px;flex-shrink:0;">
+              <button onclick="editWarrantyItem('${item.id}')" style="background:#374151;border:none;color:#94a3b8;border-radius:5px;padding:5px 9px;cursor:pointer;font-size:9pt;">✏️</button>
+              <button onclick="deleteWarrantyItem('${item.id}')" style="background:#374151;border:none;color:#94a3b8;border-radius:5px;padding:5px 9px;cursor:pointer;font-size:9pt;">🗑</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+    html += '</div>';
+    el.innerHTML = html;
+  }
+
+  window.addWarrantyItem = function(id){
+    let item = {id:genId(), type:'Concrete Flatwork', description:'', startDate:new Date().toISOString().slice(0,10), endDate:'', duration:'1 Year', status:'Active', claimDescription:'', notes:''};
+    if(id){ const d=getWCData(); const f=(d.items||[]).find(x=>x.id===id); if(f) item=JSON.parse(JSON.stringify(f)); }
+    const typeOpts = WARRANTY_TYPES.map(t=>`<option value="${esc(t)}" ${item.type===t?'selected':''}>${esc(t)}</option>`).join('');
+    const statOpts = WARRANTY_STATUSES.map(s=>`<option value="${esc(s)}" ${item.status===s?'selected':''}>${esc(s)}</option>`).join('');
+    const area = document.getElementById('warrantyItemsArea');
+    if(!area) return;
+    const formDiv = document.createElement('div');
+    formDiv.id = 'warrantyItemForm';
+    formDiv.style.cssText = 'background:#172032;border:1px solid #0d9488;border-radius:8px;padding:14px;margin-bottom:12px;';
+    formDiv.innerHTML = `<div style="font-weight:700;color:#5eead4;font-size:9.5pt;margin-bottom:10px;">${id?'✏️ Edit':'+'} Warranty Item</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;margin-bottom:8px;">
+      <div><label style="font-size:7.5pt;color:#94a3b8;">Type *</label><br><select id="wi_type" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;">${typeOpts}</select></div>
+      <div><label style="font-size:7.5pt;color:#94a3b8;">Duration</label><br><input id="wi_duration" value="${esc(item.duration)}" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;" placeholder="e.g. 1 Year, 2 Years"></div>
+      <div><label style="font-size:7.5pt;color:#94a3b8;">Start Date</label><br><input id="wi_start" type="date" value="${esc(item.startDate)}" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;"></div>
+      <div><label style="font-size:7.5pt;color:#94a3b8;">End Date *</label><br><input id="wi_end" type="date" value="${esc(item.endDate)}" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;"></div>
+      <div><label style="font-size:7.5pt;color:#94a3b8;">Status</label><br><select id="wi_status" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;">${statOpts}</select></div>
+    </div>
+    <div style="margin-bottom:7px;"><label style="font-size:7.5pt;color:#94a3b8;">Description / Scope</label><br><input id="wi_desc" value="${esc(item.description)}" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;" placeholder="What does this warranty cover?"></div>
+    <div style="margin-bottom:7px;"><label style="font-size:7.5pt;color:#94a3b8;">Claim Description (if claim open)</label><br><input id="wi_claim" value="${esc(item.claimDescription)}" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;" placeholder="Describe the claim or defect reported..."></div>
+    <div style="margin-bottom:10px;"><label style="font-size:7.5pt;color:#94a3b8;">Notes</label><br><input id="wi_notes" value="${esc(item.notes)}" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button type="button" onclick="document.getElementById('warrantyItemForm').remove();renderWarrantyList();" style="background:#374151;border:none;color:#9ca3af;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:9pt;">Cancel</button>
+      <button type="button" onclick="saveWarrantyItem('${esc(item.id)}')" style="background:#0d9488;border:none;color:#fff;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:9pt;font-weight:700;">💾 Save</button>
+    </div>`;
+    area.insertBefore(formDiv, area.firstChild);
+  };
+
+  window.editWarrantyItem = function(id){ addWarrantyItem(id); };
+
+  window.saveWarrantyItem = function(id){
+    const endDate = (document.getElementById('wi_end')||{}).value||'';
+    if(!endDate){ alert('End date is required.'); return; }
+    const item = {
+      id: id||genId(),
+      type: (document.getElementById('wi_type')||{}).value||'Concrete Flatwork',
+      duration: (document.getElementById('wi_duration')||{}).value||'',
+      startDate: (document.getElementById('wi_start')||{}).value||'',
+      endDate,
+      status: (document.getElementById('wi_status')||{}).value||'Active',
+      description: (document.getElementById('wi_desc')||{}).value||'',
+      claimDescription: (document.getElementById('wi_claim')||{}).value||'',
+      notes: (document.getElementById('wi_notes')||{}).value||''
+    };
+    const d = getWCData();
+    const idx = (d.items||[]).findIndex(x=>x.id===id);
+    if(idx>=0) d.items[idx]=item; else d.items.push(item);
+    saveWCData(d);
+    renderWarrantyList(); renderWCStats();
+    const f=document.getElementById('warrantyItemForm'); if(f) f.remove();
+  };
+
+  window.deleteWarrantyItem = function(id){
+    if(!confirm('Delete this warranty item?')) return;
+    const d = getWCData(); d.items=(d.items||[]).filter(x=>x.id!==id); saveWCData(d);
+    renderWarrantyList(); renderWCStats();
+  };
+
+  /* CLOSEOUT DOCS LIST */
+  function renderDocsList(){
+    const d = getWCData();
+    const docs = d.docs||[];
+    const el = document.getElementById('wcDocsPane');
+    if(!el) return;
+    // Seed default docs if empty
+    if(!docs.length){
+      const defaultDocs = DOC_TYPES.map((t,i)=>({id:genId()+'_'+i, docType:t, status:'Not Started', submittedDate:'', approvedDate:'', submittedTo:'', notes:''}));
+      d.docs = defaultDocs;
+      saveWCData(d);
+    }
+    const finalDocs = d.docs||[];
+    const complete = finalDocs.filter(x=>x.status==='Approved').length;
+    const pct = finalDocs.length?Math.round(complete/finalDocs.length*100):0;
+    const statOpts = DOC_STATUSES;
+    el.innerHTML = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+      <button onclick="printCloseoutDocs()" style="background:#374151;border:none;color:#e2e8f0;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:9pt;">🖨 Print Closeout Checklist</button>
+      <div style="flex:1;"></div>
+      <div style="font-size:9pt;color:#e2e8f0;font-weight:700;">${complete} / ${finalDocs.length} Approved &nbsp;
+        <span style="display:inline-block;background:#334155;border-radius:20px;height:12px;width:120px;vertical-align:middle;overflow:hidden;"><span style="display:block;height:100%;width:${pct}%;background:${pct===100?'#22c55e':'#0d9488'};"></span></span>
+        <span style="color:${pct===100?'#22c55e':'#94a3b8'};margin-left:4px;">${pct}%${pct===100?' ✅':''}</span>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr style="background:#0f172a;">
+        <th style="padding:7px 10px;font-size:8pt;color:#94a3b8;text-align:left;border-bottom:1px solid #334155;">Document</th>
+        <th style="padding:7px 10px;font-size:8pt;color:#94a3b8;text-align:left;border-bottom:1px solid #334155;">Status</th>
+        <th style="padding:7px 10px;font-size:8pt;color:#94a3b8;text-align:left;border-bottom:1px solid #334155;">Submitted</th>
+        <th style="padding:7px 10px;font-size:8pt;color:#94a3b8;text-align:left;border-bottom:1px solid #334155;">Approved</th>
+        <th style="padding:7px 10px;font-size:8pt;color:#94a3b8;text-align:left;border-bottom:1px solid #334155;">Submitted To</th>
+        <th style="padding:7px 10px;font-size:8pt;color:#94a3b8;text-align:left;border-bottom:1px solid #334155;">Notes</th>
+      </tr></thead>
+      <tbody>${finalDocs.map(doc=>{
+        const stColor = {'Not Started':'#64748b','In Progress':'#f59e0b','Submitted':'#2563eb','Approved':'#22c55e','Rejected':'#ef4444','N/A':'#475569'}[doc.status||'Not Started']||'#64748b';
+        const sopts = statOpts.map(s=>`<option value="${esc(s)}" ${doc.status===s?'selected':''}>${esc(s)}</option>`).join('');
+        return `<tr style="border-bottom:1px solid #1e293b;">
+          <td style="padding:5px 10px;font-size:8.5pt;color:#e2e8f0;">${esc(doc.docType)}</td>
+          <td style="padding:5px 10px;"><select onchange="updateDocStatus('${doc.id}',this.value)" style="background:#0f172a;border:1px solid #334155;color:${stColor};border-radius:4px;padding:3px 6px;font-size:8pt;">${sopts}</select></td>
+          <td style="padding:5px 10px;"><input type="date" value="${esc(doc.submittedDate||'')}" onchange="updateDocField('${doc.id}','submittedDate',this.value)" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:4px;padding:3px 6px;font-size:8pt;width:130px;"></td>
+          <td style="padding:5px 10px;"><input type="date" value="${esc(doc.approvedDate||'')}" onchange="updateDocField('${doc.id}','approvedDate',this.value)" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:4px;padding:3px 6px;font-size:8pt;width:130px;"></td>
+          <td style="padding:5px 10px;"><input value="${esc(doc.submittedTo||'')}" onchange="updateDocField('${doc.id}','submittedTo',this.value)" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:4px;padding:3px 6px;font-size:8pt;width:120px;" placeholder="GC / Owner / Arch"></td>
+          <td style="padding:5px 10px;"><input value="${esc(doc.notes||'')}" onchange="updateDocField('${doc.id}','notes',this.value)" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:4px;padding:3px 6px;font-size:8pt;width:140px;"></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+  }
+
+  window.updateDocStatus = function(id, val){
+    const d=getWCData(); const doc=(d.docs||[]).find(x=>x.id===id); if(doc){ doc.status=val; saveWCData(d); renderWCStats(); }
+  };
+  window.updateDocField = function(id, field, val){
+    const d=getWCData(); const doc=(d.docs||[]).find(x=>x.id===id); if(doc){ doc[field]=val; saveWCData(d); }
+  };
+
+  /* PRINT REPORTS */
+  window.printWarrantyReport = function(){
+    const d=getWCData(); const proj=(document.getElementById('projectName')||{}).value||'Project';
+    const comp={name:(document.getElementById('companyName')||{}).value||'Oncor Concrete'};
+    const items=d.items||[];
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Warranty Report</title>
+    <style>body{font-family:Arial,sans-serif;font-size:9pt;margin:0;padding:16px;}
+    .hdr{display:flex;justify-content:space-between;border-bottom:3px solid #0d9488;padding-bottom:10px;margin-bottom:12px;}
+    table{width:100%;border-collapse:collapse;} th{background:#0d9488;color:#fff;padding:5px;font-size:8pt;text-align:left;}
+    td{padding:4px 6px;font-size:8pt;border-bottom:1px solid #e5e7eb;} tr:nth-child(even) td{background:#f9fafb;}
+    .footer{margin-top:14px;font-size:7pt;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:6px;text-align:center;}
+    @media print{button{display:none!important;}}</style></head><body>
+    <div class="hdr"><div><h1 style="margin:0;color:#0d9488;">${esc(comp.name)}</h1></div>
+    <div style="text-align:right;font-size:8.5pt;"><div><strong>Project:</strong> ${esc(proj)}</div><div><strong>WARRANTY REPORT</strong></div><div>${new Date().toLocaleDateString()}</div></div></div>
+    <table><thead><tr><th>Type</th><th>Description</th><th>Start</th><th>End</th><th>Duration</th><th>Status</th><th>Claim</th></tr></thead>
+    <tbody>${items.map(i=>{const exp=daysUntil(i.endDate); return `<tr style="${i.status==='Claim Open'?'background:#fef2f2;':exp!==null&&exp<=0&&i.status==='Active'?'background:#f9fafb;color:#9ca3af;':''}">
+    <td>${esc(i.type)}</td><td>${esc(i.description||'—')}</td><td>${fmtDate(i.startDate)}</td>
+    <td style="${exp!==null&&exp<=0&&i.status==='Active'?'color:#dc2626;':''}${exp!==null&&exp<=90&&exp>0?'color:#d97706;':''}">${fmtDate(i.endDate)}${exp!==null&&exp<=0?' (EXPIRED)':exp!==null&&exp<=90&&exp>0?' ('+exp+'d left)':''}</td>
+    <td>${esc(i.duration||'—')}</td><td>${esc(i.status||'Active')}</td><td style="font-size:7.5pt;">${esc(i.claimDescription||'—')}</td></tr>`;}).join('')}</tbody></table>
+    <div class="footer">Warranty & Closeout Report · ${esc(proj)} · ${esc(comp.name)} · CONFIDENTIAL</div>
+    <br><button onclick="window.print()">🖨 Print</button></body></html>`;
+    const w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+  };
+
+  window.printCloseoutDocs = function(){
+    const d=getWCData(); const proj=(document.getElementById('projectName')||{}).value||'Project';
+    const comp={name:(document.getElementById('companyName')||{}).value||'Oncor Concrete'};
+    const docs=d.docs||[];
+    const complete=docs.filter(x=>x.status==='Approved').length;
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Closeout Checklist</title>
+    <style>body{font-family:Arial,sans-serif;font-size:9pt;margin:0;padding:16px;}
+    .hdr{display:flex;justify-content:space-between;border-bottom:3px solid #0d9488;padding-bottom:10px;margin-bottom:12px;}
+    table{width:100%;border-collapse:collapse;} th{background:#0d9488;color:#fff;padding:5px;font-size:8pt;text-align:left;}
+    td{padding:4px 6px;font-size:8pt;border-bottom:1px solid #e5e7eb;} tr:nth-child(even) td{background:#f9fafb;}
+    .footer{margin-top:14px;font-size:7pt;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:6px;text-align:center;}
+    @media print{button{display:none!important;}}</style></head><body>
+    <div class="hdr"><div><h1 style="margin:0;color:#0d9488;">${esc(comp.name)}</h1><div>PROJECT CLOSEOUT CHECKLIST</div></div>
+    <div style="text-align:right;font-size:8.5pt;"><div><strong>Project:</strong> ${esc(proj)}</div><div><strong>${complete}/${docs.length} Documents Approved</strong></div><div>${new Date().toLocaleDateString()}</div></div></div>
+    <table><thead><tr><th>Document</th><th>Status</th><th>Submitted</th><th>Approved</th><th>Submitted To</th><th>Notes</th></tr></thead>
+    <tbody>${docs.map(doc=>{const stColor={'Not Started':'#9ca3af','In Progress':'#d97706','Submitted':'#2563eb','Approved':'#22c55e','Rejected':'#dc2626','N/A':'#9ca3af'}[doc.status||'Not Started']||'#9ca3af';
+    return `<tr><td>${esc(doc.docType)}</td><td style="color:${stColor};font-weight:${doc.status==='Approved'?'700':'400'};">${esc(doc.status||'Not Started')}</td>
+    <td>${fmtDate(doc.submittedDate)}</td><td>${fmtDate(doc.approvedDate)}</td>
+    <td>${esc(doc.submittedTo||'—')}</td><td style="font-size:7.5pt;">${esc(doc.notes||'—')}</td></tr>`;}).join('')}</tbody></table>
+    <div class="footer">Closeout Checklist · ${esc(proj)} · ${esc(comp.name)} · CONFIDENTIAL</div>
+    <br><button onclick="window.print()">🖨 Print</button></body></html>`;
+    const w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+  };
+
+  /* EXPOSE STATS */
+  window._getWarrantyStats = function(){
+    const d=getWCData(); const items=d.items||[]; const docs=d.docs||[];
+    const activeClaims=items.filter(i=>i.status==='Claim Open').length;
+    const docsApproved=docs.filter(d=>d.status==='Approved').length;
+    const pct=docs.length?Math.round(docsApproved/docs.length*100):0;
+    return {totalWarranties:items.length,activeClaims,docsTotal:docs.length,docsApproved,closeoutPct:pct};
+  };
+
+  /* KEYBOARD SHORTCUT Ctrl+Shift+V */
+  document.addEventListener('keydown', function(e){
+    if(e.ctrlKey && e.shiftKey && (e.key==='V'||e.key==='v')){
+      e.preventDefault();
+      const m=document.getElementById('warrantyTrackerModal');
+      if(m&&m.style.display!=='none') closeWarrantyTracker(); else showWarrantyTracker();
+    }
+  });
+
+  /* INJECT SIDEBAR BUTTON */
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){
+      const mtgBtn = document.querySelector('button[onclick*="showMeetingLog"]');
+      if(!mtgBtn) return;
+      const newRow = document.createElement('div');
+      newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML = `<button class="action-btn secondary" onclick="showWarrantyTracker()" title="Warranty & Closeout Tracker — Track warranty periods, claims, and closeout document submissions. (Ctrl+Shift+V)" style="background:rgba(13,148,136,0.1);border-color:rgba(13,148,136,0.3);color:#5eead4;">🏁 Warranty & Closeout</button>`;
+      const parentRow = mtgBtn.closest('div');
+      if(parentRow&&parentRow.parentNode) parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 2100);
+  });
+
+})();
+// ==================== END WARRANTY & CLOSEOUT TRACKER — Zeus ⚡ Session #64 ====================
+</script>
