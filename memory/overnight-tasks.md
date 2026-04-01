@@ -1890,3 +1890,135 @@ Pre-Construction, Weekly OAC, Progress Meeting, Safety Meeting, Design Review, S
 - 152650b: 📋 Meeting Minutes & Action Items Log (Ctrl+Shift+G) (+581 lines) [Session #63]
 
 **Total Lines:** ~151,193 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + Daily Field Log + Quick Communication Templates + Project Status Card + Keyboard Shortcuts + Pay Application Generator + RFI & Submittal Log + Punch List Tracker + Lien Rights & Notices Tracker + Concrete QC Log + Job Cost Tracker + Subcontractor Management + Equipment Rental Tracker + Delivery Ticket Log + Crew Time Cards + Safety & Toolbox Talk Log + Material Procurement & PO Tracker + **Meeting Minutes & Action Items Log**
+
+---
+
+## 📋 SESSION: Apr 1, 2026 - 06:59 UTC (Overnight Cron #63)
+**Status:** ✅ MEETING MINUTES & ACTION ITEMS LOG added (+581 lines)
+
+### What Was Added:
+
+**📋 Meeting Minutes & Action Items Log (Ctrl+Shift+G):**
+- New `📋 Meetings` button in sidebar below Procurement
+- `Ctrl+Shift+G` keyboard shortcut opens/toggles the modal
+- **Purpose:** Document every project meeting (OAC, pre-con, safety, owner update), assign action items to people with due dates and priorities, and track them to completion.
+
+**Stats Bar (live):**
+- Meetings count / Total Action Items / Open Actions (amber) / Overdue (red alert) / Completed (green)
+
+**Meeting Form (10 fields):**
+- Title, Type (10 types: Pre-Construction, Weekly OAC, Progress Meeting, Safety Meeting, Design Review, Subcontractor Coordination, Owner Update, Closeout Meeting, Issue Resolution, Other)
+- Date, Location/Platform, Facilitator, Next Meeting Date
+- Attendees (one per line)
+- Meeting Summary / Discussion Topics
+- Key Decisions Made
+- Additional Notes
+
+**Action Items (inline, per meeting):**
+- Description (required), Assigned To, Due Date, Priority (Low/Medium/High/Critical), Status (Open/In Progress/Complete/Cancelled/Deferred), Notes/Resolution
+- Add/remove dynamically within the meeting form
+- Overdue auto-detected on list view with ⚠️ badge
+
+**Meeting List View:**
+- Sorted newest first
+- Per-card: type badge (color-coded), title, date/location/facilitator, attendee count
+- Meeting summary excerpt
+- First 3 action items shown inline with status/priority/assignee/due
+- "OVERDUE ACTIONS" badge when any action is past due
+
+**Open Actions View (⚡ button):**
+- Shows ALL open actions across all meetings, sorted by priority
+- Cross-meeting action item tracker — see every open item in one view
+
+**Printable Outputs:**
+- **Individual Meeting Minutes** — company header, meta grid (date/location/facilitator/attendee count/next meeting), attendee list (badge grid), Discussion Summary, Key Decisions, Additional Notes, Action Items table (with overdue highlighting), 3-column signature block (Prepared By / Distributed To / Acknowledged By), 48-hour discrepancy notice footer
+- **Full Meeting Log** — stats header, meeting log table (date/type/title/location/facilitator/attendees/actions/open), Open Action Items table (highlighted overdue rows)
+
+**Integration:**
+- `window._getMeetingStats()` exposed for Project Status Card
+- localStorage per project: `oncor_meetings_v1_[projectname]`
+
+**Commits:**
+- 152650b: 📋 Meeting Minutes & Action Items Log (+581 lines) [Session #63]
+
+**Total Lines:** ~151,193 | **New Tools:** Meeting Minutes + Action Tracker + Open Actions View
+
+---
+
+## 🏁 SESSION: Apr 1, 2026 - 07:10 UTC (Overnight Cron #64)
+**Status:** ✅ WARRANTY & CLOSEOUT TRACKER added (+336 lines)
+
+### What Was Added:
+
+**🏁 Warranty & Closeout Tracker (Ctrl+Shift+V):**
+- New `🏁 Warranty & Closeout` button in sidebar below Meetings
+- `Ctrl+Shift+V` keyboard shortcut opens/toggles the modal
+- **Two-tab modal:** 🛡 Warranty Items + 📄 Closeout Documents
+
+**Stats Bar (live):**
+- Total Warranties / Open Claims (red) / Expiring ≤90d (amber) / Total Closeout Docs / Docs Approved / Closeout % progress
+
+**Warranty Items Tab:**
+- 12 warranty types (Concrete Flatwork, Finishing, Formwork, Rebar, Curing, Sealer, Saw Cutting, Repair/Patch, Subcontractor, Materials, Equipment, Other)
+- Fields: Type, Duration (e.g. "1 Year"), Start Date, End Date, Status (Active/Claim Open/Claim Resolved/Expired/Voided), Description/Scope, Claim Description, Notes
+- Auto-badges: EXPIRED (red), EXPIRES IN Xd (amber for ≤90 days)
+- Claim Open shown with red border + claim description excerpt
+
+**Closeout Documents Tab:**
+- 18 pre-loaded document types (As-Builts, Mix Design Submittal, Curing Compound Data Sheet, Sealer SDS, Concrete Test Reports, Cylinder Break Reports, ACI 318 Strength Eval, Lien Releases, COI-GL, COI-WC, Final Pay App, CO Log, Punch List, Cert of Substantial Completion, Cert of Final Completion, Warranty Letter, O&M Manual, Other)
+- Auto-seeded on first open with all doc types as "Not Started"
+- Inline table editing: Status dropdown, Submitted Date, Approved Date, Submitted To, Notes
+- Live progress bar: X/18 Approved with % and ✅ when 100%
+
+**Printable Outputs:**
+- **Warranty Report** — table of all warranties with type/description/start/end/duration/status/claim, overdue rows highlighted
+- **Closeout Checklist** — all 18 doc types with status/dates/submitted-to/notes, live approval count
+
+**Integration:**
+- `window._getWarrantyStats()` exposed for Project Status Card
+- localStorage per project: `oncor_warranty_v1_[projectname]`
+
+**Commits:**
+- 18921bb: 🏁 Warranty & Closeout Tracker (+336 lines) [Session #64]
+
+**Total Lines:** ~151,529 | **New Tools:** Warranty Tracker + Closeout Doc Checklist
+
+---
+
+## 📸 SESSION: Apr 1, 2026 - 07:20 UTC (Overnight Cron #65)
+**Status:** ✅ BID REVISION HISTORY & BUDGET SNAPSHOTS added (+241 lines)
+
+### What Was Added:
+
+**📸 Bid Revision History & Budget Snapshots (Ctrl+Shift+B):**
+- New `📸 Bid History` button in sidebar below Warranty
+- `Ctrl+Shift+B` keyboard shortcut opens/toggles the modal
+- **Purpose:** Track every estimate revision from first number to final contract. One-click capture of the live estimate, build a revision timeline, see how the bid evolved.
+
+**📸 Capture Current Estimate button:**
+- Prompts for a label (e.g. "Rev 2 - VE reduction")
+- Automatically captures: Total Bid, Total yd³, Cost/yd³, Measurement Count, Concrete Cost, Labor Cost, Overhead, Profit, Project/Client name
+- Saves timestamped snapshot to localStorage
+
+**+ Add Manual Entry:**
+- For historical entries or comparisons: Label, Type (10 types: Initial Estimate, Revised Estimate, VE, Scope Add/Reduce, Final Bid Submitted, Awarded Contract, Budget vs Actual, GC-Negotiated, Other), Date, Total Bid, yd³, Client, Notes
+
+**Snapshot List View:**
+- Sorted chronologically (oldest → newest)
+- Summary bar: Revisions count / First Bid / Latest Bid / Total Change ($ and %)
+- Per-card: Rev #, type badge (color-coded), label, bid amount, yd³, $/yd³, change vs prior revision (+ green / - red)
+- Notes/reason shown when present
+
+**Printable Bid History Report:**
+- Table: Rev # / Label / Type / Date / Total Bid / yd³ / $/yd³ / Change / Notes
+- First vs final summary in header
+
+**Why this matters:** JFS bids a job at $480K, GC comes back and asks for VE to hit $440K, scope gets added back to $455K, then finally gets awarded at $452K. Without snapshots, that history is lost. With this tool, every revision is captured and he can show the GC exactly how the number changed and why. Also creates a bid database across projects over time — calibrate future bids against what you've actually won.
+
+**Integration:**
+- localStorage per project: `oncor_snapshots_v1_[projectname]`
+
+**Commits:**
+- 7a84f95: 📸 Bid Revision History & Budget Snapshots (+241 lines) [Session #65]
+
+**Total Lines:** ~151,770 | **New Tools:** Bid Snapshot + Revision Timeline + Bid History Report
