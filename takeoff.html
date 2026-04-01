@@ -153524,3 +153524,411 @@ ${d.totalYds > 0 ? `Cost/yd³: ${fmtMoney(d.totalBid/d.totalYds)}` : ''}
 })();
 // ==================== END BID PIPELINE & WIN/LOSS TRACKER — Zeus ⚡ Session #68 ====================
 </script>
+
+<!-- ==================== CLIENT & GC CONTACT BOOK — Zeus ⚡ Session #69 ==================== -->
+<script>
+(function(){
+  'use strict';
+  var MODAL_ID='oncor-contact-book-modal';
+  var STORAGE_KEY='oncor_contacts_v1';
+
+  /* ---- data ---- */
+  function loadContacts(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]');}catch(e){return[];}}
+  function saveContacts(arr){localStorage.setItem(STORAGE_KEY,JSON.stringify(arr));}
+  function genId(){return 'c'+Date.now().toString(36)+Math.random().toString(36).substr(2,5);}
+
+  var CONTACT_TYPES=['General Contractor','Subcontractor','Owner/Developer','Architect','Structural Engineer','Civil Engineer','Supplier/Vendor','Batch Plant','Inspector/Testing Lab','City/Municipality','Bonding/Insurance','Other'];
+  var RELATIONSHIP_STATUS=['Active','Prospect','Warm Lead','Past Client','Not a Fit','Inactive'];
+  var CONTACT_SOURCE=['Referral','Bid Board','Cold Outreach','Networking Event','Job Site','Online/Website','Repeat Client','Other'];
+
+  /* ---- modal ---- */
+  function showContactBook(){
+    var existing=document.getElementById(MODAL_ID);
+    if(existing){existing.style.display='flex';renderContactList();return;}
+    var modal=document.createElement('div');
+    modal.id=MODAL_ID;
+    modal.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;';
+    modal.innerHTML=buildModalHTML();
+    document.body.appendChild(modal);
+    modal.addEventListener('click',function(e){if(e.target===modal)closeContactBook();});
+    document.getElementById('cb-close-btn').addEventListener('click',closeContactBook);
+    document.getElementById('cb-add-btn').addEventListener('click',function(){openContactForm();});
+    document.getElementById('cb-print-btn').addEventListener('click',printContactDirectory);
+    document.getElementById('cb-search').addEventListener('input',renderContactList);
+    document.getElementById('cb-type-filter').addEventListener('change',renderContactList);
+    document.getElementById('cb-status-filter').addEventListener('change',renderContactList);
+    renderContactList();
+    renderStats();
+  }
+
+  function closeContactBook(){
+    var m=document.getElementById(MODAL_ID);
+    if(m)m.style.display='none';
+  }
+
+  function buildModalHTML(){
+    var typeOpts=CONTACT_TYPES.map(function(t){return '<option value="'+t+'">'+t+'</option>';}).join('');
+    var statusOpts=RELATIONSHIP_STATUS.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('');
+    return '<div style="background:#1e293b;border-radius:12px;width:1000px;max-width:96vw;max-height:92vh;overflow-y:auto;padding:24px;position:relative;font-family:inherit;">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
+        +'<div style="display:flex;align-items:center;gap:12px;">'
+          +'<span style="font-size:1.6rem;">📇</span>'
+          +'<div><div style="font-size:1.25rem;font-weight:700;color:#e2e8f0;">Client & GC Contact Book</div>'
+          +'<div style="font-size:0.78rem;color:#94a3b8;">All contacts, relationships, and reach-out history in one place</div></div>'
+        +'</div>'
+        +'<button id="cb-close-btn" style="background:none;border:none;color:#94a3b8;font-size:1.4rem;cursor:pointer;">✕</button>'
+      +'</div>'
+      /* stats bar */
+      +'<div id="cb-stats-bar" style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:16px;"></div>'
+      /* controls */
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">'
+        +'<input id="cb-search" placeholder="🔍 Search name, company, phone, email..." style="flex:1;min-width:180px;padding:8px 12px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:0.85rem;">'
+        +'<select id="cb-type-filter" style="padding:8px 10px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:0.82rem;">'
+          +'<option value="">All Types</option>'+typeOpts+'</select>'
+        +'<select id="cb-status-filter" style="padding:8px 10px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:0.82rem;">'
+          +'<option value="">All Statuses</option>'+statusOpts+'</select>'
+        +'<button id="cb-add-btn" style="padding:8px 16px;background:#0d9488;border:none;border-radius:6px;color:#fff;font-size:0.85rem;cursor:pointer;white-space:nowrap;">+ Add Contact</button>'
+        +'<button id="cb-print-btn" style="padding:8px 16px;background:#1e40af;border:none;border-radius:6px;color:#fff;font-size:0.85rem;cursor:pointer;white-space:nowrap;">🖨️ Directory</button>'
+      +'</div>'
+      /* list */
+      +'<div id="cb-contact-list" style="display:flex;flex-direction:column;gap:8px;"></div>'
+      /* form overlay */
+      +'<div id="cb-form-overlay" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.97);border-radius:12px;overflow-y:auto;padding:24px;box-sizing:border-box;"></div>'
+    +'</div>';
+  }
+
+  /* ---- stats bar ---- */
+  function renderStats(){
+    var contacts=loadContacts();
+    var total=contacts.length;
+    var active=contacts.filter(function(c){return c.status==='Active';}).length;
+    var gcs=contacts.filter(function(c){return c.type==='General Contractor';}).length;
+    var owners=contacts.filter(function(c){return c.type==='Owner/Developer';}).length;
+    var prospects=contacts.filter(function(c){return c.status==='Prospect'||c.status==='Warm Lead';}).length;
+    var suppliers=contacts.filter(function(c){return c.type==='Supplier/Vendor'||c.type==='Batch Plant';}).length;
+    var cards=[
+      {label:'Total Contacts',val:total,color:'#94a3b8'},
+      {label:'Active',val:active,color:'#4ade80'},
+      {label:'General Contractors',val:gcs,color:'#60a5fa'},
+      {label:'Owners/Developers',val:owners,color:'#a78bfa'},
+      {label:'Prospects/Leads',val:prospects,color:'#fbbf24'},
+      {label:'Suppliers',val:suppliers,color:'#34d399'},
+    ];
+    var bar=document.getElementById('cb-stats-bar');
+    if(!bar)return;
+    bar.innerHTML=cards.map(function(c){
+      return '<div style="background:#0f172a;border-radius:8px;padding:10px 12px;border:1px solid #1e293b;">'
+        +'<div style="font-size:1.25rem;font-weight:700;color:'+c.color+';">'+c.val+'</div>'
+        +'<div style="font-size:0.7rem;color:#64748b;margin-top:2px;">'+c.label+'</div>'
+      +'</div>';
+    }).join('');
+  }
+
+  /* ---- contact list ---- */
+  function renderContactList(){
+    var contacts=loadContacts();
+    var search=(document.getElementById('cb-search')||{}).value||'';
+    var typeFilter=(document.getElementById('cb-type-filter')||{}).value||'';
+    var statusFilter=(document.getElementById('cb-status-filter')||{}).value||'';
+    search=search.toLowerCase();
+    var filtered=contacts.filter(function(c){
+      var match=true;
+      if(search){
+        var hay=(c.name+' '+c.company+' '+c.phone+' '+c.email+' '+c.title+' '+c.notes).toLowerCase();
+        match=hay.indexOf(search)>=0;
+      }
+      if(typeFilter&&c.type!==typeFilter)match=false;
+      if(statusFilter&&c.status!==statusFilter)match=false;
+      return match;
+    });
+    // sort: Active first, then by company name
+    filtered.sort(function(a,b){
+      var aPri=a.status==='Active'?0:a.status==='Warm Lead'?1:a.status==='Prospect'?2:3;
+      var bPri=b.status==='Active'?0:b.status==='Warm Lead'?1:b.status==='Prospect'?2:3;
+      if(aPri!==bPri)return aPri-bPri;
+      return (a.company||a.name||'').localeCompare(b.company||b.name||'');
+    });
+    var list=document.getElementById('cb-contact-list');
+    if(!list)return;
+    if(filtered.length===0){
+      list.innerHTML='<div style="text-align:center;color:#475569;padding:40px;">No contacts found.<br><span style="font-size:0.8rem;">Click "+ Add Contact" to add your first GC, owner, or supplier.</span></div>';
+      return;
+    }
+    list.innerHTML=filtered.map(function(c){return renderContactCard(c);}).join('');
+    // bind edit/delete
+    filtered.forEach(function(c){
+      var editBtn=document.getElementById('cb-edit-'+c.id);
+      var delBtn=document.getElementById('cb-del-'+c.id);
+      if(editBtn)editBtn.addEventListener('click',function(){openContactForm(c.id);});
+      if(delBtn)delBtn.addEventListener('click',function(){deleteContact(c.id);});
+    });
+  }
+
+  var TYPE_COLORS={
+    'General Contractor':'#3b82f6',
+    'Subcontractor':'#8b5cf6',
+    'Owner/Developer':'#f59e0b',
+    'Architect':'#ec4899',
+    'Structural Engineer':'#06b6d4',
+    'Civil Engineer':'#0ea5e9',
+    'Supplier/Vendor':'#10b981',
+    'Batch Plant':'#84cc16',
+    'Inspector/Testing Lab':'#f97316',
+    'City/Municipality':'#ef4444',
+    'Bonding/Insurance':'#6366f1',
+    'Other':'#94a3b8'
+  };
+  var STATUS_COLORS={
+    'Active':'#4ade80','Prospect':'#fbbf24','Warm Lead':'#fb923c',
+    'Past Client':'#94a3b8','Not a Fit':'#ef4444','Inactive':'#475569'
+  };
+
+  function renderContactCard(c){
+    var typeColor=TYPE_COLORS[c.type]||'#94a3b8';
+    var statusColor=STATUS_COLORS[c.status]||'#94a3b8';
+    var lastContact=c.lastContact?'Last contact: '+c.lastContact:'';
+    var nextFollowUp=c.nextFollowUp?(' · Follow-up: <span style="color:#fbbf24;">'+c.nextFollowUp+'</span>'):'';
+    // days since last contact
+    var daysSince='';
+    if(c.lastContact){
+      var diff=Math.floor((Date.now()-new Date(c.lastContact).getTime())/(1000*60*60*24));
+      if(diff>90) daysSince='<span style="color:#ef4444;font-size:0.72rem;margin-left:6px;">'+diff+'d ago ⚠️</span>';
+      else if(diff>30) daysSince='<span style="color:#fbbf24;font-size:0.72rem;margin-left:6px;">'+diff+'d ago</span>';
+    }
+    return '<div style="background:#0f172a;border-radius:8px;padding:14px 16px;border:1px solid #1e293b;border-left:3px solid '+typeColor+';">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'
+        +'<div style="flex:1;">'
+          +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+            +'<span style="font-weight:600;color:#e2e8f0;font-size:0.95rem;">'+(c.name||'(No name)')+'</span>'
+            +(c.company?'<span style="color:#94a3b8;font-size:0.82rem;">· '+c.company+'</span>':'')
+            +(c.title?'<span style="color:#64748b;font-size:0.78rem;">'+c.title+'</span>':'')
+          +'</div>'
+          +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">'
+            +'<span style="padding:2px 8px;border-radius:4px;font-size:0.72rem;background:'+typeColor+'22;color:'+typeColor+';border:1px solid '+typeColor+'44;">'+c.type+'</span>'
+            +'<span style="padding:2px 8px;border-radius:4px;font-size:0.72rem;background:'+statusColor+'22;color:'+statusColor+';border:1px solid '+statusColor+'44;">'+c.status+'</span>'
+            +(c.source?'<span style="padding:2px 8px;border-radius:4px;font-size:0.72rem;background:#1e293b;color:#64748b;">'+c.source+'</span>':'')
+          +'</div>'
+          +'<div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:8px;">'
+            +(c.phone?'<span style="color:#94a3b8;font-size:0.82rem;">📞 '+c.phone+'</span>':'')
+            +(c.email?'<span style="color:#94a3b8;font-size:0.82rem;">✉️ '+c.email+'</span>':'')
+            +(c.city?'<span style="color:#64748b;font-size:0.78rem;">📍 '+c.city+'</span>':'')
+            +(c.license?'<span style="color:#64748b;font-size:0.78rem;">Lic: '+c.license+'</span>':'')
+          +'</div>'
+          +(c.bidHistory?'<div style="margin-top:6px;font-size:0.78rem;color:#64748b;">📋 '+c.bidHistory+'</div>':'')
+          +((lastContact||nextFollowUp)?'<div style="margin-top:4px;font-size:0.75rem;color:#64748b;">'+lastContact+daysSince+nextFollowUp+'</div>':'')
+          +(c.notes?'<div style="margin-top:6px;font-size:0.78rem;color:#475569;font-style:italic;border-top:1px solid #1e293b;padding-top:6px;">'+c.notes+'</div>':'')
+        +'</div>'
+        +'<div style="display:flex;gap:6px;">'
+          +'<button id="cb-edit-'+c.id+'" style="padding:5px 10px;background:#1e293b;border:1px solid #334155;border-radius:5px;color:#94a3b8;font-size:0.78rem;cursor:pointer;">✏️</button>'
+          +'<button id="cb-del-'+c.id+'" style="padding:5px 10px;background:#1e293b;border:1px solid #334155;border-radius:5px;color:#ef4444;font-size:0.78rem;cursor:pointer;">🗑</button>'
+        +'</div>'
+      +'</div>'
+    +'</div>';
+  }
+
+  /* ---- delete ---- */
+  function deleteContact(id){
+    if(!confirm('Delete this contact?'))return;
+    var contacts=loadContacts().filter(function(c){return c.id!==id;});
+    saveContacts(contacts);
+    renderContactList();
+    renderStats();
+  }
+
+  /* ---- form ---- */
+  function openContactForm(editId){
+    var contacts=loadContacts();
+    var existing=editId?contacts.find(function(c){return c.id===editId;}):null;
+    var overlay=document.getElementById('cb-form-overlay');
+    if(!overlay)return;
+    overlay.style.display='block';
+    var today=new Date().toISOString().split('T')[0];
+    var c=existing||{};
+    var typeOpts=CONTACT_TYPES.map(function(t){return '<option value="'+t+'"'+(c.type===t?' selected':'')+'>'+t+'</option>';}).join('');
+    var statusOpts=RELATIONSHIP_STATUS.map(function(s){return '<option value="'+s+'"'+(c.status===s?' selected':'')+'>'+s+'</option>';}).join('');
+    var sourceOpts=CONTACT_SOURCE.map(function(s){return '<option value="'+s+'"'+(c.source===s?' selected':'')+'>'+s+'</option>';}).join('');
+    overlay.innerHTML='<div style="max-width:700px;margin:0 auto;">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'
+        +'<div style="font-size:1.1rem;font-weight:700;color:#e2e8f0;">'+(editId?'✏️ Edit Contact':'+ New Contact')+'</div>'
+        +'<button id="cb-form-cancel" style="background:none;border:none;color:#94a3b8;font-size:1.3rem;cursor:pointer;">✕</button>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
+        +fld('Contact Name *','cb-f-name','text',c.name||'','e.g. John Martinez')
+        +fld('Company / Organization','cb-f-company','text',c.company||'','e.g. Sundt Construction')
+        +fld('Title / Role','cb-f-title','text',c.title||'','e.g. Project Manager')
+        +fld('Phone','cb-f-phone','text',c.phone||'','(915) 555-0100')
+        +fld('Email','cb-f-email','email',c.email||'','')
+        +fld('City / Office Location','cb-f-city','text',c.city||'','El Paso, TX')
+        +'<div><label style="font-size:0.78rem;color:#94a3b8;display:block;margin-bottom:4px;">Contact Type</label>'
+          +'<select id="cb-f-type" style="width:100%;padding:8px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:0.85rem;">'+typeOpts+'</select></div>'
+        +'<div><label style="font-size:0.78rem;color:#94a3b8;display:block;margin-bottom:4px;">Relationship Status</label>'
+          +'<select id="cb-f-status" style="width:100%;padding:8px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:0.85rem;">'+statusOpts+'</select></div>'
+        +'<div><label style="font-size:0.78rem;color:#94a3b8;display:block;margin-bottom:4px;">How We Met (Source)</label>'
+          +'<select id="cb-f-source" style="width:100%;padding:8px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:0.85rem;"><option value="">—</option>'+sourceOpts+'</select></div>'
+        +fld('Contractor License #','cb-f-license','text',c.license||'','TX TDLR or Specialty Lic')
+        +fld('Last Contact Date','cb-f-lastContact','date',c.lastContact||today,'')
+        +fld('Next Follow-Up Date','cb-f-nextFollowUp','date',c.nextFollowUp||'','')
+        +fld('Bid History / Projects Bid Together','cb-f-bidHistory','text',c.bidHistory||'','e.g. Bid 3 jobs 2025 — won Mesa Verde Apts')
+      +'</div>'
+      +'<div style="margin-top:12px;"><label style="font-size:0.78rem;color:#94a3b8;display:block;margin-bottom:4px;">Notes / Relationship Notes</label>'
+        +'<textarea id="cb-f-notes" rows="3" style="width:100%;padding:8px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:0.85rem;resize:vertical;box-sizing:border-box;" placeholder="Preferred concrete supplier, how they buy, who to talk to for bids...">'+(c.notes||'')+'</textarea></div>'
+      +'<div style="display:flex;gap:10px;margin-top:20px;">'
+        +'<button id="cb-form-save" style="padding:10px 24px;background:#0d9488;border:none;border-radius:6px;color:#fff;font-weight:600;cursor:pointer;">💾 Save Contact</button>'
+        +'<button id="cb-form-cancel2" style="padding:10px 16px;background:#334155;border:none;border-radius:6px;color:#94a3b8;cursor:pointer;">Cancel</button>'
+      +'</div>'
+    +'</div>';
+    document.getElementById('cb-form-cancel').addEventListener('click',closeForm);
+    document.getElementById('cb-form-cancel2').addEventListener('click',closeForm);
+    document.getElementById('cb-form-save').addEventListener('click',function(){saveContact(editId);});
+  }
+
+  function fld(label,id,type,val,ph){
+    return '<div><label style="font-size:0.78rem;color:#94a3b8;display:block;margin-bottom:4px;">'+label+'</label>'
+      +'<input id="'+id+'" type="'+type+'" value="'+escH(val)+'" placeholder="'+ph+'" style="width:100%;padding:8px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:0.85rem;box-sizing:border-box;"></div>';
+  }
+  function escH(s){return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+  function closeForm(){
+    var overlay=document.getElementById('cb-form-overlay');
+    if(overlay)overlay.style.display='none';
+  }
+
+  function saveContact(editId){
+    var name=(document.getElementById('cb-f-name')||{}).value||'';
+    if(!name.trim()){alert('Contact name is required.');return;}
+    var contacts=loadContacts();
+    var obj={
+      id:editId||genId(),
+      name:name.trim(),
+      company:(document.getElementById('cb-f-company')||{}).value||'',
+      title:(document.getElementById('cb-f-title')||{}).value||'',
+      phone:(document.getElementById('cb-f-phone')||{}).value||'',
+      email:(document.getElementById('cb-f-email')||{}).value||'',
+      city:(document.getElementById('cb-f-city')||{}).value||'',
+      type:(document.getElementById('cb-f-type')||{}).value||'Other',
+      status:(document.getElementById('cb-f-status')||{}).value||'Prospect',
+      source:(document.getElementById('cb-f-source')||{}).value||'',
+      license:(document.getElementById('cb-f-license')||{}).value||'',
+      lastContact:(document.getElementById('cb-f-lastContact')||{}).value||'',
+      nextFollowUp:(document.getElementById('cb-f-nextFollowUp')||{}).value||'',
+      bidHistory:(document.getElementById('cb-f-bidHistory')||{}).value||'',
+      notes:(document.getElementById('cb-f-notes')||{}).value||'',
+      updated:new Date().toISOString().split('T')[0]
+    };
+    if(editId){contacts=contacts.map(function(c){return c.id===editId?obj:c;});}
+    else{contacts.unshift(obj);}
+    saveContacts(contacts);
+    closeForm();
+    renderContactList();
+    renderStats();
+  }
+
+  /* ---- print directory ---- */
+  function printContactDirectory(){
+    var contacts=loadContacts();
+    if(!contacts.length){alert('No contacts to print.');return;}
+    // sort by type then name
+    var sorted=contacts.slice().sort(function(a,b){
+      var t=(a.type||'').localeCompare(b.type||'');
+      if(t!==0)return t;
+      return (a.name||'').localeCompare(b.name||'');
+    });
+    var co=window.companyInfo||{};
+    var coName=co.name||'Oncor Concrete';
+    var now=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+    var byType={};
+    sorted.forEach(function(c){var t=c.type||'Other';if(!byType[t])byType[t]=[];byType[t].push(c);});
+    var sections=Object.keys(byType).map(function(t){
+      var rows=byType[t].map(function(c){
+        return '<tr style="border-bottom:1px solid #e2e8f0;">'
+          +'<td style="padding:7px 10px;font-weight:600;color:#1e293b;">'+escH(c.name)+'</td>'
+          +'<td style="padding:7px 10px;color:#374151;">'+escH(c.company)+'</td>'
+          +'<td style="padding:7px 10px;color:#374151;">'+escH(c.title)+'</td>'
+          +'<td style="padding:7px 10px;color:#374151;">'+escH(c.phone)+'</td>'
+          +'<td style="padding:7px 10px;color:#374151;">'+escH(c.email)+'</td>'
+          +'<td style="padding:7px 10px;">'
+            +'<span style="padding:2px 7px;border-radius:4px;font-size:0.72rem;background:'+(STATUS_COLORS[c.status]||'#94a3b8')+'22;color:'+(STATUS_COLORS[c.status]||'#666')+';">'+escH(c.status||'')+'</span>'
+          +'</td>'
+          +'<td style="padding:7px 10px;font-size:0.78rem;color:#6b7280;">'+escH(c.notes||'').substring(0,60)+(c.notes&&c.notes.length>60?'…':'')+'</td>'
+        +'</tr>';
+      }).join('');
+      return '<div style="margin-bottom:20px;">'
+        +'<div style="background:#1e293b;color:#fff;padding:6px 12px;font-size:0.85rem;font-weight:700;border-radius:4px 4px 0 0;">'+t+' ('+byType[t].length+')</div>'
+        +'<table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;">'
+          +'<thead><tr style="background:#f8fafc;">'
+            +'<th style="padding:7px 10px;text-align:left;font-size:0.77rem;color:#64748b;">Name</th>'
+            +'<th style="padding:7px 10px;text-align:left;font-size:0.77rem;color:#64748b;">Company</th>'
+            +'<th style="padding:7px 10px;text-align:left;font-size:0.77rem;color:#64748b;">Title</th>'
+            +'<th style="padding:7px 10px;text-align:left;font-size:0.77rem;color:#64748b;">Phone</th>'
+            +'<th style="padding:7px 10px;text-align:left;font-size:0.77rem;color:#64748b;">Email</th>'
+            +'<th style="padding:7px 10px;text-align:left;font-size:0.77rem;color:#64748b;">Status</th>'
+            +'<th style="padding:7px 10px;text-align:left;font-size:0.77rem;color:#64748b;">Notes</th>'
+          +'</tr></thead><tbody>'+rows+'</tbody>'
+        +'</table></div>';
+    }).join('');
+    var total=contacts.length;
+    var active=contacts.filter(function(c){return c.status==='Active';}).length;
+    var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Contact Directory — '+coName+'</title>'
+      +'<style>body{font-family:Arial,sans-serif;font-size:13px;color:#1e293b;margin:24px;}@media print{button{display:none!important}}</style>'
+      +'</head><body>'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0d9488;padding-bottom:12px;margin-bottom:16px;">'
+        +'<div><div style="font-size:1.5rem;font-weight:700;color:#0d9488;">'+escH(coName)+'</div>'
+          +(co.phone?'<div style="font-size:0.85rem;color:#64748b;">'+escH(co.phone)+'</div>':'')
+          +(co.email?'<div style="font-size:0.85rem;color:#64748b;">'+escH(co.email)+'</div>':'')
+        +'</div>'
+        +'<div style="text-align:right;">'
+          +'<div style="font-size:1.1rem;font-weight:700;color:#1e293b;">CONTACT DIRECTORY</div>'
+          +'<div style="font-size:0.82rem;color:#64748b;">Generated: '+now+'</div>'
+          +'<div style="margin-top:6px;font-size:0.82rem;background:#f0fdf4;color:#166534;padding:4px 10px;border-radius:4px;">'+total+' contacts · '+active+' active</div>'
+        +'</div>'
+      +'</div>'
+      +sections
+      +'<div style="margin-top:24px;font-size:0.7rem;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:12px;">CONFIDENTIAL — INTERNAL USE ONLY · '+escH(coName)+' · Contact Directory</div>'
+      +'<button onclick="window.print()" style="margin-top:16px;padding:8px 20px;background:#1e293b;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer;">🖨️ Print / Save PDF</button>'
+    +'</body></html>';
+    var w=window.open('','_blank');
+    w.document.write(html);
+    w.document.close();
+  }
+
+  /* ---- stats hook ---- */
+  window._getContactStats=function(){
+    var c=loadContacts();
+    var active=c.filter(function(x){return x.status==='Active';}).length;
+    var prospects=c.filter(function(x){return x.status==='Prospect'||x.status==='Warm Lead';}).length;
+    // overdue follow-ups
+    var today=new Date().toISOString().split('T')[0];
+    var overdue=c.filter(function(x){return x.nextFollowUp&&x.nextFollowUp<today;}).length;
+    return {total:c.length,active:active,prospects:prospects,overdueFollowUp:overdue};
+  };
+
+  /* ---- keyboard shortcut: Alt+B ---- */
+  document.addEventListener('keydown',function(e){
+    if(e.altKey && e.key.toLowerCase()==='b'){
+      e.preventDefault();
+      var m=document.getElementById(MODAL_ID);
+      if(m && m.style.display==='flex') closeContactBook();
+      else showContactBook();
+    }
+  });
+
+  /* ---- inject sidebar button below Bid Pipeline ---- */
+  document.addEventListener('DOMContentLoaded',function(){
+    setTimeout(function(){
+      var pipelineBtn=document.querySelector('button[onclick*="showPipeline"]');
+      if(!pipelineBtn) return;
+      var parentRow=pipelineBtn.closest('div');
+      if(!parentRow||!parentRow.parentNode) return;
+      var newRow=document.createElement('div');
+      newRow.style.cssText='display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML='<button class="action-btn secondary" onclick="showContactBook()" title="Client & GC Contact Book — manage all contacts, relationships, follow-ups (Alt+B)" style="background:rgba(14,165,233,0.1);border-color:rgba(14,165,233,0.3);color:#38bdf8;">📇 Contact Book</button>';
+      parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 2900);
+  });
+
+  /* expose globally */
+  window.showContactBook=showContactBook;
+
+})();
+// ==================== END CLIENT & GC CONTACT BOOK — Zeus ⚡ Session #69 ====================
+</script>
