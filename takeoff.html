@@ -154829,3 +154829,517 @@ ${(p.followDue.length > 0 || c.overdueFollowUp > 0) ? `
 })();
 // ==================== END INSPECTION LOG & PERMIT TRACKER — Zeus ⚡ Session #71 ====================
 </script>
+
+<script>
+// ==================== ACCOUNTS RECEIVABLE & INVOICE TRACKER — Zeus ⚡ Session #72 ====================
+(function(){
+  'use strict';
+
+  var AR_ID = 'oncorARModal';
+  var AR_KEY_PREFIX = 'oncor_ar_v1_';
+  var AR_GLOBAL_KEY = 'oncor_ar_global_v1'; // cross-project AR
+
+  // ---- Helpers ----
+  function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function fmtMoney(v){ var n=parseFloat(v)||0; if(Math.abs(n)>=1000000) return '$'+(n/1000000).toFixed(2)+'M'; if(Math.abs(n)>=1000) return '$'+(n/1000).toFixed(1)+'k'; return '$'+n.toFixed(2); }
+  function fmtMoneyFull(v){ var n=parseFloat(v)||0; return (n<0?'-$':'$')+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function todayStr(){ var d=new Date(); return d.toISOString().slice(0,10); }
+  function daysBetween(d1,d2){ return Math.round((new Date(d2)-new Date(d1))/(1000*60*60*24)); }
+  function daysOverdue(dueDateStr){
+    if(!dueDateStr) return 0;
+    var diff = daysBetween(dueDateStr, todayStr());
+    return diff > 0 ? diff : 0;
+  }
+  function agingBucket(dueDateStr, status){
+    if(status==='Paid'||status==='Voided') return 'paid';
+    if(!dueDateStr) return 'current';
+    var days = daysBetween(dueDateStr, todayStr());
+    if(days <= 0) return 'current';
+    if(days <= 30) return '1-30';
+    if(days <= 60) return '31-60';
+    if(days <= 90) return '61-90';
+    return '90+';
+  }
+  function getProjectName(){ var el=document.getElementById('projectName'); return (el&&el.value.trim())||''; }
+
+  function loadInvoices(){
+    var proj = getProjectName();
+    var key = proj ? AR_KEY_PREFIX + proj : AR_GLOBAL_KEY;
+    try{ return JSON.parse(localStorage.getItem(key))||[]; } catch(e){ return []; }
+  }
+  function saveInvoices(arr){
+    var proj = getProjectName();
+    var key = proj ? AR_KEY_PREFIX + proj : AR_GLOBAL_KEY;
+    localStorage.setItem(key, JSON.stringify(arr));
+  }
+
+  // ---- Stats ----
+  function calcStats(invs){
+    var total=0, paid=0, outstanding=0, retainage=0, overdue=0, overdueAmt=0;
+    var aging={'current':0,'1-30':0,'31-60':0,'61-90':0,'90+':0};
+    invs.forEach(function(inv){
+      var amt=parseFloat(inv.amount)||0;
+      var ret=parseFloat(inv.retainageHeld)||0;
+      total+=amt;
+      retainage+=ret;
+      if(inv.status==='Paid'){ paid+=amt; }
+      else if(inv.status!=='Voided'){
+        outstanding+=(amt-ret);
+        var bucket=agingBucket(inv.dueDate, inv.status);
+        aging[bucket]=(aging[bucket]||0)+(amt-ret);
+        if(daysOverdue(inv.dueDate)>0){ overdue++; overdueAmt+=(amt-ret); }
+      }
+    });
+    return {total:total,paid:paid,outstanding:outstanding,retainage:retainage,overdue:overdue,overdueAmt:overdueAmt,aging:aging};
+  }
+
+  // Expose for Project Status Card
+  window._getARStats = function(){
+    var invs = loadInvoices();
+    var s = calcStats(invs);
+    return { totalInvoiced: s.total, paid: s.paid, outstanding: s.outstanding, retainage: s.retainage, overdue: s.overdue, overdueAmt: s.overdueAmt };
+  };
+
+  // ---- Build Modal ----
+  function buildModal(){
+    if(document.getElementById(AR_ID)) return;
+    var modal = document.createElement('div');
+    modal.id = AR_ID;
+    modal.style.cssText='display:none;position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px 10px;';
+    modal.innerHTML = '<div id="arInner" style="background:#1e293b;border-radius:16px;border:1px solid #334155;width:100%;max-width:960px;box-shadow:0 24px 64px rgba(0,0,0,0.5);font-family:system-ui,sans-serif;overflow:hidden;"></div>';
+    modal.addEventListener('click',function(e){ if(e.target===modal) closeARModal(); });
+    document.body.appendChild(modal);
+  }
+
+  function renderAR(){
+    var inner = document.getElementById('arInner');
+    if(!inner) return;
+    var invs = loadInvoices();
+    var st = calcStats(invs);
+    var proj = getProjectName();
+
+    // Sort: open overdue first, then by invoice date descending
+    var sorted = invs.slice().sort(function(a,b){
+      var aOD=daysOverdue(a.dueDate)>0&&a.status!=='Paid'&&a.status!=='Voided'?1:0;
+      var bOD=daysOverdue(b.dueDate)>0&&b.status!=='Paid'&&b.status!=='Voided'?1:0;
+      if(bOD!==aOD) return bOD-aOD;
+      return (b.invoiceDate||'').localeCompare(a.invoiceDate||'');
+    });
+
+    var agingHtml = '';
+    var buckets = ['current','1-30','31-60','61-90','90+'];
+    var bucketLabels = {'current':'Current','1-30':'1-30 Days','31-60':'31-60 Days','61-60':'61-90 Days','61-90':'61-90 Days','90+':'90+ Days'};
+    var bucketColors = {'current':'#22c55e','1-30':'#f59e0b','31-60':'#f97316','61-90':'#ef4444','90+':'#7f1d1d'};
+    buckets.forEach(function(b){
+      if(st.aging[b]>0){
+        agingHtml+='<div style="display:flex;align-items:center;gap:8px;font-size:0.82rem;">'
+          +'<span style="font-weight:600;color:'+bucketColors[b]+';min-width:90px;">'+(bucketLabels[b]||b)+'</span>'
+          +'<div style="flex:1;background:#0f172a;border-radius:4px;height:8px;">'
+          +'<div style="background:'+bucketColors[b]+';height:8px;border-radius:4px;width:'+Math.min(100,Math.round(st.aging[b]/Math.max(st.outstanding,1)*100))+'%;"></div>'
+          +'</div>'
+          +'<span style="color:#e2e8f0;min-width:80px;text-align:right;">'+fmtMoneyFull(st.aging[b])+'</span>'
+          +'</div>';
+      }
+    });
+
+    var invoiceListHtml = '';
+    if(sorted.length===0){
+      invoiceListHtml='<div style="text-align:center;padding:40px 20px;color:#94a3b8;font-size:0.95rem;">No invoices yet. Add your first invoice to start tracking AR.</div>';
+    } else {
+      sorted.forEach(function(inv,idx){
+        var realIdx = invs.indexOf(inv);
+        var od = inv.status!=='Paid'&&inv.status!=='Voided' ? daysOverdue(inv.dueDate) : 0;
+        var statusColor={'Unpaid':'#f97316','Partial':'#f59e0b','Paid':'#22c55e','Disputed':'#ef4444','Voided':'#64748b'}[inv.status]||'#94a3b8';
+        var badges='';
+        if(od>0) badges+='<span style="background:#ef4444;color:#fff;font-size:0.68rem;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px;">⚠️ OVERDUE '+od+'d</span>';
+        if(inv.retainageHeld>0) badges+='<span style="background:rgba(124,58,237,0.2);color:#a78bfa;font-size:0.68rem;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:4px;">RET '+fmtMoney(inv.retainageHeld)+'</span>';
+
+        invoiceListHtml+='<div style="background:#0f172a;border-radius:10px;padding:14px 16px;margin-bottom:10px;border-left:4px solid '+statusColor+(od>0?';border:1px solid #ef4444':';border:1px solid #1e293b')+'">'
+          +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">'
+          +'<div style="flex:1;min-width:0;">'
+          +'<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:4px;">'
+          +'<span style="font-weight:700;color:#f1f5f9;font-size:0.95rem;">'+escH(inv.invoiceNum||'—')+'</span>'
+          +'<span style="background:rgba(255,255,255,0.08);color:#94a3b8;font-size:0.72rem;padding:2px 8px;border-radius:8px;">'+escH(inv.client||'—')+'</span>'
+          +'<span style="background:rgba(255,255,255,0.05);color:#94a3b8;font-size:0.72rem;padding:2px 8px;border-radius:8px;">'+escH(inv.type||'Invoice')+'</span>'
+          +badges
+          +'</div>'
+          +'<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:0.82rem;color:#94a3b8;">'
+          +'<span>📅 Issued: <b style="color:#e2e8f0;">'+escH(inv.invoiceDate||'—')+'</b></span>'
+          +'<span>📆 Due: <b style="color:'+(od>0?'#ef4444':'#e2e8f0')+';">'+escH(inv.dueDate||'—')+'</b></span>'
+          +(inv.paidDate?'<span>✅ Paid: <b style="color:#22c55e;">'+escH(inv.paidDate)+'</b></span>':'')
+          +'</div>'
+          +(inv.description?'<div style="font-size:0.8rem;color:#94a3b8;margin-top:4px;">'+escH(inv.description)+'</div>':'')
+          +(inv.notes?'<div style="font-size:0.78rem;color:#64748b;margin-top:2px;font-style:italic;">'+escH(inv.notes)+'</div>':'')
+          +'</div>'
+          +'<div style="text-align:right;flex-shrink:0;">'
+          +'<div style="font-size:1.15rem;font-weight:700;color:#2dd4bf;">'+fmtMoneyFull(parseFloat(inv.amount)||0)+'</div>'
+          +(inv.retainageHeld?'<div style="font-size:0.75rem;color:#a78bfa;">-'+fmtMoneyFull(parseFloat(inv.retainageHeld)||0)+' ret</div>':'')
+          +'<div style="margin-top:4px;"><span style="background:rgba(255,255,255,0.08);color:'+statusColor+';font-size:0.75rem;font-weight:700;padding:3px 10px;border-radius:10px;">'+escH(inv.status)+'</span></div>'
+          +'<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px;">'
+          +'<button onclick="openARForm('+realIdx+')" style="background:rgba(255,255,255,0.06);border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:0.75rem;">✏️</button>'
+          +'<button onclick="printOneInvoice('+realIdx+')" style="background:rgba(255,255,255,0.06);border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:0.75rem;">🖨️</button>'
+          +'<button onclick="deleteARInvoice('+realIdx+')" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#f87171;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:0.75rem;">🗑</button>'
+          +'</div>'
+          +'</div>'
+          +'</div>'
+          +'</div>';
+      });
+    }
+
+    inner.innerHTML =
+      '<div style="background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);padding:20px 24px;border-bottom:1px solid #334155;display:flex;align-items:center;justify-content:space-between;">'
+      +'<div><h2 style="margin:0;font-size:1.35rem;font-weight:800;color:#f1f5f9;">💰 Accounts Receivable & Invoice Tracker</h2>'
+      +(proj?'<div style="font-size:0.8rem;color:#94a3b8;margin-top:2px;">📁 '+escH(proj)+'</div>':'<div style="font-size:0.78rem;color:#f59e0b;margin-top:2px;">⚠ No project loaded — showing global AR</div>')
+      +'</div>'
+      +'<button onclick="closeARModal()" style="background:rgba(255,255,255,0.08);border:1px solid #334155;color:#94a3b8;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:1rem;">✕</button>'
+      +'</div>'
+
+      // Stats row
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;padding:16px 24px;border-bottom:1px solid #1e293b;">'
+      +_arStatCard('Total Invoiced',fmtMoneyFull(st.total),'#2dd4bf')
+      +_arStatCard('Collected',fmtMoneyFull(st.paid),'#22c55e')
+      +_arStatCard('Outstanding',fmtMoneyFull(st.outstanding),st.outstanding>0?'#f97316':'#22c55e')
+      +_arStatCard('Retainage Held',fmtMoneyFull(st.retainage),'#a78bfa')
+      +_arStatCard('Overdue',st.overdue+' inv'+((st.overdue!==1)?'s':'')+'\n'+fmtMoney(st.overdueAmt),st.overdue>0?'#ef4444':'#22c55e')
+      +'</div>'
+
+      // Aging + controls
+      +'<div style="padding:12px 24px 0;display:grid;grid-template-columns:1fr auto;gap:16px;align-items:start;">'
+      +(agingHtml?'<div style="background:#0f172a;border-radius:10px;padding:12px 16px;border:1px solid #1e293b;">'
+        +'<div style="font-size:0.75rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">AR AGING (Outstanding)</div>'
+        +'<div style="display:flex;flex-direction:column;gap:6px;">'+agingHtml+'</div>'
+        +'</div>'
+        :'<div></div>')
+      +'<div style="display:flex;flex-direction:column;gap:8px;">'
+      +'<button onclick="openARForm(-1)" style="background:#2dd4bf;color:#0f172a;border:none;border-radius:8px;padding:10px 18px;cursor:pointer;font-weight:700;font-size:0.9rem;white-space:nowrap;">+ New Invoice</button>'
+      +'<button onclick="printARReport()" style="background:rgba(255,255,255,0.07);border:1px solid #334155;color:#94a3b8;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:0.82rem;white-space:nowrap;">🖨️ AR Report</button>'
+      +'</div>'
+      +'</div>'
+
+      // Invoice list
+      +'<div style="padding:16px 24px 24px;">'
+      +'<div style="font-size:0.75rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">INVOICES ('+invs.length+')</div>'
+      +invoiceListHtml
+      +'</div>';
+  }
+
+  function _arStatCard(label,value,color){
+    return '<div style="background:#0f172a;border-radius:10px;padding:12px;border:1px solid #1e293b;text-align:center;">'
+      +'<div style="font-size:0.68rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">'+escH(label)+'</div>'
+      +'<div style="font-size:0.95rem;font-weight:800;color:'+color+';white-space:pre-line;">'+escH(value)+'</div>'
+      +'</div>';
+  }
+
+  // ---- Form ----
+  function openARForm(idx){
+    var invs = loadInvoices();
+    var inv = idx >= 0 ? invs[idx] : {};
+    var proj = getProjectName();
+
+    // auto-generate invoice number
+    var autoNum = 'INV-' + String(invs.length+1).padStart(3,'0');
+
+    var html =
+      '<div id="arFormOverlay" style="position:fixed;inset:0;z-index:9200;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:20px;">'
+      +'<div style="background:#1e293b;border-radius:14px;border:1px solid #334155;width:100%;max-width:580px;max-height:92vh;overflow-y:auto;font-family:system-ui,sans-serif;">'
+      +'<div style="padding:16px 20px;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center;">'
+      +'<h3 style="margin:0;color:#f1f5f9;font-size:1.1rem;">'+(idx>=0?'Edit Invoice':'New Invoice')+'</h3>'
+      +'<button onclick="document.getElementById(\'arFormOverlay\').remove()" style="background:rgba(255,255,255,0.08);border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:4px 10px;cursor:pointer;">✕</button>'
+      +'</div>'
+      +'<div style="padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
+      +_arField('Invoice #','invoiceNum','text',inv.invoiceNum||autoNum,false)
+      +_arField('Type','invoiceType','select',inv.type||'Pay Application','false',['Pay Application','Progress Invoice','Lump Sum Invoice','Retainage Invoice','Change Order Invoice','Final Invoice','Retention Release','Other'])
+      +_arField('Client / GC','arClient','text',inv.client||proj,'','')
+      +_arField('Project / Description','arDesc','text',inv.description||proj,'','')
+      +_arField('Invoice Amount ($)','arAmount','number',inv.amount||'','required','')
+      +_arField('Retainage Held ($)','arRetainage','number',inv.retainageHeld||'','','')
+      +_arField('Invoice Date','arInvoiceDate','date',inv.invoiceDate||todayStr(),'','')
+      +_arField('Due Date','arDueDate','date',inv.dueDate||'','','')
+      +_arField('Status','arStatus','select',inv.status||'Unpaid','','',['Unpaid','Partial','Paid','Disputed','Voided'])
+      +_arField('Date Paid','arPaidDate','date',inv.paidDate||'','','')
+      +'<div style="grid-column:1/-1;">'+_arField('Pay App / CO Reference','arRef','text',inv.ref||'','','')+'</div>'
+      +'<div style="grid-column:1/-1;">'+_arField('Collection Notes','arNotes','textarea',inv.notes||'','','')+'</div>'
+      +'</div>'
+      +'<div style="padding:12px 20px 16px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid #334155;">'
+      +'<button onclick="document.getElementById(\'arFormOverlay\').remove()" style="background:rgba(255,255,255,0.07);border:1px solid #334155;color:#94a3b8;border-radius:8px;padding:8px 18px;cursor:pointer;">Cancel</button>'
+      +'<button onclick="saveARInvoice('+idx+')" style="background:#2dd4bf;color:#0f172a;border:none;border-radius:8px;padding:8px 20px;font-weight:700;cursor:pointer;">💾 Save Invoice</button>'
+      +'</div>'
+      +'</div>'
+      +'</div>';
+
+    document.body.insertAdjacentHTML('beforeend',html);
+  }
+
+  function _arField(label,id,type,value,required,opts){
+    var s = '<div style="display:flex;flex-direction:column;gap:4px;">'
+      +'<label style="font-size:0.75rem;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.04em;">'+escH(label)+'</label>';
+    if(type==='select'&&Array.isArray(opts)){
+      s+='<select id="'+id+'" style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#f1f5f9;font-size:0.85rem;">';
+      opts.forEach(function(o){ s+='<option value="'+escH(o)+'"'+(o===value?' selected':'')+'>'+escH(o)+'</option>'; });
+      s+='</select>';
+    } else if(type==='textarea'){
+      s+='<textarea id="'+id+'" rows="3" style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#f1f5f9;font-size:0.85rem;resize:vertical;">'+escH(value)+'</textarea>';
+    } else {
+      s+='<input type="'+type+'" id="'+id+'" value="'+escH(value)+'" '+(required?'required':'')+' style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#f1f5f9;font-size:0.85rem;">';
+    }
+    s+='</div>';
+    return s;
+  }
+
+  window.saveARInvoice = function(idx){
+    var invs = loadInvoices();
+    var inv = {
+      invoiceNum: (document.getElementById('invoiceNum')||{}).value||'',
+      type: (document.getElementById('invoiceType')||{}).value||'Invoice',
+      client: (document.getElementById('arClient')||{}).value||'',
+      description: (document.getElementById('arDesc')||{}).value||'',
+      amount: parseFloat((document.getElementById('arAmount')||{}).value)||0,
+      retainageHeld: parseFloat((document.getElementById('arRetainage')||{}).value)||0,
+      invoiceDate: (document.getElementById('arInvoiceDate')||{}).value||'',
+      dueDate: (document.getElementById('arDueDate')||{}).value||'',
+      status: (document.getElementById('arStatus')||{}).value||'Unpaid',
+      paidDate: (document.getElementById('arPaidDate')||{}).value||'',
+      ref: (document.getElementById('arRef')||{}).value||'',
+      notes: (document.getElementById('arNotes')||{}).value||''
+    };
+    if(!inv.amount){ alert('Invoice Amount is required.'); return; }
+    if(idx>=0){ invs[idx]=inv; } else { invs.push(inv); }
+    saveInvoices(invs);
+    var overlay = document.getElementById('arFormOverlay');
+    if(overlay) overlay.remove();
+    renderAR();
+  };
+
+  window.deleteARInvoice = function(idx){
+    if(!confirm('Delete this invoice? This cannot be undone.')) return;
+    var invs = loadInvoices();
+    invs.splice(idx,1);
+    saveInvoices(invs);
+    renderAR();
+  };
+
+  window.openARForm = openARForm;
+
+  // ---- Print single invoice ----
+  window.printOneInvoice = function(idx){
+    var invs = loadInvoices();
+    var inv = invs[idx];
+    if(!inv) return;
+    var proj = getProjectName();
+    var coName = (document.getElementById('companyName')||{}).value||'Concrete Contractor';
+    var coPhone = (document.getElementById('companyPhone')||{}).value||'';
+    var coEmail = (document.getElementById('companyEmail')||{}).value||'';
+    var coAddr = (document.getElementById('companyAddress')||{}).value||'';
+    var coLic = (document.getElementById('licenseNumber')||{}).value||'';
+    var od = inv.status!=='Paid'&&inv.status!=='Voided' ? daysOverdue(inv.dueDate) : 0;
+
+    var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice '+escH(inv.invoiceNum)+'</title>'
+      +'<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;font-size:11pt;color:#1a1a2e;padding:28px 32px;}'
+      +'.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:3px solid #0ea5e9;}'
+      +'.co-name{font-size:18pt;font-weight:bold;color:#0ea5e9;}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0;}'
+      +'.cell{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px;}'
+      +'.cell-label{font-size:8pt;font-weight:bold;text-transform:uppercase;color:#64748b;letter-spacing:.05em;}'
+      +'.cell-value{font-size:11pt;font-weight:600;color:#1a1a2e;margin-top:2px;}'
+      +'.amount-box{background:#0f172a;color:#2dd4bf;text-align:center;border-radius:10px;padding:20px;margin:18px 0;}'
+      +'.amount-box .lbl{font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:.08em;opacity:0.7;}'
+      +'.amount-box .val{font-size:26pt;font-weight:900;margin-top:4px;}'
+      +'.overdue{background:#fef2f2;border:2px solid #ef4444;border-radius:8px;padding:10px 16px;margin-bottom:14px;color:#dc2626;font-weight:700;font-size:10pt;}'
+      +'.sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px;}'
+      +'.sig-block{border-top:2px solid #334155;padding-top:8px;}.sig-block .sig-line{margin-top:32px;border-bottom:1px solid #94a3b8;}'
+      +'.footer{margin-top:20px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:8pt;color:#94a3b8;text-align:center;}'
+      +'@media print{.no-print{display:none;}body{padding:16px 20px;}}'
+      +'</style></head><body>';
+
+    html += '<div class="header"><div><div class="co-name">'+escH(coName)+'</div>'
+      +(coAddr?'<div style="font-size:9pt;color:#64748b;margin-top:2px;">'+escH(coAddr)+'</div>':'')
+      +'<div style="font-size:9pt;color:#64748b;">'+escH(coPhone)+(coEmail?' · '+coEmail:'')+'</div>'
+      +(coLic?'<div style="font-size:9pt;color:#64748b;">License: '+escH(coLic)+'</div>':'')
+      +'</div>'
+      +'<div style="text-align:right;">'
+      +'<div style="font-size:20pt;font-weight:900;color:#0f172a;">INVOICE</div>'
+      +'<div style="font-size:13pt;font-weight:700;color:#0ea5e9;"># '+escH(inv.invoiceNum)+'</div>'
+      +'<div style="font-size:9pt;color:#64748b;margin-top:4px;">'+escH(inv.type||'Invoice')+'</div>'
+      +'</div></div>';
+
+    if(od>0) html+='<div class="overdue">⚠️ OVERDUE — '+od+' days past due date ('+escH(inv.dueDate)+'). TX Prompt Payment Act Property Code Ch. 28 applies — 1.5%/month interest on late payments.</div>';
+
+    html+='<div class="grid2">'
+      +'<div class="cell"><div class="cell-label">Bill To / Client</div><div class="cell-value">'+escH(inv.client||'—')+'</div></div>'
+      +'<div class="cell"><div class="cell-label">Project</div><div class="cell-value">'+escH(proj||inv.description||'—')+'</div></div>'
+      +'<div class="cell"><div class="cell-label">Invoice Date</div><div class="cell-value">'+escH(inv.invoiceDate||'—')+'</div></div>'
+      +'<div class="cell"><div class="cell-label">Due Date</div><div class="cell-value" style="color:'+(od>0?'#dc2626':'inherit')+';">'+escH(inv.dueDate||'Net 30 from receipt')+'</div></div>'
+      +(inv.ref?'<div class="cell" style="grid-column:1/-1"><div class="cell-label">Reference / Pay App</div><div class="cell-value">'+escH(inv.ref)+'</div></div>':'')
+      +'</div>';
+
+    html+='<div class="amount-box"><div class="lbl">Invoice Amount</div><div class="val">'+fmtMoneyFull(parseFloat(inv.amount)||0)+'</div>'
+      +(inv.retainageHeld?'<div style="font-size:9pt;margin-top:4px;opacity:.7;">Less Retainage: ('+fmtMoneyFull(parseFloat(inv.retainageHeld)||0)+')'
+        +' · Net Due: <b>'+fmtMoneyFull((parseFloat(inv.amount)||0)-(parseFloat(inv.retainageHeld)||0))+'</b></div>':'')
+      +'<div style="font-size:9pt;margin-top:8px;opacity:.7;">Status: <b style="color:'+(inv.status==='Paid'?'#22c55e':inv.status==='Disputed'?'#ef4444':'#f97316')+'">'+escH(inv.status)+'</b>'
+      +(inv.paidDate?' · Paid: '+escH(inv.paidDate):'')+'</div>'
+      +'</div>';
+
+    if(inv.description||inv.notes){
+      html+='<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin-bottom:14px;">'
+        +(inv.description?'<div style="font-size:9pt;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Description / Scope</div>'
+          +'<div style="font-size:10pt;">'+escH(inv.description)+'</div>':'')
+        +(inv.notes?'<div style="font-size:9pt;font-weight:700;text-transform:uppercase;color:#64748b;margin-top:8px;margin-bottom:4px;">Notes</div>'
+          +'<div style="font-size:9.5pt;color:#475569;">'+escH(inv.notes)+'</div>':'')
+        +'</div>';
+    }
+
+    html+='<div class="sig-grid">'
+      +'<div class="sig-block"><div style="font-size:9pt;font-weight:700;text-transform:uppercase;color:#64748b;">Submitted By — Contractor</div>'
+        +'<div class="sig-line"></div><div style="font-size:9pt;color:#94a3b8;margin-top:4px;">Signature / Printed Name / Date</div></div>'
+      +'<div class="sig-block"><div style="font-size:9pt;font-weight:700;text-transform:uppercase;color:#64748b;">Received By — Client / GC</div>'
+        +'<div class="sig-line"></div><div style="font-size:9pt;color:#94a3b8;margin-top:4px;">Signature / Printed Name / Date</div></div>'
+      +'</div>';
+
+    html+='<div class="footer">Texas Prompt Payment Act (Property Code Ch. 28): Payment due within 35 days of invoice receipt. Interest accrues at 1.5%/month on late payments. Lien rights reserved under TX Property Code Ch. 53. · CONFIDENTIAL</div>'
+      +'<button class="no-print" onclick="window.print()" style="margin-top:14px;padding:8px 18px;background:#0ea5e9;color:#fff;border:none;border-radius:6px;cursor:pointer;">🖨️ Print / Save PDF</button>'
+      +'</body></html>';
+
+    var w = window.open('','_blank');
+    w.document.write(html);
+    w.document.close();
+  };
+
+  // ---- Print full AR report ----
+  window.printARReport = function(){
+    var invs = loadInvoices();
+    var st = calcStats(invs);
+    var proj = getProjectName();
+    var coName = (document.getElementById('companyName')||{}).value||'Concrete Contractor';
+    var coPhone = (document.getElementById('companyPhone')||{}).value||'';
+    var coEmail = (document.getElementById('companyEmail')||{}).value||'';
+    var sorted = invs.slice().sort(function(a,b){ return (a.invoiceDate||'').localeCompare(b.invoiceDate||''); });
+
+    var rows='';
+    sorted.forEach(function(inv,i){
+      var od = inv.status!=='Paid'&&inv.status!=='Voided' ? daysOverdue(inv.dueDate) : 0;
+      var rc = od>0?'background:#fef2f2;':(inv.status==='Paid'?'background:#f0fdf4;':'');
+      rows+='<tr style="'+rc+'">'
+        +'<td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">'+escH(inv.invoiceNum||'—')+'</td>'
+        +'<td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">'+escH(inv.client||'—')+'</td>'
+        +'<td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">'+escH(inv.type||'Invoice')+'</td>'
+        +'<td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">'+escH(inv.invoiceDate||'—')+'</td>'
+        +'<td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;color:'+(od>0?'#dc2626':'inherit')+';">'+escH(inv.dueDate||'—')+(od>0?' <b>(+'+od+'d)</b>':'')+'</td>'
+        +'<td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600;">'+fmtMoneyFull(parseFloat(inv.amount)||0)+'</td>'
+        +'<td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;color:#7c3aed;">'+(inv.retainageHeld?fmtMoneyFull(parseFloat(inv.retainageHeld)||0):'—')+'</td>'
+        +'<td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">'+(inv.paidDate?escH(inv.paidDate):'—')+'</td>'
+        +'<td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-weight:700;color:'+(inv.status==='Paid'?'#16a34a':inv.status==='Disputed'?'#dc2626':'#ea580c')+'">'+escH(inv.status)+'</td>'
+        +'<td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:9pt;color:#64748b;">'+escH(inv.notes||'')+'</td>'
+        +'</tr>';
+    });
+
+    var agingTable='';
+    var buckets=[['current','Current'],['1-30','1-30 Days'],['31-60','31-60 Days'],['61-90','61-90 Days'],['90+','90+ Days']];
+    var bucketColors2={'current':'#16a34a','1-30':'#d97706','31-60':'#ea580c','61-90':'#dc2626','90+':'#7f1d1d'};
+    var totalAging=0;
+    buckets.forEach(function(b){ totalAging+=st.aging[b[0]]||0; });
+    agingTable='<table style="width:100%;border-collapse:collapse;margin-top:8px;">'
+      +'<tr><th style="text-align:left;padding:6px 8px;background:#f1f5f9;font-size:9pt;">Bucket</th><th style="text-align:right;padding:6px 8px;background:#f1f5f9;font-size:9pt;">Amount</th><th style="text-align:right;padding:6px 8px;background:#f1f5f9;font-size:9pt;">% of AR</th></tr>';
+    buckets.forEach(function(b){
+      var amt=st.aging[b[0]]||0;
+      if(amt>0||true){
+        agingTable+='<tr><td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;font-weight:600;color:'+bucketColors2[b[0]]+';">'+b[1]+'</td>'
+          +'<td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;text-align:right;">'+fmtMoneyFull(amt)+'</td>'
+          +'<td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;text-align:right;">'+(totalAging>0?Math.round(amt/totalAging*100)+'%':'—')+'</td></tr>';
+      }
+    });
+    agingTable+='<tr style="background:#f8fafc;font-weight:700;"><td style="padding:6px 8px;">Total Outstanding AR</td>'
+      +'<td style="padding:6px 8px;text-align:right;">'+fmtMoneyFull(st.outstanding)+'</td><td style="padding:6px 8px;text-align:right;">100%</td></tr></table>';
+
+    var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>AR Report — '+escH(proj||coName)+'</title>'
+      +'<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;font-size:10pt;color:#1a1a2e;padding:20px 24px;}'
+      +'.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;padding-bottom:14px;border-bottom:3px solid #0ea5e9;}'
+      +'.co-name{font-size:16pt;font-weight:bold;color:#0ea5e9;}.badge{display:inline-block;background:#0f172a;color:#2dd4bf;font-size:13pt;font-weight:900;padding:6px 18px;border-radius:8px;}'
+      +'.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:14px 0;}'
+      +'.kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;text-align:center;}'
+      +'.kpi-label{font-size:8pt;font-weight:700;text-transform:uppercase;color:#64748b;letter-spacing:.04em;}'
+      +'.kpi-value{font-size:12pt;font-weight:800;color:#0f172a;margin-top:3px;}'
+      +'table{width:100%;border-collapse:collapse;}th{padding:7px 8px;background:#1e293b;color:#e2e8f0;font-size:9pt;text-align:left;}'
+      +'.footer{margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:8pt;color:#94a3b8;text-align:center;}'
+      +'@media print{.no-print{display:none;}}'
+      +'</style></head><body>';
+
+    html+='<div class="header"><div><div class="co-name">'+escH(coName)+'</div>'
+      +'<div style="font-size:9pt;color:#64748b;">'+escH(coPhone)+(coEmail?' · '+coEmail:'')+'</div></div>'
+      +'<div style="text-align:right;"><div class="badge">ACCOUNTS RECEIVABLE</div>'
+      +(proj?'<div style="font-size:10pt;font-weight:600;margin-top:4px;">'+escH(proj)+'</div>':'<div style="font-size:9pt;color:#64748b;margin-top:4px;">All Projects</div>')
+      +'<div style="font-size:9pt;color:#64748b;margin-top:2px;">Generated: '+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})+'</div>'
+      +'</div></div>';
+
+    html+='<div class="kpi-grid">'
+      +'<div class="kpi"><div class="kpi-label">Total Invoiced</div><div class="kpi-value">'+fmtMoneyFull(st.total)+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label">Collected</div><div class="kpi-value" style="color:#16a34a;">'+fmtMoneyFull(st.paid)+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label">Outstanding AR</div><div class="kpi-value" style="color:'+(st.outstanding>0?'#ea580c':'#16a34a')+';">'+fmtMoneyFull(st.outstanding)+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label">Retainage Held</div><div class="kpi-value" style="color:#7c3aed;">'+fmtMoneyFull(st.retainage)+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label">Overdue Invoices</div><div class="kpi-value" style="color:'+(st.overdue>0?'#dc2626':'#16a34a')+';">'+st.overdue+' ('+fmtMoney(st.overdueAmt)+')</div></div>'
+      +'</div>';
+
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;">'
+      +'<div><div style="font-size:9pt;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:6px;">AR AGING SCHEDULE</div>'+agingTable+'</div>'
+      +'<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;font-size:9.5pt;">'
+      +'<div style="font-weight:700;color:#dc2626;margin-bottom:6px;">⚠️ TX PROMPT PAYMENT ACT (Property Code Ch. 28)</div>'
+      +'<div style="color:#7f1d1d;line-height:1.6;">• Payment due within <b>35 days</b> of invoice receipt<br>• Interest accrues at <b>1.5%/month</b> on late payments<br>• Owner / GC failure to pay = attorney fees recoverable<br>• Rights preserved under TX Property Code Ch. 53 (Mechanics Lien)</div>'
+      +'</div></div>';
+
+    html+='<div style="font-size:9pt;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:6px;">INVOICE DETAIL</div>'
+      +'<table><tr><th>Invoice #</th><th>Client</th><th>Type</th><th>Issued</th><th>Due</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Retainage</th><th>Paid Date</th><th>Status</th><th>Notes</th></tr>'
+      +rows
+      +'<tr style="background:#f1f5f9;font-weight:700;">'
+      +'<td colspan="5" style="padding:7px 8px;">TOTALS ('+invs.length+' invoices)</td>'
+      +'<td style="padding:7px 8px;text-align:right;">'+fmtMoneyFull(st.total)+'</td>'
+      +'<td style="padding:7px 8px;text-align:right;">'+fmtMoneyFull(st.retainage)+'</td>'
+      +'<td colspan="3" style="padding:7px 8px;">Outstanding: '+fmtMoneyFull(st.outstanding)+'</td>'
+      +'</tr></table>';
+
+    html+='<div class="footer">CONFIDENTIAL — INTERNAL USE ONLY · '+escH(coName)+' · Oncor Takeoff Estimator · AR Report</div>'
+      +'<button class="no-print" onclick="window.print()" style="margin-top:14px;padding:8px 18px;background:#0ea5e9;color:#fff;border:none;border-radius:6px;cursor:pointer;">🖨️ Print / Save PDF</button>'
+      +'</body></html>';
+
+    var w = window.open('','_blank');
+    w.document.write(html);
+    w.document.close();
+  };
+
+  // ---- Show / Close ----
+  function showARModal(){
+    buildModal();
+    var m = document.getElementById(AR_ID);
+    if(m){ m.style.display='flex'; renderAR(); }
+  }
+  function closeARModal(){
+    var m = document.getElementById(AR_ID);
+    if(m) m.style.display='none';
+  }
+  window.showARModal = showARModal;
+  window.closeARModal = closeARModal;
+
+  // ---- Keyboard shortcut Alt+R ----
+  document.addEventListener('keydown',function(e){
+    if(e.altKey && e.key.toLowerCase()==='r'){
+      e.preventDefault();
+      var m = document.getElementById(AR_ID);
+      if(m && m.style.display==='flex') closeARModal();
+      else showARModal();
+    }
+  });
+
+  // ---- Sidebar button — inject below Inspections ----
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){
+      var inspBtn = document.querySelector('button[onclick*="showInspModal"]');
+      if(!inspBtn) return;
+      var parentRow = inspBtn.closest('div');
+      if(!parentRow||!parentRow.parentNode) return;
+      var newRow = document.createElement('div');
+      newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML = '<button class="action-btn secondary" onclick="showARModal()" title="Accounts Receivable & Invoice Tracker — track invoices, collections, aging AR, retainage (Alt+R)" style="background:rgba(14,165,233,0.1);border-color:rgba(14,165,233,0.3);color:#38bdf8;">💰 AR & Invoices</button>';
+      parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 3400);
+  });
+
+})();
+// ==================== END ACCOUNTS RECEIVABLE & INVOICE TRACKER — Zeus ⚡ Session #72 ====================
+</script>
