@@ -158657,3 +158657,360 @@ document.addEventListener('DOMContentLoaded',function(){
 })();
 // ==================== END PROJECT CORRESPONDENCE & TRANSMITTAL LOG — Zeus ⚡ Session #77 ====================
 </script>
+
+<script>
+// ==================== START COST-TO-COMPLETE FORECAST — Zeus ⚡ Session #78 ====================
+(function(){
+'use strict';
+
+var CTC_ID = 'oncorCTCModal';
+
+function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmt$(n){ return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+function fmtPct(n){ return Number(n||0).toFixed(1)+'%'; }
+
+function getCTCKey(){
+  var pn='';
+  try{ var d=JSON.parse(localStorage.getItem('oncorCurrentProject')||'{}'); pn=d.projectName||''; }catch(x){}
+  if(!pn){ try{ pn=(document.getElementById('projectName')||{}).value||''; }catch(x){} }
+  return 'oncor_ctc_v1_'+(pn||'_global');
+}
+function loadCTC(){ try{ return JSON.parse(localStorage.getItem(getCTCKey())||'null'); }catch(x){ return null; } }
+function saveCTC(obj){ localStorage.setItem(getCTCKey(), JSON.stringify(obj)); }
+
+var CTC_CATS = [
+  {id:'concrete',label:'Concrete Materials'},
+  {id:'labor',label:'Labor (Self-Performed)'},
+  {id:'formwork',label:'Formwork'},
+  {id:'rebar',label:'Rebar & Wire Mesh'},
+  {id:'pump',label:'Concrete Pump'},
+  {id:'sawcut',label:'Saw Cutting'},
+  {id:'fiber',label:'Fiber Reinforcement'},
+  {id:'base',label:'Base Course'},
+  {id:'vapor',label:'Vapor Barrier'},
+  {id:'equipment',label:'Equipment Rental'},
+  {id:'subs',label:'Subcontractors'},
+  {id:'testing',label:'Testing & Inspection'},
+  {id:'mobilization',label:'Mobilization'},
+  {id:'misc',label:'Misc / Small Tools'},
+  {id:'overhead',label:'Overhead'},
+  {id:'contingency',label:'Contingency'}
+];
+
+function getDefaultData(){
+  var est = {};
+  try{ est = window.lastEstimate || {}; }catch(x){}
+  var cats = {};
+  CTC_CATS.forEach(function(c){
+    var budget = 0;
+    if(c.id==='concrete') budget = (est.concreteCost||0);
+    else if(c.id==='labor') budget = (est.laborCost||0);
+    else if(c.id==='formwork') budget = (est.formworkCost||0);
+    else if(c.id==='rebar') budget = (est.rebarCost||0)+(est.meshCost||0);
+    else if(c.id==='pump') budget = (est.pumpCost||0);
+    else if(c.id==='sawcut') budget = (est.sawCutCost||0);
+    else if(c.id==='fiber') budget = (est.fiberCost||0);
+    else if(c.id==='base') budget = (est.baseCost||0);
+    else if(c.id==='vapor') budget = (est.vaporCost||0);
+    else if(c.id==='overhead') budget = (est.overheadAmt||0);
+    else if(c.id==='contingency') budget = (est.contingencyAmt||0);
+    else if(c.id==='mobilization') budget = (est.mobilizationCost||0);
+    else if(c.id==='misc') budget = (est.miscCost||0);
+    cats[c.id] = {budget: Math.round(budget*100)/100, spent:0, pctComplete:0};
+  });
+  return {
+    contractValue: est.totalBid||0,
+    revenueEarned: 0,
+    cats: cats,
+    notes: '',
+    updated: new Date().toISOString()
+  };
+}
+
+function buildCTCModal(){
+  if(document.getElementById(CTC_ID)) return;
+  var modal = document.createElement('div');
+  modal.id = CTC_ID;
+  modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10500;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+  modal.innerHTML = [
+    '<div style="background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:12px;width:100%;max-width:1000px;margin:auto;overflow:hidden;">',
+    '<div style="padding:18px 20px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">',
+    '<div><span style="font-size:1.15rem;font-weight:700;color:#e2e8f0;">📊 Cost-to-Complete Forecast</span><span style="font-size:0.75rem;color:#94a3b8;margin-left:10px;">Alt+F</span></div>',
+    '<div style="display:flex;gap:8px;">',
+    '<button onclick="ctcSeedFromEstimate()" style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);color:#34d399;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;">⚡ Seed from Estimate</button>',
+    '<button onclick="printCTCReport()" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);color:#ccc;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;">🖨 Print</button>',
+    '<button onclick="closeCTCModal()" style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.3);color:#f87171;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;">✕ Close</button>',
+    '</div></div>',
+    '<div id="ctcSummaryCards" style="display:flex;gap:12px;padding:14px 20px;background:rgba(0,0,0,0.2);flex-wrap:wrap;"></div>',
+    '<div style="padding:14px 20px 0;display:grid;grid-template-columns:1fr 1fr;gap:12px;">',
+    '<div><label style="font-size:0.78rem;color:#94a3b8;display:block;margin-bottom:4px;">Contract Value ($)</label>',
+    '<input id="ctcContract" type="number" min="0" step="100" oninput="ctcAutoSave()" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;padding:8px;border-radius:6px;font-size:0.9rem;box-sizing:border-box;"></div>',
+    '<div><label style="font-size:0.78rem;color:#94a3b8;display:block;margin-bottom:4px;">Revenue Earned to Date ($)</label>',
+    '<input id="ctcRevenue" type="number" min="0" step="100" oninput="ctcAutoSave()" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;padding:8px;border-radius:6px;font-size:0.9rem;box-sizing:border-box;"></div>',
+    '</div>',
+    '<div style="padding:14px 20px;">',
+    '<div style="font-size:0.85rem;font-weight:600;color:#94a3b8;margin-bottom:10px;display:flex;align-items:center;gap:10px;">',
+    'COST CATEGORIES',
+    '<span style="font-size:0.72rem;font-weight:400;color:#64748b;">Enter Budget, Spent-to-Date, and % Complete per category. Cost-to-Complete = Budget − Spent.</span>',
+    '</div>',
+    '<div style="overflow-x:auto;">',
+    '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">',
+    '<thead><tr style="border-bottom:1px solid rgba(255,255,255,0.1);">',
+    '<th style="text-align:left;padding:8px 6px;color:#94a3b8;font-weight:600;min-width:160px;">Category</th>',
+    '<th style="text-align:right;padding:8px 6px;color:#94a3b8;font-weight:600;">Budget ($)</th>',
+    '<th style="text-align:right;padding:8px 6px;color:#94a3b8;font-weight:600;">Spent to Date ($)</th>',
+    '<th style="text-align:center;padding:8px 6px;color:#94a3b8;font-weight:600;">% Complete</th>',
+    '<th style="text-align:right;padding:8px 6px;color:#94a3b8;font-weight:600;">Cost-to-Complete</th>',
+    '<th style="text-align:right;padding:8px 6px;color:#94a3b8;font-weight:600;">EAC</th>',
+    '<th style="text-align:center;padding:8px 6px;color:#94a3b8;font-weight:600;">Variance</th>',
+    '</tr></thead>',
+    '<tbody id="ctcTableBody"></tbody>',
+    '<tfoot id="ctcTableFoot"></tfoot>',
+    '</table>',
+    '</div>',
+    '<div style="margin-top:12px;"><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:4px;">Forecast Notes / Assumptions</label>',
+    '<textarea id="ctcNotes" rows="2" oninput="ctcAutoSave()" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;border-radius:6px;padding:8px;font-size:0.82rem;resize:vertical;box-sizing:border-box;" placeholder="e.g. Concrete up 5% per latest batch plant quote. Labor running 10% over estimate due to weather delays."></textarea></div>',
+    '<div style="display:flex;justify-content:flex-end;margin-top:10px;">',
+    '<button onclick="ctcSaveManual()" style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.35);color:#34d399;padding:7px 18px;border-radius:6px;cursor:pointer;font-size:0.85rem;">💾 Save Forecast</button>',
+    '</div>',
+    '</div></div>'
+  ].join('');
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e){ if(e.target===modal) closeCTCModal(); });
+}
+
+function renderCTCTable(data){
+  var tbody = document.getElementById('ctcTableBody');
+  var tfoot = document.getElementById('ctcTableFoot');
+  if(!tbody||!tfoot) return;
+  var totalBudget=0, totalSpent=0, totalCTC=0, totalEAC=0;
+  var rows = CTC_CATS.map(function(c){
+    var cat = (data.cats&&data.cats[c.id]) || {budget:0,spent:0,pctComplete:0};
+    var budget = parseFloat(cat.budget)||0;
+    var spent = parseFloat(cat.spent)||0;
+    var pct = parseFloat(cat.pctComplete)||0;
+    var ctc = Math.max(0, budget - spent);
+    var eac = spent + ctc;
+    var variance = budget - eac;
+    totalBudget+=budget; totalSpent+=spent; totalCTC+=ctc; totalEAC+=eac;
+    var varColor = variance>=0?'#34d399':'#f87171';
+    var pctColor = pct>=100?'#34d399':pct>=50?'#60a5fa':'#94a3b8';
+    return '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">'
+      +'<td style="padding:7px 6px;color:#e2e8f0;">'+escH(c.label)+'</td>'
+      +'<td style="padding:7px 6px;text-align:right;"><input type="number" min="0" step="100" value="'+budget+'" data-catid="'+c.id+'" data-field="budget" onchange="ctcUpdateCell(this)" style="width:100px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;padding:4px 6px;border-radius:4px;font-size:0.8rem;text-align:right;"></td>'
+      +'<td style="padding:7px 6px;text-align:right;"><input type="number" min="0" step="100" value="'+spent+'" data-catid="'+c.id+'" data-field="spent" onchange="ctcUpdateCell(this)" style="width:100px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;padding:4px 6px;border-radius:4px;font-size:0.8rem;text-align:right;"></td>'
+      +'<td style="padding:7px 6px;text-align:center;">'
+      +'<div style="display:flex;align-items:center;gap:6px;justify-content:center;">'
+      +'<input type="number" min="0" max="100" step="1" value="'+pct+'" data-catid="'+c.id+'" data-field="pctComplete" onchange="ctcUpdateCell(this)" style="width:60px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:'+pctColor+';padding:4px 6px;border-radius:4px;font-size:0.8rem;text-align:center;">'
+      +'<span style="font-size:0.75rem;color:'+pctColor+';">%</span>'
+      +'</div></td>'
+      +'<td style="padding:7px 6px;text-align:right;color:#fbbf24;font-weight:600;">'+fmt$(ctc)+'</td>'
+      +'<td style="padding:7px 6px;text-align:right;color:#94a3b8;">'+fmt$(eac)+'</td>'
+      +'<td style="padding:7px 6px;text-align:center;"><span style="color:'+varColor+';font-weight:600;">'+(variance>=0?'+':'')+fmt$(variance).replace('$','')+(variance>=0?'':' over')+'</span></td>'
+      +'</tr>';
+  });
+  tbody.innerHTML = rows.join('');
+  var totalVariance = totalBudget - totalEAC;
+  var tvColor = totalVariance>=0?'#34d399':'#f87171';
+  tfoot.innerHTML = '<tr style="border-top:2px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.3);">'
+    +'<td style="padding:9px 6px;font-weight:700;color:#e2e8f0;">TOTALS</td>'
+    +'<td style="padding:9px 6px;text-align:right;font-weight:700;color:#e2e8f0;">'+fmt$(totalBudget)+'</td>'
+    +'<td style="padding:9px 6px;text-align:right;font-weight:700;color:#e2e8f0;">'+fmt$(totalSpent)+'</td>'
+    +'<td style="padding:9px 6px;"></td>'
+    +'<td style="padding:9px 6px;text-align:right;font-weight:700;color:#fbbf24;">'+fmt$(totalCTC)+'</td>'
+    +'<td style="padding:9px 6px;text-align:right;font-weight:700;color:#e2e8f0;">'+fmt$(totalEAC)+'</td>'
+    +'<td style="padding:9px 6px;text-align:center;font-weight:700;color:'+tvColor+';">'+(totalVariance>=0?'+':'')+fmt$(totalVariance).replace('$','')+(totalVariance>=0?' under':' OVER')+'</td>'
+    +'</tr>';
+  renderCTCSummary(data, totalBudget, totalSpent, totalCTC, totalEAC);
+}
+
+function renderCTCSummary(data, totalBudget, totalSpent, totalCTC, totalEAC){
+  var el=document.getElementById('ctcSummaryCards'); if(!el) return;
+  var contract = parseFloat((document.getElementById('ctcContract')||{}).value)||data.contractValue||0;
+  var revenue = parseFloat((document.getElementById('ctcRevenue')||{}).value)||data.revenueEarned||0;
+  var projProfit = contract - totalEAC;
+  var projMargin = contract>0 ? (projProfit/contract*100) : 0;
+  var costPct = totalBudget>0 ? (totalSpent/totalBudget*100):0;
+  var cards = [
+    {label:'Budget',val:fmt$(totalBudget),c:'#94a3b8'},
+    {label:'Spent to Date',val:fmt$(totalSpent),c:'#60a5fa'},
+    {label:'Cost-to-Complete',val:fmt$(totalCTC),c:'#fbbf24'},
+    {label:'EAC (Total Forecast)',val:fmt$(totalEAC),c:totalEAC<=totalBudget?'#34d399':'#f87171'},
+    {label:'Projected Profit',val:fmt$(projProfit),c:projProfit>=0?'#34d399':'#f87171'},
+    {label:'Projected Margin',val:fmtPct(projMargin),c:projMargin>=15?'#34d399':projMargin>=8?'#fbbf24':'#f87171'},
+    {label:'Burn Rate',val:fmtPct(costPct),c:costPct<=80?'#34d399':costPct<=100?'#fbbf24':'#f87171'}
+  ];
+  el.innerHTML = cards.map(function(c){
+    return '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 14px;text-align:center;min-width:100px;">'
+      +'<div style="font-size:1.15rem;font-weight:700;color:'+c.c+';">'+c.val+'</div>'
+      +'<div style="font-size:0.7rem;color:#94a3b8;white-space:nowrap;">'+c.label+'</div></div>';
+  }).join('');
+}
+
+function ctcUpdateCell(input){
+  var catId = input.getAttribute('data-catid');
+  var field = input.getAttribute('data-field');
+  var val = parseFloat(input.value)||0;
+  var data = loadCTC()||getDefaultData();
+  if(!data.cats) data.cats={};
+  if(!data.cats[catId]) data.cats[catId]={budget:0,spent:0,pctComplete:0};
+  data.cats[catId][field] = val;
+  data.updated = new Date().toISOString();
+  saveCTC(data);
+  renderCTCTable(data);
+}
+window.ctcUpdateCell = ctcUpdateCell;
+
+function ctcAutoSave(){
+  var data = loadCTC()||getDefaultData();
+  data.contractValue = parseFloat((document.getElementById('ctcContract')||{}).value)||0;
+  data.revenueEarned = parseFloat((document.getElementById('ctcRevenue')||{}).value)||0;
+  data.notes = (document.getElementById('ctcNotes')||{}).value||'';
+  data.updated = new Date().toISOString();
+  saveCTC(data);
+  renderCTCTable(data);
+}
+window.ctcAutoSave = ctcAutoSave;
+
+function ctcSaveManual(){
+  ctcAutoSave();
+  var btn = document.querySelector('button[onclick="ctcSaveManual()"]');
+  if(btn){ var orig=btn.textContent; btn.textContent='✅ Saved!'; setTimeout(function(){ btn.textContent=orig; },1500); }
+}
+window.ctcSaveManual = ctcSaveManual;
+
+function ctcSeedFromEstimate(){
+  var fresh = getDefaultData();
+  var existing = loadCTC();
+  if(existing && existing.cats){
+    // Merge: only override budget from estimate, keep spent/pct
+    CTC_CATS.forEach(function(c){
+      if(fresh.cats[c.id]&&fresh.cats[c.id].budget>0){
+        if(!existing.cats[c.id]) existing.cats[c.id]={budget:0,spent:0,pctComplete:0};
+        existing.cats[c.id].budget = fresh.cats[c.id].budget;
+      }
+    });
+    if(fresh.contractValue>0) existing.contractValue = fresh.contractValue;
+    saveCTC(existing);
+    renderCTCInputs(existing);
+    renderCTCTable(existing);
+  } else {
+    saveCTC(fresh);
+    renderCTCInputs(fresh);
+    renderCTCTable(fresh);
+  }
+  var btn = document.querySelector('button[onclick="ctcSeedFromEstimate()"]');
+  if(btn){ var orig=btn.textContent; btn.textContent='✅ Seeded!'; setTimeout(function(){ btn.textContent=orig; },1500); }
+}
+window.ctcSeedFromEstimate = ctcSeedFromEstimate;
+
+function renderCTCInputs(data){
+  var cv = document.getElementById('ctcContract'); if(cv) cv.value = data.contractValue||'';
+  var rv = document.getElementById('ctcRevenue'); if(rv) rv.value = data.revenueEarned||'';
+  var nv = document.getElementById('ctcNotes'); if(nv) nv.value = data.notes||'';
+}
+
+function printCTCReport(){
+  var data = loadCTC()||getDefaultData();
+  var co = {};
+  try{
+    co.name=(document.getElementById('companyName')||{}).value||'Oncor';
+    co.phone=(document.getElementById('companyPhone')||{}).value||'';
+    co.email=(document.getElementById('companyEmail')||{}).value||'';
+  }catch(x){}
+  var pn=''; try{ pn=(document.getElementById('projectName')||{}).value||'Project'; }catch(x){}
+  var totalBudget=0,totalSpent=0,totalCTC=0,totalEAC=0;
+  var rowData = CTC_CATS.map(function(c){
+    var cat=(data.cats&&data.cats[c.id])||{budget:0,spent:0,pctComplete:0};
+    var b=parseFloat(cat.budget)||0,s=parseFloat(cat.spent)||0,p=parseFloat(cat.pctComplete)||0;
+    var ctc=Math.max(0,b-s),eac=s+ctc,v=b-eac;
+    totalBudget+=b;totalSpent+=s;totalCTC+=ctc;totalEAC+=eac;
+    return {label:c.label,b:b,s:s,p:p,ctc:ctc,eac:eac,v:v};
+  });
+  var contract=data.contractValue||0;
+  var projProfit=contract-totalEAC;
+  var projMargin=contract>0?(projProfit/contract*100):0;
+  var w=window.open('','_blank','width=1050,height=800');
+  if(!w) return;
+  w.document.write([
+    '<!DOCTYPE html><html><head><title>CTC Forecast — '+pn+'</title>',
+    '<style>body{font-family:Arial,sans-serif;color:#1e293b;padding:30px;max-width:1000px;margin:0 auto;font-size:9pt;}',
+    'table{width:100%;border-collapse:collapse;margin-top:10px;}td,th{border:1px solid #cbd5e1;padding:6px 9px;font-size:9pt;}th{background:#f1f5f9;font-weight:700;text-align:left;}',
+    '.stat{display:inline-block;text-align:center;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;margin:4px;}',
+    'tfoot tr{font-weight:700;background:#f1f5f9;} .over{color:#dc2626;} .under{color:#16a34a;}',
+    '@media print{.noprint{display:none;}}',
+    '</style></head><body>',
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;">',
+    '<div><strong style="font-size:13pt;">'+escH(co.name||'Oncor')+'</strong><br/>'+(co.phone?escH(co.phone)+' | ':'')+escH(co.email||'')+'</div>',
+    '<div style="text-align:right;"><span style="background:#0f172a;color:#fff;font-weight:700;font-size:11pt;padding:5px 14px;border-radius:4px;">COST-TO-COMPLETE FORECAST</span><br/>',
+    '<strong>'+escH(pn)+'</strong><br/>',
+    '<span style="font-size:8pt;color:#64748b;">'+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})+'</span></div>',
+    '</div><hr style="margin:12px 0;border-color:#e2e8f0;"/>',
+    '<div style="margin-bottom:14px;">',
+    [
+      {l:'Contract Value',v:fmt$(contract)},
+      {l:'Total Budget',v:fmt$(totalBudget)},
+      {l:'Spent to Date',v:fmt$(totalSpent)},
+      {l:'Cost-to-Complete',v:fmt$(totalCTC)},
+      {l:'EAC (Forecast)',v:fmt$(totalEAC)},
+      {l:'Projected Profit',v:fmt$(projProfit)},
+      {l:'Projected Margin',v:fmtPct(projMargin)}
+    ].map(function(s){ return '<span class="stat"><strong style="font-size:12pt;">'+s.v+'</strong><br/>'+s.l+'</span>'; }).join(''),
+    '</div>',
+    '<table><thead><tr><th>Category</th><th style="text-align:right;">Budget</th><th style="text-align:right;">Spent to Date</th><th style="text-align:center;">% Complete</th><th style="text-align:right;">Cost-to-Complete</th><th style="text-align:right;">EAC</th><th style="text-align:right;">Variance</th></tr></thead><tbody>',
+    rowData.filter(function(r){return r.b>0||r.s>0;}).map(function(r){
+      return '<tr><td>'+escH(r.label)+'</td><td style="text-align:right;">'+fmt$(r.b)+'</td><td style="text-align:right;">'+fmt$(r.s)+'</td><td style="text-align:center;">'+fmtPct(r.p)+'</td><td style="text-align:right;font-weight:600;">'+fmt$(r.ctc)+'</td><td style="text-align:right;">'+fmt$(r.eac)+'</td><td style="text-align:right;" class="'+(r.v>=0?'under':'over')+'">'+(r.v>=0?'+':'')+fmt$(r.v).replace('$','')+'</td></tr>';
+    }).join(''),
+    '</tbody><tfoot><tr><td>TOTAL</td><td style="text-align:right;">'+fmt$(totalBudget)+'</td><td style="text-align:right;">'+fmt$(totalSpent)+'</td><td></td><td style="text-align:right;">'+fmt$(totalCTC)+'</td><td style="text-align:right;">'+fmt$(totalEAC)+'</td>',
+    '<td style="text-align:right;" class="'+(totalBudget-totalEAC>=0?'under':'over')+'">'+(totalBudget-totalEAC>=0?'+ ':'')+fmt$(totalBudget-totalEAC).replace('$','')+(totalBudget-totalEAC>=0?' under':' OVER')+'</td>',
+    '</tr></tfoot></table>',
+    (data.notes?'<div style="margin-top:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;font-size:9pt;"><strong>Forecast Notes:</strong><br/>'+escH(data.notes).replace(/\n/g,'<br/>')+'</div>':''),
+    '<div style="margin-top:20px;font-size:7.5pt;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:8px;">CONFIDENTIAL — INTERNAL USE ONLY — ONCOR CONSTRUCTION MANAGEMENT</div>',
+    '<div class="noprint" style="margin-top:20px;text-align:center;"><button onclick="window.print()" style="background:#0f172a;color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:10pt;">🖨 Print / Save PDF</button></div>',
+    '</body></html>'
+  ].join(''));
+  w.document.close();
+}
+window.printCTCReport = printCTCReport;
+
+function showCTCModal(){
+  buildCTCModal();
+  var m=document.getElementById(CTC_ID); if(!m) return;
+  m.style.display='flex';
+  var data = loadCTC()||getDefaultData();
+  renderCTCInputs(data);
+  renderCTCTable(data);
+}
+window.showCTCModal = showCTCModal;
+
+function closeCTCModal(){
+  var m=document.getElementById(CTC_ID); if(m) m.style.display='none';
+}
+window.closeCTCModal = closeCTCModal;
+
+document.addEventListener('keydown',function(e){
+  if(e.altKey && e.key.toLowerCase()==='f'){
+    e.preventDefault();
+    var m=document.getElementById(CTC_ID);
+    if(m && m.style.display==='flex') closeCTCModal();
+    else showCTCModal();
+  }
+});
+
+// ── INJECT SIDEBAR BUTTON ──────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded',function(){
+  setTimeout(function(){
+    var corrBtn = document.querySelector('button[onclick*="showCorrModal"]');
+    if(!corrBtn) return;
+    var parentRow = corrBtn.closest('div');
+    if(!parentRow||!parentRow.parentNode) return;
+    var newRow = document.createElement('div');
+    newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+    newRow.innerHTML = '<button class="action-btn secondary" onclick="showCTCModal()" title="Cost-to-Complete Forecast — budget vs actual vs EAC per cost category, projected profit & margin (Alt+F)" style="background:rgba(245,158,11,0.1);border-color:rgba(245,158,11,0.3);color:#fcd34d;">📊 CTC Forecast</button>';
+    parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+  }, 4700);
+});
+
+})();
+// ==================== END COST-TO-COMPLETE FORECAST — Zeus ⚡ Session #78 ====================
+</script>
