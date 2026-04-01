@@ -1,5 +1,267 @@
 # Overnight Build Tasks - 2026-02-14
 
+## 📦 SESSION: Apr 1, 2026 - 05:55 UTC (Overnight Cron #62)
+**Status:** ✅ MATERIAL PROCUREMENT & PO TRACKER added (+648 lines)
+
+### What Was Added:
+
+**📦 Material Procurement & PO Tracker (Ctrl+Shift+M):**
+- New `📦 Procurement` button injected in sidebar below Safety Log
+- `Ctrl+Shift+M` keyboard shortcut opens/toggles the tracker modal
+- **Purpose:** Track every material purchase order from estimate → PO creation → supplier confirmation → delivery. Closes the procurement loop: know what's ordered, from who, when it's needed, and whether it arrived.
+
+**Stats Bar (live):**
+- **PO Orders** — total count of all purchase orders
+- **Total PO Value** — sum of all order totals
+- **Budget Variance** — budgeted minus actual PO value (green = under, red = over)
+- **Open / Pending** — count of Draft/Submitted/Confirmed/In Transit/Partially Delivered
+- **Delivered** — count of Delivered/Invoiced/Paid
+- **Overdue ⚠️** — count of orders past their need date (red alert)
+
+**Purchase Order Form (18 fields):**
+- PO # / Reference (required, auto-generated PO-001, PO-002...), Order Date, Required By (Need Date)
+- **31 Material Categories:** Concrete (Ready-Mix), Concrete (Volumetric), Rebar Grade 60/40, Wire Mesh/WWR, Fiber Reinforcement (Synthetic/Steel), Base Course/Flex Base, Vapor Retarder/Barrier, Form Lumber, Form Plywood, Curing Compound, Curing Blankets/Burlap, Expansion Joint Filler, Sealant/Caulk, Sealer, Epoxy Coating, 4 Admixture types, Form Release Agent, Dowel Bars, Tie Wire, Chairs/Bar Supports, Anchor Bolts/Embeds, Pump Hose/Fittings, Saw Blades, Core Drill Bits, Safety Supplies, Misc
+- Quantity Ordered (required) + Unit (CY/yd³/ton/lb/each/SF/LF/bags/rolls/sheets/gallons/buckets/pails/LS)
+- Unit Price → **auto-calculates Total** (or manually enter Total)
+- Budgeted Amount (from estimate, for variance tracking)
+- Supplier / Vendor (required), Phone, Sales Contact
+- **10 Status options:** Draft / Submitted / Confirmed / In Transit / Partially Delivered / Delivered / Invoiced / Paid / Cancelled / On Hold
+- Qty Delivered (actual) — tracks partial deliveries
+- Delivery Date (actual)
+- Pour / Work Area Assignment (e.g. "Slab Grid A-D, Footings 1-12")
+- Notes / Spec Details (mix design, grade, size, requirements)
+
+**PO List View:**
+- Sorted: overdue first, then by order date (newest first)
+- Each card shows: material + PO# + pour area / supplier + contact + phone / order details (qty × unit price = total, variance, dates)
+- **Auto-Warning Badges:**
+  - 🔴 **OVERDUE** — when past need date and not Delivered/Paid/Cancelled
+  - 🟡 **SHORT DELIVERY** — when qty delivered < qty ordered on Delivered/Partial status
+- Status badges (10 color-coded)
+- Edit (✏️), Print individual PO (🖨), Delete (🗑) per entry
+
+**Filter Controls:**
+- Search by material / supplier / PO # / pour area / notes
+- Status dropdown (All + 10 statuses)
+
+**Printable Outputs:**
+- **Individual PO Document** — company header (name, address, phone, email), PO# prominently displayed, project info, 6-cell detail grid (material, supplier+contact, qty ordered, need-by date, qty delivered, spec notes), **PURCHASE ORDER TOTAL callout box** (teal, large amount + budget/variance note), dual signature block (Authorized By - Contractor + Acknowledged By - Supplier with confirmed delivery date line), TX UCC footer
+- **Full Procurement Report** — stats header (total POs / total value / variance / pending / delivered / overdue), complete PO table (PO#, material, supplier, qty, total, order date, need-by, status, area), overdue rows highlighted red, grand totals row, CONFIDENTIAL footer
+
+**Integration:**
+- `window._getPOStats()` exposed for Project Status Card (Ctrl+Shift+I)
+- Returns: totalOrders, totalValue, totalBudget, pendingCount, overdue
+- localStorage per project: `oncor_po_v1_[projectname]`
+
+**Why this matters:** On a commercial concrete job, JFS orders concrete (usually split across multiple batch plant orders), rebar, mesh, fiber, curing compound, base course, and vapor barrier — often from 3-5 different suppliers. Without tracking, he's relying on memory and text messages. With this tracker, every order is logged with a need date, and he gets an immediate overdue alert when a supplier hasn't confirmed delivery. When a material is "short delivered" (batch plant delivers 47 CY but PO said 52), he catches it immediately and documents it. The printable PO document is professional enough to fax/email the supplier and serves as the procurement paper trail.
+
+**Commits:**
+- e2db239: 📦 Material Procurement & PO Tracker (Ctrl+Shift+M) (+648 lines) [Session #62]
+
+**Total Lines:** ~150,612 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + Daily Field Log + Quick Communication Templates + Project Status Card + Keyboard Shortcuts + Pay Application Generator + RFI & Submittal Log + Punch List Tracker + Lien Rights & Notices Tracker + Concrete QC Log + Job Cost Tracker + Subcontractor Management + Equipment Rental Tracker + Delivery Ticket Log + Crew Time Cards + Safety & Toolbox Talk Log + **Material Procurement & PO Tracker**
+
+---
+
+## 🚚 SESSION: Apr 1, 2026 - 02:40 UTC (Overnight Cron #59)
+**Status:** ✅ CONCRETE DELIVERY TICKET LOG added (+438 lines)
+
+### What Was Added:
+
+**🚚 Concrete Delivery Ticket Log (Ctrl+Shift+W):**
+- New `🚚 Delivery Tickets` button injected in sidebar below Equipment Rentals
+- `Ctrl+Shift+W` keyboard shortcut opens/toggles the tracker modal
+- **Purpose:** Log every batch plant truck that comes onto the job — track ticket numbers, loads, yardage, field quality tests, water additions, and rejections. The audit trail that proves what was actually placed and flags any ASTM/spec violations in real time.
+
+**Stats Bar (live):**
+- **Loads** — total ticket count
+- **Total yd³** — sum of all loads
+- **Accepted yd³** — sum of accepted loads only
+- **Rejected Loads** — count (red alert when any)
+- **Water Added** — count of loads where water was added on-site (amber alert)
+- **Over Slump** — count of loads exceeding max specified slump (amber alert)
+
+**Per-Ticket Entry (24 fields):**
+- Ticket # (required), Load #, Pour/Area Name, Batch Plant name
+- Pour Date + Truck Arrival Time
+- Truck # / ID, Driver Name
+- **yd³ on Ticket** (required) — the key financial/volume field
+- Mix PSI (2500/3000/3500/4000/4500/5000/6000/Custom), Mix Code, w/cm Ratio
+- **Field Quality Section (ASTM C172 composite sample):**
+  - Slump in inches (ASTM C143) + Max Allowed Slump
+  - Concrete Temp °F (ASTM C1064)
+  - Air Content % (ASTM C231)
+  - Unit Weight lb/ft³ (ASTM C138)
+  - **💧 Water Added On-Site (gallons)** — highlighted amber input, ASTM C94 issue when >0
+- Discharge Start / End Times
+- Status: Accepted / Rejected / Partial Use / Held / Pending
+- Cylinder Set ID (links back to QC Log entries)
+- Rejection Reason (if rejected)
+- Notes
+
+**Auto-Warning Badges (inline on ticket cards):**
+- 🔴 **REJECTED** — when status = Rejected
+- 🟡 **WATER ADDED** — when any gallons added on-site (ASTM C94 §11.8 violation risk)
+- 🟡 **OVER SLUMP** — when actual slump > max allowed slump
+- 🔴 **HOT WEATHER ☀️** — concrete temp > 90°F (ACI 305R)
+- 🔵 **COLD WEATHER ❄️** — concrete temp < 50°F (ACI 306R)
+
+**Filter Controls:**
+- Status dropdown (All / Accepted / Rejected / Partial Use / Held / Pending)
+- Pour name dropdown (auto-populated from logged pours)
+- Search by ticket #, batch plant, pour name
+
+**Printable Delivery Log:**
+- Company header (name, address, phone, email)
+- CONCRETE DELIVERY TICKET LOG badge + project + print date
+- 5-card stats (Total Loads / Total yd³ / Accepted yd³ / Rejected / Water Added)
+- Full table: # / Ticket # / Load / Date / Time / Pour-Area / Truck / yd³ / PSI / Slump / Temp / Air / Water / Status / Notes
+- Rejected rows highlighted red, over-slump and over-temp values color-flagged
+- Grand totals row
+- ASTM C94 / ACI 304R / ACI 305R standards footer
+- CONFIDENTIAL — INTERNAL USE ONLY
+
+**Integration:**
+- `window._getDeliveryStats()` exposed for Project Status Card (Ctrl+Shift+I)
+- Returns: totalLoads, totalYds, rejCount, waterIssues, overSlump
+- localStorage per project: `oncor_delivery_tickets_v1_[projectname]`
+
+**Why this matters:** On every commercial pour, the engineer/GC may ask "show me your delivery records." Without this, JFS is digging through a stack of paper tickets. With this log, he enters each ticket as trucks arrive, sees instantly if any loads were rejected or had water added (the two biggest ASTM C94 red flags), and can print a complete delivery record for the job file. The cylinder set ID links back to the QC Log — so he can trace each 28-day break result back to the specific delivery ticket.
+
+**Commits:**
+- 4cbc959: 🚚 Concrete Delivery Ticket Log (Ctrl+Shift+W) (+438 lines) [Session #59]
+
+**Total Lines:** ~148,834 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + Daily Field Log + Quick Communication Templates + Project Status Card + Keyboard Shortcuts + Pay Application Generator + RFI & Submittal Log + Punch List Tracker + Lien Rights & Notices Tracker + Concrete QC Log + Job Cost Tracker + Subcontractor Management + Equipment Rental Tracker + **Delivery Ticket Log**
+
+---
+
+## 🔧 SESSION: Apr 1, 2026 - 01:36 UTC (Overnight Cron #58)
+**Status:** ✅ EQUIPMENT & TOOL RENTAL TRACKER added (+498 lines)
+
+### What Was Added:
+
+**🔧 Equipment & Tool Rental Tracker (Ctrl+Shift+E):**
+- New `🔧 Equipment Rentals` button injected in sidebar below Subcontractors
+- `Ctrl+Shift+E` keyboard shortcut opens/toggles the tracker modal
+- **Purpose:** Track every piece of rented equipment on a project — concrete pumps, saws, vibrators, lifts, compactors, lasers. Log rental rates, periods, return dates, budget vs actual, and get overdue return alerts.
+
+**Stats Bar (live):**
+- **Equipment Items** — count of all rental entries
+- **Total Cost** — sum of all (rate × qty) totals
+- **Budgeted** — sum of all budget fields (for variance tracking)
+- **Variance** — budgeted minus actual (green = under, red = over)
+- **On Rent Now** — count of items currently On Rent status
+- **Overdue Returns** — count of On Rent items past return date (red alert)
+
+**Equipment Entry Form (12 fields):**
+- **36 Equipment Categories:** Concrete Pump (Boom), Concrete Pump (Line/Trailer), Vibrator, Plate Compactor, Walk-Behind Saw, Ride-On Saw, Trowel Machine (Walk-Behind), Trowel Machine (Ride-On), Laser Screed, Vibrating Screed, Crane (Mobile), Forklift/Telehandler, Boom Lift, Scissor Lift, Skid Steer/Bobcat, Mini Excavator, Grade Laser, Formwork System, Shoring/Scaffold, Generator, Light Tower, Water Pump/Dewatering, Concrete Buggy, Core Drill Rig, Jackhammer/Breaker, Rebar Bender/Cutter, Welder, Pressure Washer, Temporary Fence, Storage Container, and more
+- Description/Model (required), Rental Company, Vendor Phone, Contract/PO #
+- Rate + Rate Unit (Day/Week/Month/Mobilization flat/Per Pour/Hourly)
+- Quantity/Units Used — auto-multiplies with rate for total
+- Start Date, Return Date, Status (On Rent/Returned/Scheduled/Cancelled)
+- Budgeted Amount (from estimate), Notes
+
+**Entry List:**
+- Each card shows: category + description + vendor + phone
+- PO/Agreement # when present
+- Status badge (color-coded: green On Rent, gray Returned, amber Scheduled, red Cancelled)
+- **OVERDUE badge** (red) when On Rent status + past return date (shows days overdue)
+- **DUE IN Xd badge** (amber) when return due within 3 days
+- Cost breakdown: rate × qty = total, budget comparison with variance (green/red)
+- Start date, return date with countdown
+- Notes inline
+- Edit (✏️), Delete (🗑) per entry
+
+**Filter Controls:**
+- Status dropdown (All / On Rent / Returned / Scheduled / Cancelled)
+- Category dropdown (All categories)
+- Search by vendor/description/category
+
+**Printable Equipment Rental Report:**
+- Company header (name, address, phone, email)
+- EQUIPMENT RENTAL REPORT badge + project name + print date
+- 7-card stats (Total Items / Total Cost / Budgeted / Variance / On Rent / Returned / Scheduled)
+- Full equipment table: Category, Description, Vendor, PO #, Rate, Qty, Total, Budget, Start, Return, Status
+- Grand totals row
+- Overdue rows highlighted in red
+- CONFIDENTIAL — INTERNAL USE ONLY footer
+- Print / Save PDF button
+
+**Integration:**
+- `window._getEquipStats()` exposed for Project Status Card (Ctrl+Shift+I)
+- Returns: count, totalCost, totalBudget, variance, onRent, overdue
+- localStorage per project: `oncor_rental_v1_[projectname]`
+
+**Why this matters:** Equipment rental is often the most variable cost on a concrete job. A boom pump at $4,500/day sitting idle an extra day kills margin. A vibrator or laser screed you forgot to return racks up daily charges. With this tracker, JFS logs every rental, sees instantly what's still out, gets alerts on overdue returns, and tracks actual equipment cost vs what he budgeted when he bid the job. Over time, actual rental costs calibrate future bids.
+
+**Commits:**
+- f13d969: 🔧 Equipment & Tool Rental Tracker (Ctrl+Shift+E) (+498 lines) [Session #58]
+
+**Total Lines:** ~148,396 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + Daily Field Log + Quick Communication Templates + Project Status Card + Keyboard Shortcuts + Pay Application Generator + RFI & Submittal Log + Punch List Tracker + Lien Rights & Notices Tracker + Concrete QC Log + Job Cost Tracker + Subcontractor Management + **Equipment Rental Tracker**
+
+---
+
+## 🤝 SESSION: Apr 1, 2026 - 00:32 UTC (Overnight Cron #57)
+**Status:** ✅ JOB COST TRACKER added (+607 lines)
+
+### What Was Added:
+
+**💰 Job Cost Tracker (Ctrl+Shift+J):**
+- New `💰 Job Costs` button injected in sidebar below QC Log
+- `Ctrl+Shift+J` keyboard shortcut opens/toggles the Job Cost Tracker modal
+- **Purpose:** Track actual project costs (invoices, materials, labor, subs) against the estimate budget in real time. Closes the financial feedback loop: bid $X → track spend → see live variance → calibrate future bids.
+
+**Stats Bar (live):**
+- **Total Budgeted** — pulled from last estimate's totalBid
+- **Total Actual** — sum of all logged cost entries
+- **Variance** — budgeted minus actual (green = under, red = over)
+- **Outstanding AP** — sum of Unpaid + Partial entries (accounts payable)
+
+**Budget vs Actual by Category:**
+- Auto-maps estimate line items to cost categories (Concrete Materials, Rebar & Wire Mesh, Formwork, Labor, Pump, Saw Cutting, Fiber, Base Course, Vapor Barrier, Mobilization, Misc)
+- Live progress bars per category — green/amber/red at 85%/100% thresholds
+- Variance column shows green (under) or red (over) per category
+- "Also shows categories with actual spend but no budget line (subcontractors, equipment rental, etc.)
+
+**Cost Entry Form:**
+- Date, Amount, Category (20 categories), Description (required), Vendor/Payee, Invoice/PO #
+- Payment Status: Unpaid / Partial / Paid / Disputed / Voided
+- Date Paid field
+- Notes (delivery ticket numbers, PO references, quantities, etc.)
+
+**20 Cost Categories:**
+Concrete Materials, Rebar & Wire Mesh, Formwork, Labor (Self-Performed), Subcontractor, Concrete Pump, Saw Cutting, Fiber, Base Course, Vapor Barrier, Equipment Rental, Fuel & Oil, Small Tools, Mobilization, Temporary Works, Testing & Inspection, Permits & Fees, Insurance, Dump/Disposal, Miscellaneous
+
+**Entry List:**
+- Sortable by date (newest first)
+- Filter by Category + Payment Status + search (description/vendor/invoice)
+- Color-coded payment status badges
+- Edit (✏️), Delete (🗑) per entry
+- Notes shown inline below entry when present
+- Running total footer for filtered view
+
+**Printable Job Cost Report:**
+- Company header (name, address, phone, email)
+- 4-card stats (Budgeted / Actual / Variance / Outstanding AP)
+- Budget vs Actual table by category with % used column
+- Full cost entry table (date, category, description/vendor, invoice #, amount, status)
+- Grand total row
+- CONFIDENTIAL — INTERNAL USE ONLY footer
+
+**Integration:**
+- `window._getJobCostStats()` exposed for Project Status Card (Ctrl+Shift+I)
+- Returns: totalEntries, totalActual, totalBudget, variance, totalPaid, totalUnpaid, overBudget flag
+- localStorage per project: `oncor_job_cost_v1_[projectname]`
+- Budget pulled live from `window.lastEstimate` (auto-updates when you recalculate)
+
+**Why this matters:** Winning a bid is step 1. Executing within budget is where money is actually made or lost. Concrete jobs routinely run over on concrete waste, labor overruns, and sub costs. With this tracker, JFS logs every invoice as it comes in, sees live if he's burning through his concrete budget, and catches overruns before they become losses. Over time the data calibrates future bids — "I always run 8% over on labor, so I should add that next time."
+
+**Commits:**
+- 3bed6e4: 💰 Job Cost Tracker (Ctrl+Shift+J) (+607 lines) [Session #56]
+
+**Total Lines:** ~147,558 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + Daily Field Log + Quick Communication Templates + Project Status Card + Keyboard Shortcuts + Pay Application Generator + RFI & Submittal Log + Punch List Tracker + Lien Rights & Notices Tracker + Concrete QC Log + **Job Cost Tracker**
+
+---
+
 ## 🧪 SESSION: Mar 31, 2026 - 22:19 UTC (Overnight Cron #55)
 **Status:** ✅ CONCRETE QC LOG added (+746 lines)
 
@@ -1355,3 +1617,276 @@ Concrete Flatwork, Concrete Finishing, Formwork & Shoring, Rebar & Embedded Item
 - 84ae50f: 📋 Daily Field Log (Ctrl+Shift+F) (+430 lines) [Session #47]
 
 **Total Lines:** ~142,075 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + **Field Log**
+
+---
+
+## 🤝 SESSION: Apr 1, 2026 - 00:32 UTC (Overnight Cron #57)
+**Status:** ✅ SUBCONTRACTOR MANAGEMENT TRACKER added (+340 lines)
+
+### What Was Added:
+
+**🤝 Subcontractor Management (Ctrl+Shift+U):**
+- New `🤝 Subcontractors` button injected in sidebar below Job Costs
+- `Ctrl+Shift+U` keyboard shortcut opens/toggles the tracker modal
+- **Purpose:** Track every subcontractor on a project — scope, contract amount, payments, insurance certificates (COIs), lien waiver status. Closes the loop on all sub-related risks.
+
+**Stats Bar (live):**
+- **Subs on Job** — count of all subs added
+- **Total Subcontracted** — sum of all contract amounts
+- **Total Paid Out** — sum of all amtPaid values
+- **Outstanding** — total subcontracted minus paid (amber if any open)
+- **Expired COIs ⚠️** — count of subs with any expired insurance cert (red alert)
+- **COI Expiring Soon** — count within 30 days (orange alert)
+
+**Sub List View:**
+- Each sub card shows:
+  - Company name + scope of work + license #
+  - Contact name, phone
+  - Contract amount (green) + Amount Paid (purple) + % paid progress bar + outstanding
+  - Insurance COI badges — GL / WC / Auto with OK / X days / EXPIRED status
+  - Payment status + Lien Waiver status + Retainage held
+  - Edit (✏️), Delete (🗑) per card
+  - Notes shown inline when present
+
+**Add/Edit Form (22 fields):**
+- Company Name (required), Scope of Work (22 options), Contact Name, Phone, Email, License #
+- Contract Amount, Amount Paid, Retainage Held
+- GL Cert Expiry, WC Cert Expiry, Auto Cert Expiry (date pickers)
+- Payment Status: Not Started / In Progress / Partially Paid / Paid in Full / Disputed / Withheld
+- Lien Waiver Status: None / Conditional Sent / Conditional Received / Unconditional Sent / Unconditional Received
+- Notes
+
+**22 Sub Scope Options:**
+Rebar Placement, Rebar Supply & Place, Saw Cutting, Concrete Pump, Epoxy Flooring, Polished Concrete, Post-Tension, Demolition, Earthwork / Grading, Utility Rough-In, Electrical, Plumbing, HVAC, Structural Steel, Masonry, Roofing, Framing, Drywall, Painting, Landscaping, Site Concrete, Other
+
+**Printable Sub Schedule:**
+- Company header (name, address, phone, email)
+- SUBCONTRACTOR SCHEDULE badge + project name + print date
+- 4-card stats (Subs / Total Subcontracted / Total Paid Out / Outstanding)
+- Full sub table: Sub/Scope, Contact, Contract, Paid, Outstanding, Insurance COIs, Status/Waiver
+- Grand total row
+- CONFIDENTIAL — INTERNAL USE ONLY footer
+- Print / Save PDF button
+
+**COI Expiry Logic:**
+- Green "OK" — expiry is >30 days away
+- Amber "Xd" — expiry ≤30 days (urgent warning)
+- Red "EXPIRED" — expiry date has passed (blocks should stop work)
+- Gray "No Date" — expiry date not entered
+
+**Integration:**
+- `window._getSubStats()` exposed for Project Status Card (Ctrl+Shift+I)
+- Returns: count, totalContract, totalPaid, outstanding, expiredCOIs
+- localStorage per project: `oncor_subs_v1_[projectname]`
+
+**Why this matters:** When JFS hires a pump truck, saw-cutting sub, or rebar placer, he needs to track: Did they give us their insurance certs? Are they current? Have we paid them? Did we get a lien waiver? Without this, it's spreadsheets or memory. An expired WC cert means JFS could be on the hook for a sub's worker injury. A sub without a lien waiver means they can lien the owner. This tracker prevents both.
+
+**Commits:**
+- be97a4e: 🤝 Subcontractor Management Tracker (Ctrl+Shift+U) (+340 lines) [Session #57]
+
+**Total Lines:** ~147,898 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + Daily Field Log + Quick Communication Templates + Project Status Card + Keyboard Shortcuts + Pay Application Generator + RFI & Submittal Log + Punch List Tracker + Lien Rights & Notices Tracker + Concrete QC Log + Job Cost Tracker + **Subcontractor Management**
+
+---
+
+## 🦺 SESSION: Apr 1, 2026 - 04:49 UTC (Overnight Cron #61)
+**Status:** ✅ SAFETY & TOOLBOX TALK LOG added (+603 lines)
+
+### What Was Added:
+
+**🦺 Safety & Toolbox Talk Log (Ctrl+Shift+Z):**
+- New `🦺 Safety Log` button injected in sidebar below Crew Time Cards
+- `Ctrl+Shift+Z` keyboard shortcut opens/toggles the safety log modal
+- **Purpose:** OSHA-compliant safety meeting documentation — every GC on a commercial job requires weekly toolbox talk records and incident reports. This gives JFS a professional paper trail.
+
+**Two-Tab Modal: Toolbox Talks + Incidents/Near-Misses**
+
+**Stats Bar (live):**
+- **Toolbox Talks** — total count
+- **Total Attendees** — sum across all talks
+- **Total Incidents** — all incident/near-miss records
+- **Open Incidents** — count of Open/In Progress (red alert if any)
+- **Days Since Last Incident** — green/amber/red safety counter
+
+**Toolbox Talk Form (11 fields):**
+- Date (required), Duration (minutes)
+- Topic dropdown (23 pre-loaded OSHA topics):
+  - Struck-By Hazards (OSHA 1926.602)
+  - Fall Protection (OSHA 1926.502)
+  - Excavation & Trenching (OSHA 1926.652)
+  - Concrete Formwork Safety (OSHA 1926.703)
+  - PPE Requirements, Heat Illness Prevention (ACI 305R)
+  - Cold Weather Concrete (ACI 306R)
+  - Silica Dust Exposure (OSHA 1926.1153)
+  - Chemical & Concrete Burns, Pump Truck Safety (ACPA)
+  - Near-Miss Reporting Culture, Emergency Action Plan + 11 more
+  - **Custom Topic** option
+- Conducted By, Attendee Count
+- Attendee Names (one per line or comma-separated — generates signature lines on print)
+- Key Points Discussed, Action Items / Follow-Up
+- OSHA Standard Referenced, PPE Required (multi-select: Hard Hat, Safety Glasses, Hi-Vis Vest, Steel-Toe Boots, Gloves, Hearing Protection, Respirator, Face Shield, Fall Harness)
+
+**Incident / Near-Miss Form (11 fields):**
+- Date (required), Type (7 types: Near-Miss, First Aid, OSHA Recordable, Lost Time, Property Damage, Environmental, Equipment)
+- Severity (Low / Medium / High / Critical)
+- Person(s) Involved, Description (required)
+- Root Cause, Corrective Action Taken
+- Reported By, Status (Open / In Progress / Closed)
+- **OSHA Recordable?** (Yes/No/Unknown) — shows red "OSHA RECORDABLE" badge on card
+- OSHA 300 Log Entry # (for recordable injuries)
+
+**Printable Outputs:**
+- **Individual Toolbox Talk Record** — company header, date/topic/conducted-by/duration grid, OSHA standard, PPE required, key points, action items, **attendee signature block** (3 columns × N workers, with signature lines), foreman sign-off block, OSHA 29 CFR 1926 footer with record-retention note
+- **Full Project Safety Report** — stats header (talks / attendees / incidents / open / recordable), full Toolbox Talk log table, full Incident log table, rows highlighted for High/Critical severity incidents, OSHA 300 retention reminder footer
+
+**Auto-Warning Badges on Incident Cards:**
+- Red "OSHA RECORDABLE" badge on any incident with OSHA Recordable = Yes
+- Critical severity gets red left-border highlight
+- Root cause + corrective action shown in distinct colors
+
+**Integration:**
+- `window._getSafetyStats()` exposed for Project Status Card (Ctrl+Shift+I)
+- Returns: totalTalks, totalIncidents, openIncidents, oshaRecordable
+- localStorage per project: `oncor_safety_v1_[projectname]`
+
+**Why this matters:** Every GC on a commercial job eventually asks JFS "can you show me your last 4 weeks of toolbox talks?" On large jobs, OSHA may show up for an inspection. Without written records, those talks "never happened." With this log, JFS records every safety meeting, generates a professional attendance sheet with signature lines, and maintains an incident log that shows corrective actions taken — the professional paper trail that proves safety culture.
+
+**Commits:**
+- fc7be9b: 🦺 Safety & Toolbox Talk Log (Ctrl+Shift+Z) (+603 lines) [Session #61]
+
+**Total Lines:** ~149,964 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + Daily Field Log + Quick Communication Templates + Project Status Card + Keyboard Shortcuts + Pay Application Generator + RFI & Submittal Log + Punch List Tracker + Lien Rights & Notices Tracker + Concrete QC Log + Job Cost Tracker + Subcontractor Management + Equipment Rental Tracker + Delivery Ticket Log + Crew Time Cards + **Safety & Toolbox Talk Log**
+
+---
+
+## 👷 SESSION: Apr 1, 2026 - 03:45 UTC (Overnight Cron #60)
+**Status:** ✅ CREW TIME CARD & LABOR TRACKER added (+527 lines)
+
+### What Was Added:
+
+**👷 Crew Time Card & Labor Tracker (Ctrl+Shift+H):**
+- New `👷 Crew Time Cards` button injected in sidebar below Delivery Tickets
+- `Ctrl+Shift+H` keyboard shortcut opens/toggles the tracker modal
+- **Purpose:** Track daily crew labor on a concrete job — who worked, how many hours, overtime, what area, what task, what it cost. The labor cost feedback loop that closes the gap between estimated and actual crew costs.
+
+**Stats Bar (live):**
+- **Work Days** — distinct pour/work dates logged
+- **Workers Logged** — unique crew members
+- **Total Hours** — all regular + OT hours summed
+- **Overtime Hours** — OT flagged amber when >0
+- **Total Labor Cost** — regular × rate + OT × 1.5× rate
+
+**Per-Entry Form (10 fields):**
+- Work Date (required), Worker Name (required)
+- Trade / Classification dropdown (15 trades with El Paso 2025 prevailing wage auto-fill):
+  - Foreman ($90/hr), Concrete Finisher Journeyman ($78), Concrete Finisher Apprentice ($54)
+  - Laborer ($52), Pump Operator ($88), Saw Cutter ($72), Rebar Placer ($68)
+  - Form Setter ($65), Screed Operator ($70), Trowel Operator ($72)
+  - Equipment Operator ($85), Ironworker ($80), Carpenter (Forms) ($74), Helper/Tender ($46), Other ($60)
+- Hourly Rate (auto-fills from trade selection, overridable)
+- Regular Hours + OT Hours (1.5× overtime)
+- Work Area / Pour (e.g. "Slab Grid A, Footings 1-12")
+- Task / Activity (15 options: Forming, Rebar Placement, Concrete Placing, Screeding, Bull Floating, Power Troweling, Finishing, Curing, Stripping Forms, Cleanup, Saw Cutting, Patching, General Labor, Standby/Delay, Other)
+- Status (Working / On Leave / Sick / No Show / Terminated — color-coded)
+- Notes (delays, injuries, equipment used)
+- **Live cost preview** — updates as you type reg/OT hours and rate
+
+**Entry List View:**
+- Grouped by date (newest first) with day-level summary header (workers, hours, day total cost)
+- Each entry card shows: worker name + trade + status badge / hours breakdown (reg + OT rate) / work area + task / cost
+- Edit (✏️), Delete (🗑) per entry
+- Notes shown inline when present
+- **Filter controls:** Week dropdown (auto-grouped by Mon-Sun week) + Worker dropdown (auto-populated)
+
+**Worker Filter & Week Filter:**
+- Filter by individual worker — see one person's full history
+- Filter by work week — see all crew for a specific week
+- Dropdowns auto-populate from existing data
+
+**Printable Labor Report:**
+- Company header (name, address, phone, email)
+- CREW LABOR REPORT badge + project + print date + period
+- 5-card stats (Work Days / Workers / Total Hours / OT Hours / Total Labor Cost)
+- **Worker Summary table** — one row per unique worker: name, trade, days worked, regular hours, OT hours, total hours, rate/hr, total cost — sorted by cost descending
+- **Daily Detail Log table** — every entry in chronological order: date, worker, trade, work area, task, reg hrs, OT hrs, rate, cost, status — with grand totals row
+- FLSA / TX Payday Law footer
+- CONFIDENTIAL — INTERNAL USE ONLY
+
+**Integration:**
+- `window._getCrewStats()` exposed for Project Status Card (Ctrl+Shift+I)
+- Returns: totalEntries, totalHrs, totalOT, totalCost, totalWorkers
+- localStorage per project: `oncor_timecards_v1_[projectname]`
+
+**Why this matters:** Labor is the biggest variable on a concrete job — and the hardest to track. A finisher who shows up 2 hours late every day costs $500+/week undetected. An unexpected pour that runs 3 hours OT for 6 guys = $1,400 surprise. With this tracker, JFS logs every crew member daily, sees total labor cost in real time vs his labor budget, identifies who's putting in OT, and generates a clean weekly labor report. Over time, actual labor cost calibrates future bids — "I bid 18 hours of finisher time but always use 22, so I'll add 20% next time."
+
+**Commits:**
+- ff4f017: 👷 Crew Time Card & Labor Tracker (Ctrl+Shift+H) (+527 lines) [Session #60]
+
+**Total Lines:** ~149,361 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + Daily Field Log + Quick Communication Templates + Project Status Card + Keyboard Shortcuts + Pay Application Generator + RFI & Submittal Log + Punch List Tracker + Lien Rights & Notices Tracker + Concrete QC Log + Job Cost Tracker + Subcontractor Management + Equipment Rental Tracker + Delivery Ticket Log + **Crew Time Cards**
+
+---
+
+## 📋 SESSION: Apr 1, 2026 - 06:59 UTC (Overnight Cron #63)
+**Status:** ✅ MEETING MINUTES & ACTION ITEMS LOG added (+581 lines)
+
+### What Was Added:
+
+**📋 Meeting Minutes & Action Items Log (Ctrl+Shift+G):**
+- New `📋 Meetings` button injected in sidebar below Procurement
+- `Ctrl+Shift+G` keyboard shortcut opens/toggles the meeting log modal
+- **Purpose:** Document every project meeting (OAC, pre-construction, safety, owner update) with full minutes, key decisions, and tracked action items. The professional paper trail for all project communications.
+
+**Stats Bar (live):**
+- **Meetings** — total count of logged meetings
+- **Action Items** — total across all meetings
+- **Open Actions** — count of Open/In Progress (amber alert when any)
+- **Overdue** — count of past-due open actions (red alert)
+- **Completed** — count of Complete action items (green)
+
+**Meeting Log Form (10 fields):**
+- Meeting Title (required), Meeting Type dropdown (10 types), Date (required)
+- Location / Platform (e.g. "Jobsite Trailer / Zoom / GC Office")
+- Facilitator / Chair, Next Meeting Date
+- Attendees (one per line — generates attendance list on print)
+- Meeting Summary / Discussion Topics (textarea)
+- Key Decisions Made (textarea — what was formally decided)
+- Additional Notes
+
+**10 Meeting Types:**
+Pre-Construction, Weekly OAC, Progress Meeting, Safety Meeting, Design Review, Subcontractor Coordination, Owner Update, Closeout Meeting, Issue Resolution, Other
+
+**Action Items Sub-Form (per meeting):**
+- Add unlimited action items per meeting via `+ Add Action` button
+- Each action item: Description (required) / Assigned To / Due Date / Priority (4 levels) / Status (5 options) / Notes / Resolution
+- **4 Priority Levels:** Low / Medium / High / Critical (color-coded)
+- **5 Statuses:** Open / In Progress / Complete / Cancelled / Deferred
+- Inline delete per action item row
+
+**Meeting List View:**
+- Sorted newest-first
+- Each card shows: meeting type badge (color-coded by type) + title + overdue warning
+- Meta: date, location, facilitator, attendee count
+- Summary text (bordered with type color)
+- Action items inline: status badge + priority + description + assigned to + due date
+- Shows first 3 actions, "X more" when > 3
+- Edit (✏️), Print (🖨️), Delete (🗑️) per meeting
+
+**⚡ Open Actions View:**
+- Click "Open Actions" button to see all outstanding action items across ALL meetings
+- Sorted by priority (Critical → High → Medium → Low)
+- Shows overdue badge, meeting source, assignee, due date
+- Cross-meeting visibility — one view for all open work
+
+**Printable Outputs:**
+- **Individual Meeting Minutes** — company header (name, address, phone, email), MEETING MINUTES badge + type badge, 6-cell meta grid (date, location, facilitator, attendee count, action items count, next meeting), Attendees section (pill-style badges), Discussion Summary box, Key Decisions box, Additional Notes box, **Action Items table** (# / Action / Assigned To / Due Date / Priority / Status / Notes) with overdue rows highlighted red, **triple signature block** (Prepared By / Distributed To / Acknowledged By), 48-hour discrepancy notice footer
+- **Full Meeting Log Report** — stats header (meetings/actions/open/overdue/complete), Meeting Log table (date, type, title, location, facilitator, attendees, actions, open), **Open Action Items table** (all cross-meeting open actions: action / assigned to / due date / priority / status / meeting source) with overdue rows highlighted, CONFIDENTIAL footer
+
+**Integration:**
+- `window._getMeetingStats()` exposed for Project Status Card (Ctrl+Shift+I)
+- Returns: totalMeetings, totalActions, openActions, overdueActions
+- localStorage per project: `oncor_meetings_v1_[projectname]`
+
+**Why this matters:** On any commercial job, the GC runs weekly OAC (Owner-Architect-Contractor) meetings and sends out minutes the next day. JFS needs to: (1) document what was discussed, (2) track action items assigned to him vs to others, and (3) have written minutes to dispute if the GC's version of events is inaccurate. An overdue action item that wasn't documented is a missed deadline. With this tool, JFS logs every meeting the same day, assigns actions with due dates, gets overdue alerts, and prints professional minutes that can be distributed immediately. The cross-meeting "Open Actions" view shows every outstanding commitment at a glance — nothing falls through the cracks.
+
+**Commits:**
+- 152650b: 📋 Meeting Minutes & Action Items Log (Ctrl+Shift+G) (+581 lines) [Session #63]
+
+**Total Lines:** ~151,193 | **Total Tools:** 1,000 ✅ + Search + Favorites + Analytics + Bulk Select + Sections + Pricing Presets + Project Dashboard + Alternate Bid Items + Proposal Letter + Pour Schedule + Internal Report + Change Order Log + Daily Field Log + Quick Communication Templates + Project Status Card + Keyboard Shortcuts + Pay Application Generator + RFI & Submittal Log + Punch List Tracker + Lien Rights & Notices Tracker + Concrete QC Log + Job Cost Tracker + Subcontractor Management + Equipment Rental Tracker + Delivery Ticket Log + Crew Time Cards + Safety & Toolbox Talk Log + Material Procurement & PO Tracker + **Meeting Minutes & Action Items Log**
