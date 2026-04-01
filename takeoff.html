@@ -155810,4 +155810,347 @@ ${(p.followDue.length > 0 || c.overdueFollowUp > 0) ? `
 
 })();
 // ==================== END SUPPLIER QUOTE COMPARISON & PRICE HISTORY — Zeus ⚡ Session #73 ====================
+
+// ==================== PROJECT PHOTO & PROGRESS DOCUMENTATION — Zeus ⚡ Session #73 ====================
+// Alt+O — Document project progress with photos, notes, and timestamps
+// GCs/owners often request progress photos. Lenders need photo documentation for draws.
+// Claims/disputes need timestamped evidence. This creates a proper photo log.
+(function(){
+  'use strict';
+  var PHOTO_ID = 'oncor-photo-log-modal';
+
+  function getProjectKey(){
+    var pn = (document.getElementById('projectName')||{}).value||'';
+    return 'oncor_photos_v1_'+(pn.replace(/[^a-zA-Z0-9]/g,'_')||'global');
+  }
+  function getPhotos(){ try{ return JSON.parse(localStorage.getItem(getProjectKey()))||[]; }catch(e){ return []; }}
+  function savePhotos(p){ localStorage.setItem(getProjectKey(), JSON.stringify(p)); }
+
+  var CATEGORIES = [
+    'Site Conditions','Excavation','Forming','Rebar Placement','Pre-Pour Inspection',
+    'Concrete Pour','Finishing','Curing','Stripping Forms','Saw Cutting',
+    'Punch List','Completed Work','Safety/Compliance','Weather Conditions',
+    'Defect/Issue','Equipment','Materials Delivery','General Progress','Other'
+  ];
+
+  function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function fmtDate(d){ if(!d) return '—'; var dt=new Date(d); return isNaN(dt)?'—':dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+  function fmtDateTime(d){ if(!d) return '—'; var dt=new Date(d); return isNaN(dt)?'—':dt.toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}); }
+  function uid(){ return 'ph'+Date.now().toString(36)+Math.random().toString(36).substr(2,5); }
+
+  function buildModal(){
+    if(document.getElementById(PHOTO_ID)) return;
+    var m = document.createElement('div');
+    m.id = PHOTO_ID;
+    m.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:10200;align-items:center;justify-content:center;';
+    m.innerHTML = '<div style="background:#1e293b;border-radius:12px;width:95%;max-width:1100px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 25px 50px rgba(0,0,0,0.5);">'
+      +'<div style="padding:14px 18px;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center;">'
+      +'<div><span style="font-size:18px;font-weight:700;color:#f8fafc;">📸 Project Photo Log</span><span style="font-size:11px;color:#94a3b8;margin-left:10px;">Alt+O</span></div>'
+      +'<button onclick="closePhotoModal()" style="background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;">✕</button>'
+      +'</div>'
+      +'<div id="photo-stats" style="padding:10px 18px;border-bottom:1px solid #334155;background:#0f172a;"></div>'
+      +'<div style="padding:10px 18px;border-bottom:1px solid #334155;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">'
+      +'<select id="photo-cat-filter" onchange="renderPhotos()" style="padding:6px 10px;border-radius:6px;background:#0f172a;color:#e2e8f0;border:1px solid #475569;font-size:12px;"><option value="">All Categories</option></select>'
+      +'<input id="photo-date-filter" type="date" onchange="renderPhotos()" style="padding:6px 10px;border-radius:6px;background:#0f172a;color:#e2e8f0;border:1px solid #475569;font-size:12px;">'
+      +'<input id="photo-search" type="text" placeholder="Search notes/location..." oninput="renderPhotos()" style="padding:6px 10px;border-radius:6px;background:#0f172a;color:#e2e8f0;border:1px solid #475569;font-size:12px;width:160px;">'
+      +'<div style="flex:1;"></div>'
+      +'<button onclick="showAddPhoto()" style="padding:6px 12px;background:#0ea5e9;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">📷 Add Photo Entry</button>'
+      +'<button onclick="printPhotoReport()" style="padding:6px 12px;background:#64748b;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">🖨️ Report</button>'
+      +'</div>'
+      +'<div id="photo-content" style="flex:1;overflow-y:auto;padding:14px 18px;"></div>'
+      +'</div>';
+    m.onclick = function(e){ if(e.target===m) closePhotoModal(); };
+    document.body.appendChild(m);
+  }
+
+  function getStats(){
+    var ps = getPhotos();
+    var cats = {};
+    ps.forEach(function(p){ cats[p.category] = (cats[p.category]||0)+1; });
+    var dates = ps.map(function(p){ return (p.date||'').slice(0,10); }).filter(function(d){ return d; });
+    var uniqueDates = new Set(dates).size;
+    return {total:ps.length, categories:Object.keys(cats).length, dates:uniqueDates, catBreakdown:cats};
+  }
+
+  function renderStats(){
+    var st = getStats();
+    var proj = (document.getElementById('projectName')||{}).value || 'All Projects';
+    var h = '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">'
+      +'<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#f8fafc;">'+st.total+'</div><div style="font-size:10px;color:#94a3b8;">Total Photos</div></div>'
+      +'<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#22c55e;">'+st.categories+'</div><div style="font-size:10px;color:#94a3b8;">Categories</div></div>'
+      +'<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#38bdf8;">'+st.dates+'</div><div style="font-size:10px;color:#94a3b8;">Days Documented</div></div>'
+      +'<div style="flex:1;"></div>'
+      +'<div style="font-size:11px;color:#64748b;">Project: <span style="color:#94a3b8;">'+escH(proj)+'</span></div>'
+      +'</div>';
+    document.getElementById('photo-stats').innerHTML = h;
+  }
+
+  function populateFilters(){
+    var ps = getPhotos();
+    var cats = new Set();
+    ps.forEach(function(p){ if(p.category) cats.add(p.category); });
+    var catSel = document.getElementById('photo-cat-filter');
+    var curCat = catSel.value;
+    catSel.innerHTML = '<option value="">All Categories</option>' + Array.from(cats).sort().map(function(c){ return '<option value="'+escH(c)+'">'+escH(c)+'</option>'; }).join('');
+    catSel.value = curCat;
+  }
+
+  function renderPhotos(){
+    renderStats();
+    populateFilters();
+    var ps = getPhotos();
+    var catF = document.getElementById('photo-cat-filter').value;
+    var dateF = document.getElementById('photo-date-filter').value;
+    var searchF = (document.getElementById('photo-search').value||'').toLowerCase();
+
+    var filtered = ps.filter(function(p){
+      if(catF && p.category !== catF) return false;
+      if(dateF && (!p.date || !p.date.startsWith(dateF))) return false;
+      if(searchF){
+        var txt = [p.description,p.location,p.takenBy,p.category].join(' ').toLowerCase();
+        if(txt.indexOf(searchF)<0) return false;
+      }
+      return true;
+    });
+
+    filtered.sort(function(a,b){ return new Date(b.date||0) - new Date(a.date||0); });
+
+    if(filtered.length===0){
+      document.getElementById('photo-content').innerHTML = '<div style="text-align:center;padding:60px 20px;color:#64748b;"><div style="font-size:40px;margin-bottom:12px;">📸</div><div>No photo entries found. Click <b>📷 Add Photo Entry</b> to document project progress.</div><div style="font-size:11px;margin-top:10px;">Photos are stored as descriptions with metadata — actual image files stored separately (Google Drive, job folder, etc.)</div></div>';
+      return;
+    }
+
+    // Group by date
+    var byDate = {};
+    filtered.forEach(function(p){
+      var d = (p.date||'').slice(0,10) || 'No Date';
+      if(!byDate[d]) byDate[d] = [];
+      byDate[d].push(p);
+    });
+
+    var html = '';
+    Object.keys(byDate).sort().reverse().forEach(function(d){
+      var photos = byDate[d];
+      var dateLabel = d==='No Date' ? 'No Date' : fmtDate(d);
+      html += '<div style="margin-bottom:16px;">'
+        +'<div style="font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #334155;">📅 '+dateLabel+' <span style="font-weight:400;color:#64748b;">('+photos.length+' entries)</span></div>'
+        +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">';
+
+      photos.forEach(function(p){
+        var catColor = getCatColor(p.category);
+        html += '<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;border-left:3px solid '+catColor+';">'
+          +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">'
+          +'<span style="background:'+catColor+'22;color:'+catColor+';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;">'+escH(p.category)+'</span>'
+          +'<div style="display:flex;gap:6px;">'
+          +'<button onclick="editPhoto(\''+p.id+'\')" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:12px;" title="Edit">✏️</button>'
+          +'<button onclick="deletePhoto(\''+p.id+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:12px;" title="Delete">🗑</button>'
+          +'</div></div>'
+          +'<div style="font-size:12px;color:#e2e8f0;margin-bottom:6px;">'+escH(p.description||'No description')+'</div>'
+          +'<div style="font-size:11px;color:#64748b;">'
+          +(p.location?'<div>📍 '+escH(p.location)+'</div>':'')
+          +(p.takenBy?'<div>👤 '+escH(p.takenBy)+'</div>':'')
+          +'<div>🕐 '+fmtDateTime(p.date)+'</div>'
+          +(p.filename?'<div style="color:#94a3b8;">📁 '+escH(p.filename)+'</div>':'')
+          +'</div>'
+          +(p.notes?'<div style="font-size:10px;color:#94a3b8;margin-top:6px;padding:6px;background:#1e293b;border-radius:4px;">'+escH(p.notes)+'</div>':'')
+          +'</div>';
+      });
+
+      html += '</div></div>';
+    });
+
+    document.getElementById('photo-content').innerHTML = html;
+  }
+  window.renderPhotos = renderPhotos;
+
+  function getCatColor(cat){
+    var colors = {
+      'Site Conditions':'#f59e0b','Excavation':'#a16207','Forming':'#0ea5e9',
+      'Rebar Placement':'#ef4444','Pre-Pour Inspection':'#8b5cf6','Concrete Pour':'#22c55e',
+      'Finishing':'#14b8a6','Curing':'#06b6d4','Stripping Forms':'#f97316',
+      'Saw Cutting':'#ec4899','Punch List':'#eab308','Completed Work':'#10b981',
+      'Safety/Compliance':'#dc2626','Weather Conditions':'#6366f1','Defect/Issue':'#be123c',
+      'Equipment':'#64748b','Materials Delivery':'#7c3aed','General Progress':'#3b82f6'
+    };
+    return colors[cat]||'#94a3b8';
+  }
+
+  function showAddPhoto(existingId){
+    var ps = getPhotos();
+    var p = existingId ? ps.find(function(x){ return x.id===existingId; }) : null;
+    var isEdit = !!p;
+    if(!p) p = {id:uid(),category:'General Progress',date:new Date().toISOString().slice(0,16),description:'',location:'',takenBy:'',filename:'',notes:''};
+
+    var catOpts = CATEGORIES.map(function(c){ return '<option value="'+escH(c)+'"'+(p.category===c?' selected':'')+'>'+escH(c)+'</option>'; }).join('');
+
+    var html = '<div style="max-width:600px;margin:0 auto;">'
+      +'<div style="font-size:15px;font-weight:600;color:#f8fafc;margin-bottom:14px;">'+(isEdit?'Edit Photo Entry':'New Photo Entry')+'</div>'
+      +'<div style="background:#0f172a;border:1px solid #475569;border-radius:8px;padding:14px;margin-bottom:14px;">'
+      +'<div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">💡 This logs photo metadata. Store actual image files in Google Drive, job folder, or cloud storage. Reference the filename/path here.</div>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Category *</label><select id="phf-category" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;">'+catOpts+'</select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Date & Time *</label><input id="phf-date" type="datetime-local" value="'+escH(p.date)+'" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'<div style="grid-column:span 2;"><label style="font-size:11px;color:#94a3b8;">Description / What This Shows *</label><textarea id="phf-description" rows="2" placeholder="e.g. Footing rebar complete Grid A-D, ready for inspection" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;resize:vertical;">'+escH(p.description)+'</textarea></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Location / Grid Reference</label><input id="phf-location" value="'+escH(p.location)+'" placeholder="e.g. Building A, Grid Line 3-7" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Taken By</label><input id="phf-takenBy" value="'+escH(p.takenBy)+'" placeholder="Name or initials" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'<div style="grid-column:span 2;"><label style="font-size:11px;color:#94a3b8;">Filename / File Path (reference)</label><input id="phf-filename" value="'+escH(p.filename)+'" placeholder="e.g. IMG_2024.jpg or /ProjectPhotos/Footing_A_001.jpg" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'<div style="grid-column:span 2;"><label style="font-size:11px;color:#94a3b8;">Additional Notes</label><textarea id="phf-notes" rows="2" placeholder="Any additional context..." style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;resize:vertical;">'+escH(p.notes)+'</textarea></div>'
+      +'</div>'
+      +'<div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end;">'
+      +'<button onclick="renderPhotos()" style="padding:8px 16px;background:#475569;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancel</button>'
+      +'<button onclick="savePhotoForm(\''+p.id+'\','+isEdit+')" style="padding:8px 16px;background:#0ea5e9;color:#fff;border:none;border-radius:6px;cursor:pointer;">'+(isEdit?'Update':'Save Entry')+'</button>'
+      +'</div></div>';
+    document.getElementById('photo-content').innerHTML = html;
+  }
+  window.showAddPhoto = showAddPhoto;
+
+  function savePhotoForm(id, isEdit){
+    var cat = document.getElementById('phf-category').value;
+    var date = document.getElementById('phf-date').value;
+    var desc = document.getElementById('phf-description').value.trim();
+    if(!cat||!date||!desc){ alert('Category, Date, and Description are required.'); return; }
+
+    var p = {
+      id: id,
+      category: cat,
+      date: date,
+      description: desc,
+      location: document.getElementById('phf-location').value.trim(),
+      takenBy: document.getElementById('phf-takenBy').value.trim(),
+      filename: document.getElementById('phf-filename').value.trim(),
+      notes: document.getElementById('phf-notes').value.trim()
+    };
+
+    var ps = getPhotos();
+    if(isEdit){
+      var idx = ps.findIndex(function(x){ return x.id===id; });
+      if(idx>=0) ps[idx] = p;
+    } else {
+      ps.push(p);
+    }
+    savePhotos(ps);
+    renderPhotos();
+  }
+  window.savePhotoForm = savePhotoForm;
+
+  function editPhoto(id){ showAddPhoto(id); }
+  window.editPhoto = editPhoto;
+
+  function deletePhoto(id){
+    if(!confirm('Delete this photo entry?')) return;
+    var ps = getPhotos().filter(function(p){ return p.id!==id; });
+    savePhotos(ps);
+    renderPhotos();
+  }
+  window.deletePhoto = deletePhoto;
+
+  // ---- Print Report ----
+  function printPhotoReport(){
+    var ps = getPhotos();
+    var st = getStats();
+    var coName = (document.getElementById('coName')||{}).value||'Oncor Concrete';
+    var coPhone = (document.getElementById('coPhone')||{}).value||'';
+    var coEmail = (document.getElementById('coEmail')||{}).value||'';
+    var proj = (document.getElementById('projectName')||{}).value||'';
+
+    ps.sort(function(a,b){ return new Date(a.date||0) - new Date(b.date||0); });
+
+    var html = '<!DOCTYPE html><html><head><title>Project Photo Log</title><style>'
+      +'body{font-family:system-ui,-apple-system,sans-serif;padding:20px;max-width:1000px;margin:0 auto;font-size:11pt;}'
+      +'.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #0ea5e9;}'
+      +'.badge{display:inline-block;background:#0ea5e9;color:#fff;padding:4px 10px;border-radius:4px;font-size:10pt;font-weight:600;}'
+      +'.kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;}'
+      +'.kpi{background:#f1f5f9;padding:10px;border-radius:6px;text-align:center;}'
+      +'.kpi-label{font-size:9pt;color:#64748b;}'
+      +'.kpi-value{font-size:14pt;font-weight:700;}'
+      +'table{width:100%;border-collapse:collapse;margin-bottom:16px;}'
+      +'th,td{border:1px solid #e2e8f0;padding:6px 8px;text-align:left;font-size:10pt;}'
+      +'th{background:#f1f5f9;font-weight:600;}'
+      +'.cat-badge{display:inline-block;padding:2px 6px;border-radius:3px;font-size:9pt;font-weight:600;}'
+      +'.footer{margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:9pt;color:#64748b;text-align:center;}'
+      +'@media print{.no-print{display:none!important;}}'
+      +'</style></head><body>';
+
+    html += '<div class="header"><div><div style="font-size:14pt;font-weight:700;">'+escH(coName)+'</div>'
+      +'<div style="font-size:9pt;color:#64748b;">'+escH(coPhone)+(coEmail?' · '+coEmail:'')+'</div></div>'
+      +'<div style="text-align:right;"><div class="badge">PROJECT PHOTO LOG</div>'
+      +(proj?'<div style="font-size:10pt;font-weight:600;margin-top:4px;">'+escH(proj)+'</div>':'')
+      +'<div style="font-size:9pt;color:#64748b;margin-top:2px;">Generated: '+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})+'</div>'
+      +'</div></div>';
+
+    html += '<div class="kpi-grid">'
+      +'<div class="kpi"><div class="kpi-label">Total Photo Entries</div><div class="kpi-value">'+st.total+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label">Categories Documented</div><div class="kpi-value">'+st.categories+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label">Days with Photos</div><div class="kpi-value">'+st.dates+'</div></div>'
+      +'</div>';
+
+    html += '<table><tr><th style="width:100px;">Date/Time</th><th>Category</th><th>Description</th><th>Location</th><th>Taken By</th><th>File Reference</th></tr>';
+    ps.forEach(function(p){
+      var catColor = getCatColor(p.category);
+      html += '<tr>'
+        +'<td style="font-size:9pt;">'+fmtDateTime(p.date)+'</td>'
+        +'<td><span class="cat-badge" style="background:'+catColor+'22;color:'+catColor+';">'+escH(p.category)+'</span></td>'
+        +'<td>'+escH(p.description)+(p.notes?'<div style="font-size:9pt;color:#64748b;margin-top:4px;">'+escH(p.notes)+'</div>':'')+'</td>'
+        +'<td>'+escH(p.location||'—')+'</td>'
+        +'<td>'+escH(p.takenBy||'—')+'</td>'
+        +'<td style="font-size:9pt;color:#64748b;">'+escH(p.filename||'—')+'</td>'
+        +'</tr>';
+    });
+    html += '</table>';
+
+    html += '<div class="footer">CONFIDENTIAL — INTERNAL USE ONLY · '+escH(coName)+' · Oncor Takeoff Estimator · Photo Documentation Log</div>'
+      +'<button class="no-print" onclick="window.print()" style="margin-top:14px;padding:8px 18px;background:#0ea5e9;color:#fff;border:none;border-radius:6px;cursor:pointer;">🖨️ Print / Save PDF</button>'
+      +'</body></html>';
+
+    var w = window.open('','_blank');
+    w.document.write(html);
+    w.document.close();
+  }
+  window.printPhotoReport = printPhotoReport;
+
+  // ---- Expose stats for Project Status Card ----
+  window._getPhotoStats = function(){
+    return getStats();
+  };
+
+  // ---- Show / Close ----
+  function showPhotoModal(){
+    buildModal();
+    var m = document.getElementById(PHOTO_ID);
+    if(m){ m.style.display='flex'; renderPhotos(); }
+  }
+  function closePhotoModal(){
+    var m = document.getElementById(PHOTO_ID);
+    if(m) m.style.display='none';
+  }
+  window.showPhotoModal = showPhotoModal;
+  window.closePhotoModal = closePhotoModal;
+
+  // ---- Keyboard shortcut Alt+O ----
+  document.addEventListener('keydown',function(e){
+    if(e.altKey && e.key.toLowerCase()==='o'){
+      e.preventDefault();
+      var m = document.getElementById(PHOTO_ID);
+      if(m && m.style.display==='flex') closePhotoModal();
+      else showPhotoModal();
+    }
+  });
+
+  // ---- Sidebar button — inject below Supplier Quotes ----
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){
+      var quoteBtn = document.querySelector('button[onclick*="showQuoteModal"]');
+      if(!quoteBtn) return;
+      var parentRow = quoteBtn.closest('div');
+      if(!parentRow||!parentRow.parentNode) return;
+      var newRow = document.createElement('div');
+      newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML = '<button class="action-btn secondary" onclick="showPhotoModal()" title="Project Photo & Progress Documentation — log photos with categories, timestamps, locations (Alt+O)" style="background:rgba(34,197,94,0.1);border-color:rgba(34,197,94,0.3);color:#4ade80;">📸 Photo Log</button>';
+      parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 3600);
+  });
+
+})();
+// ==================== END PROJECT PHOTO & PROGRESS DOCUMENTATION — Zeus ⚡ Session #73 ====================
 </script>
