@@ -159287,4 +159287,497 @@ document.addEventListener('DOMContentLoaded',function(){
 
 })();
 // ==================== END CONCRETE WASTE & VOLUME RECONCILIATION — Zeus ⚡ Session #79 ====================
+
+// ==================== PRE-POUR INSPECTION & READINESS CHECKLIST — Zeus ⚡ Session #80 ====================
+(function(){
+'use strict';
+var PPIR_ID = 'oncor-ppir-modal';
+var PPIR_STORE_PREFIX = 'oncor_ppir_v1_';
+
+function getPPIRKey(){
+  var pn = (typeof getProjectName === 'function' ? getProjectName() : null) || 'default';
+  return PPIR_STORE_PREFIX + pn.replace(/\s+/g,'_').toLowerCase();
+}
+function loadPPIRData(){ try{ return JSON.parse(localStorage.getItem(getPPIRKey())||'[]'); }catch(e){ return []; } }
+function savePPIRData(d){ localStorage.setItem(getPPIRKey(), JSON.stringify(d)); }
+
+var ppirState = { records:[], editIndex:-1, activeTab:'list' };
+
+var POUR_ELEMENTS = ['Slab-on-Grade','Elevated Slab','Footing','Grade Beam','Retaining Wall','Shear Wall','Column','Pier','Curb & Gutter','Sidewalk','Driveway','Parking Lot','Other'];
+var INSPECTORS = ['Self (Foreman)','Project Manager','Owner Representative','Structural Engineer','Special Inspector','GC Superintendent','City Inspector','Testing Lab Rep','Other'];
+var WEATHER_OPTS = ['Clear / Sunny','Partly Cloudy','Overcast','Light Wind','High Wind','Fog','Light Rain (Caution)','Hot (>90°F)','Cold (<40°F)','Night Pour'];
+var STATUS_OPTS = ['Go — Approved','Hold — Pending Item','No Go — Abort','Postponed','Completed'];
+
+/* --- Standard Checklist Sections --- */
+var CHECKLIST_SECTIONS = [
+  {
+    id:'subgrade', label:'Subgrade & Formwork', icon:'🏔️',
+    items:[
+      {id:'sg1', label:'Subgrade compaction verified (ASTM D698 / geotech report)'},
+      {id:'sg2', label:'Subgrade moisture content acceptable'},
+      {id:'sg3', label:'Vapor retarder in place (if specified) — ASTM E1745'},
+      {id:'sg4', label:'Base course depth verified (compacted lift thickness)'},
+      {id:'sg5', label:'Formwork erected to correct dimensions and lines/grades'},
+      {id:'sg6', label:'Formwork bracing adequate, no visible deflection'},
+      {id:'sg7', label:'Form release agent applied'},
+      {id:'sg8', label:'Sleeves, blockouts, and inserts set per plans'},
+      {id:'sg9', label:'Grade pins / screed rails set at correct elevation'},
+      {id:'sg10', label:'No standing water or soft spots in pour area'}
+    ]
+  },
+  {
+    id:'rebar', label:'Rebar & Embedded Items', icon:'🔩',
+    items:[
+      {id:'rb1', label:'Rebar size, spacing, and layout match structural drawings'},
+      {id:'rb2', label:'Rebar grade correct (Grade 60 / Grade 40 per plans)'},
+      {id:'rb3', label:'Lap splice lengths met (ACI 318 — min 1.3 × ld)'},
+      {id:'rb4', label:'Concrete cover — chairs / supports in place (min per ACI 318 Table 20.6.1)'},
+      {id:'rb5', label:'Dowels and continuity bars placed at slab edges, joints, columns'},
+      {id:'rb6', label:'Wire mesh (WWR) positioned correctly (upper / lower third per design)'},
+      {id:'rb7', label:'Anchor bolts / embed plates set, checked for alignment and elevation'},
+      {id:'rb8', label:'Conduit, sleeves, and blockouts secured — won\'t float during pour'},
+      {id:'rb9', label:'Fiber reinforcement confirmed in mix design (if specified)'},
+      {id:'rb10', label:'Rebar inspection signed off by Special Inspector (if required)'}
+    ]
+  },
+  {
+    id:'joints', label:'Joint Layout & Saw Cutting Plan', icon:'📏',
+    items:[
+      {id:'jt1', label:'Control joint locations staked / marked per plan (ACI 302.1R — max spacing)'},
+      {id:'jt2', label:'Isolation joints installed at columns, walls, footings'},
+      {id:'jt3', label:'Construction joints set correctly with keyways or dowels'},
+      {id:'jt4', label:'Expansion joint filler installed where required'},
+      {id:'jt5', label:'Saw cutting crew/schedule confirmed (first cuts within 4-12 hrs of finish)'}
+    ]
+  },
+  {
+    id:'mix', label:'Mix Design & Batch Plant', icon:'🧪',
+    items:[
+      {id:'mx1', label:'Approved mix design on hand (mix code, PSI, w/cm, aggregate size)'},
+      {id:'mx2', label:'Mix design submittal approved by EOR / GC'},
+      {id:'mx3', label:'Batch plant order confirmed — quantity, PSI, slump, admixtures, fiber'},
+      {id:'mx4', label:'First truck delivery time confirmed with batch plant dispatcher'},
+      {id:'mx5', label:'Truck interval / unload window confirmed (per ASTM C94 — 1.5 hr max)'},
+      {id:'mx6', label:'Backup batch plant identified (if long pour)'},
+      {id:'mx7', label:'Mix design w/cm ratio ≤ ACI 318 Table 19.3.3 max for exposure class'}
+    ]
+  },
+  {
+    id:'weather', label:'Weather & Environmental', icon:'🌤️',
+    items:[
+      {id:'wt1', label:'Forecast reviewed — no rain expected during pour + 4 hrs after'},
+      {id:'wt2', label:'High temp check — ACI 305R: >90°F requires hot weather procedures'},
+      {id:'wt3', label:'Low temp check — ACI 306R: <40°F requires cold weather procedures'},
+      {id:'wt4', label:'Wind speed check — ACI 305R: >15 mph increases evaporation, may need windbreaks'},
+      {id:'wt5', label:'Evaporation rate calculated (ACI 305R) — corrective action if >0.20 lb/ft²/hr'},
+      {id:'wt6', label:'Ice water or chilled water available (if hot weather pour)'},
+      {id:'wt7', label:'Curing blankets / insulated forms available (if cold weather pour)'},
+      {id:'wt8', label:'Pour window timed for optimal temperature (early AM in summer, midday in winter)'}
+    ]
+  },
+  {
+    id:'equipment', label:'Equipment & Crew', icon:'🚜',
+    items:[
+      {id:'eq1', label:'Concrete pump confirmed — size, type, location, setup space'},
+      {id:'eq2', label:'Pump operator contact confirmed, on-site before first truck'},
+      {id:'eq3', label:'Vibrators on-site — quantity, condition, spares available'},
+      {id:'eq4', label:'Power trowels confirmed — walk-behind and/or ride-on as needed'},
+      {id:'eq5', label:'Screed system confirmed — laser screed, vibratory screed, or hand screed'},
+      {id:'eq6', label:'Crew headcount confirmed — sufficient for pour volume and schedule'},
+      {id:'eq7', label:'Foreman / pour superintendent on-site for duration'},
+      {id:'eq8', label:'First aid kit on-site; concrete burn wash station available'},
+      {id:'eq9', label:'Water supply for washout and on-site use confirmed'}
+    ]
+  },
+  {
+    id:'qc', label:'QC & Testing', icon:'🔬',
+    items:[
+      {id:'qc1', label:'ACI-certified field technician scheduled for testing (ASTM C172 sampling)'},
+      {id:'qc2', label:'Cylinder molds, slump cone, air meter, thermometer on-site'},
+      {id:'qc3', label:'Cylinder curing arrangement confirmed (temp storage, not direct sun)'},
+      {id:'qc4', label:'Testing lab notified of pour date and time'},
+      {id:'qc5', label:'Special Inspection Program in place (if required by building department)'},
+      {id:'qc6', label:'Ticket log sheets / delivery ticket binder ready'},
+      {id:'qc7', label:'QC Log ready to record each load\'s slump, temp, air, water added'}
+    ]
+  },
+  {
+    id:'safety', label:'Safety & Site Access', icon:'🦺',
+    items:[
+      {id:'sf1', label:'Pour area barricaded — pedestrian and vehicle exclusion zone set'},
+      {id:'sf2', label:'PPE confirmed: hard hats, safety glasses, gloves, rubber boots, alkali-resistant gear'},
+      {id:'sf3', label:'Concrete burn wash station set up (ACI 305R / OSHA 1926)'},
+      {id:'sf4', label:'MSDS / SDS for concrete admixtures on-site'},
+      {id:'sf5', label:'Emergency contact list posted (hospital, poison control, plant dispatcher)'},
+      {id:'sf6', label:'Truck access and washout area confirmed — no conflicts with site traffic'},
+      {id:'sf7', label:'Toolbox talk / pre-pour safety briefing complete — all crew signed'}
+    ]
+  },
+  {
+    id:'notifications', label:'Notifications & Approvals', icon:'📋',
+    items:[
+      {id:'nt1', label:'GC Superintendent notified of pour date/time — written confirmation'},
+      {id:'nt2', label:'Owner / Owner\'s Rep notified (if required by contract)'},
+      {id:'nt3', label:'City Inspector notified — inspection scheduled and confirmed'},
+      {id:'nt4', label:'Rebar / pre-pour inspection passed and signed off'},
+      {id:'nt5', label:'Structural Engineer / EOR approved pre-pour inspection (if required)'},
+      {id:'nt6', label:'All open RFIs affecting this pour answered / resolved'},
+      {id:'nt7', label:'All submittals for this work approved (mix design, rebar shop drawings)'}
+    ]
+  }
+];
+
+function buildPPIRModal(){
+  if(document.getElementById(PPIR_ID)) return;
+  var m = document.createElement('div');
+  m.id = PPIR_ID;
+  m.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:10100;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+  m.innerHTML = [
+    '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;width:100%;max-width:900px;margin:auto;font-family:system-ui,sans-serif;color:#e2e8f0;">',
+    '<div style="background:#1e293b;padding:18px 24px;border-bottom:1px solid #334155;border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:space-between;">',
+    '<div><span style="font-size:1.3rem;font-weight:700;color:#e2e8f0;">✅ Pre-Pour Inspection Checklist</span><span style="margin-left:10px;background:#166534;color:#bbf7d0;padding:2px 10px;border-radius:20px;font-size:10pt;font-weight:600;">Alt+K</span></div>',
+    '<button onclick="closePPIRModal()" style="background:none;border:none;color:#94a3b8;font-size:1.4rem;cursor:pointer;">✕</button>',
+    '</div>',
+    '<div id="ppir-stats-bar" style="display:flex;gap:12px;padding:14px 24px;background:#0f172a;border-bottom:1px solid #1e293b;flex-wrap:wrap;"></div>',
+    '<div style="display:flex;gap:0;border-bottom:1px solid #334155;">',
+    '<button onclick="ppirTab(\'list\')" id="ppir-tab-list" style="flex:1;padding:12px;background:#1e293b;border:none;color:#38bdf8;cursor:pointer;font-weight:600;border-bottom:2px solid #38bdf8;">📋 Inspection Records</button>',
+    '<button onclick="ppirTab(\'new\')" id="ppir-tab-new" style="flex:1;padding:12px;background:#0f172a;border:none;color:#94a3b8;cursor:pointer;font-weight:600;border-bottom:2px solid transparent;">➕ New Checklist</button>',
+    '</div>',
+    '<div id="ppir-body" style="padding:20px;"></div>',
+    '</div>'
+  ].join('');
+  document.body.appendChild(m);
+}
+
+function ppirTab(t){
+  ppirState.activeTab = t;
+  ['list','new'].forEach(function(tab){
+    var btn = document.getElementById('ppir-tab-'+tab);
+    if(!btn) return;
+    if(tab===t){ btn.style.background='#1e293b'; btn.style.color='#38bdf8'; btn.style.borderBottom='2px solid #38bdf8'; }
+    else { btn.style.background='#0f172a'; btn.style.color='#94a3b8'; btn.style.borderBottom='2px solid transparent'; }
+  });
+  if(t==='list') renderPPIRList();
+  else if(t==='new') renderPPIRForm(-1);
+}
+window.ppirTab = ppirTab;
+
+function renderPPIRStats(){
+  var records = loadPPIRData();
+  var total = records.length;
+  var go = records.filter(function(r){ return r.status && r.status.indexOf('Go — Approved')===0; }).length;
+  var noGo = records.filter(function(r){ return r.status && r.status.indexOf('No Go')===0; }).length;
+  var hold = records.filter(function(r){ return r.status && r.status.indexOf('Hold')===0; }).length;
+  var completed = records.filter(function(r){ return r.status && r.status.indexOf('Completed')===0; }).length;
+  var bar = document.getElementById('ppir-stats-bar');
+  if(!bar) return;
+  function card(label, val, color){
+    return '<div style="background:#1e293b;border-radius:8px;padding:10px 16px;min-width:90px;"><div style="font-size:1.3rem;font-weight:700;color:'+color+';">'+val+'</div><div style="font-size:8pt;color:#94a3b8;margin-top:2px;">'+label+'</div></div>';
+  }
+  bar.innerHTML = card('Checklists', total, '#e2e8f0') + card('✅ Approved Go', go, '#4ade80') + card('⚠️ On Hold', hold, '#fb923c') + card('🚫 No Go', noGo, '#f87171') + card('✔ Completed', completed, '#60a5fa');
+}
+
+function renderPPIRList(){
+  var records = loadPPIRData();
+  var body = document.getElementById('ppir-body');
+  if(!body) return;
+  renderPPIRStats();
+  if(!records.length){
+    body.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;"><div style="font-size:2rem;margin-bottom:10px;">✅</div><div style="font-size:1.1rem;font-weight:600;color:#e2e8f0;margin-bottom:6px;">No pre-pour checklists yet</div><div>Create a new checklist before each pour to document go/no-go decisions.</div><br><button onclick="ppirTab(\'new\')" style="background:#0284c7;border:none;color:#fff;padding:10px 24px;border-radius:8px;cursor:pointer;font-weight:600;">➕ New Checklist</button></div>';
+    return;
+  }
+  var sorted = records.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;"><span style="color:#94a3b8;font-size:9pt;">'+records.length+' checklist(s) — newest first</span><div style="display:flex;gap:8px;"><button onclick="ppirTab(\'new\')" style="background:#0284c7;border:none;color:#fff;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:9pt;">➕ New Checklist</button><button onclick="printPPIRReport()" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:9pt;">🖨 Full Report</button></div></div>';
+  sorted.forEach(function(rec, si){
+    var idx = records.indexOf(rec);
+    var statusColor = rec.status&&rec.status.indexOf('Go — Approved')===0?'#4ade80':rec.status&&rec.status.indexOf('No Go')===0?'#f87171':rec.status&&rec.status.indexOf('Hold')===0?'#fb923c':'#60a5fa';
+    // Count checked items
+    var totalItems = 0, checkedItems = 0;
+    CHECKLIST_SECTIONS.forEach(function(sec){ totalItems += sec.items.length; });
+    if(rec.checks){ Object.keys(rec.checks).forEach(function(k){ if(rec.checks[k]==='yes') checkedItems++; }); }
+    var naItems = 0;
+    if(rec.checks){ Object.keys(rec.checks).forEach(function(k){ if(rec.checks[k]==='na') naItems++; }); }
+    var pct = totalItems>0 ? Math.round(checkedItems/(totalItems-naItems)*100) : 0;
+    if(isNaN(pct)) pct=0;
+    html += '<div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px;margin-bottom:12px;border-left:4px solid '+statusColor+';">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">';
+    html += '<div><div style="font-weight:700;font-size:1.05rem;color:#e2e8f0;">'+escHtml(rec.pourName||'Unnamed Pour')+'</div>';
+    html += '<div style="color:#94a3b8;font-size:9pt;margin-top:2px;">'+escHtml(rec.date||'')+(rec.startTime?' · First Truck: '+escHtml(rec.startTime):'')+(rec.element?' · '+escHtml(rec.element):'')+'</div>';
+    if(rec.location) html += '<div style="color:#64748b;font-size:8.5pt;">📍 '+escHtml(rec.location)+'</div>';
+    html += '</div>';
+    html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">';
+    html += '<span style="background:'+statusColor+'22;color:'+statusColor+';border:1px solid '+statusColor+'44;padding:3px 12px;border-radius:20px;font-size:9pt;font-weight:600;">'+escHtml(rec.status||'Draft')+'</span>';
+    html += '<span style="color:#94a3b8;font-size:8.5pt;">'+checkedItems+'/'+(totalItems-naItems)+' items ('+pct+'%)</span>';
+    html += '</div></div>';
+    // Progress bar
+    html += '<div style="margin:10px 0 6px;background:#0f172a;border-radius:4px;height:6px;overflow:hidden;"><div style="height:100%;background:'+(pct>=90?'#4ade80':pct>=70?'#fb923c':'#ef4444')+';width:'+pct+'%;transition:width 0.3s;"></div></div>';
+    // Meta row
+    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:8.5pt;color:#64748b;margin-top:4px;">';
+    if(rec.inspector) html += '<span>👤 '+escHtml(rec.inspector)+'</span>';
+    if(rec.weather) html += '<span>🌤️ '+escHtml(rec.weather)+'</span>';
+    if(rec.orderedYds) html += '<span>🧱 '+escHtml(rec.orderedYds)+' yd³</span>';
+    if(rec.psi) html += '<span>💪 '+escHtml(rec.psi)+' PSI</span>';
+    html += '</div>';
+    if(rec.goNoGoNotes) html += '<div style="margin-top:8px;background:#0f172a;border-radius:6px;padding:8px 12px;font-size:8.5pt;color:#94a3b8;"><strong style="color:#e2e8f0;">Notes:</strong> '+escHtml(rec.goNoGoNotes)+'</div>';
+    // Failed items summary
+    if(rec.checks){
+      var failed = [];
+      CHECKLIST_SECTIONS.forEach(function(sec){ sec.items.forEach(function(item){ if(rec.checks[item.id]==='no') failed.push(item.label); }); });
+      if(failed.length){
+        html += '<div style="margin-top:8px;background:#450a0a;border:1px solid #7f1d1d;border-radius:6px;padding:8px 12px;"><div style="font-size:8pt;font-weight:600;color:#fca5a5;margin-bottom:4px;">⚠️ Failed / Not OK ('+failed.length+'):</div>';
+        failed.slice(0,3).forEach(function(f){ html += '<div style="font-size:8pt;color:#f87171;margin-top:2px;">• '+escHtml(f)+'</div>'; });
+        if(failed.length>3) html += '<div style="font-size:8pt;color:#94a3b8;margin-top:2px;">+'+(failed.length-3)+'  more...</div>';
+        html += '</div>';
+      }
+    }
+    html += '<div style="display:flex;gap:8px;margin-top:12px;">';
+    html += '<button onclick="ppirEdit('+idx+')" style="background:#1e3a5f;border:1px solid #1d4ed8;color:#93c5fd;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:9pt;">✏️ Edit</button>';
+    html += '<button onclick="printPPIRRecord('+idx+')" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:9pt;">🖨 Print</button>';
+    html += '<button onclick="ppirDelete('+idx+')" style="background:#1e293b;border:1px solid #7f1d1d;color:#f87171;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:9pt;">🗑 Delete</button>';
+    html += '</div></div>';
+  });
+  body.innerHTML = html;
+}
+
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function renderPPIRForm(editIdx){
+  var records = loadPPIRData();
+  var rec = editIdx>=0 ? records[editIdx] : {};
+  var checks = rec.checks || {};
+  ppirState.editIndex = editIdx;
+  var body = document.getElementById('ppir-body');
+  if(!body) return;
+  var elOpts = POUR_ELEMENTS.map(function(e){ return '<option value="'+escHtml(e)+'"'+(rec.element===e?' selected':'')+'>'+escHtml(e)+'</option>'; }).join('');
+  var inspOpts = INSPECTORS.map(function(i){ return '<option value="'+escHtml(i)+'"'+(rec.inspector===i?' selected':'')+'>'+escHtml(i)+'</option>'; }).join('');
+  var statOpts = STATUS_OPTS.map(function(s){ return '<option value="'+escHtml(s)+'"'+(rec.status===s?' selected':'')+'>'+escHtml(s)+'</option>'; }).join('');
+  var wtOpts = WEATHER_OPTS.map(function(w){ return '<option value="'+escHtml(w)+'"'+(rec.weather===w?' selected':'')+'>'+escHtml(w)+'</option>'; }).join('');
+  var html = '<div style="max-width:840px;margin:auto;">';
+  html += '<h3 style="color:#e2e8f0;margin:0 0 16px;">'+(editIdx>=0?'Edit Pre-Pour Checklist':'New Pre-Pour Checklist')+'</h3>';
+  // Header fields
+  html += '<div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px;margin-bottom:16px;">';
+  html += '<div style="font-weight:600;color:#38bdf8;margin-bottom:12px;font-size:10pt;">📋 Pour Information</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">';
+  html += ppirField('Pour Name / Location','text','ppir-pourName',rec.pourName||'','e.g. Slab at Grid A-D');
+  html += ppirField('Pour Date','date','ppir-date',rec.date||'','');
+  html += ppirField('First Truck Time','time','ppir-startTime',rec.startTime||'','');
+  html += '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:4px;">Element Type</label><select id="ppir-element" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:9.5pt;">'+elOpts+'</select></div>';
+  html += ppirField('Pour Location / Grid Ref','text','ppir-location',rec.location||'','Building A, Grid 3-7');
+  html += '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:4px;">Inspector / Inspected By</label><select id="ppir-inspector" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:9.5pt;">'+inspOpts+'</select></div>';
+  html += ppirField('Ordered yd³','number','ppir-orderedYds',rec.orderedYds||'','');
+  html += ppirField('Mix PSI','text','ppir-psi',rec.psi||'','4000');
+  html += ppirField('Batch Plant / Supplier','text','ppir-plant',rec.plant||'','');
+  html += '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:4px;">Weather Conditions</label><select id="ppir-weather" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:9.5pt;">'+wtOpts+'</select></div>';
+  html += '</div></div>';
+  // Checklist sections
+  CHECKLIST_SECTIONS.forEach(function(sec){
+    html += '<div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px;margin-bottom:12px;">';
+    html += '<div style="font-weight:600;color:#38bdf8;margin-bottom:12px;font-size:10pt;">'+sec.icon+' '+escHtml(sec.label)+'</div>';
+    html += '<table style="width:100%;border-collapse:collapse;">';
+    html += '<thead><tr><th style="text-align:left;font-size:8pt;color:#64748b;padding:4px 6px;border-bottom:1px solid #334155;">Checklist Item</th><th style="font-size:8pt;color:#64748b;padding:4px 6px;border-bottom:1px solid #334155;text-align:center;width:120px;">Status</th></tr></thead><tbody>';
+    sec.items.forEach(function(item){
+      var val = checks[item.id]||'na';
+      html += '<tr style="border-bottom:1px solid #0f172a;">';
+      html += '<td style="padding:8px 6px;font-size:9pt;color:#cbd5e1;">'+escHtml(item.label)+'</td>';
+      html += '<td style="padding:8px 6px;text-align:center;">';
+      html += '<select id="ppir-chk-'+item.id+'" onchange="ppirUpdateRow(this,\''+item.id+'\')" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:4px 8px;border-radius:4px;font-size:8.5pt;width:100%;">';
+      html += '<option value="na"'+(val==='na'?' selected':'')+'>— N/A</option>';
+      html += '<option value="yes"'+(val==='yes'?' selected':'')+' style="color:#4ade80;">✅ OK</option>';
+      html += '<option value="no"'+(val==='no'?' selected':'')+' style="color:#f87171;">❌ Not OK</option>';
+      html += '</select></td></tr>';
+    });
+    html += '</tbody></table></div>';
+  });
+  // Go / No-Go Decision
+  html += '<div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px;margin-bottom:16px;">';
+  html += '<div style="font-weight:600;color:#38bdf8;margin-bottom:12px;font-size:10pt;">🚦 Go / No-Go Decision</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">';
+  html += '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:4px;">Decision Status</label><select id="ppir-status" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:9.5pt;">'+statOpts+'</select></div>';
+  html += ppirField('Authorized By (Name)','text','ppir-authorizedBy',rec.authorizedBy||'','GC Superintendent / PM');
+  html += '</div>';
+  html += '<div style="margin-top:12px;"><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:4px;">Decision Notes / Items Pending</label><textarea id="ppir-goNoGoNotes" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:9pt;box-sizing:border-box;min-height:70px;resize:vertical;">'+escHtml(rec.goNoGoNotes||'')+'</textarea></div>';
+  html += '</div>';
+  // Buttons
+  html += '<div style="display:flex;gap:10px;margin-top:16px;">';
+  html += '<button onclick="savePPIRForm()" style="background:#166534;border:none;color:#bbf7d0;padding:12px 28px;border-radius:8px;cursor:pointer;font-weight:700;font-size:10pt;">💾 Save Checklist</button>';
+  html += '<button onclick="ppirTab(\'list\')" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:12px 20px;border-radius:8px;cursor:pointer;">Cancel</button>';
+  if(editIdx>=0) html += '<button onclick="printPPIRRecord('+editIdx+')" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:12px 20px;border-radius:8px;cursor:pointer;">🖨 Print</button>';
+  html += '</div></div>';
+  body.innerHTML = html;
+}
+
+function ppirField(label, type, id, val, placeholder){
+  return '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:4px;">'+label+'</label><input type="'+type+'" id="'+id+'" value="'+escHtml(val)+'" placeholder="'+escHtml(placeholder)+'" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:9.5pt;box-sizing:border-box;"></div>';
+}
+
+window.ppirUpdateRow = function(sel, itemId){
+  sel.style.color = sel.value==='yes'?'#4ade80':sel.value==='no'?'#f87171':'#e2e8f0';
+};
+
+function gv(id){ var el=document.getElementById(id); return el?el.value.trim():''; }
+
+window.savePPIRForm = function(){
+  var records = loadPPIRData();
+  var checks = {};
+  CHECKLIST_SECTIONS.forEach(function(sec){ sec.items.forEach(function(item){ var sel=document.getElementById('ppir-chk-'+item.id); if(sel) checks[item.id]=sel.value; }); });
+  var rec = {
+    pourName: gv('ppir-pourName'), date: gv('ppir-date'), startTime: gv('ppir-startTime'),
+    element: gv('ppir-element'), location: gv('ppir-location'), inspector: gv('ppir-inspector'),
+    orderedYds: gv('ppir-orderedYds'), psi: gv('ppir-psi'), plant: gv('ppir-plant'),
+    weather: gv('ppir-weather'), status: gv('ppir-status'), authorizedBy: gv('ppir-authorizedBy'),
+    goNoGoNotes: document.getElementById('ppir-goNoGoNotes')?document.getElementById('ppir-goNoGoNotes').value.trim():'',
+    checks: checks, savedAt: new Date().toISOString()
+  };
+  if(!rec.pourName){ alert('Please enter a pour name.'); return; }
+  if(ppirState.editIndex>=0) records[ppirState.editIndex] = rec;
+  else records.push(rec);
+  savePPIRData(records);
+  ppirTab('list');
+};
+
+window.ppirEdit = function(idx){ ppirState.editIndex=idx; ppirTab('new'); renderPPIRForm(idx); };
+window.ppirDelete = function(idx){
+  if(!confirm('Delete this checklist?')) return;
+  var records = loadPPIRData(); records.splice(idx,1); savePPIRData(records); renderPPIRList();
+};
+
+window.printPPIRRecord = function(idx){
+  var records = loadPPIRData();
+  var rec = records[idx]; if(!rec) return;
+  var totalItems=0, checkedItems=0, failedItems=0, naItems=0;
+  CHECKLIST_SECTIONS.forEach(function(sec){ totalItems+=sec.items.length; });
+  if(rec.checks){ Object.keys(rec.checks).forEach(function(k){ if(rec.checks[k]==='yes') checkedItems++; else if(rec.checks[k]==='no') failedItems++; else naItems++; }); }
+  var pct = (totalItems-naItems)>0 ? Math.round(checkedItems/(totalItems-naItems)*100) : 0;
+  var statusColor = rec.status&&rec.status.indexOf('Go — Approved')===0?'#166534':rec.status&&rec.status.indexOf('No Go')===0?'#7f1d1d':'#78350f';
+  var w = window.open('','_blank');
+  var coName = (typeof getCompanyName==='function'?getCompanyName():'')||'Oncor Construction';
+  var coPhone = (typeof getCompanyPhone==='function'?getCompanyPhone():'');
+  var coEmail = (typeof getCompanyEmail==='function'?getCompanyEmail():'');
+  var sections = CHECKLIST_SECTIONS.map(function(sec){
+    var rows = sec.items.map(function(item){
+      var v = rec.checks?rec.checks[item.id]:'na';
+      var statusCell = v==='yes'?'<td style="text-align:center;color:#166534;font-weight:700;">✅ OK</td>':v==='no'?'<td style="text-align:center;color:#991b1b;font-weight:700;background:#fef2f2;">❌ NOT OK</td>':'<td style="text-align:center;color:#64748b;">N/A</td>';
+      return '<tr style="border-bottom:1px solid #e2e8f0;'+(v==='no'?'background:#fff5f5;':'')+'"><td style="padding:6px 8px;font-size:9pt;">'+escHtml(item.label)+'</td>'+statusCell+'</tr>';
+    }).join('');
+    return '<div style="margin-bottom:18px;"><div style="background:#1e3a5f;color:#dbeafe;padding:8px 12px;font-weight:700;font-size:10pt;border-radius:4px 4px 0 0;">'+sec.icon+' '+escHtml(sec.label)+'</div><table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-top:none;"><thead><tr style="background:#f8fafc;"><th style="text-align:left;padding:6px 8px;font-size:8.5pt;color:#64748b;border-bottom:1px solid #e2e8f0;">Item</th><th style="text-align:center;padding:6px 8px;font-size:8.5pt;color:#64748b;border-bottom:1px solid #e2e8f0;width:100px;">Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  }).join('');
+  w.document.write([
+    '<!DOCTYPE html><html><head><title>Pre-Pour Inspection — '+escHtml(rec.pourName||'Pour')+'</title>',
+    '<style>body{font-family:Arial,sans-serif;font-size:10pt;color:#1e293b;margin:0;padding:20px;} @media print{.noprint{display:none}}</style></head><body>',
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1e3a5f;padding-bottom:12px;margin-bottom:16px;">',
+    '<div><div style="font-size:1.4rem;font-weight:800;color:#1e3a5f;">'+escHtml(coName)+'</div>',
+    '<div style="color:#64748b;font-size:9pt;">'+(coPhone?coPhone+' · ':'')+escHtml(coEmail)+'</div></div>',
+    '<div style="text-align:right;"><div style="background:'+statusColor+';color:#fff;padding:6px 16px;border-radius:6px;font-weight:700;font-size:11pt;">✅ PRE-POUR INSPECTION</div>',
+    '<div style="font-size:9pt;color:#64748b;margin-top:4px;">'+new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})+'</div></div></div>',
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;">',
+    '<div style="border:1px solid #e2e8f0;border-radius:6px;padding:10px;"><div style="font-size:8pt;color:#64748b;">Pour Name</div><div style="font-weight:700;">'+escHtml(rec.pourName||'—')+'</div></div>',
+    '<div style="border:1px solid #e2e8f0;border-radius:6px;padding:10px;"><div style="font-size:8pt;color:#64748b;">Pour Date</div><div style="font-weight:700;">'+escHtml(rec.date||'—')+'</div></div>',
+    '<div style="border:1px solid #e2e8f0;border-radius:6px;padding:10px;"><div style="font-size:8pt;color:#64748b;">First Truck</div><div style="font-weight:700;">'+escHtml(rec.startTime||'—')+'</div></div>',
+    '<div style="border:1px solid #e2e8f0;border-radius:6px;padding:10px;"><div style="font-size:8pt;color:#64748b;">Element Type</div><div style="font-weight:700;">'+escHtml(rec.element||'—')+'</div></div>',
+    '<div style="border:1px solid #e2e8f0;border-radius:6px;padding:10px;"><div style="font-size:8pt;color:#64748b;">Ordered yd³ / PSI</div><div style="font-weight:700;">'+(rec.orderedYds?rec.orderedYds+' yd³':'')+' '+(rec.psi?rec.psi+' PSI':'')+'</div></div>',
+    '<div style="border:1px solid #e2e8f0;border-radius:6px;padding:10px;"><div style="font-size:8pt;color:#64748b;">Inspector</div><div style="font-weight:700;">'+escHtml(rec.inspector||'—')+'</div></div>',
+    '<div style="border:1px solid #e2e8f0;border-radius:6px;padding:10px;"><div style="font-size:8pt;color:#64748b;">Location / Grid Ref</div><div style="font-weight:700;">'+escHtml(rec.location||'—')+'</div></div>',
+    '<div style="border:1px solid #e2e8f0;border-radius:6px;padding:10px;"><div style="font-size:8pt;color:#64748b;">Batch Plant</div><div style="font-weight:700;">'+escHtml(rec.plant||'—')+'</div></div>',
+    '<div style="border:1px solid #e2e8f0;border-radius:6px;padding:10px;"><div style="font-size:8pt;color:#64748b;">Weather</div><div style="font-weight:700;">'+escHtml(rec.weather||'—')+'</div></div>',
+    '</div>',
+    '<div style="background:'+statusColor+';color:#fff;border-radius:8px;padding:14px 18px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;">',
+    '<div><div style="font-size:9pt;opacity:0.8;">Decision Status</div><div style="font-size:1.2rem;font-weight:800;">'+escHtml(rec.status||'Draft')+'</div></div>',
+    '<div style="text-align:right;"><div style="font-size:9pt;opacity:0.8;">Completion: '+pct+'% ('+checkedItems+'/'+(totalItems-naItems)+')</div>',
+    (rec.authorizedBy?'<div style="font-weight:600;">Authorized by: '+escHtml(rec.authorizedBy)+'</div>':''),
+    '</div></div>',
+    (rec.goNoGoNotes?'<div style="background:#fef9c3;border:1px solid #fde68a;border-radius:6px;padding:10px 14px;margin-bottom:16px;font-size:9pt;"><strong>Notes / Pending Items:</strong> '+escHtml(rec.goNoGoNotes)+'</div>':''),
+    sections,
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:24px;border-top:2px solid #1e3a5f;padding-top:16px;">',
+    '<div><div style="font-size:9pt;font-weight:700;color:#1e3a5f;margin-bottom:20px;">Inspector / Foreman</div><div style="border-top:1px solid #94a3b8;padding-top:4px;font-size:8pt;color:#64748b;">Signature &amp; Date</div></div>',
+    '<div><div style="font-size:9pt;font-weight:700;color:#1e3a5f;margin-bottom:20px;">GC / Owner Rep Authorization</div><div style="border-top:1px solid #94a3b8;padding-top:4px;font-size:8pt;color:#64748b;">Signature &amp; Date</div></div>',
+    '<div><div style="font-size:9pt;font-weight:700;color:#1e3a5f;margin-bottom:20px;">Special Inspector (if req\'d)</div><div style="border-top:1px solid #94a3b8;padding-top:4px;font-size:8pt;color:#64748b;">Signature, Cert # &amp; Date</div></div>',
+    '</div>',
+    '<div style="margin-top:16px;font-size:7.5pt;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:8px;">Standards: ACI 302.1R (slab preparation) · ACI 305R (hot weather) · ACI 306R (cold weather) · ACI 318-19 (structural) · ASTM C94 (ready-mix) · ASTM C172 (sampling) · OSHA 1926 (safety) · CONFIDENTIAL — INTERNAL USE ONLY</div>',
+    '<div class="noprint" style="margin-top:16px;text-align:center;"><button onclick="window.print()" style="background:#1e3a5f;color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:10pt;">🖨 Print / Save PDF</button></div>',
+    '</body></html>'
+  ].join(''));
+  w.document.close();
+};
+
+window.printPPIRReport = function(){
+  var records = loadPPIRData();
+  var w = window.open('','_blank');
+  var coName = (typeof getCompanyName==='function'?getCompanyName():'')||'Oncor Construction';
+  var total = records.length;
+  var go = records.filter(function(r){ return r.status&&r.status.indexOf('Go — Approved')===0; }).length;
+  var noGo = records.filter(function(r){ return r.status&&r.status.indexOf('No Go')===0; }).length;
+  var rows = records.slice().sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); }).map(function(rec,i){
+    var totalItems=0,checkedItems=0,failedItems=0,naItems=0;
+    CHECKLIST_SECTIONS.forEach(function(sec){ totalItems+=sec.items.length; });
+    if(rec.checks){ Object.keys(rec.checks).forEach(function(k){ if(rec.checks[k]==='yes') checkedItems++; else if(rec.checks[k]==='no') failedItems++; else naItems++; }); }
+    var pct = (totalItems-naItems)>0?Math.round(checkedItems/(totalItems-naItems)*100):0;
+    var sColor = rec.status&&rec.status.indexOf('Go — Approved')===0?'#166534':rec.status&&rec.status.indexOf('No Go')===0?'#991b1b':'#92400e';
+    return '<tr><td style="padding:6px 8px;font-size:9pt;">'+(i+1)+'</td><td style="padding:6px 8px;font-size:9pt;font-weight:600;">'+escHtml(rec.pourName||'')+'</td><td style="padding:6px 8px;font-size:9pt;">'+escHtml(rec.date||'')+'</td><td style="padding:6px 8px;font-size:9pt;">'+escHtml(rec.element||'')+'</td><td style="padding:6px 8px;font-size:9pt;">'+(rec.orderedYds||'')+(rec.psi?' / '+rec.psi+' PSI':'')+'</td><td style="padding:6px 8px;font-size:9pt;">'+checkedItems+'/'+(totalItems-naItems)+' ('+pct+'%)</td><td style="padding:6px 8px;font-size:9pt;color:#991b1b;font-weight:600;">'+(failedItems>0?failedItems+' failed':'—')+'</td><td style="padding:6px 8px;font-size:9pt;"><span style="background:'+sColor+'22;color:'+sColor+';padding:2px 8px;border-radius:12px;border:1px solid '+sColor+'44;font-weight:600;">'+escHtml(rec.status||'Draft')+'</span></td></tr>';
+  }).join('');
+  w.document.write([
+    '<!DOCTYPE html><html><head><title>Pre-Pour Inspection Report</title>',
+    '<style>body{font-family:Arial,sans-serif;font-size:10pt;color:#1e293b;margin:0;padding:24px;} @media print{.noprint{display:none}}</style></head><body>',
+    '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1e3a5f;padding-bottom:12px;margin-bottom:16px;">',
+    '<div><div style="font-size:1.4rem;font-weight:800;color:#1e3a5f;">'+escHtml(coName)+'</div>',
+    '<div style="font-size:1.1rem;font-weight:700;color:#64748b;margin-top:4px;">PRE-POUR INSPECTION LOG</div></div>',
+    '<div style="text-align:right;font-size:9pt;color:#64748b;">Generated: '+new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})+'</div></div>',
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;">',
+    '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:1.5rem;font-weight:800;color:#1e293b;">'+total+'</div><div style="font-size:8pt;color:#64748b;margin-top:2px;">Total Checklists</div></div>',
+    '<div style="border:1px solid #dcfce7;border-radius:8px;padding:12px;text-align:center;background:#f0fdf4;"><div style="font-size:1.5rem;font-weight:800;color:#166534;">'+go+'</div><div style="font-size:8pt;color:#166534;margin-top:2px;">✅ Approved Go</div></div>',
+    '<div style="border:1px solid #fee2e2;border-radius:8px;padding:12px;text-align:center;background:#fef2f2;"><div style="font-size:1.5rem;font-weight:800;color:#991b1b;">'+noGo+'</div><div style="font-size:8pt;color:#991b1b;margin-top:2px;">🚫 No Go</div></div>',
+    '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:1.5rem;font-weight:800;color:#0284c7;">'+(total-go-noGo)+'</div><div style="font-size:8pt;color:#64748b;margin-top:2px;">Other Status</div></div>',
+    '</div>',
+    '<table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;"><thead>',
+    '<tr style="background:#1e3a5f;color:#fff;"><th style="padding:8px;text-align:left;font-size:9pt;">#</th><th style="padding:8px;text-align:left;font-size:9pt;">Pour Name</th><th style="padding:8px;text-align:left;font-size:9pt;">Date</th><th style="padding:8px;text-align:left;font-size:9pt;">Element</th><th style="padding:8px;text-align:left;font-size:9pt;">Qty / PSI</th><th style="padding:8px;text-align:left;font-size:9pt;">Completion</th><th style="padding:8px;text-align:left;font-size:9pt;">Failed Items</th><th style="padding:8px;text-align:left;font-size:9pt;">Status</th></tr></thead>',
+    '<tbody>'+rows+'</tbody></table>',
+    '<div style="margin-top:16px;font-size:7.5pt;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:8px;">ACI 302.1R · ACI 305R · ACI 306R · ACI 318-19 · ASTM C94 · OSHA 1926 — CONFIDENTIAL — INTERNAL USE ONLY</div>',
+    '<div class="noprint" style="margin-top:16px;text-align:center;"><button onclick="window.print()" style="background:#1e3a5f;color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:10pt;">🖨 Print / Save PDF</button></div>',
+    '</body></html>'
+  ].join(''));
+  w.document.close();
+};
+
+window._getPPIRStats = function(){
+  var r = loadPPIRData();
+  return { total:r.length, go:r.filter(function(x){ return x.status&&x.status.indexOf('Go — Approved')===0; }).length, noGo:r.filter(function(x){ return x.status&&x.status.indexOf('No Go')===0; }).length };
+};
+
+function showPPIRModal(){
+  buildPPIRModal();
+  var m = document.getElementById(PPIR_ID); if(!m) return;
+  m.style.display='flex';
+  ppirState.records = loadPPIRData();
+  ppirTab('list');
+}
+window.showPPIRModal = showPPIRModal;
+
+function closePPIRModal(){
+  var m=document.getElementById(PPIR_ID); if(m) m.style.display='none';
+}
+window.closePPIRModal = closePPIRModal;
+
+document.addEventListener('keydown',function(e){
+  if(e.altKey && e.key.toLowerCase()==='k'){
+    e.preventDefault();
+    var m=document.getElementById(PPIR_ID);
+    if(m && m.style.display==='flex') closePPIRModal();
+    else showPPIRModal();
+  }
+});
+
+document.addEventListener('DOMContentLoaded',function(){
+  setTimeout(function(){
+    var wasteBtn = document.querySelector('button[onclick*="showWasteModal"]');
+    if(!wasteBtn) return;
+    var parentRow = wasteBtn.closest('div');
+    if(!parentRow||!parentRow.parentNode) return;
+    var newRow = document.createElement('div');
+    newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+    newRow.innerHTML = '<button class="action-btn secondary" onclick="showPPIRModal()" title="Pre-Pour Inspection & Readiness Checklist — 9 sections, 56 items, go/no-go decision, ACI 302/305/306/318 (Alt+K)" style="background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.3);color:#6ee7b7;">✅ Pre-Pour Checklist</button>';
+    parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+  }, 5200);
+});
+
+})();
+// ==================== END PRE-POUR INSPECTION & READINESS CHECKLIST — Zeus ⚡ Session #80 ====================
 </script>
