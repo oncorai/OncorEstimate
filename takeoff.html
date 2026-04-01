@@ -156153,4 +156153,387 @@ ${(p.followDue.length > 0 || c.overdueFollowUp > 0) ? `
 
 })();
 // ==================== END PROJECT PHOTO & PROGRESS DOCUMENTATION — Zeus ⚡ Session #73 ====================
+
+// ==================== STANDBY & DELAY TIME TRACKER — Zeus ⚡ Session #73 ====================
+// Alt+D — Document standby time, delays, and extra work for claims/backcharges
+// When crew sits waiting for GC/owner/inspector, that's billable delay time.
+// This tool documents it in real-time for change order justification.
+(function(){
+  'use strict';
+  var DELAY_ID = 'oncor-delay-modal';
+
+  function getProjectKey(){
+    var pn = (document.getElementById('projectName')||{}).value||'';
+    return 'oncor_delays_v1_'+(pn.replace(/[^a-zA-Z0-9]/g,'_')||'global');
+  }
+  function getDelays(){ try{ return JSON.parse(localStorage.getItem(getProjectKey()))||[]; }catch(e){ return []; }}
+  function saveDelays(d){ localStorage.setItem(getProjectKey(), JSON.stringify(d)); }
+
+  var DELAY_TYPES = [
+    'GC Delay — Site Not Ready','GC Delay — Access Blocked','GC Delay — Prior Trade Not Complete',
+    'Owner Delay — Decision Pending','Owner Delay — Change Direction',
+    'Inspection Delay — Inspector Late','Inspection Delay — Failed/Re-Inspection',
+    'Weather Delay — Rain','Weather Delay — Wind','Weather Delay — Extreme Heat','Weather Delay — Cold',
+    'Material Delay — Late Delivery','Material Delay — Wrong Material','Material Delay — Short Delivery',
+    'Equipment Delay — Breakdown','Equipment Delay — Late Arrival',
+    'Utility Conflict — Unmarked','Utility Conflict — Relocation Needed',
+    'Design Issue — RFI Pending','Design Issue — Drawing Conflict',
+    'Subcontractor Delay','Permit/Approval Delay','Force Majeure','Other'
+  ];
+
+  var RESPONSIBLE = ['General Contractor','Owner/Developer','Architect/Engineer','Inspector/Testing','Subcontractor','Supplier/Vendor','Weather/Force Majeure','Self-Caused','Other'];
+
+  function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function fmtMoney(n){ n=parseFloat(n)||0; return '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function fmtDate(d){ if(!d) return '—'; var dt=new Date(d); return isNaN(dt)?'—':dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+  function uid(){ return 'dl'+Date.now().toString(36)+Math.random().toString(36).substr(2,5); }
+
+  function buildModal(){
+    if(document.getElementById(DELAY_ID)) return;
+    var m = document.createElement('div');
+    m.id = DELAY_ID;
+    m.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:10200;align-items:center;justify-content:center;';
+    m.innerHTML = '<div style="background:#1e293b;border-radius:12px;width:95%;max-width:1000px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 25px 50px rgba(0,0,0,0.5);">'
+      +'<div style="padding:14px 18px;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center;">'
+      +'<div><span style="font-size:18px;font-weight:700;color:#f8fafc;">⏱️ Standby & Delay Tracker</span><span style="font-size:11px;color:#94a3b8;margin-left:10px;">Alt+D</span></div>'
+      +'<button onclick="closeDelayModal()" style="background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;">✕</button>'
+      +'</div>'
+      +'<div id="delay-stats" style="padding:10px 18px;border-bottom:1px solid #334155;background:#0f172a;"></div>'
+      +'<div style="padding:10px 18px;border-bottom:1px solid #334155;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">'
+      +'<select id="delay-type-filter" onchange="renderDelays()" style="padding:6px 10px;border-radius:6px;background:#0f172a;color:#e2e8f0;border:1px solid #475569;font-size:12px;"><option value="">All Types</option></select>'
+      +'<select id="delay-resp-filter" onchange="renderDelays()" style="padding:6px 10px;border-radius:6px;background:#0f172a;color:#e2e8f0;border:1px solid #475569;font-size:12px;"><option value="">All Responsible</option></select>'
+      +'<select id="delay-status-filter" onchange="renderDelays()" style="padding:6px 10px;border-radius:6px;background:#0f172a;color:#e2e8f0;border:1px solid #475569;font-size:12px;"><option value="">All Statuses</option><option value="pending">Pending Claim</option><option value="submitted">Submitted</option><option value="approved">Approved</option><option value="denied">Denied</option></select>'
+      +'<div style="flex:1;"></div>'
+      +'<button onclick="showAddDelay()" style="padding:6px 12px;background:#f59e0b;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">+ Log Delay</button>'
+      +'<button onclick="printDelayReport()" style="padding:6px 12px;background:#64748b;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;">🖨️ Report</button>'
+      +'</div>'
+      +'<div id="delay-content" style="flex:1;overflow-y:auto;padding:14px 18px;"></div>'
+      +'</div>';
+    m.onclick = function(e){ if(e.target===m) closeDelayModal(); };
+    document.body.appendChild(m);
+  }
+
+  function getStats(){
+    var ds = getDelays();
+    var totalHrs=0, totalCost=0, pending=0, approved=0, denied=0;
+    var byResp = {};
+    ds.forEach(function(d){
+      var hrs = parseFloat(d.hours)||0;
+      var cost = parseFloat(d.cost)||0;
+      totalHrs += hrs;
+      totalCost += cost;
+      if(d.status==='pending') pending++;
+      else if(d.status==='approved') approved++;
+      else if(d.status==='denied') denied++;
+      var r = d.responsible||'Unknown';
+      if(!byResp[r]) byResp[r] = {hrs:0,cost:0,count:0};
+      byResp[r].hrs += hrs;
+      byResp[r].cost += cost;
+      byResp[r].count++;
+    });
+    return {total:ds.length,totalHrs:totalHrs,totalCost:totalCost,pending:pending,approved:approved,denied:denied,byResp:byResp};
+  }
+
+  function renderStats(){
+    var st = getStats();
+    var h = '<div style="display:flex;gap:14px;flex-wrap:wrap;">'
+      +'<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#f8fafc;">'+st.total+'</div><div style="font-size:10px;color:#94a3b8;">Delay Events</div></div>'
+      +'<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#f59e0b;">'+st.totalHrs.toFixed(1)+'</div><div style="font-size:10px;color:#94a3b8;">Total Hours</div></div>'
+      +'<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#ef4444;">'+fmtMoney(st.totalCost)+'</div><div style="font-size:10px;color:#94a3b8;">Total Cost</div></div>'
+      +'<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#eab308;">'+st.pending+'</div><div style="font-size:10px;color:#94a3b8;">Pending Claims</div></div>'
+      +'<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#22c55e;">'+st.approved+'</div><div style="font-size:10px;color:#94a3b8;">Approved</div></div>'
+      +'<div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#dc2626;">'+st.denied+'</div><div style="font-size:10px;color:#94a3b8;">Denied</div></div>'
+      +'</div>';
+    document.getElementById('delay-stats').innerHTML = h;
+  }
+
+  function populateFilters(){
+    var ds = getDelays();
+    var types = new Set(), resps = new Set();
+    ds.forEach(function(d){ if(d.type) types.add(d.type); if(d.responsible) resps.add(d.responsible); });
+    var typeSel = document.getElementById('delay-type-filter');
+    var respSel = document.getElementById('delay-resp-filter');
+    var curType = typeSel.value, curResp = respSel.value;
+    typeSel.innerHTML = '<option value="">All Types</option>' + Array.from(types).sort().map(function(t){ return '<option value="'+escH(t)+'">'+escH(t)+'</option>'; }).join('');
+    respSel.innerHTML = '<option value="">All Responsible</option>' + RESPONSIBLE.map(function(r){ return '<option value="'+escH(r)+'">'+escH(r)+'</option>'; }).join('');
+    typeSel.value = curType; respSel.value = curResp;
+  }
+
+  function renderDelays(){
+    renderStats();
+    populateFilters();
+    var ds = getDelays();
+    var typeF = document.getElementById('delay-type-filter').value;
+    var respF = document.getElementById('delay-resp-filter').value;
+    var statF = document.getElementById('delay-status-filter').value;
+
+    var filtered = ds.filter(function(d){
+      if(typeF && d.type !== typeF) return false;
+      if(respF && d.responsible !== respF) return false;
+      if(statF && d.status !== statF) return false;
+      return true;
+    });
+
+    filtered.sort(function(a,b){ return new Date(b.date||0) - new Date(a.date||0); });
+
+    if(filtered.length===0){
+      document.getElementById('delay-content').innerHTML = '<div style="text-align:center;padding:60px 20px;color:#64748b;"><div style="font-size:40px;margin-bottom:12px;">⏱️</div><div>No delay events logged. Click <b>+ Log Delay</b> to document standby time or delays.</div><div style="font-size:11px;margin-top:10px;">Document delays in real-time for change order justification.</div></div>';
+      return;
+    }
+
+    var html = '<div style="display:grid;gap:10px;">';
+    filtered.forEach(function(d){
+      var statusColor = {pending:'#eab308',submitted:'#3b82f6',approved:'#22c55e',denied:'#ef4444'}[d.status]||'#64748b';
+      var statusLabel = {pending:'Pending Claim',submitted:'Submitted',approved:'Approved',denied:'Denied'}[d.status]||'—';
+      var respColor = d.responsible&&d.responsible.indexOf('GC')>=0?'#f59e0b':(d.responsible&&d.responsible.indexOf('Owner')>=0?'#8b5cf6':'#64748b');
+
+      html += '<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;border-left:3px solid '+statusColor+';">'
+        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">'
+        +'<div><span style="font-weight:600;color:#f8fafc;">'+escH(d.type)+'</span></div>'
+        +'<div style="display:flex;gap:6px;align-items:center;">'
+        +'<span style="background:'+statusColor+'22;color:'+statusColor+';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;">'+statusLabel+'</span>'
+        +'<button onclick="editDelay(\''+d.id+'\')" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:12px;" title="Edit">✏️</button>'
+        +'<button onclick="deleteDelay(\''+d.id+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:12px;" title="Delete">🗑</button>'
+        +'</div></div>'
+        +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;font-size:12px;margin-bottom:8px;">'
+        +'<div><span style="color:#64748b;">Date:</span> <span style="color:#e2e8f0;">'+fmtDate(d.date)+'</span></div>'
+        +'<div><span style="color:#64748b;">Hours:</span> <span style="color:#f59e0b;font-weight:600;">'+((parseFloat(d.hours)||0).toFixed(1))+'</span></div>'
+        +'<div><span style="color:#64748b;">Crew:</span> <span style="color:#e2e8f0;">'+(d.crewSize||'—')+'</span></div>'
+        +'<div><span style="color:#64748b;">Cost:</span> <span style="color:#ef4444;font-weight:600;">'+fmtMoney(d.cost)+'</span></div>'
+        +'</div>'
+        +'<div style="font-size:11px;color:#64748b;margin-bottom:6px;">'
+        +'<span style="color:'+respColor+';font-weight:600;">Responsible: '+escH(d.responsible||'—')+'</span>'
+        +(d.notifiedTo?' · Notified: '+escH(d.notifiedTo):'')
+        +'</div>'
+        +(d.description?'<div style="font-size:12px;color:#e2e8f0;margin-bottom:6px;">'+escH(d.description)+'</div>':'')
+        +(d.impact?'<div style="font-size:11px;color:#94a3b8;padding:6px;background:#1e293b;border-radius:4px;"><span style="color:#64748b;">Impact:</span> '+escH(d.impact)+'</div>':'')
+        +'</div>';
+    });
+    html += '</div>';
+    document.getElementById('delay-content').innerHTML = html;
+  }
+  window.renderDelays = renderDelays;
+
+  function showAddDelay(existingId){
+    var ds = getDelays();
+    var d = existingId ? ds.find(function(x){ return x.id===existingId; }) : null;
+    var isEdit = !!d;
+    if(!d) d = {id:uid(),type:'',date:new Date().toISOString().slice(0,10),hours:'',crewSize:'',rate:'',cost:'',responsible:'',notifiedTo:'',description:'',impact:'',status:'pending'};
+
+    var typeOpts = DELAY_TYPES.map(function(t){ return '<option value="'+escH(t)+'"'+(d.type===t?' selected':'')+'>'+escH(t)+'</option>'; }).join('');
+    var respOpts = RESPONSIBLE.map(function(r){ return '<option value="'+escH(r)+'"'+(d.responsible===r?' selected':'')+'>'+escH(r)+'</option>'; }).join('');
+
+    var html = '<div style="max-width:650px;margin:0 auto;">'
+      +'<div style="font-size:15px;font-weight:600;color:#f8fafc;margin-bottom:14px;">'+(isEdit?'Edit Delay Event':'Log Delay / Standby Time')+'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
+      +'<div style="grid-column:span 2;"><label style="font-size:11px;color:#94a3b8;">Delay Type *</label><select id="dlf-type" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;"><option value="">Select type...</option>'+typeOpts+'</select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Date *</label><input id="dlf-date" type="date" value="'+escH(d.date)+'" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Responsible Party *</label><select id="dlf-responsible" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;"><option value="">Select...</option>'+respOpts+'</select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Hours Lost *</label><input id="dlf-hours" type="number" step="0.25" value="'+escH(d.hours)+'" placeholder="e.g. 2.5" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Crew Size (people)</label><input id="dlf-crewSize" type="number" value="'+escH(d.crewSize)+'" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Avg Hourly Rate ($/hr)</label><input id="dlf-rate" type="number" step="0.01" value="'+escH(d.rate)+'" placeholder="e.g. 75" oninput="calcDelayCost()" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Total Cost ($) <span style="color:#64748b;">(auto-calc or override)</span></label><input id="dlf-cost" type="number" step="0.01" value="'+escH(d.cost)+'" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Notified To (GC Rep, Super)</label><input id="dlf-notifiedTo" value="'+escH(d.notifiedTo)+'" placeholder="Name / title" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8;">Claim Status</label><select id="dlf-status" style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;"><option value="pending"'+(d.status==='pending'?' selected':'')+'>Pending Claim</option><option value="submitted"'+(d.status==='submitted'?' selected':'')+'>Submitted</option><option value="approved"'+(d.status==='approved'?' selected':'')+'>Approved</option><option value="denied"'+(d.status==='denied'?' selected':'')+'>Denied</option></select></div>'
+      +'<div style="grid-column:span 2;"><label style="font-size:11px;color:#94a3b8;">Description / What Happened *</label><textarea id="dlf-description" rows="2" placeholder="Detailed description of the delay event..." style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;resize:vertical;">'+escH(d.description)+'</textarea></div>'
+      +'<div style="grid-column:span 2;"><label style="font-size:11px;color:#94a3b8;">Impact / Schedule Effect</label><textarea id="dlf-impact" rows="2" placeholder="How did this affect the work? e.g. Footing pour delayed 1 day, crew sent home..." style="width:100%;padding:8px;border-radius:6px;background:#1e293b;color:#e2e8f0;border:1px solid #475569;margin-top:4px;box-sizing:border-box;resize:vertical;">'+escH(d.impact)+'</textarea></div>'
+      +'</div>'
+      +'<div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end;">'
+      +'<button onclick="renderDelays()" style="padding:8px 16px;background:#475569;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancel</button>'
+      +'<button onclick="saveDelayForm(\''+d.id+'\','+isEdit+')" style="padding:8px 16px;background:#f59e0b;color:#fff;border:none;border-radius:6px;cursor:pointer;">'+(isEdit?'Update':'Log Delay')+'</button>'
+      +'</div></div>';
+    document.getElementById('delay-content').innerHTML = html;
+  }
+  window.showAddDelay = showAddDelay;
+
+  window.calcDelayCost = function(){
+    var hrs = parseFloat(document.getElementById('dlf-hours').value)||0;
+    var crew = parseFloat(document.getElementById('dlf-crewSize').value)||1;
+    var rate = parseFloat(document.getElementById('dlf-rate').value)||0;
+    if(hrs && rate){
+      document.getElementById('dlf-cost').value = (hrs * crew * rate).toFixed(2);
+    }
+  };
+
+  function saveDelayForm(id, isEdit){
+    var type = document.getElementById('dlf-type').value;
+    var date = document.getElementById('dlf-date').value;
+    var hours = document.getElementById('dlf-hours').value;
+    var responsible = document.getElementById('dlf-responsible').value;
+    var desc = document.getElementById('dlf-description').value.trim();
+    if(!type||!date||!hours||!responsible||!desc){ alert('Type, Date, Hours, Responsible Party, and Description are required.'); return; }
+
+    var d = {
+      id: id,
+      type: type,
+      date: date,
+      hours: parseFloat(hours)||0,
+      crewSize: document.getElementById('dlf-crewSize').value,
+      rate: document.getElementById('dlf-rate').value,
+      cost: parseFloat(document.getElementById('dlf-cost').value)||0,
+      responsible: responsible,
+      notifiedTo: document.getElementById('dlf-notifiedTo').value.trim(),
+      description: desc,
+      impact: document.getElementById('dlf-impact').value.trim(),
+      status: document.getElementById('dlf-status').value
+    };
+
+    var ds = getDelays();
+    if(isEdit){
+      var idx = ds.findIndex(function(x){ return x.id===id; });
+      if(idx>=0) ds[idx] = d;
+    } else {
+      ds.push(d);
+    }
+    saveDelays(ds);
+    renderDelays();
+  }
+  window.saveDelayForm = saveDelayForm;
+
+  function editDelay(id){ showAddDelay(id); }
+  window.editDelay = editDelay;
+
+  function deleteDelay(id){
+    if(!confirm('Delete this delay event?')) return;
+    var ds = getDelays().filter(function(d){ return d.id!==id; });
+    saveDelays(ds);
+    renderDelays();
+  }
+  window.deleteDelay = deleteDelay;
+
+  // ---- Print Report ----
+  function printDelayReport(){
+    var ds = getDelays();
+    var st = getStats();
+    var coName = (document.getElementById('coName')||{}).value||'Oncor Concrete';
+    var coPhone = (document.getElementById('coPhone')||{}).value||'';
+    var coEmail = (document.getElementById('coEmail')||{}).value||'';
+    var proj = (document.getElementById('projectName')||{}).value||'';
+
+    ds.sort(function(a,b){ return new Date(a.date||0) - new Date(b.date||0); });
+
+    var html = '<!DOCTYPE html><html><head><title>Delay & Standby Time Report</title><style>'
+      +'body{font-family:system-ui,-apple-system,sans-serif;padding:20px;max-width:1000px;margin:0 auto;font-size:11pt;}'
+      +'.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #f59e0b;}'
+      +'.badge{display:inline-block;background:#f59e0b;color:#fff;padding:4px 10px;border-radius:4px;font-size:10pt;font-weight:600;}'
+      +'.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}'
+      +'.kpi{background:#f1f5f9;padding:10px;border-radius:6px;text-align:center;}'
+      +'.kpi-label{font-size:9pt;color:#64748b;}'
+      +'.kpi-value{font-size:14pt;font-weight:700;}'
+      +'.summary-box{background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:14px;margin-bottom:16px;}'
+      +'table{width:100%;border-collapse:collapse;margin-bottom:16px;}'
+      +'th,td{border:1px solid #e2e8f0;padding:6px 8px;text-align:left;font-size:10pt;}'
+      +'th{background:#f1f5f9;font-weight:600;}'
+      +'.pending{background:#fef9c3;}'
+      +'.approved{background:#dcfce7;}'
+      +'.denied{background:#fee2e2;}'
+      +'.footer{margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:9pt;color:#64748b;text-align:center;}'
+      +'@media print{.no-print{display:none!important;}}'
+      +'</style></head><body>';
+
+    html += '<div class="header"><div><div style="font-size:14pt;font-weight:700;">'+escH(coName)+'</div>'
+      +'<div style="font-size:9pt;color:#64748b;">'+escH(coPhone)+(coEmail?' · '+coEmail:'')+'</div></div>'
+      +'<div style="text-align:right;"><div class="badge">DELAY & STANDBY TIME REPORT</div>'
+      +(proj?'<div style="font-size:10pt;font-weight:600;margin-top:4px;">'+escH(proj)+'</div>':'')
+      +'<div style="font-size:9pt;color:#64748b;margin-top:2px;">Generated: '+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})+'</div>'
+      +'</div></div>';
+
+    html += '<div class="kpi-grid">'
+      +'<div class="kpi"><div class="kpi-label">Total Delay Events</div><div class="kpi-value">'+st.total+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label">Total Hours Lost</div><div class="kpi-value" style="color:#d97706;">'+st.totalHrs.toFixed(1)+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label">Total Delay Cost</div><div class="kpi-value" style="color:#dc2626;">'+fmtMoney(st.totalCost)+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label">Pending Claims</div><div class="kpi-value" style="color:#ca8a04;">'+st.pending+'</div></div>'
+      +'</div>';
+
+    // Summary by responsible party
+    var respKeys = Object.keys(st.byResp).sort(function(a,b){ return st.byResp[b].cost - st.byResp[a].cost; });
+    if(respKeys.length>0){
+      html += '<div class="summary-box"><div style="font-weight:600;color:#92400e;margin-bottom:8px;">DELAY COST BY RESPONSIBLE PARTY</div><table style="margin:0;">'
+        +'<tr><th>Responsible Party</th><th style="text-align:center;">Events</th><th style="text-align:right;">Hours</th><th style="text-align:right;">Cost</th></tr>';
+      respKeys.forEach(function(r){
+        var data = st.byResp[r];
+        html += '<tr><td>'+escH(r)+'</td><td style="text-align:center;">'+data.count+'</td><td style="text-align:right;">'+data.hrs.toFixed(1)+'</td><td style="text-align:right;font-weight:600;">'+fmtMoney(data.cost)+'</td></tr>';
+      });
+      html += '</table></div>';
+    }
+
+    html += '<div style="font-size:10pt;font-weight:600;margin-bottom:8px;">DELAY EVENT LOG</div>';
+    html += '<table><tr><th>Date</th><th>Type</th><th>Responsible</th><th style="text-align:right;">Hours</th><th style="text-align:right;">Cost</th><th>Status</th><th>Description</th></tr>';
+    ds.forEach(function(d){
+      var rowClass = d.status==='approved'?'approved':(d.status==='denied'?'denied':(d.status==='pending'?'pending':''));
+      var statusLabel = {pending:'Pending',submitted:'Submitted',approved:'Approved',denied:'Denied'}[d.status]||'—';
+      html += '<tr class="'+rowClass+'">'
+        +'<td>'+fmtDate(d.date)+'</td>'
+        +'<td>'+escH(d.type)+'</td>'
+        +'<td>'+escH(d.responsible)+'</td>'
+        +'<td style="text-align:right;">'+((parseFloat(d.hours)||0).toFixed(1))+'</td>'
+        +'<td style="text-align:right;font-weight:600;">'+fmtMoney(d.cost)+'</td>'
+        +'<td>'+statusLabel+'</td>'
+        +'<td style="font-size:9pt;">'+escH(d.description)+(d.impact?'<br><span style="color:#64748b;">Impact: '+escH(d.impact)+'</span>':'')+'</td>'
+        +'</tr>';
+    });
+    html += '<tr style="background:#f1f5f9;font-weight:700;">'
+      +'<td colspan="3">TOTALS</td>'
+      +'<td style="text-align:right;">'+st.totalHrs.toFixed(1)+'</td>'
+      +'<td style="text-align:right;">'+fmtMoney(st.totalCost)+'</td>'
+      +'<td colspan="2"></td>'
+      +'</tr></table>';
+
+    html += '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;font-size:9pt;margin-bottom:16px;">'
+      +'<div style="font-weight:600;color:#dc2626;">⚠️ NOTICE TO GENERAL CONTRACTOR / OWNER</div>'
+      +'<div style="color:#7f1d1d;margin-top:6px;">This report documents delay and standby time caused by parties other than the Contractor. Per the subcontract agreement and industry standard practice, the Contractor reserves the right to recover costs for delays caused by others. This documentation serves as formal notice of claimed delay costs.</div>'
+      +'</div>';
+
+    html += '<div class="footer">CONFIDENTIAL — FOR CLAIM DOCUMENTATION ONLY · '+escH(coName)+' · Oncor Takeoff Estimator</div>'
+      +'<button class="no-print" onclick="window.print()" style="margin-top:14px;padding:8px 18px;background:#f59e0b;color:#fff;border:none;border-radius:6px;cursor:pointer;">🖨️ Print / Save PDF</button>'
+      +'</body></html>';
+
+    var w = window.open('','_blank');
+    w.document.write(html);
+    w.document.close();
+  }
+  window.printDelayReport = printDelayReport;
+
+  // ---- Expose stats ----
+  window._getDelayStats = function(){ return getStats(); };
+
+  // ---- Show / Close ----
+  function showDelayModal(){
+    buildModal();
+    var m = document.getElementById(DELAY_ID);
+    if(m){ m.style.display='flex'; renderDelays(); }
+  }
+  function closeDelayModal(){
+    var m = document.getElementById(DELAY_ID);
+    if(m) m.style.display='none';
+  }
+  window.showDelayModal = showDelayModal;
+  window.closeDelayModal = closeDelayModal;
+
+  // ---- Keyboard shortcut Alt+D ----
+  document.addEventListener('keydown',function(e){
+    if(e.altKey && e.key.toLowerCase()==='d'){
+      e.preventDefault();
+      var m = document.getElementById(DELAY_ID);
+      if(m && m.style.display==='flex') closeDelayModal();
+      else showDelayModal();
+    }
+  });
+
+  // ---- Sidebar button — inject below Photo Log ----
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){
+      var photoBtn = document.querySelector('button[onclick*="showPhotoModal"]');
+      if(!photoBtn) return;
+      var parentRow = photoBtn.closest('div');
+      if(!parentRow||!parentRow.parentNode) return;
+      var newRow = document.createElement('div');
+      newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML = '<button class="action-btn secondary" onclick="showDelayModal()" title="Standby & Delay Time Tracker — document delays for claims/backcharges (Alt+D)" style="background:rgba(245,158,11,0.1);border-color:rgba(245,158,11,0.3);color:#fbbf24;">⏱️ Delay Tracker</button>';
+      parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 3700);
+  });
+
+})();
+// ==================== END STANDBY & DELAY TIME TRACKER — Zeus ⚡ Session #73 ====================
 </script>
