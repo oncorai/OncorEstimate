@@ -1,5 +1,93 @@
 # Overnight Build Tasks - 2026-02-14
 
+## 🌤️ SESSION: Apr 1, 2026 - 10:12 UTC (Overnight Cron #67)
+**Status:** ✅ WEATHER FORECAST + QUICK CALCULATORS added (+508 lines)
+
+### What Was Added:
+
+**🌤️ Weather Forecast — Pour Planning (Alt+W):**
+- New `🌤️ Weather` button injected in sidebar below Profit Analyzer
+- `Alt+W` keyboard shortcut opens/toggles the weather modal
+- **Purpose:** Check weather before scheduling pours. Get ACI 305R (hot weather) and ACI 306R (cold weather) alerts. Avoid scheduling pours during rain, extreme temps, or high winds.
+
+**Weather Data (wttr.in — no API key required):**
+- Current conditions: temp, humidity, wind speed, description
+- High/low for the day
+- 3-day forecast with daily outlook
+
+**Pour Conditions Rating (auto-calculated):**
+- **EXCELLENT** ✅ — no weather alerts, favorable conditions
+- **CAUTION** ⚡ — one minor alert (moderate wind, warm temps)
+- **MARGINAL** ⚠️ — multiple alerts but pourable with precautions
+- **POOR** ⚠️ — significant risk factors present
+- **DO NOT POUR** 🚫 — rain forecast, concrete will be ruined
+
+**ACI Compliance Alerts:**
+- **ACI 305R Hot Weather:** >90°F high, low humidity + heat evaporation risk
+- **ACI 306R Cold Weather:** <50°F low, near-freezing warnings
+- **Wind Alert:** >15 mph increased evaporation
+- **Rain Alert:** any rain/storm/shower in forecast
+
+**Recommended Pour Window:**
+- Hot days: 5:00 AM - 9:00 AM (before peak heat)
+- Cold days: 10:00 AM - 2:00 PM (when temps rise)
+- Normal: 6:00 AM - 12:00 PM (standard window)
+
+**Quick Reference Cards:**
+- ACI 305R hot weather procedures (retarder, ice water, curing compound)
+- ACI 306R cold weather procedures (heated water, accelerator, protection)
+
+---
+
+**🧮 Quick Calculators — Field Math Tools (Alt+C):**
+- New `🧮 Calculators` button injected in sidebar below Weather
+- `Alt+C` keyboard shortcut opens/toggles the calculator modal
+- **Purpose:** Fast field math without full takeoff — rebar weight, water limits, evaporation rate, cure time
+
+**4 Calculator Tools:**
+
+1. **🔩 Rebar Weight Calculator**
+   - Select bar size (#3 through #11 with lb/ft reference)
+   - Enter length (feet) and quantity (bars)
+   - Outputs total lbs and tons
+   - Formula: bar size × length × quantity
+
+2. **💧 Water Addition Limit (ASTM C94)**
+   - Enter load size (yd³), target slump, current slump
+   - Calculates max water addition per ASTM C94 §11.8
+   - Warns if slump increase would exceed 1 gal/yd³ limit
+   - Recommends rejection or water reducer if over limit
+
+3. **☀️ Evaporation Rate (ACI 305R)**
+   - Enter air temp, concrete temp, humidity, wind speed
+   - Calculates approximate evaporation rate (lb/ft²/hr)
+   - Risk assessment: LOW (<0.1), MODERATE (0.1-0.2), HIGH (>0.2)
+   - Recommendations: fogging, windbreaks, delay pour
+
+4. **⏱️ Strength Gain Estimator**
+   - Select design f'c (3000/4000/5000/6000 PSI)
+   - Enter average curing temperature
+   - Shows estimated strength at 1/3/7/14/28 days
+   - Temperature factor adjusts for hot/cold curing
+
+**Quick Reference Panel:**
+- Rebar lb/ft table (#3-#8)
+- Water/yd³ guidelines (27-32 gal typical, 1 gal/yd³ site add)
+- Evaporation risk thresholds
+- Strength gain percentages (16%/40%/65%/100%)
+
+**Why these matter:**
+1. **Weather Forecast** — JFS can check conditions the night before or morning of a pour. If rain is forecast, he reschedules instead of showing up and having a ruined pour. If it's going to be 100°F, he knows to start at 5 AM and have ice water ready. No more guessing.
+
+2. **Quick Calculators** — In the field, JFS needs fast answers. "How much does 200 bars of #5 at 20 feet weigh?" Answer in 3 clicks: 4,172 lbs (2.09 tons). "Can I add water to this 3" slump load to get 5"?" Calculator says yes, up to 20 gallons for a 10-yard load. No hunting for formulas.
+
+**Commits:**
+- 9b1bb1b: 🌤️🧮 Weather Forecast + Quick Calculators (+508 lines) [Session #67]
+
+**Total Lines:** ~153,185 | **New Alt+ Shortcuts:** Alt+W (Weather), Alt+C (Calculators)
+
+---
+
 ## 📧 SESSION: Apr 1, 2026 - 09:12 UTC (Overnight Cron #66)
 **Status:** ✅ EMAIL DRAFT GENERATOR + PROFITABILITY ANALYZER added (+907 lines)
 
