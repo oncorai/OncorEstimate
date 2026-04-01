@@ -1,5 +1,277 @@
 # Overnight Build Tasks - 2026-02-14
 
+## 💳 SESSION: Apr 1, 2026 - 17:17 UTC (Overnight Cron #74)
+**Status:** ✅ ACCOUNTS PAYABLE & BILL TRACKER + DRAWING & DOCUMENT REGISTER added (+689 lines)
+
+### What Was Added:
+
+**💳 Accounts Payable & Bill Tracker (Alt+A):**
+- New `💳 AP & Bills` button injected in sidebar below AR & Invoices
+- `Alt+A` keyboard shortcut opens/toggles the AP modal
+- **Purpose:** Track every bill and vendor invoice — due dates, payment status, overdue alerts, cash flow management. The flip side of AR — what JFS owes vs what he's owed.
+
+**Stats Bar (live):**
+- **Total Bills** — count of all logged bills
+- **Total Billed** — sum of all bill amounts
+- **Paid** — total paid out
+- **Outstanding** — unpaid balance (bills - payments)
+- **Overdue** — count + dollar amount past due date
+- **Due ≤7d** — count + amount coming due this week
+
+**Bill Types (15 options):** Material Invoice, Sub Invoice, Equipment Rental, Fuel & Oil, Small Tools, Permit/Fee, Insurance Premium, Labor (Sub), PO Confirmation, Utility Bill, Dump Fee, Testing/Inspection, Mobilization, Misc Expense, Other
+
+**Bill Entry Form (10 fields):**
+- Bill Type (required), Vendor / Payee (required), Invoice # / Ref
+- Amount (required), Amount Paid (for partial tracking)
+- Invoice Date, Due Date, Date Paid
+- Status (Unpaid / Due Soon / Overdue / Partial / Paid / Disputed / Voided)
+- Notes / Description
+
+**Auto Status Logic:**
+- **Overdue** auto-tagged when past due date and not Paid/Voided/Disputed
+- **Due Soon** auto-tagged when due within 7 days and status is Unpaid
+- Sort order: Overdue first → Due Soon → Partial → Unpaid → Disputed → Paid → Voided
+
+**Bill List View:**
+- Per-card: Vendor + Type badge + Status badge + Overdue days badge / Invoice & due dates / Notes
+- Amount (teal) + Paid (green) + Balance (amber) when partial
+- Edit (✏️), Delete (🗑) per bill
+
+**Printable AP Report:**
+- Company header + AP REPORT badge + print date
+- 6-card KPI stats (Total Bills / Total Billed / Paid / Outstanding / Overdue / Due ≤7d)
+- Full bill table sorted by urgency: Vendor, Type, Invoice #, Invoice Date, Due Date (days overdue), Amount, Paid, Balance, Status, Notes
+- Grand totals row
+- Cash flow note callout: prioritize overdue then 7-day bills
+- CONFIDENTIAL footer
+
+**Why this matters:** JFS gets invoices from batch plants, rebar suppliers, pump companies, testing labs. Without AP tracking, he's paying from memory or digging through emails. With this: "I've got $18K outstanding in bills — $6K is overdue to Martin Marietta, $4K is due Friday to the pump company." The overdue alert prevents supplier credit holds that would stop deliveries mid-job.
+
+---
+
+**📐 Drawing & Document Register (Alt+X):**
+- New `📐 Drawing Register` button injected in sidebar below AP & Bills
+- `Alt+X` keyboard shortcut opens/toggles the drawing register modal
+- **Purpose:** Track every drawing, spec, and document on a project — current revision, status, who issued it, when received. Ensure JFS is always building from the latest IFC drawings.
+
+**Stats Bar (live):**
+- **Total Docs** — all registered documents
+- **IFC** — Issued for Construction (the ones to build from)
+- **Under Review** — documents not yet approved
+- **Current (Active)** — non-superseded/void
+- **Superseded/Void** — old revisions (shown faded)
+
+**Document Types (24 options):**
+Architectural Drawing, Structural Drawing, Civil Drawing, MEP Drawing, Concrete Plan, Foundation Plan, Slab Plan, Rebar/Reinforcing Plan, Formwork Drawing, Shop Drawing, Coordination Drawing, As-Built Drawing, Specification Section, Geotechnical Report, Structural Calc, Mix Design, Product Data Sheet, Material Sample, Test Report, Inspection Report, Survey/Topo, Site Plan, Landscape Plan, Other
+
+**Statuses (8):**
+Issued for Construction (IFC), Issued for Review, Approved, Approved as Noted, Revise & Resubmit, For Information Only, Superseded, Void
+
+**Document Entry Form (10 fields):**
+- Document Type, Document # / Sheet # (e.g. S-101, A-203)
+- Title / Description (required), Discipline (Structural/Civil/Arch)
+- Revision (0/1/2/A…), Status
+- Prepared By (firm name), Date Issued, Date Received
+- File Location / URL (Google Drive link, folder path)
+- Notes / Comments
+
+**Document List View:**
+- Sorted by type then document number
+- Per-card: Doc # (monospace, blue badge) + Title + Type badge + Status badge (color-coded) + Revision badge
+- Discipline, Prepared By, Issued/Received dates
+- Notes inline
+- Superseded/Void rows shown at 60% opacity
+- Filter by Type + Status + Search
+
+**Printable Drawing Register:**
+- Company header + DRAWING & DOCUMENT REGISTER badge
+- 5-card KPI stats
+- **Grouped by Document Type** — each type gets its own section
+- Per section table: Doc # / Title / Rev / Status / Discipline / Prepared By / Date Issued / Date Received / Notes
+- IFC rows highlighted green, Superseded rows shown italic/gray
+- Drawing management note: always work from IFC, remove superseded from jobsite
+- CONFIDENTIAL footer
+
+**Why this matters:** On a commercial job, JFS receives 50+ drawings across multiple disciplines. When the structural engineer issues Rev 2 of S-201 (Foundation Plan), the old Rev 1 should never be used. With this register, JFS logs every drawing received, tracks the current revision, and knows instantly which are IFC vs still under review. When a GC asks "are you building from the current drawings?" he can show a printed register. Also tracks specification sections, mix design approvals, and shop drawing submittals — the full document ecosystem on a complex job.
+
+**Commits:**
+- 53bb293: 💳📐 Accounts Payable & Bill Tracker (Alt+A) + Drawing & Document Register (Alt+X) (+689 lines) [Session #74]
+
+**Total Lines:** ~157,228 | **New Alt+ Shortcuts:** Alt+A (AP & Bills), Alt+X (Drawing Register)
+
+---
+
+## 🏷️ SESSION: Apr 1, 2026 - 16:12 UTC (Overnight Cron #73)
+**Status:** ✅ SUPPLIER QUOTE COMPARISON & PRICE HISTORY added (+468 lines)
+
+### What Was Added:
+
+**🏷️ Supplier Quote Comparison & Price History (Alt+Q):**
+- New `🏷️ Supplier Quotes` button injected in sidebar below AR & Invoices
+- `Alt+Q` keyboard shortcut opens/toggles the quote comparison modal
+- **Purpose:** When bidding a job, JFS gets quotes from 2-4 batch plants, rebar suppliers, pump companies. This tool logs all quotes, compares them side-by-side, tracks price history over time, and marks which vendor was awarded.
+
+**Stats Bar (live):**
+- **Total Quotes** — all logged supplier quotes
+- **Active** — quotes not expired, not awarded
+- **Expiring ≤7d** — amber warning for quotes expiring soon
+- **Expired** — past expiry date
+- **Awarded** — marked as selected/won
+- **Vendors** — unique supplier count
+- **Materials** — unique material types quoted
+
+**Quote Entry Form (13 fields):**
+- Material dropdown (33 options: Ready-Mix by PSI, Rebar #3-#8, Wire Mesh, Fiber, Pump, Curing, Sealer, Base Course, Vapor Barrier, Saw Cutting, Admixtures, Embeds, etc.)
+- Vendor/Supplier (with autocomplete from saved vendors)
+- Contact Name, Phone
+- Unit Price (required), Unit (15 options: per CY, per ton, per lb, per SF, per LF, per EA, per HR, per day, per pour, LS, etc.)
+- Quantity (for this project)
+- Project (optional — links quote to a specific job)
+- Quote Date (required), Quote Expiry
+- Payment Terms / Delivery Notes (e.g. "Net 30, FOB jobsite, 45 min unload")
+- Notes
+
+**Quote List View:**
+- Sorted: awarded last, then by quote date (newest first)
+- Per-card: Material + expiry badge (EXPIRED red / Xd left amber / ✓ AWARDED purple)
+- Vendor + contact + phone
+- Price (green) + unit + qty
+- Quote date + expiry date
+- Project name, terms, notes inline
+- Edit (✏️), Award (✓), Delete (🗑️) per quote
+
+**Filter Controls:**
+- Material dropdown (auto-populated from logged quotes)
+- Vendor dropdown (auto-populated)
+- Status filter (All / Active Only / Expired / Awarded)
+- Search by material, vendor, project, notes
+
+**📊 Compare View:**
+- Shows all materials with 2+ active quotes
+- Side-by-side comparison table per material
+- Sorted by price (lowest first)
+- Columns: Vendor, Price, Unit, Terms, Expires, vs Low (% difference)
+- LOWEST badge on best price
+- One-click Award button per quote
+
+**Award Tracking:**
+- Mark any quote as "Awarded" to track which vendor won the work
+- Awarded quotes shown with purple ✓ badge
+- Builds vendor performance history over time
+
+**Vendor List (auto-built):**
+- Saves unique vendors to localStorage
+- Autocomplete on vendor field for fast entry
+- Tracks contact + phone per vendor
+
+**Printable Quote Report:**
+- Company header (name, phone, email)
+- 5-card stats (Total / Active / Expiring / Expired / Awarded)
+- Grouped by material — each material gets its own comparison table
+- Columns: Vendor, Contact, Price, Unit, Quote Date, Expires, Terms, Status
+- Lowest price row highlighted green
+- Awarded row highlighted purple
+- Expired rows highlighted red
+- CONFIDENTIAL — INTERNAL USE ONLY footer
+
+**Integration:**
+- `window._getQuoteStats()` exposed for Project Status Card
+- localStorage global keys: `oncor_quotes_v1` (quotes), `oncor_vendors_v1` (vendor directory)
+
+**Why this matters:** On every bid, JFS calls 2-3 batch plants for concrete pricing, gets rebar quotes from 2 suppliers, pump quotes from local pumpers. Without a system, he's comparing quotes on scraps of paper or in his head. With this tool, he logs every quote as it comes in, instantly sees which supplier is cheapest per material, tracks expiration dates (batch plant quotes typically expire in 30 days), and marks which vendor got the work. Over time, this builds a price history database — "Martin Marietta's 4000 PSI has been $185-$195/CY over the last 6 months." Better bid calibration, less scrambling on bid day.
+
+---
+
+**📸 Project Photo & Progress Documentation (Alt+O):**
+- New `📸 Photo Log` button injected in sidebar below Supplier Quotes
+- `Alt+O` keyboard shortcut opens/toggles the photo log modal
+- **Purpose:** GCs/owners request progress photos. Lenders need photo documentation for draws. Claims/disputes need timestamped evidence. This creates a proper photo log.
+
+**Stats Bar (live):**
+- **Total Photos** — entries logged
+- **Categories** — unique categories documented
+- **Days Documented** — unique dates with photos
+
+**Photo Entry Form:**
+- Category dropdown (19 options: Site Conditions, Excavation, Forming, Rebar Placement, Pre-Pour Inspection, Concrete Pour, Finishing, Curing, Stripping Forms, Saw Cutting, Punch List, Completed Work, Safety/Compliance, Weather Conditions, Defect/Issue, Equipment, Materials Delivery, General Progress, Other)
+- Date & Time (datetime-local picker)
+- Description / What This Shows (required)
+- Location / Grid Reference (e.g. "Building A, Grid Line 3-7")
+- Taken By (name/initials)
+- Filename / File Path (reference to actual image file stored elsewhere)
+- Additional Notes
+
+**Photo List View:**
+- Grouped by date (newest first)
+- Cards show: category badge (color-coded), description, location, taken by, timestamp, filename
+- Edit / Delete per entry
+- Responsive grid layout
+
+**Filter Controls:**
+- Category dropdown
+- Date picker
+- Search by notes/location
+
+**Printable Photo Report:**
+- Company header
+- 3-card stats
+- Table: Date/Time, Category, Description, Location, Taken By, File Reference
+- CONFIDENTIAL footer
+
+**Design note:** Photos are stored as descriptions with metadata — actual image files stored in Google Drive, job folder, or cloud storage. This logs the metadata for organization and reporting.
+
+---
+
+**⏱️ Standby & Delay Time Tracker (Alt+D):**
+- New `⏱️ Delay Tracker` button injected in sidebar below Photo Log
+- `Alt+D` keyboard shortcut opens/toggles the delay tracker modal
+- **Purpose:** When crew sits waiting for GC/owner/inspector, that's billable delay time. This tool documents it in real-time for change order justification and claims.
+
+**Stats Bar (live):**
+- **Delay Events** — total logged
+- **Total Hours** — hours lost to delays
+- **Total Cost** — calculated delay cost ($)
+- **Pending Claims** — awaiting resolution
+- **Approved** — claims paid
+- **Denied** — claims rejected
+
+**Delay Entry Form (13 fields):**
+- Delay Type dropdown (23 options: GC Delay — Site Not Ready / Access Blocked / Prior Trade Not Complete, Owner Delay — Decision Pending / Change Direction, Inspection Delay — Inspector Late / Failed/Re-Inspection, Weather Delay — Rain/Wind/Heat/Cold, Material Delay — Late/Wrong/Short Delivery, Equipment Delay — Breakdown / Late Arrival, Utility Conflict — Unmarked / Relocation, Design Issue — RFI Pending / Drawing Conflict, Subcontractor Delay, Permit/Approval Delay, Force Majeure, Other)
+- Date (required)
+- Responsible Party dropdown (9 options: General Contractor, Owner/Developer, Architect/Engineer, Inspector/Testing, Subcontractor, Supplier/Vendor, Weather/Force Majeure, Self-Caused, Other)
+- Hours Lost (required, 0.25 increments)
+- Crew Size (people affected)
+- Avg Hourly Rate ($/hr)
+- Total Cost (auto-calculated: hours × crew × rate, or manual override)
+- Notified To (GC rep name)
+- Claim Status (Pending / Submitted / Approved / Denied)
+- Description / What Happened (required)
+- Impact / Schedule Effect
+
+**Delay List View:**
+- Color-coded by status (pending=amber, submitted=blue, approved=green, denied=red)
+- Cards show: type, date, hours, crew, cost, responsible party, notified to, description, impact
+- Filter by type, responsible party, status
+
+**Printable Delay Report:**
+- Company header
+- 4-card stats (Events, Hours, Cost, Pending Claims)
+- Summary table: Delay Cost by Responsible Party (sorted by cost descending)
+- Full delay log table: Date, Type, Responsible, Hours, Cost, Status, Description/Impact
+- Totals row
+- Legal notice: "This documentation serves as formal notice of claimed delay costs."
+
+**Why this matters:** Construction disputes often hinge on documentation. When a GC says "we don't owe you for that delay," JFS can pull out a timestamped report showing: who was responsible, who was notified, exactly how many hours/dollars were lost. The print report is designed to attach to change order requests or use in mediation.
+
+**Commits:**
+- bd9207a: 🏷️ Supplier Quote Comparison & Price History (Alt+Q) (+468 lines) [Session #73]
+- 0075eb6: 📸 Project Photo & Progress Documentation (Alt+O) (+343 lines) [Session #73]
+- 3e4edee: ⏱️ Standby & Delay Time Tracker (Alt+D) (+383 lines) [Session #73]
+
+**Total Lines:** ~156,539 | **New Alt+ Shortcuts:** Alt+Q (Supplier Quotes), Alt+O (Photo Log), Alt+D (Delay Tracker)
+
+---
+
 ## ⚡ SESSION: Apr 1, 2026 - 13:12 UTC (Overnight Cron #70)
 **Status:** ✅ BUSINESS INTELLIGENCE DASHBOARD added (+400 lines)
 
