@@ -151527,3 +151527,244 @@ td{padding:6px 8px;border-bottom:1px solid #e2e8f0;}
 })();
 // ==================== END WARRANTY & CLOSEOUT TRACKER — Zeus ⚡ Session #64 ====================
 </script>
+<script>
+// ==================== BID REVISION HISTORY & BUDGET SNAPSHOT — Zeus ⚡ Session #65 ====================
+(function(){
+  'use strict';
+
+  function getSnapKey(){ const p=(document.getElementById('projectName')||{}).value||'default'; return 'oncor_snapshots_v1_'+p.replace(/\s+/g,'_'); }
+  function getSnapData(){ try{ return JSON.parse(localStorage.getItem(getSnapKey()))||{snapshots:[]}; }catch(e){ return {snapshots:[]}; } }
+  function saveSnapData(d){ localStorage.setItem(getSnapKey(), JSON.stringify(d)); }
+
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  function fmtDate(d){ if(!d) return '—'; try{ return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }catch(e){return d;} }
+  function fmtMoney(n){ const v=parseFloat(n)||0; return '$'+v.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+  function genId(){ return 'S'+(Date.now()%1e7)+(Math.random()*9999|0); }
+
+  const SNAP_TYPES = ['Initial Estimate','Revised Estimate','Value Engineering','Scope Addition','Scope Reduction','Final Bid Submitted','GC-Negotiated','Awarded Contract','Budget vs Actual','Other'];
+
+  /* CAPTURE CURRENT ESTIMATE AS SNAPSHOT */
+  function captureCurrentEstimate(){
+    const est = window.lastEstimate || {};
+    const proj = (document.getElementById('projectName')||{}).value||'';
+    const client = (document.getElementById('clientName')||{}).value||'';
+    const notes = (document.getElementById('projectNotes')||{}).value||'';
+    const meas = window.measurements || [];
+    return {
+      totalBid: est.totalBid || 0,
+      totalYds: meas.reduce((s,m)=>s+(parseFloat(m.yd3)||0),0),
+      costPerYd: est.totalBid && meas.length ? (est.totalBid / meas.reduce((s,m)=>s+(parseFloat(m.yd3)||0),0)) : 0,
+      measurementCount: meas.length,
+      concrete: est.concreteCost || 0,
+      labor: est.laborCost || 0,
+      overhead: est.overheadCost || 0,
+      profit: est.profitCost || 0,
+      projectName: proj,
+      clientName: client,
+      notes: notes,
+      capturedAt: new Date().toISOString()
+    };
+  }
+
+  window.showBidHistory = function(){
+    let modal = document.getElementById('bidHistoryModal');
+    if(!modal){
+      modal = document.createElement('div');
+      modal.id = 'bidHistoryModal';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10100;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+      modal.innerHTML = `<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;width:100%;max-width:1000px;max-height:90vh;overflow-y:auto;padding:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #334155;position:sticky;top:0;background:#1e293b;z-index:1;">
+          <div><div style="font-size:14pt;font-weight:700;color:#e2e8f0;">📸 Bid Revision History & Budget Snapshots</div>
+          <div style="font-size:8.5pt;color:#64748b;">Track every revision, capture estimate snapshots, compare budget vs actual</div></div>
+          <button onclick="closeBidHistory()" style="background:#374151;border:none;color:#9ca3af;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:10pt;">✕</button>
+        </div>
+        <div style="padding:16px 20px;">
+          <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+            <button onclick="takeSnapshot()" style="background:#f59e0b;border:none;color:#111;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:9pt;font-weight:700;">📸 Capture Current Estimate</button>
+            <button onclick="addManualSnapshot()" style="background:#374151;border:none;color:#e2e8f0;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:9pt;">+ Add Manual Entry</button>
+            <button onclick="printBidHistory()" style="background:#374151;border:none;color:#e2e8f0;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:9pt;">🖨 Print History</button>
+          </div>
+          <div id="snapFormArea"></div>
+          <div id="snapListArea"></div>
+        </div>
+      </div>`;
+      modal.addEventListener('click', function(e){ if(e.target===modal) closeBidHistory(); });
+      document.body.appendChild(modal);
+    }
+    modal.style.display = 'flex';
+    renderSnapList();
+  };
+
+  window.closeBidHistory = function(){
+    const m=document.getElementById('bidHistoryModal'); if(m) m.style.display='none';
+  };
+
+  window.takeSnapshot = function(){
+    const current = captureCurrentEstimate();
+    if(!current.totalBid && !current.totalYds){ alert('Run an estimate first — no data to capture.'); return; }
+    const label = prompt('Label for this snapshot (e.g. "Rev 2 - VE reduction", "Final Bid"):','Rev '+(getSnapData().snapshots.length+1));
+    if(!label) return;
+    const typeStr = SNAP_TYPES[1]; // default Revised Estimate
+    const snap = {
+      id: genId(),
+      label: label.trim(),
+      type: typeStr,
+      date: new Date().toISOString().slice(0,10),
+      ...current,
+      manualNote: ''
+    };
+    const d = getSnapData();
+    d.snapshots.push(snap);
+    saveSnapData(d);
+    renderSnapList();
+    // Flash feedback
+    const btn = document.querySelector('[onclick="takeSnapshot()"]');
+    if(btn){ btn.textContent='✅ Saved!'; btn.style.background='#22c55e'; setTimeout(()=>{ btn.textContent='📸 Capture Current Estimate'; btn.style.background='#f59e0b'; },1500); }
+  };
+
+  window.addManualSnapshot = function(){
+    const fa = document.getElementById('snapFormArea');
+    if(!fa) return;
+    const typeOpts = SNAP_TYPES.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
+    fa.innerHTML = `<div style="background:#172032;border:1px solid #f59e0b;border-radius:8px;padding:14px;margin-bottom:14px;">
+      <div style="font-weight:700;color:#fcd34d;font-size:9.5pt;margin-bottom:10px;">+ Manual Bid Entry</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px;">
+        <div><label style="font-size:7.5pt;color:#94a3b8;">Label / Version *</label><br><input id="sn_label" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;" placeholder="e.g. Rev 1 - Initial Bid"></div>
+        <div><label style="font-size:7.5pt;color:#94a3b8;">Type</label><br><select id="sn_type" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;">${typeOpts}</select></div>
+        <div><label style="font-size:7.5pt;color:#94a3b8;">Date</label><br><input id="sn_date" type="date" value="${new Date().toISOString().slice(0,10)}" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;"></div>
+        <div><label style="font-size:7.5pt;color:#94a3b8;">Total Bid $</label><br><input id="sn_bid" type="number" min="0" step="100" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;" placeholder="0"></div>
+        <div><label style="font-size:7.5pt;color:#94a3b8;">Total yd³</label><br><input id="sn_yds" type="number" min="0" step="0.5" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;" placeholder="0"></div>
+        <div><label style="font-size:7.5pt;color:#94a3b8;">Client / GC</label><br><input id="sn_client" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;"></div>
+      </div>
+      <div style="margin-bottom:8px;"><label style="font-size:7.5pt;color:#94a3b8;">Notes / Reason for Revision</label><br>
+        <textarea id="sn_note" rows="2" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;resize:vertical;" placeholder="What changed? Why was this revision made?"></textarea></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button type="button" onclick="document.getElementById('snapFormArea').innerHTML=''" style="background:#374151;border:none;color:#9ca3af;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:9pt;">Cancel</button>
+        <button type="button" onclick="saveManualSnapshot()" style="background:#f59e0b;border:none;color:#111;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:9pt;font-weight:700;">💾 Save</button>
+      </div>
+    </div>`;
+  };
+
+  window.saveManualSnapshot = function(){
+    const label=(document.getElementById('sn_label')||{}).value||'';
+    if(!label.trim()){ alert('Label is required.'); return; }
+    const bid=parseFloat((document.getElementById('sn_bid')||{}).value||0);
+    const yds=parseFloat((document.getElementById('sn_yds')||{}).value||0);
+    const snap={
+      id:genId(), label:label.trim(),
+      type:(document.getElementById('sn_type')||{}).value||'Initial Estimate',
+      date:(document.getElementById('sn_date')||{}).value||new Date().toISOString().slice(0,10),
+      totalBid:bid, totalYds:yds,
+      costPerYd:yds>0?bid/yds:0,
+      clientName:(document.getElementById('sn_client')||{}).value||'',
+      manualNote:(document.getElementById('sn_note')||{}).value||'',
+      capturedAt:new Date().toISOString()
+    };
+    const d=getSnapData(); d.snapshots.push(snap); saveSnapData(d);
+    document.getElementById('snapFormArea').innerHTML='';
+    renderSnapList();
+  };
+
+  window.deleteSnapshot = function(id){
+    if(!confirm('Delete this snapshot?')) return;
+    const d=getSnapData(); d.snapshots=(d.snapshots||[]).filter(s=>s.id!==id); saveSnapData(d); renderSnapList();
+  };
+
+  function renderSnapList(){
+    const d=getSnapData();
+    const snaps=(d.snapshots||[]).slice().sort((a,b)=>new Date(a.capturedAt||a.date||0)-new Date(b.capturedAt||b.date||0));
+    const el=document.getElementById('snapListArea');
+    if(!el) return;
+    if(!snaps.length){
+      el.innerHTML=`<div style="text-align:center;padding:40px;color:#64748b;"><div style="font-size:24pt;">📸</div><div style="margin-top:8px;">No snapshots yet.</div><div style="font-size:8.5pt;margin-top:4px;">Click "Capture Current Estimate" after each revision to build a history.</div></div>`;
+      return;
+    }
+    // Compute change from previous
+    const firstBid = parseFloat(snaps[0].totalBid)||0;
+    const lastBid = parseFloat(snaps[snaps.length-1].totalBid)||0;
+    const totalChange = lastBid - firstBid;
+    const totalChangePct = firstBid>0 ? ((totalChange/firstBid)*100).toFixed(1) : '—';
+    el.innerHTML = `<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;gap:16px;flex-wrap:wrap;">
+      <div><span style="font-size:8pt;color:#64748b;">Revisions: </span><span style="font-weight:700;color:#e2e8f0;">${snaps.length}</span></div>
+      <div><span style="font-size:8pt;color:#64748b;">First Bid: </span><span style="font-weight:700;color:#e2e8f0;">${fmtMoney(firstBid)}</span></div>
+      <div><span style="font-size:8pt;color:#64748b;">Latest Bid: </span><span style="font-weight:700;color:#f59e0b;">${fmtMoney(lastBid)}</span></div>
+      <div><span style="font-size:8pt;color:#64748b;">Total Change: </span><span style="font-weight:700;color:${totalChange>=0?'#22c55e':'#ef4444'};">${totalChange>=0?'+':''}${fmtMoney(totalChange)} (${totalChangePct}%)</span></div>
+    </div>` +
+    snaps.map((snap,i)=>{
+      const prev = i>0?snaps[i-1]:null;
+      const bidChange = prev ? (parseFloat(snap.totalBid||0)-parseFloat(prev.totalBid||0)) : null;
+      const bidChangePct = prev && parseFloat(prev.totalBid||0)>0 ? ((bidChange/parseFloat(prev.totalBid||0))*100).toFixed(1) : null;
+      const typeColor = {'Initial Estimate':'#2563eb','Revised Estimate':'#f59e0b','Final Bid Submitted':'#22c55e','Awarded Contract':'#22c55e','Budget vs Actual':'#7c3aed','Value Engineering':'#d97706','Scope Addition':'#0d9488','Scope Reduction':'#ef4444','GC-Negotiated':'#f59e0b','Other':'#64748b'}[snap.type||'Other']||'#64748b';
+      return `<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px 16px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+        <div style="flex:1;min-width:200px;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="background:#374151;color:#e2e8f0;font-size:7.5pt;padding:2px 7px;border-radius:3px;font-weight:700;">Rev ${i+1}</span>
+            <span style="background:${typeColor};color:#fff;font-size:7pt;padding:2px 7px;border-radius:3px;">${esc(snap.type||'Estimate')}</span>
+            <span style="font-weight:700;color:#e2e8f0;">${esc(snap.label)}</span>
+          </div>
+          <div style="margin-top:6px;display:flex;gap:16px;flex-wrap:wrap;">
+            <div style="text-align:center;"><div style="font-size:12pt;font-weight:700;color:#f59e0b;">${fmtMoney(snap.totalBid)}</div><div style="font-size:7pt;color:#64748b;">Total Bid</div></div>
+            ${snap.totalYds?`<div style="text-align:center;"><div style="font-size:12pt;font-weight:700;color:#0d9488;">${(parseFloat(snap.totalYds)||0).toFixed(1)} yd³</div><div style="font-size:7pt;color:#64748b;">Volume</div></div>`:''}
+            ${snap.costPerYd?`<div style="text-align:center;"><div style="font-size:12pt;font-weight:700;color:#e2e8f0;">${fmtMoney(snap.costPerYd)}/yd³</div><div style="font-size:7pt;color:#64748b;">Cost/yd³</div></div>`:''}
+            ${bidChange!==null?`<div style="text-align:center;"><div style="font-size:12pt;font-weight:700;color:${bidChange>=0?'#22c55e':'#ef4444'};">${bidChange>=0?'+':''}${fmtMoney(bidChange)}</div><div style="font-size:7pt;color:#64748b;">vs Rev ${i} (${bidChangePct}%)</div></div>`:''}
+          </div>
+          <div style="font-size:8pt;color:#64748b;margin-top:5px;">📅 ${fmtDate(snap.date)}${snap.clientName?' · 👤 '+esc(snap.clientName):''}</div>
+          ${snap.manualNote?`<div style="font-size:8.5pt;color:#94a3b8;margin-top:4px;font-style:italic;">${esc(snap.manualNote)}</div>`:''}
+        </div>
+        <button onclick="deleteSnapshot('${snap.id}')" style="background:#374151;border:none;color:#94a3b8;border-radius:5px;padding:5px 9px;cursor:pointer;font-size:9pt;">🗑</button>
+      </div>`;
+    }).join('');
+  }
+
+  window.printBidHistory = function(){
+    const d=getSnapData(); const snaps=(d.snapshots||[]).slice().sort((a,b)=>new Date(a.capturedAt||a.date||0)-new Date(b.capturedAt||b.date||0));
+    if(!snaps.length){ alert('No snapshots to print.'); return; }
+    const proj=(document.getElementById('projectName')||{}).value||'Project';
+    const comp={name:(document.getElementById('companyName')||{}).value||'Oncor Concrete'};
+    const firstBid=parseFloat(snaps[0].totalBid||0); const lastBid=parseFloat(snaps[snaps.length-1].totalBid||0);
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bid History</title>
+    <style>body{font-family:Arial,sans-serif;font-size:9pt;margin:0;padding:16px;}
+    .hdr{display:flex;justify-content:space-between;border-bottom:3px solid #f59e0b;padding-bottom:10px;margin-bottom:12px;}
+    table{width:100%;border-collapse:collapse;} th{background:#f59e0b;color:#111;padding:5px;font-size:8pt;text-align:left;}
+    td{padding:4px 6px;font-size:8pt;border-bottom:1px solid #e5e7eb;vertical-align:top;} tr:nth-child(even) td{background:#f9fafb;}
+    .footer{margin-top:14px;font-size:7pt;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:6px;text-align:center;}
+    @media print{button{display:none!important;}}</style></head><body>
+    <div class="hdr"><div><h1 style="margin:0;color:#d97706;">${esc(comp.name)}</h1><div>BID REVISION HISTORY</div></div>
+    <div style="text-align:right;font-size:8.5pt;"><div><strong>Project:</strong> ${esc(proj)}</div><div>First: ${fmtMoney(firstBid)} → Final: ${fmtMoney(lastBid)}</div><div>${new Date().toLocaleDateString()}</div></div></div>
+    <table><thead><tr><th>Rev</th><th>Label</th><th>Type</th><th>Date</th><th>Total Bid</th><th>yd³</th><th>$/yd³</th><th>Change</th><th>Notes</th></tr></thead>
+    <tbody>${snaps.map((s,i)=>{const prev=i>0?snaps[i-1]:null; const chg=prev?parseFloat(s.totalBid||0)-parseFloat(prev.totalBid||0):null;
+    return `<tr><td>${i+1}</td><td>${esc(s.label)}</td><td>${esc(s.type||'—')}</td><td>${fmtDate(s.date)}</td>
+    <td style="font-weight:700;">${fmtMoney(s.totalBid)}</td><td>${(parseFloat(s.totalYds)||0).toFixed(1)}</td>
+    <td>${s.costPerYd?fmtMoney(s.costPerYd):'-'}</td>
+    <td style="color:${chg===null?'#111':chg>=0?'#22a349':'#dc2626'}">${chg===null?'—':(chg>=0?'+':'')+fmtMoney(chg)}</td>
+    <td style="font-size:7.5pt;">${esc(s.manualNote||'—')}</td></tr>`;}).join('')}</tbody></table>
+    <div class="footer">Bid Revision History · ${esc(proj)} · ${esc(comp.name)} · CONFIDENTIAL</div>
+    <br><button onclick="window.print()">🖨 Print</button></body></html>`;
+    const w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+  };
+
+  /* KEYBOARD SHORTCUT Ctrl+Shift+B */
+  document.addEventListener('keydown', function(e){
+    if(e.ctrlKey && e.shiftKey && (e.key==='B'||e.key==='b')){
+      e.preventDefault();
+      const m=document.getElementById('bidHistoryModal');
+      if(m&&m.style.display!=='none') closeBidHistory(); else showBidHistory();
+    }
+  });
+
+  /* INJECT SIDEBAR BUTTON */
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){
+      const wcBtn = document.querySelector('button[onclick*="showWarrantyTracker"]');
+      if(!wcBtn) return;
+      const newRow = document.createElement('div');
+      newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML = `<button class="action-btn secondary" onclick="showBidHistory()" title="Bid Revision History & Budget Snapshots — Capture estimate snapshots, track revisions, compare first vs final bid. (Ctrl+Shift+B)" style="background:rgba(245,158,11,0.1);border-color:rgba(245,158,11,0.3);color:#fcd34d;">📸 Bid History</button>`;
+      const parentRow = wcBtn.closest('div');
+      if(parentRow&&parentRow.parentNode) parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 2200);
+  });
+
+})();
+// ==================== END BID REVISION HISTORY & BUDGET SNAPSHOT — Zeus ⚡ Session #65 ====================
+</script>
