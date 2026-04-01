@@ -158246,3 +158246,414 @@ document.addEventListener('DOMContentLoaded',function(){
 })();
 // ==================== END PROJECT CALENDAR & MILESTONE TRACKER — Zeus ⚡ Session #76 ====================
 </script>
+
+<script>
+// ==================== START PROJECT CORRESPONDENCE & TRANSMITTAL LOG — Zeus ⚡ Session #77 ====================
+(function(){
+'use strict';
+
+var CORR_ID = 'oncorCorrModal';
+
+function getCorrKey(){
+  var pn = (typeof window.getCurrentProjectName === 'function') ? window.getCurrentProjectName() : '';
+  if(!pn){
+    try{ var d=JSON.parse(localStorage.getItem('oncorCurrentProject')||'{}'); pn=d.projectName||''; }catch(x){}
+  }
+  return 'oncor_corr_v1_' + (pn||'_global');
+}
+
+function loadCorr(){ try{ return JSON.parse(localStorage.getItem(getCorrKey())||'[]'); }catch(x){ return []; } }
+function saveCorr(arr){ localStorage.setItem(getCorrKey(), JSON.stringify(arr)); }
+
+var corrEditIdx = -1;
+
+function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtD(s){ if(!s)return '—'; try{ var d=new Date(s+'T00:00:00'); return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }catch(x){ return s; } }
+function todayCorrStr(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+var CORR_TYPES = ['Letter','Email','Fax','Transmittal','Notice','Memo','RFI Response','Submittal Response','Change Order Correspondence','Pay Application','Meeting Minutes','Contract/Agreement','Subpoena/Legal','Daily Report','Site Directive','Other'];
+var CORR_DIR = ['Outgoing (Sent)','Incoming (Received)'];
+var CORR_FROM = ['Oncor / JFS','General Contractor','Owner / Developer','Architect','Structural Engineer','Civil Engineer','Subcontractor','Supplier/Vendor','Testing Lab','City/Inspector','Attorney','Other'];
+var CORR_STATUS = ['Active / Open','For Record Only','Requires Response','Response Received','Closed','Disputed'];
+var CORR_METHOD = ['Email','USPS Certified Mail','USPS Regular Mail','Hand Delivered','Fax','Courier','Text/SMS','DocuSign / E-Sign','Other'];
+
+function getCorrStats(){
+  var arr = loadCorr();
+  var today = todayCorrStr();
+  var outgoing = arr.filter(function(c){ return c.direction==='Outgoing (Sent)'; }).length;
+  var incoming = arr.filter(function(c){ return c.direction==='Incoming (Received)'; }).length;
+  var needsResp = arr.filter(function(c){ return c.status==='Requires Response'; }).length;
+  var overdue = arr.filter(function(c){ return c.status==='Requires Response' && c.responseDue && c.responseDue < today; }).length;
+  return { total: arr.length, outgoing: outgoing, incoming: incoming, needsResp: needsResp, overdue: overdue };
+}
+window._getCorrStats = getCorrStats;
+
+function buildCorrModal(){
+  if(document.getElementById(CORR_ID)) return;
+  var modal = document.createElement('div');
+  modal.id = CORR_ID;
+  modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10500;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML = [
+    '<div style="background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:12px;width:100%;max-width:960px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">',
+    '<div style="padding:18px 20px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">',
+    '<div><span style="font-size:1.15rem;font-weight:700;color:#e2e8f0;">🗂️ Project Correspondence & Transmittal Log</span><span style="font-size:0.75rem;color:#94a3b8;margin-left:10px;">Alt+E</span></div>',
+    '<div style="display:flex;gap:8px;"><button onclick="printCorrReport()" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);color:#ccc;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;">🖨 Print Log</button>',
+    '<button onclick="closeCorrModal()" style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.3);color:#f87171;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;">✕ Close</button></div>',
+    '</div>',
+    '<div id="corrStats" style="display:flex;gap:12px;padding:12px 20px;background:rgba(0,0,0,0.2);flex-shrink:0;flex-wrap:wrap;"></div>',
+    '<div style="padding:10px 20px 6px;display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;align-items:center;">',
+    '<input id="corrSearch" type="text" placeholder="Search correspondence..." oninput="renderCorrList()" style="flex:1;min-width:180px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;padding:7px 10px;border-radius:6px;font-size:0.83rem;">',
+    '<select id="corrFilterDir" onchange="renderCorrList()" style="background:#1e293b;border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;padding:7px 10px;border-radius:6px;font-size:0.82rem;"><option value="">All Directions</option><option>Outgoing (Sent)</option><option>Incoming (Received)</option></select>',
+    '<select id="corrFilterStatus" onchange="renderCorrList()" style="background:#1e293b;border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;padding:7px 10px;border-radius:6px;font-size:0.82rem;"><option value="">All Statuses</option>',
+    CORR_STATUS.map(function(s){ return '<option>'+s+'</option>'; }).join(''),
+    '</select>',
+    '<button onclick="openCorrForm(-1)" style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.35);color:#34d399;padding:7px 14px;border-radius:6px;cursor:pointer;font-size:0.82rem;white-space:nowrap;">+ New Entry</button>',
+    '</div>',
+    '<div id="corrList" style="flex:1;overflow-y:auto;padding:4px 20px 12px;"></div>',
+    '<div id="corrFormWrap" style="display:none;border-top:1px solid rgba(255,255,255,0.08);padding:16px 20px;flex-shrink:0;overflow-y:auto;max-height:380px;"></div>',
+    '</div>'
+  ].join('');
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e){ if(e.target===modal) closeCorrModal(); });
+}
+
+function renderCorrStats(){
+  var st = getCorrStats();
+  var s = document.getElementById('corrStats'); if(!s) return;
+  var cards = [
+    {label:'Total',val:st.total,c:'#94a3b8'},
+    {label:'Outgoing',val:st.outgoing,c:'#60a5fa'},
+    {label:'Incoming',val:st.incoming,c:'#a78bfa'},
+    {label:'Needs Response',val:st.needsResp,c:'#fbbf24'},
+    {label:'Overdue Response',val:st.overdue,c:st.overdue>0?'#f87171':'#64748b'}
+  ];
+  s.innerHTML = cards.map(function(c){
+    return '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px 14px;text-align:center;min-width:90px;">'
+      +'<div style="font-size:1.3rem;font-weight:700;color:'+c.c+';">'+c.val+'</div>'
+      +'<div style="font-size:0.72rem;color:#94a3b8;">'+c.label+'</div></div>';
+  }).join('');
+}
+
+function getStatusColor(s){
+  return {
+    'Active / Open':'#60a5fa',
+    'For Record Only':'#94a3b8',
+    'Requires Response':'#fbbf24',
+    'Response Received':'#34d399',
+    'Closed':'#64748b',
+    'Disputed':'#f87171'
+  }[s]||'#94a3b8';
+}
+function getDirColor(d){
+  return d==='Outgoing (Sent)'?'#60a5fa':'#a78bfa';
+}
+function getTypeIcon(t){
+  var m={'Letter':'📄','Email':'📧','Fax':'📠','Transmittal':'📦','Notice':'⚠️','Memo':'📝','RFI Response':'❓','Submittal Response':'📋','Change Order Correspondence':'📝','Pay Application':'💵','Meeting Minutes':'📋','Contract/Agreement':'📜','Subpoena/Legal':'⚖️','Daily Report':'📊','Site Directive':'🔧'};
+  return m[t]||'📄';
+}
+
+function renderCorrList(){
+  renderCorrStats();
+  var arr = loadCorr();
+  var search = (document.getElementById('corrSearch')||{}).value||'';
+  var fDir = (document.getElementById('corrFilterDir')||{}).value||'';
+  var fSt = (document.getElementById('corrFilterStatus')||{}).value||'';
+  var today = todayCorrStr();
+  if(search){ var q=search.toLowerCase(); arr=arr.filter(function(c){ return (c.subject||'').toLowerCase().indexOf(q)>=0||(c.from||'').toLowerCase().indexOf(q)>=0||(c.to||'').toLowerCase().indexOf(q)>=0||(c.notes||'').toLowerCase().indexOf(q)>=0||(c.type||'').toLowerCase().indexOf(q)>=0; }); }
+  if(fDir) arr=arr.filter(function(c){ return c.direction===fDir; });
+  if(fSt) arr=arr.filter(function(c){ return c.status===fSt; });
+  // sort: needs response overdue first, then by date desc
+  arr.sort(function(a,b){
+    var ao = a.status==='Requires Response'&&a.responseDue&&a.responseDue<today?1:0;
+    var bo = b.status==='Requires Response'&&b.responseDue&&b.responseDue<today?1:0;
+    if(bo-ao!==0) return bo-ao;
+    return (b.date||'').localeCompare(a.date||'');
+  });
+  var el = document.getElementById('corrList'); if(!el) return;
+  if(!arr.length){ el.innerHTML='<div style="color:#64748b;text-align:center;padding:40px;">No correspondence logged yet. Click "+ New Entry" to add.</div>'; return; }
+  var allCorr = loadCorr();
+  el.innerHTML = arr.map(function(c){
+    var realIdx = allCorr.indexOf(c);
+    var isOverdue = c.status==='Requires Response' && c.responseDue && c.responseDue < today;
+    var dc = getDirColor(c.direction);
+    var sc = getStatusColor(c.status);
+    var icon = getTypeIcon(c.type);
+    return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-left:3px solid '+dc+';border-radius:8px;padding:12px 14px;margin-bottom:8px;'+(isOverdue?'border-top:1px solid rgba(248,113,113,0.4);':'')+'">'
+      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">'
+      +'<div style="flex:1;">'
+      +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">'
+      +'<span style="font-size:0.88rem;font-weight:600;color:#e2e8f0;">'+icon+' '+escH(c.subject)+'</span>'
+      +(isOverdue?'<span style="background:#dc2626;color:#fff;font-size:0.63rem;padding:1px 6px;border-radius:4px;">OVERDUE RESPONSE</span>':'')
+      +'<span style="background:rgba(255,255,255,0.07);color:'+dc+';font-size:0.7rem;padding:2px 7px;border-radius:4px;">'+escH(c.direction)+'</span>'
+      +'<span style="background:rgba(255,255,255,0.05);color:'+sc+';font-size:0.7rem;padding:2px 7px;border-radius:4px;">'+escH(c.status)+'</span>'
+      +'</div>'
+      +'<div style="font-size:0.78rem;color:#94a3b8;display:flex;gap:14px;flex-wrap:wrap;">'
+      +'<span>'+escH(c.type)+'</span>'
+      +'<span>'+fmtD(c.date)+'</span>'
+      +(c.from?'<span>From: '+escH(c.from)+'</span>':'')
+      +(c.to?'<span>To: '+escH(c.to)+'</span>':'')
+      +(c.method?'<span>Via: '+escH(c.method)+'</span>':'')
+      +(c.refNo?'<span>Ref: <span style="font-family:monospace;color:#60a5fa;">'+escH(c.refNo)+'</span></span>':'')
+      +'</div>'
+      +(c.responseDue?'<div style="font-size:0.75rem;color:'+(isOverdue?'#f87171':'#fbbf24')+';">Response due: '+fmtD(c.responseDue)+'</div>':'')
+      +(c.notes?'<div style="font-size:0.78rem;color:#cbd5e1;margin-top:4px;border-left:2px solid rgba(255,255,255,0.1);padding-left:8px;">'+escH(c.notes)+'</div>':'')
+      +'</div>'
+      +'<div style="display:flex;gap:6px;flex-shrink:0;">'
+      +'<button onclick="printSingleCorr('+realIdx+')" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#94a3b8;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:0.75rem;">🖨</button>'
+      +'<button onclick="openCorrForm('+realIdx+')" style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);color:#93c5fd;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:0.75rem;">✏️</button>'
+      +'<button onclick="deleteCorr('+realIdx+')" style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.3);color:#f87171;border-radius:5px;padding:4px 8px;cursor:pointer;font-size:0.75rem;">🗑</button>'
+      +'</div>'
+      +'</div></div>';
+  }).join('');
+}
+window.renderCorrList = renderCorrList;
+
+function openCorrForm(idx){
+  corrEditIdx = idx;
+  var c = idx>=0 ? (loadCorr()[idx]||{}) : {};
+  var fw = document.getElementById('corrFormWrap'); if(!fw) return;
+  fw.style.display='block';
+  fw.innerHTML = [
+    '<div style="font-size:0.9rem;font-weight:600;color:#e2e8f0;margin-bottom:12px;">'+(idx>=0?'Edit Correspondence':'New Correspondence Entry')+'</div>',
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">',
+    field('corrFSubject','Subject / Description *','text',c.subject||'','',true),
+    selField('corrFType','Type',CORR_TYPES,c.type||'Letter'),
+    selField('corrFDir','Direction',CORR_DIR,c.direction||'Outgoing (Sent)'),
+    field('corrFDate','Date *','date',c.date||todayCorrStr(),'',true),
+    selField('corrFFrom','From',CORR_FROM,c.from||'Oncor / JFS'),
+    selField('corrFTo','To',CORR_FROM,c.to||'General Contractor'),
+    selField('corrFMethod','Method',CORR_METHOD,c.method||'Email'),
+    field('corrFRefNo','Ref # / Log #','text',c.refNo||'','e.g. L-001, TXL-2026-001'),
+    selField('corrFStatus','Status',CORR_STATUS,c.status||'Active / Open'),
+    field('corrFResponseDue','Response Due Date','date',c.responseDue||'',''),
+    field('corrFAttachRef','Attachment / File Ref','text',c.attachRef||'','Google Drive link or filename'),
+    '</div>',
+    '<div style="margin-top:10px;">',
+    '<label style="font-size:0.78rem;color:#94a3b8;display:block;margin-bottom:4px;">Notes / Summary</label>',
+    '<textarea id="corrFNotes" rows="3" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;border-radius:6px;padding:8px;font-size:0.83rem;resize:vertical;">'+escH(c.notes||'')+'</textarea>',
+    '</div>',
+    '<div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end;">',
+    '<button onclick="closeCorrForm()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#94a3b8;padding:7px 16px;border-radius:6px;cursor:pointer;font-size:0.83rem;">Cancel</button>',
+    '<button onclick="saveCorrEntry()" style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.35);color:#34d399;padding:7px 16px;border-radius:6px;cursor:pointer;font-size:0.83rem;">💾 Save Entry</button>',
+    '</div>'
+  ].join('');
+  fw.scrollIntoView({behavior:'smooth',block:'end'});
+}
+window.openCorrForm = openCorrForm;
+
+function field(id,label,type,val,ph,req){
+  return '<div><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:3px;">'+label+'</label>'
+    +'<input id="'+id+'" type="'+type+'" value="'+escH(val)+'" placeholder="'+escH(ph||'')+'" '+(req?'required':'')+' style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;padding:7px 9px;border-radius:6px;font-size:0.82rem;box-sizing:border-box;"></div>';
+}
+function selField(id,label,opts,val){
+  return '<div><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:3px;">'+label+'</label>'
+    +'<select id="'+id+'" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;padding:7px 9px;border-radius:6px;font-size:0.82rem;box-sizing:border-box;">'
+    +opts.map(function(o){ return '<option'+(o===val?' selected':'')+'>'+escH(o)+'</option>'; }).join('')
+    +'</select></div>';
+}
+
+function gv(id){ var el=document.getElementById(id); return el?(el.value||''):''; }
+
+function saveCorrEntry(){
+  var subject = gv('corrFSubject').trim();
+  var date = gv('corrFDate').trim();
+  if(!subject||!date){ alert('Subject and Date are required.'); return; }
+  var arr = loadCorr();
+  var entry = {
+    subject:subject, type:gv('corrFType'), direction:gv('corrFDir'),
+    date:date, from:gv('corrFFrom'), to:gv('corrFTo'), method:gv('corrFMethod'),
+    refNo:gv('corrFRefNo'), status:gv('corrFStatus'), responseDue:gv('corrFResponseDue'),
+    attachRef:gv('corrFAttachRef'), notes:gv('corrFNotes').trim(),
+    created: corrEditIdx<0 ? Date.now() : (arr[corrEditIdx]||{}).created||Date.now()
+  };
+  if(corrEditIdx>=0) arr[corrEditIdx]=entry;
+  else arr.push(entry);
+  saveCorr(arr);
+  closeCorrForm();
+  renderCorrList();
+}
+window.saveCorrEntry = saveCorrEntry;
+
+function closeCorrForm(){
+  var fw = document.getElementById('corrFormWrap'); if(fw) fw.style.display='none';
+  corrEditIdx=-1;
+}
+window.closeCorrForm = closeCorrForm;
+
+function deleteCorr(idx){
+  if(!confirm('Delete this correspondence entry?')) return;
+  var arr=loadCorr(); arr.splice(idx,1); saveCorr(arr); renderCorrList();
+}
+window.deleteCorr = deleteCorr;
+
+function getCompanyInfo(){
+  var f={name:'',phone:'',email:'',address:'',license:''};
+  try{
+    f.name=(document.getElementById('companyName')||{}).value||'';
+    f.phone=(document.getElementById('companyPhone')||{}).value||'';
+    f.email=(document.getElementById('companyEmail')||{}).value||'';
+    f.address=(document.getElementById('companyAddress')||{}).value||'';
+    f.license=(document.getElementById('companyLicense')||{}).value||'';
+  }catch(x){}
+  return f;
+}
+
+function getProjName(){
+  try{ return (document.getElementById('projectName')||{}).value||'Project'; }catch(x){ return 'Project'; }
+}
+
+function printSingleCorr(idx){
+  var arr=loadCorr(); var c=arr[idx]; if(!c) return;
+  var co=getCompanyInfo(); var pn=getProjName();
+  var w=window.open('','_blank','width=900,height=700');
+  if(!w) return;
+  var sc=getStatusColor(c.status); var dc=getDirColor(c.direction);
+  w.document.write([
+    '<!DOCTYPE html><html><head><title>Correspondence — '+c.subject+'</title>',
+    '<style>body{font-family:Arial,sans-serif;color:#1e293b;padding:30px;max-width:850px;margin:0 auto;}',
+    'h1{font-size:14pt;}table{width:100%;border-collapse:collapse;margin-top:12px;}',
+    'td,th{border:1px solid #cbd5e1;padding:7px 10px;font-size:9pt;}th{background:#f1f5f9;font-weight:600;text-align:left;}',
+    '.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:9pt;font-weight:600;}',
+    '.notes{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;font-size:9pt;margin-top:10px;}',
+    '.sign{border-top:1px solid #cbd5e1;margin-top:30px;padding-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:20px;}',
+    '.sline{border-bottom:1px solid #000;margin:20px 0 4px;} @media print{.noprint{display:none;}}',
+    '</style></head><body>',
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;">',
+    '<div><strong style="font-size:13pt;">'+escH(co.name||'Oncor')+'</strong><br/>',
+    (co.address?escH(co.address)+'<br/>':''),
+    (co.phone?escH(co.phone)+' | ':'')+(co.email?escH(co.email):''),
+    (co.license?'<br/>License: '+escH(co.license):''),
+    '</div>',
+    '<div style="text-align:right;"><span style="background:#1e293b;color:#fff;font-weight:700;font-size:11pt;padding:5px 14px;border-radius:4px;">CORRESPONDENCE</span><br/>',
+    '<span style="font-size:9pt;color:#64748b;">'+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})+'</span></div>',
+    '</div><hr style="margin:12px 0;border-color:#e2e8f0;"/>',
+    '<h2 style="font-size:13pt;margin:0 0 10px;">'+escH(c.subject)+'</h2>',
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;font-size:9pt;">',
+    '<div><strong>Project:</strong> '+escH(pn)+'</div>',
+    '<div><strong>Date:</strong> '+fmtD(c.date)+'</div>',
+    '<div><strong>Type:</strong> '+escH(c.type)+'</div>',
+    '<div><strong>Direction:</strong> <span style="color:'+dc+';">'+escH(c.direction)+'</span></div>',
+    '<div><strong>From:</strong> '+escH(c.from)+'</div>',
+    '<div><strong>To:</strong> '+escH(c.to)+'</div>',
+    '<div><strong>Method:</strong> '+escH(c.method||'—')+'</div>',
+    '<div><strong>Ref #:</strong> '+escH(c.refNo||'—')+'</div>',
+    '<div><strong>Status:</strong> <span style="color:'+sc+';">'+escH(c.status)+'</span></div>',
+    (c.responseDue?'<div><strong>Response Due:</strong> '+fmtD(c.responseDue)+'</div>':'<div></div>'),
+    (c.attachRef?'<div style="grid-column:1/-1;"><strong>Attachment/File Ref:</strong> '+escH(c.attachRef)+'</div>':''),
+    '</div>',
+    (c.notes?'<div class="notes"><strong>Notes / Summary:</strong><br/>'+escH(c.notes).replace(/\n/g,'<br/>')+'</div>':''),
+    '<div class="sign">',
+    '<div><strong>Recorded By</strong><div class="sline"></div><div style="font-size:8pt;">Name / Title / Date</div></div>',
+    '<div><strong>Acknowledged By</strong><div class="sline"></div><div style="font-size:8pt;">Name / Title / Date</div></div>',
+    '</div>',
+    '<div style="margin-top:20px;font-size:7.5pt;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:8px;">CORRESPONDENCE LOG — ONCOR CONSTRUCTION MANAGEMENT — FOR RECORD PURPOSES ONLY</div>',
+    '<div class="noprint" style="margin-top:20px;text-align:center;"><button onclick="window.print()" style="background:#1e293b;color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:10pt;">🖨 Print / Save PDF</button></div>',
+    '</body></html>'
+  ].join(''));
+  w.document.close();
+}
+window.printSingleCorr = printSingleCorr;
+
+function printCorrReport(){
+  var arr=loadCorr(); var co=getCompanyInfo(); var pn=getProjName();
+  var st=getCorrStats();
+  var today=todayCorrStr();
+  arr.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+  var w=window.open('','_blank','width=1100,height=800');
+  if(!w) return;
+  w.document.write([
+    '<!DOCTYPE html><html><head><title>Correspondence Log — '+pn+'</title>',
+    '<style>body{font-family:Arial,sans-serif;color:#1e293b;padding:30px;max-width:1050px;margin:0 auto;font-size:9pt;}',
+    'h1{font-size:14pt;}table{width:100%;border-collapse:collapse;margin-top:12px;}',
+    'td,th{border:1px solid #cbd5e1;padding:6px 8px;font-size:8.5pt;vertical-align:top;}th{background:#f1f5f9;font-weight:700;text-align:left;}',
+    '.stat{display:inline-block;text-align:center;padding:8px 14px;border:1px solid #e2e8f0;border-radius:6px;margin-right:8px;margin-bottom:8px;}',
+    'tr.overdue{background:#fef2f2;} tr.needs{background:#fffbeb;}',
+    '@media print{.noprint{display:none;}}',
+    '</style></head><body>',
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;">',
+    '<div><strong style="font-size:13pt;">'+escH(co.name||'Oncor')+'</strong><br/>',
+    (co.address?escH(co.address)+'<br/>':''),
+    (co.phone?escH(co.phone)+' | ':'')+(co.email?escH(co.email):''),
+    '</div>',
+    '<div style="text-align:right;"><span style="background:#0f172a;color:#fff;font-weight:700;font-size:11pt;padding:5px 14px;border-radius:4px;">CORRESPONDENCE & TRANSMITTAL LOG</span><br/>',
+    '<strong>'+escH(pn)+'</strong><br/>',
+    '<span style="font-size:8pt;color:#64748b;">Printed: '+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})+'</span></div>',
+    '</div><hr style="margin:12px 0;border-color:#e2e8f0;"/>',
+    '<div style="margin-bottom:14px;">',
+    ['Total Entries:'+st.total,'Outgoing:'+st.outgoing,'Incoming:'+st.incoming,'Needs Response:'+st.needsResp,'Overdue Response:'+st.overdue].map(function(s){
+      var p=s.split(':');
+      return '<span class="stat"><strong style="font-size:12pt;">'+p[1]+'</strong><br/>'+p[0]+'</span>';
+    }).join(''),
+    '</div>',
+    '<table><thead><tr>',
+    '<th>#</th><th>Date</th><th>Type</th><th>Direction</th><th>Subject</th><th>From</th><th>To</th><th>Method</th><th>Ref #</th><th>Status</th><th>Resp. Due</th><th>Notes</th>',
+    '</tr></thead><tbody>',
+    arr.map(function(c,i){
+      var isOverdue=c.status==='Requires Response'&&c.responseDue&&c.responseDue<today;
+      var isNeeds=c.status==='Requires Response'&&!isOverdue;
+      return '<tr class="'+(isOverdue?'overdue':isNeeds?'needs':'')+'">'
+        +'<td style="font-family:monospace;color:#64748b;">'+(i+1)+'</td>'
+        +'<td>'+fmtD(c.date)+'</td>'
+        +'<td>'+escH(c.type)+'</td>'
+        +'<td>'+escH(c.direction)+'</td>'
+        +'<td><strong>'+escH(c.subject)+'</strong></td>'
+        +'<td>'+escH(c.from)+'</td>'
+        +'<td>'+escH(c.to)+'</td>'
+        +'<td>'+escH(c.method||'—')+'</td>'
+        +'<td style="font-family:monospace;">'+escH(c.refNo||'—')+'</td>'
+        +'<td>'+escH(c.status)+'</td>'
+        +'<td>'+(c.responseDue?'<span style="color:'+(isOverdue?'red':'#d97706')+';">'+fmtD(c.responseDue)+'</span>':'—')+'</td>'
+        +'<td style="max-width:180px;">'+escH((c.notes||'').slice(0,100))+(c.notes&&c.notes.length>100?'…':'')+'</td>'
+        +'</tr>';
+    }).join(''),
+    '</tbody></table>',
+    (st.overdue>0?'<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:10px 14px;margin-top:14px;font-size:8.5pt;color:#991b1b;"><strong>⚠️ '+st.overdue+' overdue response(s) — follow up immediately to protect project interests and claims rights.</strong></div>':''),
+    '<div style="margin-top:20px;font-size:7.5pt;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:8px;">CONFIDENTIAL — INTERNAL USE ONLY — ONCOR CONSTRUCTION MANAGEMENT</div>',
+    '<div class="noprint" style="margin-top:20px;text-align:center;"><button onclick="window.print()" style="background:#0f172a;color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:10pt;">🖨 Print / Save PDF</button></div>',
+    '</body></html>'
+  ].join(''));
+  w.document.close();
+}
+window.printCorrReport = printCorrReport;
+
+function showCorrModal(){
+  buildCorrModal();
+  var m=document.getElementById(CORR_ID);
+  if(!m) return;
+  m.style.display='flex';
+  renderCorrList();
+}
+window.showCorrModal = showCorrModal;
+
+function closeCorrModal(){
+  var m=document.getElementById(CORR_ID);
+  if(m) m.style.display='none';
+}
+window.closeCorrModal = closeCorrModal;
+
+document.addEventListener('keydown',function(e){
+  if(e.altKey && e.key.toLowerCase()==='e'){
+    e.preventDefault();
+    var m=document.getElementById(CORR_ID);
+    if(m && m.style.display==='flex') closeCorrModal();
+    else showCorrModal();
+  }
+});
+
+// ── INJECT SIDEBAR BUTTON ──────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded',function(){
+  setTimeout(function(){
+    var calBtn = document.querySelector('button[onclick*="showCalModal"]');
+    if(!calBtn) return;
+    var parentRow = calBtn.closest('div');
+    if(!parentRow||!parentRow.parentNode) return;
+    var newRow = document.createElement('div');
+    newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+    newRow.innerHTML = '<button class="action-btn secondary" onclick="showCorrModal()" title="Project Correspondence & Transmittal Log — track all letters, emails, transmittals, formal notices (Alt+E)" style="background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.3);color:#a5b4fc;">🗂️ Correspondence Log</button>';
+    parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+  }, 4600);
+});
+
+})();
+// ==================== END PROJECT CORRESPONDENCE & TRANSMITTAL LOG — Zeus ⚡ Session #77 ====================
+</script>
