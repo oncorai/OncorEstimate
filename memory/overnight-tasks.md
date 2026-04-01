@@ -1,5 +1,78 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ⚡ SESSION: Apr 1, 2026 - 13:12 UTC (Overnight Cron #70)
+**Status:** ✅ BUSINESS INTELLIGENCE DASHBOARD added (+400 lines)
+
+### What Was Added:
+
+**⚡ Business Intelligence Dashboard (Alt+I):**
+- New `⚡ BI Dashboard` button injected in sidebar below Contact Book
+- `Alt+I` keyboard shortcut opens/toggles the BI modal
+- **Purpose:** Cross-project command center — see the full Oncor business picture in one view: pipeline health, win rate, top GC analysis, contact network breakdown, monthly bid activity, actionable alerts.
+
+**6-Card KPI Header (live, cross-source):**
+- **Pipeline Value** — total $ value of all active bids (Preparing / Submitted / Under Review)
+- **Won Revenue** — total $ of won jobs + won job count
+- **Win Rate** — W/(W+L)%, color-coded (green≥50%, amber≥30%, red<30%)
+- **Avg Bid Size** — mean across all logged bids (won+lost+active)
+- **Contacts** — total contacts in Contact Book, active count + leads count
+- **Saved Projects** — count of all saved estimate projects + total estimated value
+
+**Alert Banner:**
+- Amber warning banner when any bids have overdue follow-up dates
+- Shows count of overdue bid follow-ups AND overdue contact follow-ups in one glance
+
+**Monthly Bid Activity Chart (last 6 months):**
+- Simple bar chart with one column per month
+- Bar height = bid dollar volume for that month
+- Bar color = win rate that month (green≥50%, amber≥25%, blue<25%)
+- Shows $ value + month label + win rate % per column
+
+**Top GC / Clients (Won Jobs):**
+- Table of top 5 GCs/clients sorted by total won value
+- Shows jobs won count + total won value per GC
+- Pulled from Bid Pipeline tracker data
+
+**Contact Network Breakdown:**
+- Horizontal progress bars showing count by contact type
+- General Contractor / Owner / Subcontractor / Supplier / etc.
+- Percentage share per type
+
+**Won Jobs by Bid Type:**
+- Pill list of won job types (Commercial / Municipal / Residential / etc.) with count
+- Shows total won volume (yd³) below
+
+**Business Insights Panel:**
+- Auto-generated text insights based on live data:
+  - "Win rate below 30% — review pricing strategy"
+  - "X bids need follow-up — call before they award"
+  - "X contacts overdue for follow-up"
+  - "Pipeline value of $X — keep closing"
+  - "At current win rate, expected value per bid: $X"
+  - Empty-state prompts if no data logged yet
+
+**Printable BI Report:**
+- Company header (name, phone, email) + report date
+- 6-column KPI grid
+- Top GC/Clients table
+- Contact Network table
+- CONFIDENTIAL — INTERNAL USE ONLY footer
+- Print / Save PDF button
+
+**Data Sources:**
+- `oncor_pipeline_v1` — bid pipeline (won, lost, active, follow-up dates)
+- `oncor_contacts_v1` — contact book (types, statuses, follow-up dates)
+- `oncorProjects` — saved project estimates (count, total bid value)
+
+**Why this matters:** JFS now has 10+ data-gathering tools all storing data. Without a summary view, he'd have to open Pipeline, then Contact Book, then project list separately to see the big picture. With the BI Dashboard (Alt+I), he opens one view and instantly knows: pipeline health, win rate trend, which GCs are paying off, which contacts need attention, and what monthly bid volume looks like. The insights panel flags actionable items so nothing slips through. This is the "CEO view" of the Oncor concrete business.
+
+**Commits:**
+- 422f505: ⚡ Business Intelligence Dashboard (Alt+I) (+400 lines) [Session #70]
+
+**Total Lines:** ~154,334 | **New Alt+ Shortcuts:** Alt+I (BI Dashboard)
+
+---
+
 ## 📇 SESSION: Apr 1, 2026 - 12:12 UTC (Overnight Cron #69)
 **Status:** ✅ CLIENT & GC CONTACT BOOK added (+408 lines)
 
@@ -2319,3 +2392,119 @@ Pre-Construction, Weekly OAC, Progress Meeting, Safety Meeting, Design Review, S
 - 7a84f95: 📸 Bid Revision History & Budget Snapshots (+241 lines) [Session #65]
 
 **Total Lines:** ~151,770 | **New Tools:** Bid Snapshot + Revision Timeline + Bid History Report
+
+---
+
+## 💰 SESSION: Apr 1, 2026 - 15:12 UTC (Overnight Cron #72)
+**Status:** ✅ ACCOUNTS RECEIVABLE & INVOICE TRACKER added (+514 lines)
+
+### What Was Added:
+
+**💰 Accounts Receivable & Invoice Tracker (Alt+R):**
+- New `💰 AR & Invoices` button injected in sidebar below Inspections
+- `Alt+R` keyboard shortcut opens/toggles the AR modal
+- **Purpose:** Track every invoice sent across the project — amount, due date, payment status, retainage held, and collection notes. Includes AR aging schedule, TX Prompt Payment Act reminders, and printable invoice documents.
+
+**Stats Bar (live):**
+- **Total Invoiced** — sum of all invoice amounts
+- **Collected** — sum of all Paid invoices
+- **Outstanding** — unpaid/partial amounts minus retainage
+- **Retainage Held** — total retainage across all invoices
+- **Overdue** — count of past-due invoices with total overdue amount
+
+**AR Aging Schedule (visual bars):**
+- Current / 1-30 Days / 31-60 Days / 61-90 Days / 90+ Days
+- Color-coded (green → amber → red) with bar width proportional to share of outstanding AR
+- Only shows buckets with non-zero balances
+
+**Invoice Entry Form (12 fields):**
+- Invoice # (auto-generated: INV-001, INV-002...), Type (8 options: Pay Application / Progress Invoice / Lump Sum Invoice / Retainage Invoice / Change Order Invoice / Final Invoice / Retention Release / Other)
+- Client / GC, Project / Description
+- Invoice Amount (required), Retainage Held ($)
+- Invoice Date, Due Date
+- Status (5: Unpaid / Partial / Paid / Disputed / Voided)
+- Date Paid (when marked Paid)
+- Pay App / CO Reference (links to pay app number or CO)
+- Collection Notes
+
+**Invoice List View:**
+- Sorted: overdue open invoices first, then by invoice date (newest first)
+- Per-card: Invoice # + client badge + type badge + overdue badge (days) + retainage badge
+- Issued date / Due date (red when overdue) / Paid date
+- Description + notes inline
+- Invoice amount (teal) + retainage held (purple) + status badge (color-coded)
+- Edit (✏️), Print individual invoice (🖨️), Delete (🗑️) per card
+
+**Printable Outputs:**
+- **Individual Invoice Document** — company header (name, address, phone, email, license), INVOICE badge + invoice #, 6-cell meta grid (client, project, invoice date, due date, reference), OVERDUE callout when past due (cites TX Prompt Payment Act 1.5%/month interest), **Invoice Amount box** (dark with retainage breakdown and net due), description/notes box, dual signature block (Contractor / Client-GC), TX Prompt Payment Act footer
+- **Full AR Report** — company header, 5-card KPI stats (invoiced/collected/outstanding/retainage/overdue), **AR Aging Schedule table** with amounts + % of AR per bucket, **TX Prompt Payment Act reference box** (35-day payment, 1.5%/month, attorney fees, lien rights), **Invoice Detail table** (invoice #, client, type, issued, due, amount, retainage, paid date, status, notes) with overdue rows highlighted red and paid rows highlighted green, grand totals row
+
+**Data Storage:**
+- Per-project storage: `oncor_ar_v1_[projectname]` (keyed to active project)
+- Global fallback: `oncor_ar_global_v1` when no project loaded (cross-project view)
+
+**Integration:**
+- `window._getARStats()` exposed for Project Status Card (Ctrl+Shift+I)
+- Returns: totalInvoiced, paid, outstanding, retainage, overdue, overdueAmt
+- Data survives page reload, isolated per project
+
+**TX Prompt Payment Act Integration:**
+- Overdue invoices show red banner with day count
+- Individual invoice prints include Prompt Payment Act citation
+- AR Report includes full legal reference box with 35-day rule, 1.5%/month interest, attorney fees, lien rights reminder
+
+**Why this matters:** JFS bills monthly on commercial jobs via pay applications. Without an AR tracker, he has no idea what's been paid, what's outstanding, or how long invoices have been sitting. With this tool: "I've invoiced $280K total on the XYZ job. $185K collected. $95K outstanding — $40K is 60+ days overdue." One button sends him the AR report to drop in an email to the GC's accounts payable. The TX Prompt Payment Act callout reminds everyone that 1.5%/month interest is accruing on late payments — the legal pressure point.
+
+**Commits:**
+- e054510: 💰 Accounts Receivable & Invoice Tracker (Alt+R) (+514 lines) [Session #72]
+
+**Total Lines:** ~155,345 | **New Alt+ Shortcuts:** Alt+R (AR & Invoices)
+
+---
+
+## 🏗️ SESSION: Apr 1, 2026 - 14:12 UTC (Overnight Cron #71)
+**Status:** ✅ INSPECTION LOG & PERMIT TRACKER added (+497 lines)
+
+### What Was Added:
+
+**🏗️ Inspection Log & Permit Tracker (Alt+N):**
+- New `🏗️ Inspections` button injected in sidebar below BI Dashboard
+- `Alt+N` keyboard shortcut opens/toggles the modal
+- **Two-tab modal:** 🔍 Inspections + 📄 Permits
+- **Purpose:** Every commercial concrete job requires city inspections (footing, rebar, slab, final) and multiple permits. Missing an inspection sign-off delays the job. An expired permit means work stops. This tool tracks both.
+
+**Stats Bar (live):**
+- Total Inspections / Passed (green) / Failed/Re-Insp (red alert) / Scheduled/Pending / Active Permits / Permit Alerts (expired + expiring)
+
+**Inspection Log Tab:**
+- 20 Inspection Types: Footing, Rebar, Slab-on-Grade, Foundation, Structural Concrete, Post-Tension, Pre-Pour, Pour (Special Insp.), Compaction/Soils, Framing, Rough Plumbing/Electrical/Mechanical, Concrete Cover/Epoxy, Fireproofing, Masonry, ADA/Accessibility, Final Inspection, Certificate of Occupancy, Other
+- 7 Statuses: Scheduled / Passed / Failed / Partial Pass / Re-Inspection Required / Cancelled / Pending
+- Per-inspection fields: Type, Date, Status, Inspector/City Rep, Area/Grid Ref, Permit Ref #, Fail Reason, Corrective Action, Notes
+- Auto-badges: OVERDUE (past scheduled date, still open), RE-INSP NEEDED
+- Failed/Re-Insp rows highlighted with red border
+- Fail Reason + Corrective Action shown in distinct colored boxes
+
+**Permits Tab:**
+- 14 Permit Types: Building, Grading/Earthwork, Excavation, Right-of-Way, Utility Connection, Electrical, Plumbing, Mechanical, Special Inspection Program, Stormwater/SWPPP, Environmental, Fire Sprinkler, Sign, Demolition, Other
+- 8 Statuses: Not Applied / Applied / Under Review / Approved / Active / Expired / Revoked / Closed
+- Per-permit fields: Type, Permit #, Status, Issuing Authority, Date Issued, Expiry Date, Fee ($), Inspector/Contact, Notes
+- Auto-badges: EXPIRED (red, when Active permit past expiry date), EXPIRES IN Xd (amber, ≤30 days)
+
+**Printable Inspection & Permit Report:**
+- Company header (name, phone, email)
+- 5-card stats header (Total Inspections / Passed / Failed / Scheduled / Active Permits)
+- Full Inspection Log table: #, Type, Date, Status (color-coded), Inspector, Area, Notes/Fail Reason — failed rows highlighted red, passed rows highlighted green
+- Full Permit Log table: #, Type, Permit #, Status, Authority, Issued, Expiry, Fee — expired rows highlighted red
+- CONFIDENTIAL — INTERNAL USE ONLY footer
+
+**Integration:**
+- `window._getInspectionStats()` exposed for Project Status Card (Ctrl+Shift+I)
+- Returns: totalInsp, passed, failed, scheduled, totalPermits, expiredPermits
+- localStorage per project: `oncor_inspections_v1_[projectname]` + `oncor_permits_v1_[projectname]`
+
+**Why this matters:** On a commercial concrete job, the inspector must sign off on footings before you pour. Rebar inspection before slab pour. Final inspection before CO. Missing any of these = work stops, GC calls, schedule delay, potential penalties. With this tracker JFS logs every inspection as it happens — pass, fail, or needs re-inspection — and tracks corrective actions. The permit tab flags expiring permits before they become a problem. Professional inspectors log, professional company.
+
+**Commits:**
+- 393df16: 🏗️ Inspection Log & Permit Tracker (Alt+N) (+497 lines) [Session #71]
+
+**Total Lines:** ~154,831 | **New Alt+ Shortcuts:** Alt+N (Inspections)
