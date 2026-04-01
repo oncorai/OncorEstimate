@@ -159781,3 +159781,377 @@ document.addEventListener('DOMContentLoaded',function(){
 })();
 // ==================== END PRE-POUR INSPECTION & READINESS CHECKLIST — Zeus ⚡ Session #80 ====================
 </script>
+<script>
+// ==================== CONCRETE MIX DESIGN LIBRARY — Zeus ⚡ Session #81 ====================
+(function(){
+'use strict';
+var MDL_ID = 'oncor-mixdesign-modal';
+var MDL_KEY_PREFIX = 'oncor_mixdesign_v1_';
+
+function getMDLKey(){
+  var p = (typeof window.currentProjectName==='string'&&window.currentProjectName.trim())?window.currentProjectName.trim():'__global__';
+  return MDL_KEY_PREFIX + p;
+}
+function loadMDLData(){ try{ return JSON.parse(localStorage.getItem(getMDLKey())||'[]'); } catch(e){ return []; } }
+function saveMDLData(arr){ localStorage.setItem(getMDLKey(), JSON.stringify(arr)); }
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function genMixId(arr){
+  var n = arr.length + 1;
+  return 'MIX-' + String(n).padStart(3,'0');
+}
+
+var mdlState = { records:[], editIdx:-1, view:'list', search:'', filterStatus:'all' };
+
+function buildMDLModal(){
+  if(document.getElementById(MDL_ID)) return;
+  var el = document.createElement('div');
+  el.id = MDL_ID;
+  el.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9100;align-items:center;justify-content:center;padding:16px;';
+  el.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;width:100%;max-width:880px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;">' +
+    '<div style="padding:16px 20px;border-bottom:1px solid #334155;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">' +
+      '<div><div style="font-size:1.1rem;font-weight:700;color:#f1f5f9;">🧪 Concrete Mix Design Library</div>' +
+      '<div style="font-size:0.75rem;color:#94a3b8;margin-top:2px;">Store, submit, and manage approved mix designs per project</div></div>' +
+      '<button onclick="closeMDLModal()" style="background:none;border:none;color:#94a3b8;font-size:1.4rem;cursor:pointer;padding:4px 8px;">✕</button>' +
+    '</div>' +
+    '<div id="mdl-stats" style="display:flex;gap:8px;padding:12px 20px;border-bottom:1px solid #1e293b;flex-shrink:0;overflow-x:auto;"></div>' +
+    '<div style="padding:10px 20px;border-bottom:1px solid #1e293b;display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0;">' +
+      '<input id="mdl-search" type="text" placeholder="Search mix ID, PSI, batch plant..." onkeyup="mdlRefreshList()" style="flex:1;min-width:160px;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 12px;color:#f1f5f9;font-size:0.85rem;">' +
+      '<select id="mdl-filter-status" onchange="mdlRefreshList()" style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 12px;color:#f1f5f9;font-size:0.85rem;">' +
+        '<option value="all">All Statuses</option>' +
+        '<option value="Proposed">Proposed</option>' +
+        '<option value="Submitted">Submitted</option>' +
+        '<option value="Approved">Approved</option>' +
+        '<option value="Approved as Noted">Approved as Noted</option>' +
+        '<option value="Rejected">Rejected</option>' +
+        '<option value="Superseded">Superseded</option>' +
+      '</select>' +
+      '<button onclick="mdlNewForm()" style="background:#0369a1;border:none;color:#fff;border-radius:6px;padding:7px 16px;font-size:0.85rem;cursor:pointer;font-weight:600;">+ Add Mix Design</button>' +
+      '<button onclick="printMDLReport()" style="background:#374151;border:none;color:#d1d5db;border-radius:6px;padding:7px 14px;font-size:0.85rem;cursor:pointer;">🖨 Print Report</button>' +
+    '</div>' +
+    '<div id="mdl-body" style="overflow-y:auto;padding:16px 20px;flex:1;"></div>' +
+  '</div>';
+  document.body.appendChild(el);
+  el.addEventListener('click',function(ev){ if(ev.target===el) closeMDLModal(); });
+}
+
+function mdlStats(){
+  var r = mdlState.records;
+  var approved = r.filter(function(x){ return x.status==='Approved'||x.status==='Approved as Noted'; }).length;
+  var pending = r.filter(function(x){ return x.status==='Proposed'||x.status==='Submitted'; }).length;
+  var rejected = r.filter(function(x){ return x.status==='Rejected'; }).length;
+  var plants = [...new Set(r.map(function(x){ return x.batchPlant; }).filter(Boolean))].length;
+  var items = [
+    ['Total Mix Designs',r.length,'#f1f5f9',''],
+    ['✅ Approved',approved,'#4ade80','#0f2e1a'],
+    ['⏳ Pending',pending,'#fbbf24','#1c1500'],
+    ['❌ Rejected',rejected,'#f87171','#1f0e0e'],
+    ['Batch Plants',plants,'#818cf8','#0f0f2a']
+  ];
+  var el = document.getElementById('mdl-stats'); if(!el) return;
+  el.innerHTML = items.map(function(it){
+    return '<div style="flex:1;min-width:110px;background:'+(it[3]||'#1e293b')+';border:1px solid #334155;border-radius:8px;padding:10px 14px;text-align:center;">' +
+      '<div style="font-size:1.4rem;font-weight:800;color:'+it[2]+';">'+it[1]+'</div>' +
+      '<div style="font-size:0.7rem;color:#94a3b8;margin-top:2px;">'+it[0]+'</div></div>';
+  }).join('');
+}
+
+var MDL_CEMENT_TYPES = ['Type I/II','Type I','Type II','Type III (High Early)','Type IP (Blended)','Type IS (Slag Blend)','Type IL (Portland-Limestone)','White Cement'];
+var MDL_ADMIXTURES = ['HRWR / Superplasticizer (ASTM C494 Type F)','WR / Normal Reducer (ASTM C494 Type A)','Retarder (ASTM C494 Type B)','Accelerator (ASTM C494 Type C)','Air Entraining (ASTM C260)','Corrosion Inhibitor','Viscosity Modifying (VMA)','Shrinkage Reducing (SRA)','None'];
+var MDL_COARSE_AGG = ['3/4" Crushed Limestone','3/4" River Gravel','1/2" Crushed Limestone','1/2" River Gravel','3/8" Pea Gravel','1" Crushed Limestone','3/4" Caliche (local)','Custom'];
+var MDL_EXPOSURE = ['F0 - Negligible freeze/thaw','F1 - Moderate exposure','F2 - Severe exposure','W0 - Dry or protected','W1 - Occasional contact','W2 - Continuous contact','S0 - No sulfate exposure','S1 - Moderate sulfate','S2 - Severe sulfate (El Paso caliche)','C0 - Not applicable','C1 - Exposed to deicers','C2 - Severe chloride'];
+
+function mdlRefreshList(){
+  mdlState.records = loadMDLData();
+  mdlStats();
+  var search = (document.getElementById('mdl-search')||{}).value||'';
+  var statusF = (document.getElementById('mdl-filter-status')||{}).value||'all';
+  var filtered = mdlState.records.filter(function(r){
+    var q = search.toLowerCase();
+    var matchQ = !q || (r.mixId||'').toLowerCase().includes(q)||(r.psi||'').toLowerCase().includes(q)||(r.batchPlant||'').toLowerCase().includes(q)||(r.submittalRef||'').toLowerCase().includes(q)||(r.notes||'').toLowerCase().includes(q)||(r.mixCode||'').toLowerCase().includes(q);
+    var matchS = statusF==='all' || r.status===statusF;
+    return matchQ && matchS;
+  });
+  var body = document.getElementById('mdl-body'); if(!body) return;
+  if(filtered.length===0){
+    body.innerHTML = '<div style="text-align:center;padding:40px;color:#64748b;">'+(mdlState.records.length===0?'No mix designs yet. Click "+ Add Mix Design" to get started.':'No mix designs match your search.')+'</div>';
+    return;
+  }
+  var STATUS_COLORS = {'Approved':'#4ade80','Approved as Noted':'#86efac','Proposed':'#fbbf24','Submitted':'#60a5fa','Rejected':'#f87171','Superseded':'#94a3b8'};
+  body.innerHTML = filtered.map(function(r, i){
+    var realIdx = mdlState.records.indexOf(r);
+    var sc = STATUS_COLORS[r.status]||'#94a3b8';
+    var admixList = (r.admixtures||[]).filter(Boolean).map(function(a){ return '<span style="background:#1e3a5f;color:#93c5fd;padding:2px 7px;border-radius:10px;font-size:0.7rem;margin-right:4px;">'+escHtml(a)+'</span>'; }).join('');
+    var fiberBadge = r.fiberType&&r.fiberType!=='None'?'<span style="background:#14532d;color:#86efac;padding:2px 8px;border-radius:10px;font-size:0.7rem;margin-left:6px;">Fiber '+escHtml(r.fiberDose||'')+'</span>':'';
+    var aeBadge = r.airContent?'<span style="background:#312e81;color:#a5b4fc;padding:2px 8px;border-radius:10px;font-size:0.7rem;margin-left:4px;">AE '+escHtml(r.airContent)+'%</span>':'';
+    return '<div style="background:#1e293b;border:1px solid '+(r.status==='Rejected'?'#7f1d1d':r.status==='Approved'||r.status==='Approved as Noted'?'#14532d':'#334155')+';border-radius:8px;padding:14px 16px;margin-bottom:10px;">' +
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">' +
+        '<span style="font-family:monospace;font-size:0.85rem;font-weight:700;color:#7dd3fc;background:#0c2c4a;padding:2px 10px;border-radius:4px;">'+escHtml(r.mixId||'')+'</span>' +
+        (r.mixCode?'<span style="font-size:0.78rem;color:#94a3b8;">Code: '+escHtml(r.mixCode)+'</span>':'') +
+        '<span style="background:'+sc+'22;color:'+sc+';border:1px solid '+sc+'55;padding:2px 10px;border-radius:10px;font-size:0.75rem;font-weight:600;">'+escHtml(r.status||'Proposed')+'</span>' +
+        (r.submittalRef?'<span style="font-size:0.72rem;color:#94a3b8;">Submittal: '+escHtml(r.submittalRef)+'</span>':'') +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:8px;">' +
+        '<div><div style="font-size:0.7rem;color:#64748b;">Design f\'c</div><div style="font-weight:700;color:#f1f5f9;">'+escHtml(r.psi||'—')+'</div></div>' +
+        '<div><div style="font-size:0.7rem;color:#64748b;">Slump (in.)</div><div style="font-weight:700;color:#f1f5f9;">'+escHtml(r.slump||'—')+'</div></div>' +
+        '<div><div style="font-size:0.7rem;color:#64748b;">w/cm Ratio</div><div style="font-weight:700;color:#f1f5f9;">'+escHtml(r.wcmRatio||'—')+'</div></div>' +
+        '<div><div style="font-size:0.7rem;color:#64748b;">Cement Type</div><div style="font-weight:700;color:#f1f5f9;">'+escHtml(r.cementType||'—')+'</div></div>' +
+        '<div><div style="font-size:0.7rem;color:#64748b;">Coarse Agg.</div><div style="font-weight:700;color:#f1f5f9;">'+escHtml(r.coarseAgg||'—')+'</div></div>' +
+        '<div><div style="font-size:0.7rem;color:#64748b;">Batch Plant</div><div style="font-weight:700;color:#f1f5f9;">'+escHtml(r.batchPlant||'—')+'</div></div>' +
+      '</div>' +
+      '<div style="font-size:0.78rem;color:#94a3b8;margin-bottom:6px;">'+admixList+fiberBadge+aeBadge+'</div>' +
+      (r.exposureClass?'<div style="font-size:0.72rem;color:#78716c;margin-bottom:4px;">Exposure: '+escHtml(r.exposureClass)+'</div>':'')+
+      (r.approvedDate?'<div style="font-size:0.72rem;color:#64748b;">Approved: '+escHtml(r.approvedDate)+(r.approvedBy?' by '+escHtml(r.approvedBy):'')+'</div>':'')+
+      (r.notes?'<div style="font-size:0.78rem;color:#94a3b8;margin-top:6px;border-top:1px solid #334155;padding-top:6px;">'+escHtml(r.notes)+'</div>':'')+
+      '<div style="display:flex;gap:8px;margin-top:10px;">' +
+        '<button onclick="mdlEdit('+realIdx+')" style="background:#0369a1;border:none;color:#fff;border-radius:5px;padding:5px 12px;font-size:0.78rem;cursor:pointer;">✏️ Edit</button>' +
+        '<button onclick="printMixDesignSheet('+realIdx+')" style="background:#374151;border:none;color:#d1d5db;border-radius:5px;padding:5px 12px;font-size:0.78rem;cursor:pointer;">🖨 Data Sheet</button>' +
+        '<button onclick="mdlDelete('+realIdx+')" style="background:#7f1d1d;border:none;color:#fca5a5;border-radius:5px;padding:5px 12px;font-size:0.78rem;cursor:pointer;">🗑</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function mdlNewForm(){ mdlState.editIdx = -1; mdlShowForm(null); }
+function mdlEdit(idx){ mdlState.editIdx = idx; mdlShowForm(mdlState.records[idx]); }
+
+function mdlShowForm(rec){
+  var body = document.getElementById('mdl-body'); if(!body) return;
+  var r = rec || {};
+  var isEdit = mdlState.editIdx >= 0;
+  var admixChecked = function(a){ return (r.admixtures||[]).includes(a)?'checked':''; };
+  body.innerHTML = '<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:18px;">' +
+    '<div style="font-weight:700;color:#f1f5f9;margin-bottom:14px;font-size:1rem;">'+(isEdit?'Edit Mix Design':'New Mix Design')+'</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Mix ID</label><input id="mdl-mixId" value="'+escHtml(r.mixId||'')+'" placeholder="MIX-001 (auto)" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;"></div>' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Batch Plant Mix Code</label><input id="mdl-mixCode" value="'+escHtml(r.mixCode||'')+'" placeholder="e.g. 4K-F-3/4" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;"></div>' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Design f\'c (PSI) *</label>' +
+        '<select id="mdl-psi" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;">' +
+        ['2500 PSI','3000 PSI','3500 PSI','4000 PSI','4500 PSI','5000 PSI','6000 PSI','Custom'].map(function(p){ return '<option'+(r.psi===p?' selected':'')+'>'+p+'</option>'; }).join('')+'</select></div>' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Target Slump (in.)</label><input id="mdl-slump" type="number" min="1" max="9" step="0.5" value="'+escHtml(r.slump||'4')+'" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;"></div>' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Max w/cm Ratio (ACI 318 §19.3)</label><input id="mdl-wcm" type="number" min="0.35" max="0.60" step="0.01" value="'+escHtml(r.wcmRatio||'0.45')+'" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;"></div>' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Cement Type</label>' +
+        '<select id="mdl-cement" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;">' +
+        MDL_CEMENT_TYPES.map(function(c){ return '<option'+(r.cementType===c?' selected':'')+'>'+c+'</option>'; }).join('')+'</select></div>' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Coarse Aggregate</label>' +
+        '<select id="mdl-coarseAgg" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;">' +
+        MDL_COARSE_AGG.map(function(a){ return '<option'+(r.coarseAgg===a?' selected':'')+'>'+a+'</option>'; }).join('')+'</select></div>' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Air Content % (if AE)</label><input id="mdl-air" type="number" min="0" max="10" step="0.5" value="'+escHtml(r.airContent||'')+'" placeholder="e.g. 4.5" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;"></div>' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Fiber Type</label>' +
+        '<select id="mdl-fiberType" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;">' +
+        ['None','Synthetic Macro (ASTM C1116 Type III)','Synthetic Micro (crack control)','Steel Fiber (ASTM C1116 Type I)','Blended Macro+Micro'].map(function(f){ return '<option'+(r.fiberType===f?' selected':'')+'>'+f+'</option>'; }).join('')+'</select></div>' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Fiber Dose (lb/CY)</label><input id="mdl-fiberDose" type="number" min="0" max="20" step="0.5" value="'+escHtml(r.fiberDose||'')+'" placeholder="e.g. 3.0" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;"></div>' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Batch Plant / Supplier</label><input id="mdl-plant" value="'+escHtml(r.batchPlant||'')+'" placeholder="Martin Marietta, Cemex..." style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;"></div>' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Status</label>' +
+        '<select id="mdl-status" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;">' +
+        ['Proposed','Submitted','Approved','Approved as Noted','Rejected','Superseded'].map(function(s){ return '<option'+(r.status===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px;">' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Exposure Class (ACI 318-19 §19.3)</label><input id="mdl-exposure" value="'+escHtml(r.exposureClass||'')+'" placeholder="e.g. W1 / S2" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;"></div>' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Submittal Ref # (links to Submittal Log)</label><input id="mdl-submittalRef" value="'+escHtml(r.submittalRef||'')+'" placeholder="SUB-003" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;"></div>' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Approved By (name/firm)</label><input id="mdl-approvedBy" value="'+escHtml(r.approvedBy||'')+'" placeholder="EOR / GC PM name" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;"></div>' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Date Submitted</label><input id="mdl-submittedDate" type="date" value="'+escHtml(r.submittedDate||'')+'" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;"></div>' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Date Approved</label><input id="mdl-approvedDate" type="date" value="'+escHtml(r.approvedDate||'')+'" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;"></div>' +
+      '<div><label style="font-size:0.78rem;color:#94a3b8;">Use / Application</label><input id="mdl-use" value="'+escHtml(r.useApp||'')+'" placeholder="SOG slabs, footings, walls..." style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;"></div>' +
+    '</div>' +
+    '<div style="margin-top:12px;"><label style="font-size:0.78rem;color:#94a3b8;">Admixtures (select all that apply)</label>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">' +
+      MDL_ADMIXTURES.map(function(a){ return '<label style="display:flex;align-items:center;gap:5px;font-size:0.78rem;color:#cbd5e1;cursor:pointer;"><input type="checkbox" class="mdl-admix" value="'+escHtml(a)+'" '+admixChecked(a)+' style="accent-color:#0369a1;">'+escHtml(a)+'</label>'; }).join('') +
+      '</div></div>' +
+    '<div style="margin-top:12px;"><label style="font-size:0.78rem;color:#94a3b8;">Notes / Special Requirements / Proportions</label>' +
+      '<textarea id="mdl-notes" rows="3" placeholder="Cement content, SCM additions (fly ash, slag), unit weight, 56-day strength, special inspector requirements..." style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;padding:7px;color:#f1f5f9;font-size:0.85rem;box-sizing:border-box;margin-top:3px;resize:vertical;">'+escHtml(r.notes||'')+'</textarea></div>' +
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">' +
+      '<button onclick="mdlRefreshList()" style="background:#374151;border:none;color:#d1d5db;border-radius:6px;padding:8px 18px;font-size:0.85rem;cursor:pointer;">Cancel</button>' +
+      '<button onclick="mdlSaveForm()" style="background:#0369a1;border:none;color:#fff;border-radius:6px;padding:8px 20px;font-size:0.85rem;cursor:pointer;font-weight:600;">💾 Save Mix Design</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function mdlSaveForm(){
+  var records = loadMDLData();
+  var admixtures = [];
+  document.querySelectorAll('.mdl-admix:checked').forEach(function(cb){ admixtures.push(cb.value); });
+  var obj = {
+    mixId: (document.getElementById('mdl-mixId').value.trim()) || genMixId(records),
+    mixCode: document.getElementById('mdl-mixCode').value.trim(),
+    psi: document.getElementById('mdl-psi').value,
+    slump: document.getElementById('mdl-slump').value,
+    wcmRatio: document.getElementById('mdl-wcm').value,
+    cementType: document.getElementById('mdl-cement').value,
+    coarseAgg: document.getElementById('mdl-coarseAgg').value,
+    airContent: document.getElementById('mdl-air').value,
+    fiberType: document.getElementById('mdl-fiberType').value,
+    fiberDose: document.getElementById('mdl-fiberDose').value,
+    batchPlant: document.getElementById('mdl-plant').value.trim(),
+    status: document.getElementById('mdl-status').value,
+    exposureClass: document.getElementById('mdl-exposure').value.trim(),
+    submittalRef: document.getElementById('mdl-submittalRef').value.trim(),
+    approvedBy: document.getElementById('mdl-approvedBy').value.trim(),
+    submittedDate: document.getElementById('mdl-submittedDate').value,
+    approvedDate: document.getElementById('mdl-approvedDate').value,
+    useApp: document.getElementById('mdl-use').value.trim(),
+    admixtures: admixtures,
+    notes: document.getElementById('mdl-notes').value.trim()
+  };
+  if(mdlState.editIdx >= 0 && mdlState.editIdx < records.length){
+    records[mdlState.editIdx] = obj;
+  } else {
+    records.push(obj);
+  }
+  saveMDLData(records);
+  mdlState.editIdx = -1;
+  mdlRefreshList();
+}
+
+function mdlDelete(idx){
+  if(!confirm('Delete this mix design?')) return;
+  var records = loadMDLData();
+  records.splice(idx,1);
+  saveMDLData(records);
+  mdlRefreshList();
+}
+window.mdlDelete = mdlDelete;
+window.mdlEdit = mdlEdit;
+
+function printMixDesignSheet(idx){
+  var records = loadMDLData();
+  var r = records[idx]; if(!r) return;
+  var coName = (typeof getCompanyName==='function'?getCompanyName():'')||'Oncor Construction';
+  var pn = (typeof window.currentProjectName==='string'?window.currentProjectName:'')||'Project';
+  var STATUS_COLORS_P = {'Approved':'#166534','Approved as Noted':'#166534','Proposed':'#92400e','Submitted':'#1e3a8a','Rejected':'#991b1b','Superseded':'#374151'};
+  var sc = STATUS_COLORS_P[r.status]||'#374151';
+  var admixList = (r.admixtures||[]).filter(Boolean).map(function(a){ return '• '+a; }).join('<br>');
+  var w = window.open('','_blank');
+  w.document.write([
+    '<!DOCTYPE html><html><head><title>Mix Design Data Sheet - '+escHtml(r.mixId)+'</title>',
+    '<style>body{font-family:Arial,sans-serif;font-size:10pt;color:#1e293b;margin:0;padding:24px;} table{border-collapse:collapse;width:100%;} td,th{border:1px solid #cbd5e1;padding:8px 10px;} th{background:#1e3a5f;color:#fff;font-size:9pt;} .kpi{display:inline-block;padding:12px 16px;border:1px solid #e2e8f0;border-radius:8px;text-align:center;min-width:100px;} .kpi-val{font-size:1.4rem;font-weight:800;} .kpi-lbl{font-size:8pt;color:#64748b;margin-top:2px;} @media print{.noprint{display:none}}</style></head><body>',
+    '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #1e3a5f;padding-bottom:12px;margin-bottom:18px;">',
+    '<div><div style="font-size:1.3rem;font-weight:800;color:#1e3a5f;">'+escHtml(coName)+'</div>',
+    '<div style="font-size:1rem;font-weight:700;color:#64748b;margin-top:2px;">CONCRETE MIX DESIGN DATA SHEET</div></div>',
+    '<div style="text-align:right;"><div style="font-size:1.4rem;font-weight:800;font-family:monospace;color:#1e3a5f;">'+escHtml(r.mixId)+'</div>',
+    '<div style="background:'+sc+';color:#fff;padding:4px 14px;border-radius:12px;font-size:9pt;font-weight:700;margin-top:4px;display:inline-block;">'+escHtml(r.status)+'</div></div></div>',
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;">',
+    '<div class="kpi"><div class="kpi-val">'+escHtml(r.psi||'—')+'</div><div class="kpi-lbl">Design f\'c</div></div>',
+    '<div class="kpi"><div class="kpi-val">'+escHtml(r.slump||'—')+'"</div><div class="kpi-lbl">Target Slump (in.)</div></div>',
+    '<div class="kpi"><div class="kpi-val">'+escHtml(r.wcmRatio||'—')+'</div><div class="kpi-lbl">Max w/cm Ratio</div></div>',
+    '</div>',
+    '<table style="margin-bottom:16px;"><thead><tr><th colspan="4">Mix Design Specifications</th></tr></thead><tbody>',
+    '<tr><td style="font-weight:600;width:25%;">Batch Plant Code</td><td>'+escHtml(r.mixCode||'—')+'</td><td style="font-weight:600;width:25%;">Batch Plant</td><td>'+escHtml(r.batchPlant||'—')+'</td></tr>',
+    '<tr><td style="font-weight:600;">Cement Type</td><td>'+escHtml(r.cementType||'—')+'</td><td style="font-weight:600;">Coarse Aggregate</td><td>'+escHtml(r.coarseAgg||'—')+'</td></tr>',
+    '<tr><td style="font-weight:600;">Air Content</td><td>'+(r.airContent?escHtml(r.airContent)+'%':'Not Air-Entrained')+'</td><td style="font-weight:600;">Exposure Class</td><td>'+escHtml(r.exposureClass||'Not specified')+'</td></tr>',
+    '<tr><td style="font-weight:600;">Fiber Type</td><td>'+escHtml(r.fiberType||'None')+'</td><td style="font-weight:600;">Fiber Dose</td><td>'+(r.fiberDose&&r.fiberType!=='None'?escHtml(r.fiberDose)+' lb/CY':'N/A')+'</td></tr>',
+    '<tr><td style="font-weight:600;">Intended Use</td><td colspan="3">'+escHtml(r.useApp||'—')+'</td></tr>',
+    '</tbody></table>',
+    (admixList?'<table style="margin-bottom:16px;"><thead><tr><th>Admixtures (ASTM C494 / C260)</th></tr></thead><tbody><tr><td>'+admixList+'</td></tr></tbody></table>':''),
+    (r.notes?'<table style="margin-bottom:16px;"><thead><tr><th>Notes / Special Requirements</th></tr></thead><tbody><tr><td style="white-space:pre-wrap;">'+escHtml(r.notes)+'</td></tr></tbody></table>':''),
+    '<table style="margin-bottom:16px;"><thead><tr><th colspan="4">Submittal & Approval Record</th></tr></thead><tbody>',
+    '<tr><td style="font-weight:600;width:25%;">Submittal Ref #</td><td>'+escHtml(r.submittalRef||'—')+'</td><td style="font-weight:600;width:25%;">Date Submitted</td><td>'+escHtml(r.submittedDate||'—')+'</td></tr>',
+    '<tr><td style="font-weight:600;">Status</td><td><strong>'+escHtml(r.status||'—')+'</strong></td><td style="font-weight:600;">Date Approved</td><td>'+escHtml(r.approvedDate||'—')+'</td></tr>',
+    '<tr><td style="font-weight:600;">Approved By</td><td colspan="3">'+escHtml(r.approvedBy||'—')+'</td></tr>',
+    '</tbody></table>',
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:24px;border-top:2px solid #1e3a5f;padding-top:16px;">',
+    '<div><div style="font-size:9pt;font-weight:700;color:#1e3a5f;margin-bottom:20px;">Contractor / Estimator</div><div style="border-top:1px solid #94a3b8;padding-top:4px;font-size:8pt;color:#64748b;">Signature &amp; Date</div></div>',
+    '<div><div style="font-size:9pt;font-weight:700;color:#1e3a5f;margin-bottom:20px;">GC / Project Manager</div><div style="border-top:1px solid #94a3b8;padding-top:4px;font-size:8pt;color:#64748b;">Approved By / Date</div></div>',
+    '<div><div style="font-size:9pt;font-weight:700;color:#1e3a5f;margin-bottom:20px;">Engineer of Record (EOR)</div><div style="border-top:1px solid #94a3b8;padding-top:4px;font-size:8pt;color:#64748b;">Approved By / License # / Date</div></div>',
+    '</div>',
+    '<div style="margin-top:16px;font-size:7.5pt;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:8px;">',
+    'Standards: ACI 211.1 (mix proportioning) · ACI 318-19 §19.3 (durability / w/cm) · ASTM C94 (ready-mix) · ASTM C1116 (fiber) · ASTM C494 (admixtures) · ASTM C260 (AE) — Project: '+escHtml(pn)+' — CONFIDENTIAL — INTERNAL USE ONLY</div>',
+    '<div class="noprint" style="margin-top:16px;text-align:center;"><button onclick="window.print()" style="background:#1e3a5f;color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:10pt;">🖨 Print / Save PDF</button></div>',
+    '</body></html>'
+  ].join(''));
+  w.document.close();
+}
+window.printMixDesignSheet = printMixDesignSheet;
+
+function printMDLReport(){
+  var records = loadMDLData();
+  if(records.length===0){ alert('No mix designs to print.'); return; }
+  var coName = (typeof getCompanyName==='function'?getCompanyName():'')||'Oncor Construction';
+  var pn = (typeof window.currentProjectName==='string'?window.currentProjectName:'')||'Project';
+  var approved = records.filter(function(r){ return r.status==='Approved'||r.status==='Approved as Noted'; }).length;
+  var pending = records.filter(function(r){ return r.status==='Proposed'||r.status==='Submitted'; }).length;
+  var STATUS_BG = {'Approved':'#dcfce7','Approved as Noted':'#dcfce7','Proposed':'#fef9c3','Submitted':'#dbeafe','Rejected':'#fee2e2','Superseded':'#f1f5f9'};
+  var STATUS_COLOR = {'Approved':'#166534','Approved as Noted':'#166534','Proposed':'#92400e','Submitted':'#1e3a8a','Rejected':'#991b1b','Superseded':'#374151'};
+  var rows = records.map(function(r,i){
+    var sc = STATUS_COLOR[r.status]||'#374151'; var bg = STATUS_BG[r.status]||'#f1f5f9';
+    return '<tr style="border-bottom:1px solid #e2e8f0;">' +
+      '<td style="padding:8px;font-family:monospace;font-size:9pt;color:#1e3a5f;font-weight:700;">'+escHtml(r.mixId)+'</td>' +
+      '<td style="padding:8px;font-size:9pt;">'+escHtml(r.mixCode||'—')+'</td>' +
+      '<td style="padding:8px;font-size:9pt;font-weight:700;">'+escHtml(r.psi||'—')+'</td>' +
+      '<td style="padding:8px;font-size:9pt;">'+escHtml(r.slump||'—')+'"</td>' +
+      '<td style="padding:8px;font-size:9pt;">'+escHtml(r.wcmRatio||'—')+'</td>' +
+      '<td style="padding:8px;font-size:9pt;">'+escHtml(r.cementType||'—')+'</td>' +
+      '<td style="padding:8px;font-size:9pt;">'+escHtml(r.batchPlant||'—')+'</td>' +
+      '<td style="padding:8px;font-size:9pt;"><span style="background:'+bg+';color:'+sc+';padding:2px 8px;border-radius:10px;font-weight:600;">'+escHtml(r.status||'—')+'</span></td>' +
+      '<td style="padding:8px;font-size:9pt;">'+escHtml(r.approvedDate||'—')+'</td>' +
+    '</tr>';
+  }).join('');
+  var w = window.open('','_blank');
+  w.document.write([
+    '<!DOCTYPE html><html><head><title>Mix Design Library - '+escHtml(pn)+'</title>',
+    '<style>body{font-family:Arial,sans-serif;font-size:10pt;color:#1e293b;margin:0;padding:24px;} table{border-collapse:collapse;width:100%;} td,th{border:1px solid #e2e8f0;padding:8px 10px;} @media print{.noprint{display:none}}</style></head><body>',
+    '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1e3a5f;padding-bottom:12px;margin-bottom:16px;">',
+    '<div><div style="font-size:1.3rem;font-weight:800;color:#1e3a5f;">'+escHtml(coName)+'</div>',
+    '<div style="font-size:1rem;font-weight:700;color:#64748b;margin-top:2px;">CONCRETE MIX DESIGN LIBRARY — '+escHtml(pn)+'</div></div>',
+    '<div style="text-align:right;font-size:9pt;color:#64748b;">Generated: '+new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})+'</div></div>',
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;">',
+    '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:1.5rem;font-weight:800;">'+records.length+'</div><div style="font-size:8pt;color:#64748b;">Total Mix Designs</div></div>',
+    '<div style="border:1px solid #dcfce7;background:#f0fdf4;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:1.5rem;font-weight:800;color:#166534;">'+approved+'</div><div style="font-size:8pt;color:#166534;">Approved</div></div>',
+    '<div style="border:1px solid #fef9c3;background:#fefce8;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:1.5rem;font-weight:800;color:#92400e;">'+pending+'</div><div style="font-size:8pt;color:#92400e;">Pending</div></div>',
+    '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:1.5rem;font-weight:800;color:#374151;">'+(records.length-approved-pending)+'</div><div style="font-size:8pt;color:#64748b;">Other</div></div>',
+    '</div>',
+    '<table><thead><tr style="background:#1e3a5f;color:#fff;">',
+    '<th>Mix ID</th><th>Code</th><th>f\'c (PSI)</th><th>Slump</th><th>w/cm</th><th>Cement</th><th>Batch Plant</th><th>Status</th><th>Approved</th>',
+    '</tr></thead><tbody>'+rows+'</tbody></table>',
+    '<div style="margin-top:16px;font-size:7.5pt;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:8px;">ACI 211.1 · ACI 318-19 §19.3 · ASTM C94 · ASTM C1116 · ASTM C494 — CONFIDENTIAL — INTERNAL USE ONLY</div>',
+    '<div class="noprint" style="margin-top:16px;text-align:center;"><button onclick="window.print()" style="background:#1e3a5f;color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;">🖨 Print / Save PDF</button></div>',
+    '</body></html>'
+  ].join(''));
+  w.document.close();
+}
+window.printMDLReport = printMDLReport;
+
+function showMDLModal(){
+  buildMDLModal();
+  var m = document.getElementById(MDL_ID); if(!m) return;
+  m.style.display = 'flex';
+  mdlRefreshList();
+}
+function closeMDLModal(){
+  var m = document.getElementById(MDL_ID); if(m) m.style.display='none';
+}
+window.showMDLModal = showMDLModal;
+window.closeMDLModal = closeMDLModal;
+window.mdlRefreshList = mdlRefreshList;
+window.mdlSaveForm = mdlSaveForm;
+window.mdlNewForm = mdlNewForm;
+
+window._getMDLStats = function(){
+  var r = loadMDLData();
+  return { total: r.length, approved: r.filter(function(x){ return x.status==='Approved'||x.status==='Approved as Noted'; }).length };
+};
+
+document.addEventListener('keydown', function(e){
+  if(e.altKey && e.key.toLowerCase()==='m'){
+    e.preventDefault();
+    var m = document.getElementById(MDL_ID);
+    if(m && m.style.display==='flex') closeMDLModal();
+    else showMDLModal();
+  }
+});
+
+document.addEventListener('DOMContentLoaded', function(){
+  setTimeout(function(){
+    var ppirBtn = document.querySelector('button[onclick*="showPPIRModal"]');
+    if(!ppirBtn) return;
+    var parentRow = ppirBtn.closest('div');
+    if(!parentRow||!parentRow.parentNode) return;
+    var newRow = document.createElement('div');
+    newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+    newRow.innerHTML = '<button class="action-btn secondary" onclick="showMDLModal()" title="Concrete Mix Design Library — store, submit, and track approved mix designs per project (Alt+M)" style="background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.3);color:#a5b4fc;">🧪 Mix Design Library</button>';
+    parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+  }, 5400);
+});
+
+})();
+// ==================== END CONCRETE MIX DESIGN LIBRARY — Zeus ⚡ Session #81 ====================
+</script>
