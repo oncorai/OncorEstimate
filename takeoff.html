@@ -154332,3 +154332,500 @@ ${(p.followDue.length > 0 || c.overdueFollowUp > 0) ? `
 })();
 // ==================== END BUSINESS INTELLIGENCE DASHBOARD — Zeus ⚡ Session #70 ====================
 </script>
+
+<script>
+// ==================== INSPECTION LOG & PERMIT TRACKER — Zeus ⚡ Session #71 ====================
+(function(){
+  'use strict';
+  var INSP_ID = 'oncor-inspection-modal-v1';
+  var INSP_KEY_PREFIX = 'oncor_inspections_v1_';
+  var PERMIT_KEY_PREFIX = 'oncor_permits_v1_';
+
+  function projKey(){ return (window.projectName&&window.projectName.value?window.projectName.value:'default').replace(/\s+/g,'_'); }
+  function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  // Storage
+  function loadInsp(){ try{return JSON.parse(localStorage.getItem(INSP_KEY_PREFIX+projKey()))||[];}catch(e){return [];} }
+  function saveInsp(d){ localStorage.setItem(INSP_KEY_PREFIX+projKey(), JSON.stringify(d)); }
+  function loadPermits(){ try{return JSON.parse(localStorage.getItem(PERMIT_KEY_PREFIX+projKey()))||[];}catch(e){return [];} }
+  function savePermits(d){ localStorage.setItem(PERMIT_KEY_PREFIX+projKey(), JSON.stringify(d)); }
+
+  var INSP_TYPES = [
+    'Footing Inspection','Rebar Inspection','Slab-on-Grade Inspection','Foundation Inspection',
+    'Structural Concrete','Post-Tension Inspection','Pre-Pour Inspection','Pour Inspection (Special Insp.)',
+    'Compaction / Soils','Framing Inspection','Rough Plumbing','Rough Electrical','Rough Mechanical',
+    'Concrete Cover/Epoxy','Fireproofing','Masonry Inspection','ADA / Accessibility',
+    'Final Inspection','Certificate of Occupancy','Other'
+  ];
+  var INSP_STATUS = ['Scheduled','Passed','Failed','Partial Pass','Re-Inspection Required','Cancelled','Pending'];
+  var INSP_STATUS_COLORS = {
+    'Passed':'#16a34a','Failed':'#dc2626','Partial Pass':'#d97706',
+    'Re-Inspection Required':'#ea580c','Scheduled':'#2563eb','Cancelled':'#94a3b8','Pending':'#64748b'
+  };
+  var PERMIT_TYPES = [
+    'Building Permit','Grading/Earthwork Permit','Excavation Permit','Right-of-Way Permit',
+    'Utility Connection Permit','Electrical Permit','Plumbing Permit','Mechanical Permit',
+    'Special Inspection Program','Stormwater/SWPPP Permit','Environmental Permit',
+    'Fire Sprinkler Permit','Sign Permit','Demolition Permit','Other'
+  ];
+  var PERMIT_STATUS = ['Not Applied','Applied','Under Review','Approved','Active','Expired','Revoked','Closed'];
+  var PERMIT_STATUS_COLORS = {
+    'Active':'#16a34a','Approved':'#2563eb','Not Applied':'#94a3b8','Applied':'#d97706',
+    'Under Review':'#7c3aed','Expired':'#dc2626','Revoked':'#dc2626','Closed':'#475569'
+  };
+
+  // Expose stats for Project Status Card
+  window._getInspectionStats = function(){
+    var insps = loadInsp();
+    var permits = loadPermits();
+    var failed = insps.filter(function(i){return i.status==='Failed'||i.status==='Re-Inspection Required';}).length;
+    var passed = insps.filter(function(i){return i.status==='Passed';}).length;
+    var scheduled = insps.filter(function(i){return i.status==='Scheduled'||i.status==='Pending';}).length;
+    var expiredPermits = permits.filter(function(p){
+      if(p.status==='Active'&&p.expiry){var e=new Date(p.expiry);return e<new Date();}
+      return false;
+    }).length;
+    return { totalInsp: insps.length, passed: passed, failed: failed, scheduled: scheduled,
+             totalPermits: permits.length, expiredPermits: expiredPermits };
+  };
+
+  // ---- Build Modal ----
+  function buildModal(){
+    var el = document.getElementById(INSP_ID);
+    if(el) return;
+    var m = document.createElement('div');
+    m.id = INSP_ID;
+    m.style.cssText = 'display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;';
+    m.innerHTML = '<div style="background:#1e293b;border-radius:12px;width:min(98vw,1050px);max-height:92vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,0.6);display:flex;flex-direction:column;">'
+      +'<div style="padding:18px 20px 0;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#1e293b;z-index:2;border-bottom:1px solid rgba(255,255,255,0.07);">'
+      +'<div style="display:flex;align-items:center;gap:10px;">'
+      +'<span style="font-size:1.5rem;">🏗️</span>'
+      +'<div><div style="font-size:1.05rem;font-weight:700;color:#f1f5f9;">Inspection Log & Permit Tracker</div>'
+      +'<div style="font-size:0.75rem;color:#64748b;">Track city inspections, pass/fail status, and permit expiry</div></div></div>'
+      +'<div style="display:flex;gap:8px;align-items:center;">'
+      +'<button onclick="printInspReport()" style="padding:6px 14px;border-radius:6px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);color:#cbd5e1;cursor:pointer;font-size:0.78rem;">🖨 Report</button>'
+      +'<button onclick="closeInspModal()" style="padding:6px 14px;border-radius:6px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);color:#cbd5e1;cursor:pointer;font-size:0.78rem;">✕ Close</button>'
+      +'</div></div>'
+
+      // Stats
+      +'<div id="insp-stats-bar" style="padding:12px 20px;display:flex;gap:10px;flex-wrap:wrap;"></div>'
+
+      // Tabs
+      +'<div style="padding:0 20px;display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,0.08);">'
+      +'<button id="insp-tab-inspections" onclick="inspSwitchTab(\'inspections\')" style="padding:8px 18px;background:transparent;border:none;border-bottom:2px solid #3b82f6;color:#3b82f6;cursor:pointer;font-size:0.82rem;font-weight:600;">🔍 Inspections</button>'
+      +'<button id="insp-tab-permits" onclick="inspSwitchTab(\'permits\')" style="padding:8px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:#64748b;cursor:pointer;font-size:0.82rem;">📄 Permits</button>'
+      +'</div>'
+
+      // Content
+      +'<div id="insp-content" style="padding:16px 20px 20px;"></div>'
+      +'</div>';
+    document.body.appendChild(m);
+    m.addEventListener('click', function(e){ if(e.target===m) closeInspModal(); });
+  }
+
+  var _currentTab = 'inspections';
+  window.inspSwitchTab = function(tab){
+    _currentTab = tab;
+    document.getElementById('insp-tab-inspections').style.cssText='padding:8px 18px;background:transparent;border:none;border-bottom:2px solid '+(tab==='inspections'?'#3b82f6':'transparent')+';color:'+(tab==='inspections'?'#3b82f6':'#64748b')+';cursor:pointer;font-size:0.82rem;font-weight:'+(tab==='inspections'?'600':'400')+';';
+    document.getElementById('insp-tab-permits').style.cssText='padding:8px 18px;background:transparent;border:none;border-bottom:2px solid '+(tab==='permits'?'#3b82f6':'transparent')+';color:'+(tab==='permits'?'#3b82f6':'#64748b')+';cursor:pointer;font-size:0.82rem;font-weight:'+(tab==='permits'?'600':'400')+';';
+    renderInspContent();
+  };
+
+  function renderStats(){
+    var insps = loadInsp();
+    var permits = loadPermits();
+    var passed = insps.filter(function(i){return i.status==='Passed';}).length;
+    var failed = insps.filter(function(i){return i.status==='Failed'||i.status==='Re-Inspection Required';}).length;
+    var scheduled = insps.filter(function(i){return i.status==='Scheduled'||i.status==='Pending';}).length;
+    var activePermits = permits.filter(function(p){return p.status==='Active'||p.status==='Approved';}).length;
+    var today = new Date(); today.setHours(0,0,0,0);
+    var expiredP = permits.filter(function(p){
+      if((p.status==='Active')&&p.expiry){var e=new Date(p.expiry);e.setHours(0,0,0,0);return e<today;}
+      return false;
+    }).length;
+    var expiringP = permits.filter(function(p){
+      if((p.status==='Active')&&p.expiry){var e=new Date(p.expiry);e.setHours(0,0,0,0);var diff=Math.floor((e-today)/(86400000));return diff>=0&&diff<=30;}
+      return false;
+    }).length;
+    var cards = [
+      {l:'Inspections',v:insps.length,s:'total logged',c:'#3b82f6'},
+      {l:'Passed',v:passed,s:'✅',c:'#16a34a'},
+      {l:'Failed / Re-Insp',v:failed,s:failed>0?'⚠️ review needed':'',c:failed>0?'#dc2626':'#64748b'},
+      {l:'Scheduled',v:scheduled,s:'upcoming',c:'#2563eb'},
+      {l:'Active Permits',v:activePermits,s:'current',c:'#7c3aed'},
+      {l:'Permit Alerts',v:(expiredP+expiringP),s:expiredP>0?expiredP+' EXPIRED':expiringP>0?expiringP+' expiring':'OK',c:(expiredP>0?'#dc2626':expiringP>0?'#d97706':'#16a34a')}
+    ];
+    var el = document.getElementById('insp-stats-bar');
+    if(el) el.innerHTML = cards.map(function(c){
+      return '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px 14px;min-width:120px;">'
+        +'<div style="font-size:0.62rem;text-transform:uppercase;color:#64748b;margin-bottom:2px;">'+escH(c.l)+'</div>'
+        +'<div style="font-size:1.3rem;font-weight:800;color:'+c.c+';">'+c.v+'</div>'
+        +'<div style="font-size:0.65rem;color:#94a3b8;">'+escH(c.s)+'</div>'
+        +'</div>';
+    }).join('');
+  }
+
+  function renderInspContent(){
+    renderStats();
+    var el = document.getElementById('insp-content');
+    if(!el) return;
+    if(_currentTab==='inspections') el.innerHTML = buildInspectionTab();
+    else el.innerHTML = buildPermitTab();
+    // wire form if visible
+    setTimeout(function(){
+      var f = document.getElementById('insp-form-inner');
+      if(f) wireInspForm();
+      var pf = document.getElementById('permit-form-inner');
+      if(pf) wirePermitForm();
+    },50);
+  }
+
+  // ---- INSPECTIONS TAB ----
+  var _inspFormVisible = false;
+  var _inspEditIdx = -1;
+
+  function buildInspectionTab(){
+    var insps = loadInsp();
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'
+      +'<div style="font-size:0.82rem;color:#94a3b8;">'+insps.length+' inspection'+(insps.length!==1?'s':'')+' logged</div>'
+      +'<button onclick="showInspForm(-1)" style="padding:6px 16px;background:#2563eb;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:0.82rem;">+ New Inspection</button>'
+      +'</div>';
+    html += '<div id="insp-form-wrap" style="'+ (_inspFormVisible?'':'display:none;') +'margin-bottom:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:16px;">'
+      +'<div id="insp-form-inner">'+buildInspForm(null)+'</div></div>';
+    if(insps.length===0){
+      html += '<div style="text-align:center;padding:40px;color:#475569;">'
+        +'<div style="font-size:2rem;margin-bottom:8px;">🔍</div>'
+        +'<div style="font-size:0.88rem;">No inspections logged yet.</div>'
+        +'<div style="font-size:0.78rem;margin-top:4px;">Track footings, rebar, slab, and final inspections here.</div></div>';
+    } else {
+      html += insps.map(function(insp, idx){
+        var sc = INSP_STATUS_COLORS[insp.status]||'#64748b';
+        var today = new Date(); today.setHours(0,0,0,0);
+        var overdue = (insp.status==='Scheduled'||insp.status==='Pending')&&insp.date&&new Date(insp.date)<today;
+        return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,'+(insp.status==='Failed'||insp.status==='Re-Inspection Required'?'0.25':'0.07')+');border-left:3px solid '+sc+';border-radius:8px;padding:12px 14px;margin-bottom:8px;">'
+          +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">'
+          +'<div style="flex:1;">'
+          +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px;">'
+          +'<span style="font-size:0.88rem;font-weight:700;color:#f1f5f9;">'+escH(insp.type)+'</span>'
+          +'<span style="font-size:0.7rem;padding:2px 8px;border-radius:4px;background:'+sc+'22;color:'+sc+';border:1px solid '+sc+'44;font-weight:600;">'+escH(insp.status)+'</span>'
+          +(overdue?'<span style="font-size:0.68rem;padding:2px 7px;border-radius:4px;background:#dc262622;color:#dc2626;border:1px solid #dc262644;font-weight:700;">OVERDUE</span>':'')
+          +(insp.reinspRequired?'<span style="font-size:0.68rem;padding:2px 7px;border-radius:4px;background:#ea580c22;color:#ea580c;border:1px solid #ea580c44;">RE-INSP NEEDED</span>':'')
+          +'</div>'
+          +'<div style="font-size:0.78rem;color:#94a3b8;display:flex;gap:14px;flex-wrap:wrap;">'
+          +(insp.date?'<span>📅 '+escH(insp.date)+'</span>':'')
+          +(insp.inspector?'<span>👤 '+escH(insp.inspector)+'</span>':'')
+          +(insp.area?'<span>📍 '+escH(insp.area)+'</span>':'')
+          +(insp.permitRef?'<span>📄 Permit: '+escH(insp.permitRef)+'</span>':'')
+          +'</div>'
+          +(insp.notes?'<div style="font-size:0.75rem;color:#64748b;margin-top:4px;border-left:2px solid rgba(255,255,255,0.1);padding-left:8px;">'+escH(insp.notes)+'</div>':'')
+          +(insp.failReason?'<div style="font-size:0.75rem;color:#fca5a5;margin-top:4px;background:rgba(220,38,38,0.08);border-radius:4px;padding:5px 8px;"><strong>Fail Reason:</strong> '+escH(insp.failReason)+'</div>':'')
+          +(insp.corrAction?'<div style="font-size:0.75rem;color:#86efac;margin-top:3px;background:rgba(22,163,74,0.08);border-radius:4px;padding:5px 8px;"><strong>Corrective Action:</strong> '+escH(insp.corrAction)+'</div>':'')
+          +'</div>'
+          +'<div style="display:flex;gap:6px;">'
+          +'<button onclick="showInspForm('+idx+')" style="padding:4px 10px;border-radius:5px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;cursor:pointer;font-size:0.75rem;">✏️</button>'
+          +'<button onclick="deleteInsp('+idx+')" style="padding:4px 10px;border-radius:5px;background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.25);color:#fca5a5;cursor:pointer;font-size:0.75rem;">🗑</button>'
+          +'</div></div></div>';
+      }).join('');
+    }
+    return html;
+  }
+
+  function buildInspForm(data){
+    var d = data||{};
+    return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">'
+      +formField('Type','insp-f-type','select',INSP_TYPES,d.type)
+      +formField('Date','insp-f-date','date','',d.date)
+      +formField('Status','insp-f-status','select',INSP_STATUS,d.status||'Scheduled')
+      +formField('Inspector / City Rep','insp-f-inspector','text','',d.inspector)
+      +formField('Area / Grid Ref','insp-f-area','text','e.g. Footings A1-A8',d.area)
+      +formField('Permit Ref #','insp-f-permitRef','text','',d.permitRef)
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">'
+      +formTextarea('Fail Reason (if failed)','insp-f-failReason',2,d.failReason)
+      +formTextarea('Corrective Action','insp-f-corrAction',2,d.corrAction)
+      +'</div>'
+      +formTextarea('Notes','insp-f-notes',2,d.notes)
+      +'<div style="margin-top:10px;display:flex;gap:8px;">'
+      +'<button onclick="saveInspEntry()" style="padding:7px 20px;background:#2563eb;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:0.82rem;">💾 Save</button>'
+      +'<button onclick="cancelInspForm()" style="padding:7px 14px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#94a3b8;cursor:pointer;font-size:0.82rem;">Cancel</button>'
+      +'</div>';
+  }
+
+  function wireInspForm(){ /* fields wired via onclick/oninput inline */ }
+
+  window.showInspForm = function(idx){
+    _inspFormVisible = true;
+    _inspEditIdx = idx;
+    renderInspContent();
+    if(idx>=0){
+      var d = loadInsp()[idx]||{};
+      var fields = {type:d.type,date:d.date,status:d.status,inspector:d.inspector,area:d.area,permitRef:d.permitRef,failReason:d.failReason,corrAction:d.corrAction,notes:d.notes};
+      Object.keys(fields).forEach(function(k){
+        var el = document.getElementById('insp-f-'+k);
+        if(el) el.value = fields[k]||'';
+      });
+    }
+    var fw = document.getElementById('insp-form-wrap');
+    if(fw){ fw.style.display=''; fw.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+  };
+  window.cancelInspForm = function(){ _inspFormVisible=false; _inspEditIdx=-1; renderInspContent(); };
+  window.saveInspEntry = function(){
+    var get = function(id){ var e=document.getElementById(id); return e?e.value.trim():''; };
+    var data = {
+      type:get('insp-f-type'), date:get('insp-f-date'), status:get('insp-f-status'),
+      inspector:get('insp-f-inspector'), area:get('insp-f-area'), permitRef:get('insp-f-permitRef'),
+      failReason:get('insp-f-failReason'), corrAction:get('insp-f-corrAction'), notes:get('insp-f-notes')
+    };
+    if(!data.type){ alert('Select an inspection type.'); return; }
+    var insps = loadInsp();
+    if(_inspEditIdx>=0) insps[_inspEditIdx]=data; else insps.push(data);
+    saveInsp(insps);
+    _inspFormVisible=false; _inspEditIdx=-1;
+    renderInspContent();
+  };
+  window.deleteInsp = function(idx){
+    if(!confirm('Delete this inspection record?')) return;
+    var insps=loadInsp(); insps.splice(idx,1); saveInsp(insps);
+    renderInspContent();
+  };
+
+  // ---- PERMITS TAB ----
+  var _permitFormVisible = false;
+  var _permitEditIdx = -1;
+
+  function buildPermitTab(){
+    var permits = loadPermits();
+    var today = new Date(); today.setHours(0,0,0,0);
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'
+      +'<div style="font-size:0.82rem;color:#94a3b8;">'+permits.length+' permit'+(permits.length!==1?'s':'')+' tracked</div>'
+      +'<button onclick="showPermitForm(-1)" style="padding:6px 16px;background:#7c3aed;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:0.82rem;">+ Add Permit</button>'
+      +'</div>';
+    html += '<div id="permit-form-wrap" style="'+(_permitFormVisible?'':'display:none;')+'margin-bottom:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:16px;">'
+      +'<div id="permit-form-inner">'+buildPermitForm(null)+'</div></div>';
+    if(permits.length===0){
+      html += '<div style="text-align:center;padding:40px;color:#475569;">'
+        +'<div style="font-size:2rem;margin-bottom:8px;">📄</div>'
+        +'<div style="font-size:0.88rem;">No permits tracked yet.</div>'
+        +'<div style="font-size:0.78rem;margin-top:4px;">Track building permits, grading permits, and more here.</div></div>';
+    } else {
+      html += permits.map(function(permit, idx){
+        var sc = PERMIT_STATUS_COLORS[permit.status]||'#64748b';
+        var expired = (permit.status==='Active')&&permit.expiry&&new Date(permit.expiry)<today;
+        var expiring = !expired&&(permit.status==='Active')&&permit.expiry&&Math.floor((new Date(permit.expiry)-today)/86400000)<=30&&Math.floor((new Date(permit.expiry)-today)/86400000)>=0;
+        var daysLeft = permit.expiry?Math.floor((new Date(permit.expiry)-today)/86400000):null;
+        return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,'+(expired?'0.25':'0.07')+');border-left:3px solid '+sc+';border-radius:8px;padding:12px 14px;margin-bottom:8px;">'
+          +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">'
+          +'<div style="flex:1;">'
+          +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px;">'
+          +'<span style="font-size:0.88rem;font-weight:700;color:#f1f5f9;">'+escH(permit.type)+'</span>'
+          +(permit.permitNum?'<span style="font-size:0.75rem;color:#94a3b8;font-family:monospace;background:rgba(255,255,255,0.06);padding:1px 7px;border-radius:4px;">#'+escH(permit.permitNum)+'</span>':'')
+          +'<span style="font-size:0.7rem;padding:2px 8px;border-radius:4px;background:'+sc+'22;color:'+sc+';border:1px solid '+sc+'44;font-weight:600;">'+escH(permit.status)+'</span>'
+          +(expired?'<span style="font-size:0.68rem;padding:2px 7px;border-radius:4px;background:#dc262622;color:#dc2626;border:1px solid #dc262644;font-weight:700;">EXPIRED</span>':'')
+          +(expiring?'<span style="font-size:0.68rem;padding:2px 7px;border-radius:4px;background:#d9770622;color:#d97706;border:1px solid #d9770644;font-weight:600;">EXPIRES IN '+daysLeft+'d</span>':'')
+          +'</div>'
+          +'<div style="font-size:0.78rem;color:#94a3b8;display:flex;gap:14px;flex-wrap:wrap;">'
+          +(permit.issuedDate?'<span>📅 Issued: '+escH(permit.issuedDate)+'</span>':'')
+          +(permit.expiry?'<span>⏰ Expiry: '+escH(permit.expiry)+'</span>':'')
+          +(permit.authority?'<span>🏛 '+escH(permit.authority)+'</span>':'')
+          +(permit.fee?'<span>💰 Fee: $'+parseFloat(permit.fee||0).toLocaleString()+'</span>':'')
+          +(permit.contact?'<span>👤 '+escH(permit.contact)+'</span>':'')
+          +'</div>'
+          +(permit.notes?'<div style="font-size:0.75rem;color:#64748b;margin-top:4px;border-left:2px solid rgba(255,255,255,0.1);padding-left:8px;">'+escH(permit.notes)+'</div>':'')
+          +'</div>'
+          +'<div style="display:flex;gap:6px;">'
+          +'<button onclick="showPermitForm('+idx+')" style="padding:4px 10px;border-radius:5px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;cursor:pointer;font-size:0.75rem;">✏️</button>'
+          +'<button onclick="deletePermit('+idx+')" style="padding:4px 10px;border-radius:5px;background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.25);color:#fca5a5;cursor:pointer;font-size:0.75rem;">🗑</button>'
+          +'</div></div></div>';
+      }).join('');
+    }
+    return html;
+  }
+
+  function buildPermitForm(data){
+    var d = data||{};
+    return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">'
+      +formField('Permit Type','permit-f-type','select',PERMIT_TYPES,d.type)
+      +formField('Permit #','permit-f-permitNum','text','',d.permitNum)
+      +formField('Status','permit-f-status','select',PERMIT_STATUS,d.status||'Not Applied')
+      +formField('Issuing Authority','permit-f-authority','text','e.g. City of El Paso',d.authority)
+      +formField('Date Issued','permit-f-issuedDate','date','',d.issuedDate)
+      +formField('Expiry Date','permit-f-expiry','date','',d.expiry)
+      +formField('Fee ($)','permit-f-fee','number','',d.fee)
+      +formField('Inspector / Contact','permit-f-contact','text','',d.contact)
+      +'</div>'
+      +formTextarea('Notes','permit-f-notes',2,d.notes)
+      +'<div style="margin-top:10px;display:flex;gap:8px;">'
+      +'<button onclick="savePermitEntry()" style="padding:7px 20px;background:#7c3aed;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:0.82rem;">💾 Save</button>'
+      +'<button onclick="cancelPermitForm()" style="padding:7px 14px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#94a3b8;cursor:pointer;font-size:0.82rem;">Cancel</button>'
+      +'</div>';
+  }
+
+  function wirePermitForm(){}
+
+  window.showPermitForm = function(idx){
+    _permitFormVisible = true; _permitEditIdx = idx;
+    renderInspContent();
+    if(idx>=0){
+      var d = loadPermits()[idx]||{};
+      var fields = {type:d.type,permitNum:d.permitNum,status:d.status,authority:d.authority,issuedDate:d.issuedDate,expiry:d.expiry,fee:d.fee,contact:d.contact,notes:d.notes};
+      Object.keys(fields).forEach(function(k){
+        var el = document.getElementById('permit-f-'+k);
+        if(el) el.value = fields[k]||'';
+      });
+    }
+    var fw = document.getElementById('permit-form-wrap');
+    if(fw){ fw.style.display=''; fw.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+  };
+  window.cancelPermitForm = function(){ _permitFormVisible=false; _permitEditIdx=-1; renderInspContent(); };
+  window.savePermitEntry = function(){
+    var get = function(id){ var e=document.getElementById(id); return e?e.value.trim():''; };
+    var data = {
+      type:get('permit-f-type'), permitNum:get('permit-f-permitNum'), status:get('permit-f-status'),
+      authority:get('permit-f-authority'), issuedDate:get('permit-f-issuedDate'), expiry:get('permit-f-expiry'),
+      fee:get('permit-f-fee'), contact:get('permit-f-contact'), notes:get('permit-f-notes')
+    };
+    if(!data.type){ alert('Select a permit type.'); return; }
+    var permits = loadPermits();
+    if(_permitEditIdx>=0) permits[_permitEditIdx]=data; else permits.push(data);
+    savePermits(permits);
+    _permitFormVisible=false; _permitEditIdx=-1;
+    renderInspContent();
+  };
+  window.deletePermit = function(idx){
+    if(!confirm('Delete this permit record?')) return;
+    var permits=loadPermits(); permits.splice(idx,1); savePermits(permits);
+    renderInspContent();
+  };
+
+  // ---- Form Helpers ----
+  function formField(label, id, type, options, val){
+    var input;
+    if(type==='select'){
+      input = '<select id="'+id+'" style="width:100%;padding:7px 9px;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#f1f5f9;font-size:0.82rem;">'
+        + (Array.isArray(options)?options:[]).map(function(o){ return '<option value="'+escH(o)+'"'+(o===val?' selected':'')+'>'+escH(o)+'</option>'; }).join('') + '</select>';
+    } else {
+      input = '<input id="'+id+'" type="'+type+'" placeholder="'+escH(options)+'" value="'+escH(val||'')+'" style="width:100%;padding:7px 9px;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#f1f5f9;font-size:0.82rem;box-sizing:border-box;">';
+    }
+    return '<div><label style="font-size:0.72rem;color:#94a3b8;display:block;margin-bottom:3px;">'+escH(label)+'</label>'+input+'</div>';
+  }
+  function formTextarea(label, id, rows, val){
+    return '<div><label style="font-size:0.72rem;color:#94a3b8;display:block;margin-bottom:3px;">'+escH(label)+'</label>'
+      +'<textarea id="'+id+'" rows="'+rows+'" style="width:100%;padding:7px 9px;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#f1f5f9;font-size:0.82rem;box-sizing:border-box;resize:vertical;">'+escH(val||'')+'</textarea></div>';
+  }
+
+  // ---- Print ----
+  window.printInspReport = function(){
+    var insps = loadInsp();
+    var permits = loadPermits();
+    var coName = document.getElementById('companyName')?document.getElementById('companyName').value||'Oncor':'Oncor';
+    var coPhone = document.getElementById('companyPhone')?document.getElementById('companyPhone').value||'':'';
+    var coEmail = document.getElementById('companyEmail')?document.getElementById('companyEmail').value||'':'';
+    var projName = document.getElementById('projectName')?document.getElementById('projectName').value||'Project':'Project';
+    var today = new Date();
+    var todayH = new Date(); todayH.setHours(0,0,0,0);
+    var passed = insps.filter(function(i){return i.status==='Passed';}).length;
+    var failed = insps.filter(function(i){return i.status==='Failed'||i.status==='Re-Inspection Required';}).length;
+    var scheduled = insps.filter(function(i){return i.status==='Scheduled'||i.status==='Pending';}).length;
+    var activeP = permits.filter(function(p){return p.status==='Active'||p.status==='Approved';}).length;
+    var html = '<!DOCTYPE html><html><head><title>Inspection & Permit Report — '+escH(coName)+'</title>'
+      +'<style>body{font-family:Inter,Arial,sans-serif;margin:32px;color:#1e293b;font-size:12px;}h1{font-size:1.2rem;margin:0;}h2{font-size:0.85rem;color:#475569;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid #e2e8f0;padding-bottom:4px;margin:20px 0 10px;}table{width:100%;border-collapse:collapse;margin-bottom:12px;}th{background:#1e293b;color:#fff;padding:6px 10px;text-align:left;font-size:0.68rem;text-transform:uppercase;}td{padding:5px 10px;font-size:0.78rem;border-bottom:1px solid #f1f5f9;}.failed-row{background:#fef2f2;}.passed-row{background:#f0fdf4;}@media print{button{display:none;}}</style></head><body>'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1e293b;padding-bottom:12px;margin-bottom:16px;">'
+      +'<div><h1>'+escH(coName)+'</h1><div style="font-size:0.8rem;color:#475569;">Inspection Log & Permit Report · '+escH(projName)+' · Generated '+today.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})+'</div></div>'
+      +'<div style="text-align:right;font-size:0.75rem;color:#475569;">'+escH(coPhone)+'<br>'+escH(coEmail)+'</div>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px;">'
+      +[
+        {l:'Total Inspections',v:insps.length},
+        {l:'Passed',v:passed,c:'#16a34a'},
+        {l:'Failed / Re-Insp',v:failed,c:failed>0?'#dc2626':'#64748b'},
+        {l:'Scheduled/Pending',v:scheduled,c:'#2563eb'},
+        {l:'Active Permits',v:activeP,c:'#7c3aed'}
+      ].map(function(k){
+        return '<div style="border:1px solid #e2e8f0;border-radius:6px;padding:8px;text-align:center;">'
+          +'<div style="font-size:0.58rem;text-transform:uppercase;color:#94a3b8;">'+escH(k.l)+'</div>'
+          +'<div style="font-size:1.2rem;font-weight:800;color:'+(k.c||'#1e293b')+';">'+k.v+'</div>'
+          +'</div>';
+      }).join('')
+      +'</div>'
+      +'<h2>Inspection Log</h2>'
+      +(insps.length===0?'<p style="color:#94a3b8;font-size:0.8rem;">No inspections logged.</p>'
+        :'<table><thead><tr><th>#</th><th>Type</th><th>Date</th><th>Status</th><th>Inspector</th><th>Area</th><th>Notes / Fail Reason</th></tr></thead><tbody>'
+        +insps.map(function(i,n){
+          var cls=(i.status==='Failed'||i.status==='Re-Inspection Required')?' class="failed-row"':i.status==='Passed'?' class="passed-row"':'';
+          return '<tr'+cls+'>'
+            +'<td style="color:#64748b;">'+(n+1)+'</td>'
+            +'<td style="font-weight:600;">'+escH(i.type)+'</td>'
+            +'<td>'+escH(i.date||'')+'</td>'
+            +'<td style="font-weight:600;color:'+(INSP_STATUS_COLORS[i.status]||'#64748b')+';">'+escH(i.status)+'</td>'
+            +'<td>'+escH(i.inspector||'')+'</td>'
+            +'<td>'+escH(i.area||'')+'</td>'
+            +'<td style="color:#475569;">'+escH((i.failReason||i.notes||''))+'</td>'
+            +'</tr>';
+        }).join('')
+        +'</tbody></table>')
+      +'<h2>Permit Log</h2>'
+      +(permits.length===0?'<p style="color:#94a3b8;font-size:0.8rem;">No permits tracked.</p>'
+        :'<table><thead><tr><th>#</th><th>Permit Type</th><th>Permit #</th><th>Status</th><th>Authority</th><th>Issued</th><th>Expiry</th><th>Fee</th></tr></thead><tbody>'
+        +permits.map(function(p,n){
+          var expired=(p.status==='Active')&&p.expiry&&new Date(p.expiry)<todayH;
+          return '<tr'+(expired?' class="failed-row"':'')+'>'
+            +'<td style="color:#64748b;">'+(n+1)+'</td>'
+            +'<td style="font-weight:600;">'+escH(p.type)+'</td>'
+            +'<td style="font-family:monospace;font-size:0.75rem;">'+escH(p.permitNum||'—')+'</td>'
+            +'<td style="font-weight:600;color:'+(PERMIT_STATUS_COLORS[p.status]||'#64748b')+';">'+escH(p.status)+(expired?' ⚠️ EXPIRED':'')+'</td>'
+            +'<td>'+escH(p.authority||'')+'</td>'
+            +'<td>'+escH(p.issuedDate||'')+'</td>'
+            +'<td>'+escH(p.expiry||'')+'</td>'
+            +'<td>'+(p.fee?'$'+parseFloat(p.fee).toLocaleString():'')+'</td>'
+            +'</tr>';
+        }).join('')
+        +'</tbody></table>')
+      +'<div style="margin-top:20px;font-size:0.7rem;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:10px;">CONFIDENTIAL — INTERNAL USE ONLY · '+escH(coName)+' · Oncor Takeoff Estimator · Inspection & Permit Record</div>'
+      +'<button onclick="window.print()" style="margin-top:14px;padding:8px 18px;background:#1e293b;color:#fff;border:none;border-radius:6px;cursor:pointer;">🖨️ Print / Save PDF</button>'
+      +'</body></html>';
+    var w = window.open('','_blank');
+    w.document.write(html);
+    w.document.close();
+  };
+
+  // ---- Show / Close ----
+  function showInspModal(){
+    buildModal();
+    _currentTab = 'inspections';
+    var m = document.getElementById(INSP_ID);
+    if(m){ m.style.display='flex'; renderInspContent(); }
+  }
+  function closeInspModal(){
+    var m = document.getElementById(INSP_ID);
+    if(m) m.style.display='none';
+  }
+  window.showInspModal = showInspModal;
+  window.closeInspModal = closeInspModal;
+
+  // ---- Keyboard shortcut Alt+N ----
+  document.addEventListener('keydown',function(e){
+    if(e.altKey && e.key.toLowerCase()==='n'){
+      e.preventDefault();
+      var m = document.getElementById(INSP_ID);
+      if(m && m.style.display==='flex') closeInspModal();
+      else showInspModal();
+    }
+  });
+
+  // ---- Sidebar button — inject below BI Dashboard ----
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){
+      var biBtn = document.querySelector('button[onclick*="showBI"]');
+      if(!biBtn) return;
+      var parentRow = biBtn.closest('div');
+      if(!parentRow||!parentRow.parentNode) return;
+      var newRow = document.createElement('div');
+      newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML = '<button class="action-btn secondary" onclick="showInspModal()" title="Inspection Log & Permit Tracker — track pass/fail inspections, permit expiry (Alt+N)" style="background:rgba(124,58,237,0.1);border-color:rgba(124,58,237,0.3);color:#a78bfa;">🏗️ Inspections</button>';
+      parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 3200);
+  });
+
+})();
+// ==================== END INSPECTION LOG & PERMIT TRACKER — Zeus ⚡ Session #71 ====================
+</script>
