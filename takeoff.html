@@ -153932,3 +153932,403 @@ ${d.totalYds > 0 ? `Cost/yd³: ${fmtMoney(d.totalBid/d.totalYds)}` : ''}
 })();
 // ==================== END CLIENT & GC CONTACT BOOK — Zeus ⚡ Session #69 ====================
 </script>
+<script>
+// ==================== BUSINESS INTELLIGENCE DASHBOARD — Zeus ⚡ Session #70 ====================
+(function(){
+  'use strict';
+
+  var BI_ID = 'oncor_bi_modal_70';
+
+  // ---- Data helpers ----
+  function getAllProjects(){
+    try { return JSON.parse(localStorage.getItem('oncorProjects')||'[]'); } catch(e){ return []; }
+  }
+  function getPipeline(){
+    try { return JSON.parse(localStorage.getItem('oncor_pipeline_v1')||'[]'); } catch(e){ return []; }
+  }
+  function getContacts(){
+    try { return JSON.parse(localStorage.getItem('oncor_contacts_v1')||'[]'); } catch(e){ return []; }
+  }
+  function getSnapshots(proj){
+    try { return JSON.parse(localStorage.getItem('oncor_snapshots_v1_'+proj)||'[]'); } catch(e){ return []; }
+  }
+  function getJobCosts(proj){
+    try { return JSON.parse(localStorage.getItem('oncor_job_cost_v1_'+proj)||'[]'); } catch(e){ return []; }
+  }
+  function getPOStats(proj){
+    try { return JSON.parse(localStorage.getItem('oncor_po_v1_'+proj)||'[]'); } catch(e){ return []; }
+  }
+
+  function fmt$(n){
+    if(!n&&n!==0) return '—';
+    n=parseFloat(n)||0;
+    if(Math.abs(n)>=1000000) return '$'+(n/1000000).toFixed(2)+'M';
+    if(Math.abs(n)>=1000) return '$'+(n/1000).toFixed(1)+'k';
+    return '$'+n.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
+  }
+  function pct(a,b){ return b>0?Math.round(a/b*100):0; }
+  function today(){ return new Date().toISOString().split('T')[0]; }
+
+  // ---- Compute master BI data ----
+  function computeBI(){
+    var projects = getAllProjects();
+    var pipeline = getPipeline();
+    var contacts = getContacts();
+
+    // — Pipeline KPIs —
+    var won = pipeline.filter(function(b){ return b.status==='Won'; });
+    var lost = pipeline.filter(function(b){ return b.status==='Lost'; });
+    var active = pipeline.filter(function(b){ return ['Preparing','Submitted','Under Review'].indexOf(b.status)>=0; });
+    var wonVal = won.reduce(function(s,b){ return s+(parseFloat(b.amount)||0); },0);
+    var lostVal = lost.reduce(function(s,b){ return s+(parseFloat(b.amount)||0); },0);
+    var pipelineVal = active.reduce(function(s,b){ return s+(parseFloat(b.amount)||0); },0);
+    var winRate = (won.length+lost.length)>0 ? Math.round(won.length/(won.length+lost.length)*100) : null;
+    var totalBidVol = won.reduce(function(s,b){ return s+(parseFloat(b.yards)||0); },0);
+    var avgBid = (won.length+lost.length+active.length)>0 ? (wonVal+lostVal+pipelineVal)/(won.length+lost.length+active.length) : 0;
+
+    // Follow-up due
+    var t = today();
+    var followDue = active.filter(function(b){ return b.followUp && b.followUp <= t; });
+
+    // — Projects KPIs —
+    var totalSavedBid = projects.reduce(function(s,p){
+      try { var d=JSON.parse(p.data||'{}'); return s+(d.lastEstimate&&d.lastEstimate.totalBid ? parseFloat(d.lastEstimate.totalBid)||0 : 0); } catch(e){ return s; }
+    },0);
+    var projCount = projects.length;
+
+    // Job cost across all saved projects
+    var totalActual=0, totalBudget=0;
+    projects.forEach(function(p){
+      var costs = getJobCosts(p.name||'');
+      costs.forEach(function(c){ totalActual+=parseFloat(c.amount)||0; });
+    });
+
+    // — Contacts KPIs —
+    var activeContacts = contacts.filter(function(c){ return c.status==='Active'; });
+    var prospects = contacts.filter(function(c){ return c.status==='Prospect'||c.status==='Warm Lead'; });
+    var overdueFollowUp = contacts.filter(function(c){ return c.nextFollowUp && c.nextFollowUp<t; });
+    // Contacts by type
+    var contactTypes={};
+    contacts.forEach(function(c){ contactTypes[c.type||'Other']=(contactTypes[c.type||'Other']||0)+1; });
+
+    // — Pipeline by GC (cross-reference with contacts) —
+    var gcWins={};
+    won.forEach(function(b){
+      var g=b.gcClient||'Unknown';
+      if(!gcWins[g]) gcWins[g]={count:0,val:0};
+      gcWins[g].count++;
+      gcWins[g].val+=parseFloat(b.amount)||0;
+    });
+    var topGC = Object.entries(gcWins).sort(function(a,b){ return b[1].val-a[1].val; }).slice(0,5);
+
+    // — Monthly bid activity —
+    var monthlyBids={};
+    pipeline.forEach(function(b){
+      if(!b.bidDate) return;
+      var m=b.bidDate.slice(0,7);
+      if(!monthlyBids[m]) monthlyBids[m]={bids:0,value:0,won:0};
+      monthlyBids[m].bids++;
+      monthlyBids[m].value+=parseFloat(b.amount)||0;
+      if(b.status==='Won') monthlyBids[m].won++;
+    });
+    var months = Object.keys(monthlyBids).sort().slice(-6);
+
+    // — Won jobs by bid type —
+    var wonByType={};
+    won.forEach(function(b){ wonByType[b.bidType||'Other']=(wonByType[b.bidType||'Other']||0)+1; });
+
+    return {
+      pipeline:{won,lost,active,wonVal,lostVal,pipelineVal,winRate,totalBidVol,avgBid,followDue,monthly:monthlyBids,months,topGC,wonByType},
+      projects:{count:projCount,totalSavedBid,totalActual},
+      contacts:{total:contacts.length,active:activeContacts.length,prospects:prospects.length,overdueFollowUp:overdueFollowUp.length,byType:contactTypes}
+    };
+  }
+
+  // ---- Render ----
+  function renderBI(){
+    var d = computeBI();
+    var p = d.pipeline;
+    var pr = d.projects;
+    var c = d.contacts;
+
+    var winColor = p.winRate===null?'#94a3b8':p.winRate>=50?'#22c55e':p.winRate>=30?'#f59e0b':'#ef4444';
+    var winLabel = p.winRate===null?'No data':(p.winRate+'%');
+
+    // Monthly bar chart (simple HTML bars)
+    var maxBids = Math.max.apply(null, p.months.map(function(m){ return p.monthly[m].value; }).concat([1]));
+    var monthHTML = p.months.length===0 ? '<div style="color:#64748b;font-size:0.8rem;padding:12px 0;">No bid history yet.</div>' :
+      '<div style="display:grid;grid-template-columns:repeat('+p.months.length+',1fr);gap:8px;align-items:end;height:80px;">'
+      + p.months.map(function(m){
+          var v=p.monthly[m];
+          var h=Math.max(4,Math.round(v.value/maxBids*72));
+          var wr=v.bids>0?Math.round(v.won/v.bids*100):0;
+          var bc=wr>=50?'#22c55e':wr>=25?'#f59e0b':'#3b82f6';
+          return '<div style="display:flex;flex-direction:column;align-items:center;gap:3px;">'
+            +'<div style="font-size:9px;color:#94a3b8;">'+fmt$(v.value)+'</div>'
+            +'<div style="width:100%;background:'+bc+';height:'+h+'px;border-radius:3px 3px 0 0;opacity:0.85;"></div>'
+            +'<div style="font-size:9px;color:#64748b;">'+m.slice(5)+'</div>'
+            +'<div style="font-size:9px;color:'+bc+';">'+wr+'%</div>'
+          +'</div>';
+        }).join('')
+      +'</div>';
+
+    // Top GCs table
+    var gcHTML = p.topGC.length===0 ? '<div style="color:#64748b;font-size:0.8rem;">No won bids recorded yet.</div>' :
+      '<table style="width:100%;border-collapse:collapse;font-size:0.78rem;">'
+      +'<thead><tr>'
+      +'<th style="text-align:left;padding:5px 8px;color:#94a3b8;border-bottom:1px solid #334155;">GC / Client</th>'
+      +'<th style="text-align:center;padding:5px 8px;color:#94a3b8;border-bottom:1px solid #334155;">Won</th>'
+      +'<th style="text-align:right;padding:5px 8px;color:#94a3b8;border-bottom:1px solid #334155;">Total Value</th>'
+      +'</tr></thead><tbody>'
+      + p.topGC.map(function(row,i){
+          return '<tr style="background:'+(i%2===0?'transparent':'rgba(255,255,255,0.02)+')+';">'
+            +'<td style="padding:5px 8px;color:#e2e8f0;">'+escH(row[0])+'</td>'
+            +'<td style="padding:5px 8px;text-align:center;color:#22c55e;font-weight:700;">'+row[1].count+'</td>'
+            +'<td style="padding:5px 8px;text-align:right;color:#34d399;font-weight:700;">'+fmt$(row[1].val)+'</td>'
+          +'</tr>';
+        }).join('')
+      +'</tbody></table>';
+
+    // Contact type breakdown
+    var ctTypes = Object.entries(c.byType).sort(function(a,b){ return b[1]-a[1]; }).slice(0,6);
+    var ctHTML = ctTypes.length===0 ? '<div style="color:#64748b;font-size:0.8rem;">No contacts yet.</div>' :
+      ctTypes.map(function(row){
+        var pctV = c.total>0?Math.round(row[1]/c.total*100):0;
+        return '<div style="margin-bottom:8px;">'
+          +'<div style="display:flex;justify-content:space-between;font-size:0.75rem;margin-bottom:3px;">'
+          +'<span style="color:#cbd5e1;">'+escH(row[0])+'</span>'
+          +'<span style="color:#94a3b8;">'+row[1]+' ('+pctV+'%)</span>'
+          +'</div>'
+          +'<div style="height:6px;background:#1e293b;border-radius:3px;overflow:hidden;">'
+          +'<div style="height:100%;width:'+pctV+'%;background:#3b82f6;border-radius:3px;"></div>'
+          +'</div>'
+        +'</div>';
+      }).join('');
+
+    // Won by bid type
+    var btEntries = Object.entries(p.wonByType).sort(function(a,b){ return b[1]-a[1]; });
+    var btHTML = btEntries.length===0 ? '<div style="color:#64748b;font-size:0.8rem;">No won bids yet.</div>' :
+      btEntries.map(function(row){
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:#1e293b;border-radius:4px;margin-bottom:4px;">'
+          +'<span style="color:#cbd5e1;font-size:0.78rem;">'+escH(row[0])+'</span>'
+          +'<span style="color:#22c55e;font-weight:700;font-size:0.85rem;">'+row[1]+'</span>'
+        +'</div>';
+      }).join('');
+
+    return `
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+  <div>
+    <div style="font-size:1.15rem;font-weight:700;color:#e2e8f0;">⚡ Business Intelligence Dashboard</div>
+    <div style="font-size:0.75rem;color:#64748b;">Cross-project overview · Pipeline · Contacts · Win analysis</div>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <button onclick="printBIReport()" style="padding:6px 14px;background:#1e40af;border:none;border-radius:6px;color:#fff;font-size:0.8rem;cursor:pointer;">🖨️ Print Report</button>
+    <button onclick="document.getElementById('${BI_ID}').style.display='none'" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#e2e8f0;font-size:0.8rem;cursor:pointer;">✕ Close</button>
+  </div>
+</div>
+
+<!-- Top KPI Row -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px;">
+  <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;">
+    <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Pipeline Value</div>
+    <div style="font-size:1.3rem;font-weight:800;color:#38bdf8;">${fmt$(p.pipelineVal)}</div>
+    <div style="font-size:0.7rem;color:#64748b;">${p.active.length} active bids</div>
+  </div>
+  <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;">
+    <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Won Revenue</div>
+    <div style="font-size:1.3rem;font-weight:800;color:#22c55e;">${fmt$(p.wonVal)}</div>
+    <div style="font-size:0.7rem;color:#64748b;">${p.won.length} jobs won</div>
+  </div>
+  <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;">
+    <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Win Rate</div>
+    <div style="font-size:1.3rem;font-weight:800;color:${winColor};">${winLabel}</div>
+    <div style="font-size:0.7rem;color:#64748b;">${p.won.length}W / ${p.lost.length}L</div>
+  </div>
+  <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;">
+    <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Avg Bid Size</div>
+    <div style="font-size:1.3rem;font-weight:800;color:#f59e0b;">${fmt$(p.avgBid)}</div>
+    <div style="font-size:0.7rem;color:#64748b;">${p.won.length+p.lost.length+p.active.length} total bids</div>
+  </div>
+  <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;">
+    <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Contacts</div>
+    <div style="font-size:1.3rem;font-weight:800;color:#a78bfa;">${c.total}</div>
+    <div style="font-size:0.7rem;color:#64748b;">${c.active} active · ${c.prospects} leads</div>
+  </div>
+  <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;">
+    <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Saved Projects</div>
+    <div style="font-size:1.3rem;font-weight:800;color:#e2e8f0;">${pr.count}</div>
+    <div style="font-size:0.7rem;color:#64748b;">${fmt$(pr.totalSavedBid)} total est.</div>
+  </div>
+</div>
+
+<!-- Alerts Row -->
+${(p.followDue.length > 0 || c.overdueFollowUp > 0) ? `
+<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+  <span style="color:#fbbf24;font-weight:700;font-size:0.85rem;">⚡ Action Required:</span>
+  ${p.followDue.length>0?`<span style="color:#fde68a;font-size:0.8rem;">${p.followDue.length} bid follow-up${p.followDue.length>1?'s':''} overdue</span>`:''}
+  ${c.overdueFollowUp>0?`<span style="color:#fde68a;font-size:0.8rem;">${c.overdueFollowUp} contact follow-up${c.overdueFollowUp>1?'s':''} overdue</span>`:''}
+</div>` : ''}
+
+<!-- Two-column grid -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+
+  <!-- Monthly Bid Activity -->
+  <div style="background:#1e293b;border-radius:8px;padding:14px;">
+    <div style="font-size:0.75rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;font-weight:600;">📅 Monthly Bid Activity (last 6 mo)</div>
+    ${monthHTML}
+    <div style="font-size:0.68rem;color:#64748b;margin-top:6px;">Bar color = win rate (green≥50% / amber≥25% / blue&lt;25%)</div>
+  </div>
+
+  <!-- Top GCs -->
+  <div style="background:#1e293b;border-radius:8px;padding:14px;">
+    <div style="font-size:0.75rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;font-weight:600;">🏆 Top GC / Clients (won)</div>
+    ${gcHTML}
+  </div>
+
+  <!-- Contacts by Type -->
+  <div style="background:#1e293b;border-radius:8px;padding:14px;">
+    <div style="font-size:0.75rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;font-weight:600;">📇 Contact Network Breakdown</div>
+    ${ctHTML}
+  </div>
+
+  <!-- Won by Bid Type -->
+  <div style="background:#1e293b;border-radius:8px;padding:14px;">
+    <div style="font-size:0.75rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;font-weight:600;">🎯 Won Jobs by Bid Type</div>
+    ${btHTML}
+    ${p.totalBidVol>0?'<div style="margin-top:10px;padding-top:8px;border-top:1px solid #334155;font-size:0.75rem;color:#64748b;">Total won volume: <span style="color:#34d399;font-weight:700;">'+Math.round(p.totalBidVol)+' yd³</span></div>':''}
+  </div>
+</div>
+
+<!-- Business Health Score -->
+<div style="background:linear-gradient(135deg,#0f172a,#1e293b);border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:4px;">
+  <div style="font-size:0.75rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;font-weight:600;">💡 Business Insights</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;font-size:0.8rem;color:#cbd5e1;">
+    ${p.winRate!==null && p.winRate<30 ? '<div style="color:#fca5a5;">⚠️ Win rate below 30% — review pricing strategy or target better-fit GCs</div>' : ''}
+    ${p.winRate!==null && p.winRate>=50 ? '<div style="color:#86efac;">✅ Win rate ≥50% — strong competitive position</div>' : ''}
+    ${p.followDue.length>0 ? '<div style="color:#fde68a;">⏰ '+p.followDue.length+' bids need follow-up — call before they award</div>' : ''}
+    ${c.overdueFollowUp>0 ? '<div style="color:#fde68a;">📞 '+c.overdueFollowUp+' contacts overdue for follow-up — relationships need nurturing</div>' : ''}
+    ${p.pipelineVal>0 ? '<div style="color:#93c5fd;">📈 Pipeline value of '+fmt$(p.pipelineVal)+' — keep closing</div>' : ''}
+    ${p.won.length===0 && p.lost.length===0 ? '<div style="color:#94a3b8;">📋 Start logging bids in the Pipeline tracker to see win analytics here</div>' : ''}
+    ${c.total===0 ? '<div style="color:#94a3b8;">📇 Add contacts to the Contact Book to see network analytics</div>' : ''}
+    ${p.winRate!==null && p.avgBid>0 ? '<div style="color:#c4b5fd;">💰 At current win rate, avg bid of '+fmt$(p.avgBid)+' → expected value per bid: '+fmt$(p.avgBid*p.winRate/100)+'</div>' : ''}
+  </div>
+</div>`;
+  }
+
+  function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  // ---- Show / Hide ----
+  function showBI(){
+    var modal = document.getElementById(BI_ID);
+    if(!modal){
+      modal = document.createElement('div');
+      modal.id = BI_ID;
+      modal.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;backdrop-filter:blur(4px);';
+      modal.onclick=function(e){ if(e.target===modal) closeBI(); };
+      document.body.appendChild(modal);
+    }
+    var inner = document.createElement('div');
+    inner.style.cssText='background:#0f172a;border:1px solid #334155;border-radius:12px;padding:24px;width:100%;max-width:860px;color:#e2e8f0;font-family:Inter,Arial,sans-serif;';
+    inner.innerHTML = renderBI();
+    modal.innerHTML='';
+    modal.appendChild(inner);
+    modal.style.display='flex';
+  }
+
+  function closeBI(){
+    var m=document.getElementById(BI_ID);
+    if(m) m.style.display='none';
+  }
+
+  // ---- Print ----
+  window.printBIReport = function(){
+    var d=computeBI();
+    var p=d.pipeline; var pr=d.projects; var c=d.contacts;
+    var coName=document.getElementById('companyName')?document.getElementById('companyName').value||'Oncor':'Oncor';
+    var coPhone=document.getElementById('companyPhone')?document.getElementById('companyPhone').value||'':'';
+    var coEmail=document.getElementById('companyEmail')?document.getElementById('companyEmail').value||'':'';
+    var winColor=p.winRate===null?'#64748b':p.winRate>=50?'#16a34a':p.winRate>=30?'#d97706':'#dc2626';
+    var winLabel=p.winRate===null?'No data':(p.winRate+'%');
+    var gcRows=p.topGC.map(function(row,i){
+      return '<tr style="background:'+(i%2===0?'#fff':'#f8fafc')+';">'
+        +'<td style="padding:6px 10px;">'+escH(row[0])+'</td>'
+        +'<td style="padding:6px 10px;text-align:center;font-weight:700;color:#16a34a;">'+row[1].count+'</td>'
+        +'<td style="padding:6px 10px;text-align:right;font-weight:700;color:#15803d;">'+(row[1].val>=1000?'$'+(row[1].val/1000).toFixed(1)+'k':'$'+Math.round(row[1].val).toLocaleString())+'</td>'
+      +'</tr>';
+    }).join('');
+    var html='<!DOCTYPE html><html><head><title>Business Intelligence Report — '+escH(coName)+'</title>'
+      +'<style>body{font-family:Inter,Arial,sans-serif;margin:32px;color:#1e293b;font-size:13px;}h1{font-size:1.3rem;margin:0;}h2{font-size:0.9rem;color:#475569;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid #e2e8f0;padding-bottom:4px;margin:20px 0 10px;}table{width:100%;border-collapse:collapse;}th{background:#1e293b;color:#fff;padding:7px 10px;text-align:left;font-size:0.72rem;text-transform:uppercase;}td{padding:6px 10px;font-size:0.82rem;}@media print{button{display:none;}}</style></head><body>'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1e293b;padding-bottom:12px;margin-bottom:18px;">'
+      +'<div><h1>'+escH(coName)+'</h1><div style="color:#64748b;font-size:0.8rem;">Business Intelligence Report · Generated '+new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})+'</div></div>'
+      +'<div style="text-align:right;font-size:0.78rem;color:#475569;">'+escH(coPhone)+'<br>'+escH(coEmail)+'</div>'
+      +'</div>'
+
+      +'<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:18px;">'
+      +[
+        {l:'Pipeline',v:fmt$(p.pipelineVal),s:p.active.length+' active bids',c:'#1d4ed8'},
+        {l:'Won Revenue',v:fmt$(p.wonVal),s:p.won.length+' jobs',c:'#15803d'},
+        {l:'Win Rate',v:winLabel,s:p.won.length+'W / '+p.lost.length+'L',c:winColor},
+        {l:'Avg Bid',v:fmt$(p.avgBid),s:'per job',c:'#92400e'},
+        {l:'Contacts',v:c.total,s:c.active+' active',c:'#6d28d9'},
+        {l:'Projects',v:pr.count,s:fmt$(pr.totalSavedBid)+' est.',c:'#1e293b'}
+      ].map(function(k){
+        return '<div style="border:1px solid #e2e8f0;border-radius:6px;padding:10px;text-align:center;">'
+          +'<div style="font-size:0.6rem;text-transform:uppercase;color:#64748b;margin-bottom:2px;">'+escH(k.l)+'</div>'
+          +'<div style="font-size:1.1rem;font-weight:800;color:'+k.c+';">'+escH(String(k.v))+'</div>'
+          +'<div style="font-size:0.65rem;color:#94a3b8;">'+escH(k.s)+'</div>'
+        +'</div>';
+      }).join('')
+      +'</div>'
+
+      +'<h2>Top GC / Clients (Won Jobs)</h2>'
+      +(p.topGC.length===0?'<p style="color:#64748b;font-size:0.8rem;">No won bids recorded yet.</p>'
+        :'<table><thead><tr><th>GC / Client</th><th style="text-align:center;">Jobs Won</th><th style="text-align:right;">Total Value</th></tr></thead><tbody>'+gcRows+'</tbody></table>')
+
+      +'<h2 style="margin-top:18px;">Contact Network</h2>'
+      +'<table><thead><tr><th>Contact Type</th><th style="text-align:right;">Count</th></tr></thead><tbody>'
+      +Object.entries(c.byType).sort(function(a,b){return b[1]-a[1];}).map(function(row,i){
+        return '<tr style="background:'+(i%2===0?'#fff':'#f8fafc')+';">'
+          +'<td style="padding:6px 10px;">'+escH(row[0])+'</td>'
+          +'<td style="padding:6px 10px;text-align:right;font-weight:700;">'+row[1]+'</td>'
+        +'</tr>';
+      }).join('')
+      +'</tbody></table>'
+
+      +'<div style="margin-top:24px;font-size:0.7rem;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:12px;">CONFIDENTIAL — INTERNAL USE ONLY · '+escH(coName)+' Business Intelligence Dashboard · Oncor Takeoff Estimator</div>'
+      +'<button onclick="window.print()" style="margin-top:16px;padding:8px 20px;background:#1e293b;color:#fff;border:none;border-radius:6px;cursor:pointer;">🖨️ Print / Save PDF</button>'
+      +'</body></html>';
+    var w=window.open('','_blank');
+    w.document.write(html);
+    w.document.close();
+  };
+
+  // ---- Keyboard shortcut: Alt+I ----
+  document.addEventListener('keydown',function(e){
+    if(e.altKey && e.key.toLowerCase()==='i'){
+      e.preventDefault();
+      var m=document.getElementById(BI_ID);
+      if(m && m.style.display==='flex') closeBI();
+      else showBI();
+    }
+  });
+
+  // ---- Inject sidebar button below Contact Book ----
+  document.addEventListener('DOMContentLoaded',function(){
+    setTimeout(function(){
+      var contactBtn=document.querySelector('button[onclick*="showContactBook"]');
+      if(!contactBtn) return;
+      var parentRow=contactBtn.closest('div');
+      if(!parentRow||!parentRow.parentNode) return;
+      var newRow=document.createElement('div');
+      newRow.style.cssText='display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML='<button class="action-btn secondary" onclick="showBI()" title="Business Intelligence Dashboard — pipeline KPIs, win rate, top GC analysis, contact network (Alt+I)" style="background:rgba(245,158,11,0.1);border-color:rgba(245,158,11,0.3);color:#fbbf24;">⚡ BI Dashboard</button>';
+      parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 3100);
+  });
+
+  window.showBI=showBI;
+  window.closeBI=closeBI;
+
+})();
+// ==================== END BUSINESS INTELLIGENCE DASHBOARD — Zeus ⚡ Session #70 ====================
+</script>
