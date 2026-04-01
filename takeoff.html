@@ -156537,3 +156537,692 @@ ${(p.followDue.length > 0 || c.overdueFollowUp > 0) ? `
 })();
 // ==================== END STANDBY & DELAY TIME TRACKER — Zeus ⚡ Session #73 ====================
 </script>
+
+<script>
+// ==================== ACCOUNTS PAYABLE & BILL TRACKER — Zeus ⚡ Session #74 ====================
+(function(){
+  'use strict';
+  var AP_ID = 'oncor-ap-modal';
+  var STORE_KEY_PREFIX = 'oncor_ap_v1_';
+  var GLOBAL_KEY = 'oncor_ap_global_v1';
+
+  function getStorageKey(){
+    var pn = (typeof getCurrentProjectName === 'function' ? getCurrentProjectName() : null) || '';
+    return pn ? STORE_KEY_PREFIX + pn : GLOBAL_KEY;
+  }
+  function loadBills(){ try{ return JSON.parse(localStorage.getItem(getStorageKey()))||[]; } catch(e){ return []; } }
+  function saveBills(d){ localStorage.setItem(getStorageKey(), JSON.stringify(d)); }
+
+  function fmtMoney(v){ v=parseFloat(v)||0; return '$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function fmtDate(s){ if(!s) return '—'; var d=new Date(s+'T12:00:00'); return isNaN(d)?s:d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+  function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function today(){ return new Date().toISOString().slice(0,10); }
+
+  var BILL_TYPES = ['Material Invoice','Sub Invoice','Equipment Rental','Fuel & Oil','Small Tools','Permit/Fee','Insurance Premium','Labor (Sub)','PO Confirmation','Utility Bill','Dump Fee','Testing/Inspection','Mobilization','Misc Expense','Other'];
+  var STATUSES = ['Unpaid','Due Soon','Overdue','Partial','Paid','Disputed','Voided'];
+  var STATUS_COLORS = {Unpaid:'#64748b',DueSoon:'#d97706',Overdue:'#dc2626',Partial:'#7c3aed',Paid:'#16a34a',Disputed:'#b91c1c',Voided:'#94a3b8'};
+
+  var editIndex = null;
+
+  function getStats(){
+    var bills = loadBills();
+    var todayD = new Date(); todayD.setHours(0,0,0,0);
+    var totalBilled=0, totalPaid=0, totalUnpaid=0, overdue=0, dueSoon=0, overdueAmt=0, dueSoonAmt=0;
+    bills.forEach(function(b){
+      var amt = parseFloat(b.amount)||0;
+      totalBilled += amt;
+      if(b.status==='Paid') totalPaid += amt;
+      else if(b.status!=='Voided'){ totalUnpaid += (amt - (parseFloat(b.amtPaid)||0)); }
+      if(b.dueDate && b.status!=='Paid' && b.status!=='Voided'){
+        var dd = new Date(b.dueDate+'T12:00:00'); dd.setHours(0,0,0,0);
+        var diff = Math.floor((dd-todayD)/86400000);
+        if(diff<0){ overdue++; overdueAmt+=amt-(parseFloat(b.amtPaid)||0); }
+        else if(diff<=7){ dueSoon++; dueSoonAmt+=amt-(parseFloat(b.amtPaid)||0); }
+      }
+    });
+    return {total:bills.length,totalBilled,totalPaid,totalUnpaid,overdue,overdueAmt,dueSoon,dueSoonAmt};
+  }
+  window._getAPStats = getStats;
+
+  function buildModal(){
+    if(document.getElementById(AP_ID)) return;
+    var overlay = document.createElement('div');
+    overlay.id = AP_ID;
+    overlay.style.cssText = 'display:none;position:fixed;inset:0;z-index:9400;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;';
+    overlay.innerHTML = `
+<div style="background:#1e293b;border-radius:12px;width:min(820px,96vw);max-height:90vh;overflow-y:auto;padding:24px;position:relative;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+    <div style="font-size:1.2rem;font-weight:700;color:#f1f5f9;">💳 Accounts Payable &amp; Bill Tracker</div>
+    <button onclick="closeAPModal()" style="background:none;border:none;color:#94a3b8;font-size:1.4rem;cursor:pointer;">✕</button>
+  </div>
+  <div id="ap-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:16px;"></div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+    <input id="ap-search" type="text" placeholder="Search bills…" oninput="renderBills()" style="flex:1;min-width:160px;background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:7px 10px;border-radius:6px;">
+    <select id="ap-filter-status" onchange="renderBills()" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;">
+      <option value="">All Statuses</option>
+      ${STATUSES.map(function(s){ return '<option>'+s+'</option>'; }).join('')}
+    </select>
+    <button onclick="openAPForm(-1)" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-weight:600;">+ Add Bill</button>
+    <button onclick="printAPReport()" style="background:#0f172a;border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:7px 12px;cursor:pointer;">🖨 Report</button>
+  </div>
+  <div id="ap-form-area" style="margin-bottom:12px;"></div>
+  <div id="ap-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+</div>`;
+    document.body.appendChild(overlay);
+  }
+
+  function renderStats(){
+    var st = getStats();
+    var el = document.getElementById('ap-stats');
+    if(!el) return;
+    el.innerHTML = [
+      ['Total Bills',st.total,'#94a3b8'],
+      ['Total Billed',fmtMoney(st.totalBilled),'#38bdf8'],
+      ['Paid',fmtMoney(st.totalPaid),'#4ade80'],
+      ['Outstanding',fmtMoney(st.totalUnpaid),'#f59e0b'],
+      ['Overdue',st.overdue+' ('+fmtMoney(st.overdueAmt)+')','#f87171'],
+      ['Due ≤7d',st.dueSoon+' ('+fmtMoney(st.dueSoonAmt)+')','#fbbf24']
+    ].map(function(k){ return '<div style="background:#0f172a;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:10px;color:#94a3b8;margin-bottom:4px;">'+k[0]+'</div><div style="font-weight:700;color:'+k[2]+';font-size:0.95rem;">'+k[1]+'</div></div>'; }).join('');
+  }
+
+  function renderBills(){
+    renderStats();
+    var bills = loadBills();
+    var search = (document.getElementById('ap-search')||{}).value||'';
+    var fst = (document.getElementById('ap-filter-status')||{}).value||'';
+    var todayD = new Date(); todayD.setHours(0,0,0,0);
+
+    // Auto-tag overdue
+    bills = bills.map(function(b){
+      if(b.dueDate && b.status!=='Paid' && b.status!=='Voided' && b.status!=='Disputed'){
+        var dd = new Date(b.dueDate+'T12:00:00'); dd.setHours(0,0,0,0);
+        var diff = Math.floor((dd-todayD)/86400000);
+        if(diff < 0) b.status = 'Overdue';
+        else if(diff <= 7 && b.status === 'Unpaid') b.status = 'Due Soon';
+      }
+      return b;
+    });
+
+    var filtered = bills.filter(function(b,i){
+      b._idx = i;
+      var sq = search.toLowerCase();
+      var match = !sq || (b.vendor||'').toLowerCase().includes(sq) || (b.type||'').toLowerCase().includes(sq) || (b.invoiceNum||'').toLowerCase().includes(sq) || (b.notes||'').toLowerCase().includes(sq);
+      var ms = !fst || b.status === fst;
+      return match && ms;
+    });
+
+    // Sort: overdue first, then by due date
+    filtered.sort(function(a,b){
+      var order = {Overdue:0,'Due Soon':1,Partial:2,Unpaid:3,Paid:5,Voided:6,Disputed:4};
+      var oa = order[a.status]||3, ob = order[b.status]||3;
+      if(oa!==ob) return oa-ob;
+      if(a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+      return 0;
+    });
+
+    var container = document.getElementById('ap-list');
+    if(!container) return;
+    if(!filtered.length){ container.innerHTML='<div style="text-align:center;color:#64748b;padding:32px;">No bills logged yet. Click + Add Bill to start.</div>'; return; }
+
+    container.innerHTML = filtered.map(function(b){
+      var amt = parseFloat(b.amount)||0;
+      var paid = parseFloat(b.amtPaid)||0;
+      var bal = amt - paid;
+      var statusColors = {'Unpaid':'#64748b','Due Soon':'#d97706','Overdue':'#dc2626','Partial':'#7c3aed','Paid':'#16a34a','Disputed':'#b91c1c','Voided':'#94a3b8'};
+      var sc = statusColors[b.status]||'#64748b';
+
+      var isOverdue = b.status==='Overdue';
+      var borderColor = isOverdue?'#dc2626':'#334155';
+      var todayD2 = new Date(); todayD2.setHours(0,0,0,0);
+      var dueDays = '';
+      if(b.dueDate){
+        var dd = new Date(b.dueDate+'T12:00:00'); dd.setHours(0,0,0,0);
+        var diff = Math.floor((dd-todayD2)/86400000);
+        if(diff<0) dueDays = '<span style="background:#fef2f2;color:#dc2626;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600;margin-left:6px;">'+Math.abs(diff)+'d OVERDUE</span>';
+        else if(diff<=7) dueDays = '<span style="background:#fffbeb;color:#d97706;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600;margin-left:6px;">Due in '+diff+'d</span>';
+      }
+
+      return '<div style="background:#0f172a;border:1px solid '+borderColor+';border-radius:8px;padding:12px;">'
+        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
+        +'<div style="flex:1;">'
+        +'<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:4px;">'
+        +'<span style="font-weight:600;color:#f1f5f9;">'+escH(b.vendor||'Unknown Vendor')+'</span>'
+        +'<span style="background:#1e293b;color:#94a3b8;padding:1px 7px;border-radius:10px;font-size:11px;">'+escH(b.type||'Misc')+'</span>'
+        +'<span style="background:'+sc+'22;color:'+sc+';padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600;">'+escH(b.status)+'</span>'
+        +dueDays
+        +(b.invoiceNum?'<span style="color:#64748b;font-size:11px;">'+escH(b.invoiceNum)+'</span>':'')
+        +'</div>'
+        +'<div style="font-size:12px;color:#94a3b8;">Invoice: '+fmtDate(b.invoiceDate)+(b.dueDate?' · Due: '+fmtDate(b.dueDate):'')+(b.datePaid?' · Paid: '+fmtDate(b.datePaid):'')+'</div>'
+        +(b.notes?'<div style="font-size:11px;color:#64748b;margin-top:4px;">'+escH(b.notes)+'</div>':'')
+        +'</div>'
+        +'<div style="text-align:right;min-width:120px;">'
+        +'<div style="font-size:1.1rem;font-weight:700;color:#38bdf8;">'+fmtMoney(amt)+'</div>'
+        +(paid>0?'<div style="font-size:11px;color:#4ade80;">Paid: '+fmtMoney(paid)+'</div><div style="font-size:11px;color:#f59e0b;">Bal: '+fmtMoney(bal)+'</div>':'')
+        +'<div style="display:flex;gap:6px;margin-top:6px;justify-content:flex-end;">'
+        +'<button onclick="openAPForm('+b._idx+')" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:12px;">✏️</button>'
+        +'<button onclick="deleteAPBill('+b._idx+')" style="background:#1e293b;border:1px solid #334155;color:#f87171;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:12px;">🗑</button>'
+        +'</div>'
+        +'</div>'
+        +'</div>'
+        +'</div>';
+    }).join('');
+  }
+
+  window.renderBills = renderBills;
+
+  window.deleteAPBill = function(idx){
+    if(!confirm('Delete this bill?')) return;
+    var bills = loadBills(); bills.splice(idx,1); saveBills(bills); renderBills();
+  };
+
+  window.openAPForm = function(idx){
+    editIndex = idx>=0 ? idx : null;
+    var bills = loadBills();
+    var b = idx>=0 ? bills[idx] : {};
+    var fa = document.getElementById('ap-form-area');
+    if(!fa) return;
+    fa.innerHTML = `<div style="background:#0f172a;border:1px solid #2563eb;border-radius:8px;padding:16px;margin-bottom:12px;">
+<div style="font-weight:600;color:#f1f5f9;margin-bottom:12px;">${idx>=0?'Edit Bill':'Add New Bill'}</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Bill Type *</div>
+    <select id="apf-type" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;">
+      ${BILL_TYPES.map(function(t){ return '<option'+(b.type===t?' selected':'')+'>'+t+'</option>'; }).join('')}
+    </select></div>
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Vendor / Payee *</div>
+    <input id="apf-vendor" value="${escH(b.vendor||'')}" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;" placeholder="Martin Marietta, ABC Rebar…"></div>
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Invoice # / Ref</div>
+    <input id="apf-invnum" value="${escH(b.invoiceNum||'')}" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;" placeholder="INV-2026-001"></div>
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Amount *</div>
+    <input id="apf-amount" type="number" min="0" step="0.01" value="${b.amount||''}" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;" placeholder="0.00"></div>
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Amount Paid</div>
+    <input id="apf-paid" type="number" min="0" step="0.01" value="${b.amtPaid||''}" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;" placeholder="0.00"></div>
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Invoice Date</div>
+    <input id="apf-invdate" type="date" value="${b.invoiceDate||''}" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;"></div>
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Due Date</div>
+    <input id="apf-duedate" type="date" value="${b.dueDate||''}" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;"></div>
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Date Paid</div>
+    <input id="apf-datepaid" type="date" value="${b.datePaid||''}" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;"></div>
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Status</div>
+    <select id="apf-status" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;">
+      ${STATUSES.map(function(s){ return '<option'+(b.status===s?' selected':'')+'>'+s+'</option>'; }).join('')}
+    </select></div>
+</div>
+<div style="margin-top:10px;"><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Notes / Description</div>
+  <textarea id="apf-notes" rows="2" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;">${escH(b.notes||'')}</textarea></div>
+<div style="display:flex;gap:8px;margin-top:12px;">
+  <button onclick="saveAPBill()" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;font-weight:600;">💾 Save</button>
+  <button onclick="cancelAPForm()" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:8px 16px;cursor:pointer;">Cancel</button>
+</div></div>`;
+  };
+
+  window.cancelAPForm = function(){
+    var fa = document.getElementById('ap-form-area');
+    if(fa) fa.innerHTML='';
+    editIndex = null;
+  };
+
+  window.saveAPBill = function(){
+    var vendor = (document.getElementById('apf-vendor')||{}).value||'';
+    var amount = (document.getElementById('apf-amount')||{}).value||'';
+    if(!vendor.trim() || !amount){ alert('Vendor and Amount are required.'); return; }
+    var entry = {
+      type:(document.getElementById('apf-type')||{}).value||'',
+      vendor:vendor.trim(),
+      invoiceNum:(document.getElementById('apf-invnum')||{}).value||'',
+      amount:parseFloat(amount)||0,
+      amtPaid:parseFloat((document.getElementById('apf-paid')||{}).value)||0,
+      invoiceDate:(document.getElementById('apf-invdate')||{}).value||'',
+      dueDate:(document.getElementById('apf-duedate')||{}).value||'',
+      datePaid:(document.getElementById('apf-datepaid')||{}).value||'',
+      status:(document.getElementById('apf-status')||{}).value||'Unpaid',
+      notes:(document.getElementById('apf-notes')||{}).value||''
+    };
+    var bills = loadBills();
+    if(editIndex !== null) bills[editIndex] = entry;
+    else bills.push(entry);
+    saveBills(bills);
+    cancelAPForm();
+    renderBills();
+  };
+
+  function printAPReport(){
+    var bills = loadBills();
+    var st = getStats();
+    var coName = (document.getElementById('company-name')||{}).value||'Oncor Concrete';
+    var pjName = (typeof getCurrentProjectName==='function'?getCurrentProjectName():null)||'';
+    var todayStr = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+    var todayD = new Date(); todayD.setHours(0,0,0,0);
+
+    var sorted = bills.slice().sort(function(a,b){
+      var order = {Overdue:0,'Due Soon':1,Partial:2,Unpaid:3,Disputed:4,Paid:5,Voided:6};
+      return (order[a.status]||3)-(order[b.status]||3);
+    });
+
+    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>AP Report</title>';
+    html += '<style>body{font-family:Arial,sans-serif;font-size:10pt;color:#222;margin:0;padding:20px;}';
+    html += 'table{width:100%;border-collapse:collapse;margin-bottom:14px;}th,td{border:1px solid #ddd;padding:5px 7px;font-size:9pt;}th{background:#1e3a5f;color:#fff;}';
+    html += '.overdue{background:#fff0f0;}.paid{background:#f0fff4;}.kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}';
+    html += '.kpi{border:1px solid #ddd;border-radius:6px;padding:10px;text-align:center;}.kpi-label{font-size:9pt;color:#666;}.kpi-value{font-size:14pt;font-weight:bold;margin-top:4px;}';
+    html += '@media print{button{display:none!important;}}</style></head><body>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">';
+    html += '<div><div style="font-size:18pt;font-weight:800;color:#1e3a5f;">'+escH(coName)+'</div>';
+    if(pjName) html += '<div style="color:#555;font-size:11pt;">Project: '+escH(pjName)+'</div>';
+    html += '<div style="color:#555;font-size:10pt;">Generated: '+todayStr+'</div></div>';
+    html += '<div style="background:#1e3a5f;color:#fff;padding:8px 16px;border-radius:6px;font-weight:700;font-size:12pt;">💳 ACCOUNTS PAYABLE REPORT</div></div>';
+
+    html += '<div class="kpi-grid">';
+    html += '<div class="kpi"><div class="kpi-label">Total Bills</div><div class="kpi-value">'+st.total+'</div></div>';
+    html += '<div class="kpi"><div class="kpi-label">Total Billed</div><div class="kpi-value" style="color:#2563eb;">'+fmtMoney(st.totalBilled)+'</div></div>';
+    html += '<div class="kpi"><div class="kpi-label">Paid</div><div class="kpi-value" style="color:#16a34a;">'+fmtMoney(st.totalPaid)+'</div></div>';
+    html += '<div class="kpi"><div class="kpi-label">Outstanding</div><div class="kpi-value" style="color:#d97706;">'+fmtMoney(st.totalUnpaid)+'</div></div>';
+    html += '<div class="kpi"><div class="kpi-label">Overdue ('+st.overdue+' bills)</div><div class="kpi-value" style="color:#dc2626;">'+fmtMoney(st.overdueAmt)+'</div></div>';
+    html += '<div class="kpi"><div class="kpi-label">Due ≤7 Days</div><div class="kpi-value" style="color:#d97706;">'+fmtMoney(st.dueSoonAmt)+'</div></div>';
+    html += '</div>';
+
+    html += '<table><tr><th>Vendor</th><th>Type</th><th>Invoice #</th><th>Invoice Date</th><th>Due Date</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Balance</th><th>Status</th><th>Notes</th></tr>';
+    var grandTotal=0, grandPaid=0;
+    sorted.forEach(function(b){
+      var amt=parseFloat(b.amount)||0, paid=parseFloat(b.amtPaid)||0;
+      grandTotal+=amt; grandPaid+=paid;
+      var rowClass = b.status==='Overdue'?'overdue':(b.status==='Paid'?'paid':'');
+
+      var ddStr = '';
+      if(b.dueDate){
+        var dd=new Date(b.dueDate+'T12:00:00'); dd.setHours(0,0,0,0);
+        var diff=Math.floor((dd-todayD)/86400000);
+        ddStr = fmtDate(b.dueDate)+(diff<0?' ('+Math.abs(diff)+'d OVERDUE)':'');
+      }
+
+      html += '<tr class="'+rowClass+'">'
+        +'<td><strong>'+escH(b.vendor||'—')+'</strong></td>'
+        +'<td>'+escH(b.type||'—')+'</td>'
+        +'<td>'+escH(b.invoiceNum||'—')+'</td>'
+        +'<td>'+fmtDate(b.invoiceDate)+'</td>'
+        +'<td>'+ddStr+'</td>'
+        +'<td style="text-align:right;font-weight:600;">'+fmtMoney(amt)+'</td>'
+        +'<td style="text-align:right;color:green;">'+fmtMoney(paid)+'</td>'
+        +'<td style="text-align:right;font-weight:600;'+(amt-paid>0?'color:#d97706;':'')+'">'+fmtMoney(amt-paid)+'</td>'
+        +'<td>'+escH(b.status)+'</td>'
+        +'<td style="font-size:9pt;">'+escH(b.notes||'')+'</td>'
+        +'</tr>';
+    });
+    html += '<tr style="background:#f1f5f9;font-weight:700;">'
+      +'<td colspan="5">TOTALS</td>'
+      +'<td style="text-align:right;">'+fmtMoney(grandTotal)+'</td>'
+      +'<td style="text-align:right;color:green;">'+fmtMoney(grandPaid)+'</td>'
+      +'<td style="text-align:right;">'+fmtMoney(grandTotal-grandPaid)+'</td>'
+      +'<td colspan="2"></td></tr></table>';
+
+    html += '<div style="background:#fefce8;border:1px solid #fde047;border-radius:8px;padding:12px;font-size:9pt;">'
+      +'<strong>⚠️ CASH FLOW NOTE:</strong> Overdue AP affects your relationship with suppliers and can result in held deliveries, loss of discount terms, or lien exposure from subs. Prioritize overdue bills, then items due in the next 7 days.</div>';
+    html += '<div style="font-size:9pt;color:#666;border-top:1px solid #ddd;margin-top:14px;padding-top:8px;text-align:center;">CONFIDENTIAL — INTERNAL USE ONLY · '+escH(coName)+' · Oncor Takeoff Estimator</div>';
+    html += '<button onclick="window.print()" style="margin-top:14px;padding:8px 18px;background:#1e3a5f;color:#fff;border:none;border-radius:6px;cursor:pointer;">🖨️ Print / Save PDF</button>';
+    html += '</body></html>';
+
+    var w = window.open('','_blank');
+    w.document.write(html);
+    w.document.close();
+  }
+
+  function showAPModal(){
+    buildModal();
+    var m = document.getElementById(AP_ID);
+    if(m){ m.style.display='flex'; renderBills(); }
+  }
+  function closeAPModal(){
+    var m = document.getElementById(AP_ID);
+    if(m) m.style.display='none';
+    cancelAPForm();
+  }
+  window.showAPModal = showAPModal;
+  window.closeAPModal = closeAPModal;
+
+  document.addEventListener('keydown',function(e){
+    if(e.altKey && e.key.toLowerCase()==='a'){
+      e.preventDefault();
+      var m = document.getElementById(AP_ID);
+      if(m && m.style.display==='flex') closeAPModal();
+      else showAPModal();
+    }
+  });
+
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){
+      var arBtn = document.querySelector('button[onclick*="showARModal"]');
+      if(!arBtn) return;
+      var parentRow = arBtn.closest('div');
+      if(!parentRow||!parentRow.parentNode) return;
+      var newRow = document.createElement('div');
+      newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML = '<button class="action-btn secondary" onclick="showAPModal()" title="Accounts Payable & Bill Tracker — track bills, due dates, payments (Alt+A)" style="background:rgba(37,99,235,0.1);border-color:rgba(37,99,235,0.3);color:#93c5fd;">💳 AP & Bills</button>';
+      parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 3800);
+  });
+
+})();
+// ==================== END ACCOUNTS PAYABLE & BILL TRACKER — Zeus ⚡ Session #74 ====================
+</script>
+
+<script>
+// ==================== DRAWING & DOCUMENT REGISTER — Zeus ⚡ Session #74 ====================
+(function(){
+  'use strict';
+  var DOC_ID = 'oncor-drawing-modal';
+  var STORE_KEY_PREFIX = 'oncor_drawings_v1_';
+  var GLOBAL_KEY = 'oncor_drawings_global_v1';
+
+  function getStorageKey(){
+    var pn = (typeof getCurrentProjectName === 'function' ? getCurrentProjectName() : null) || '';
+    return pn ? STORE_KEY_PREFIX + pn : GLOBAL_KEY;
+  }
+  function loadDocs(){ try{ return JSON.parse(localStorage.getItem(getStorageKey()))||[]; } catch(e){ return []; } }
+  function saveDocs(d){ localStorage.setItem(getStorageKey(), JSON.stringify(d)); }
+
+  function fmtDate(s){ if(!s) return '—'; var d=new Date(s+'T12:00:00'); return isNaN(d)?s:d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+  function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  var DOC_TYPES = ['Architectural Drawing','Structural Drawing','Civil Drawing','MEP Drawing','Concrete Plan','Foundation Plan','Slab Plan','Rebar/Reinforcing Plan','Formwork Drawing','Shop Drawing','Coordination Drawing','As-Built Drawing','Specification Section','Geotechnical Report','Structural Calc','Mix Design','Product Data Sheet','Material Sample','Test Report','Inspection Report','Survey/Topo','Site Plan','Landscape Plan','Other'];
+  var STATUSES = ['Issued for Construction','Issued for Review','Approved','Approved as Noted','Revise & Resubmit','For Information Only','Superseded','Void'];
+  var STATUS_COLORS = {'Issued for Construction':'#16a34a','Issued for Review':'#2563eb','Approved':'#16a34a','Approved as Noted':'#d97706','Revise & Resubmit':'#dc2626','For Information Only':'#64748b','Superseded':'#94a3b8','Void':'#475569'};
+
+  var editIndex = null;
+
+  function getStats(){
+    var docs = loadDocs();
+    var ifc=0, review=0, superseded=0, latest=0;
+    docs.forEach(function(d){
+      if(d.status==='Issued for Construction') ifc++;
+      else if(d.status==='Issued for Review'||d.status==='Revise & Resubmit') review++;
+      if(d.status==='Superseded'||d.status==='Void') superseded++;
+      else latest++;
+    });
+    return {total:docs.length, ifc, review, superseded, latest};
+  }
+  window._getDrawingStats = getStats;
+
+  function buildModal(){
+    if(document.getElementById(DOC_ID)) return;
+    var overlay = document.createElement('div');
+    overlay.id = DOC_ID;
+    overlay.style.cssText = 'display:none;position:fixed;inset:0;z-index:9400;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;';
+    overlay.innerHTML = `
+<div style="background:#1e293b;border-radius:12px;width:min(860px,96vw);max-height:90vh;overflow-y:auto;padding:24px;position:relative;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+    <div style="font-size:1.2rem;font-weight:700;color:#f1f5f9;">📐 Drawing &amp; Document Register</div>
+    <button onclick="closeDrawingModal()" style="background:none;border:none;color:#94a3b8;font-size:1.4rem;cursor:pointer;">✕</button>
+  </div>
+  <div id="doc-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:16px;"></div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+    <input id="doc-search" type="text" placeholder="Search drawings…" oninput="renderDocs()" style="flex:1;min-width:160px;background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:7px 10px;border-radius:6px;">
+    <select id="doc-filter-type" onchange="renderDocs()" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;">
+      <option value="">All Types</option>
+      ${DOC_TYPES.map(function(t){ return '<option>'+t+'</option>'; }).join('')}
+    </select>
+    <select id="doc-filter-status" onchange="renderDocs()" style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;">
+      <option value="">All Statuses</option>
+      ${STATUSES.map(function(s){ return '<option>'+s+'</option>'; }).join('')}
+    </select>
+    <button onclick="openDocForm(-1)" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-weight:600;">+ Add Doc</button>
+    <button onclick="printDocRegister()" style="background:#0f172a;border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:7px 12px;cursor:pointer;">🖨 Register</button>
+  </div>
+  <div id="doc-form-area" style="margin-bottom:12px;"></div>
+  <div id="doc-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+</div>`;
+    document.body.appendChild(overlay);
+  }
+
+  function renderDocStats(){
+    var st = getStats();
+    var el = document.getElementById('doc-stats');
+    if(!el) return;
+    el.innerHTML = [
+      ['Total Docs',st.total,'#94a3b8'],
+      ['IFC',st.ifc,'#4ade80'],
+      ['Under Review',st.review,'#fbbf24'],
+      ['Current (Active)',st.latest,'#38bdf8'],
+      ['Superseded/Void',st.superseded,'#64748b']
+    ].map(function(k){ return '<div style="background:#0f172a;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:10px;color:#94a3b8;margin-bottom:4px;">'+k[0]+'</div><div style="font-weight:700;color:'+k[2]+';font-size:0.95rem;">'+k[1]+'</div></div>'; }).join('');
+  }
+
+  function renderDocs(){
+    renderDocStats();
+    var docs = loadDocs();
+    var search = (document.getElementById('doc-search')||{}).value||'';
+    var ftype = (document.getElementById('doc-filter-type')||{}).value||'';
+    var fst = (document.getElementById('doc-filter-status')||{}).value||'';
+
+    var filtered = docs.filter(function(d,i){
+      d._idx = i;
+      var sq = search.toLowerCase();
+      var match = !sq || (d.docNum||'').toLowerCase().includes(sq) || (d.title||'').toLowerCase().includes(sq) || (d.discipline||'').toLowerCase().includes(sq) || (d.preparedBy||'').toLowerCase().includes(sq) || (d.notes||'').toLowerCase().includes(sq);
+      var mt = !ftype || d.type === ftype;
+      var ms = !fst || d.status === fst;
+      return match && mt && ms;
+    });
+
+    // Sort by type then doc number
+    filtered.sort(function(a,b){
+      if(a.type!==b.type) return (a.type||'').localeCompare(b.type||'');
+      return (a.docNum||'').localeCompare(b.docNum||'');
+    });
+
+    var container = document.getElementById('doc-list');
+    if(!container) return;
+    if(!filtered.length){ container.innerHTML='<div style="text-align:center;color:#64748b;padding:32px;">No documents logged. Click + Add Doc to start.</div>'; return; }
+
+    container.innerHTML = filtered.map(function(d){
+      var sc = STATUS_COLORS[d.status]||'#64748b';
+      var isSuperseded = d.status==='Superseded'||d.status==='Void';
+
+      return '<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;opacity:'+(isSuperseded?'0.6':'1')+'">'
+        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
+        +'<div style="flex:1;">'
+        +'<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:4px;">'
+        +(d.docNum?'<span style="background:#1e3a5f;color:#93c5fd;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:monospace;">'+escH(d.docNum)+'</span>':'')
+        +'<span style="font-weight:600;color:#f1f5f9;">'+escH(d.title||'Untitled')+'</span>'
+        +'<span style="background:#1e293b;color:#94a3b8;padding:1px 7px;border-radius:10px;font-size:11px;">'+escH(d.type||'')+'</span>'
+        +'<span style="background:'+sc+'22;color:'+sc+';padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600;">'+escH(d.status||'')+'</span>'
+        +(d.revision?'<span style="background:#2d1b69;color:#a78bfa;padding:1px 7px;border-radius:10px;font-size:11px;">Rev '+escH(d.revision)+'</span>':'')
+        +'</div>'
+        +'<div style="font-size:12px;color:#94a3b8;">'
+        +(d.discipline?escH(d.discipline)+' · ':'')
+        +(d.preparedBy?'By: '+escH(d.preparedBy)+' · ':'')
+        +(d.dateIssued?'Issued: '+fmtDate(d.dateIssued)+' · ':'')
+        +(d.dateReceived?'Received: '+fmtDate(d.dateReceived):'')
+        +'</div>'
+        +(d.notes?'<div style="font-size:11px;color:#64748b;margin-top:4px;">'+escH(d.notes)+'</div>':'')
+        +'</div>'
+        +'<div style="display:flex;gap:6px;margin-left:12px;">'
+        +'<button onclick="openDocForm('+d._idx+')" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:12px;">✏️</button>'
+        +'<button onclick="deleteDoc('+d._idx+')" style="background:#1e293b;border:1px solid #334155;color:#f87171;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:12px;">🗑</button>'
+        +'</div>'
+        +'</div>'
+        +'</div>';
+    }).join('');
+  }
+
+  window.renderDocs = renderDocs;
+
+  window.deleteDoc = function(idx){
+    if(!confirm('Delete this document?')) return;
+    var docs = loadDocs(); docs.splice(idx,1); saveDocs(docs); renderDocs();
+  };
+
+  window.openDocForm = function(idx){
+    editIndex = idx>=0 ? idx : null;
+    var docs = loadDocs();
+    var d = idx>=0 ? docs[idx] : {};
+    var fa = document.getElementById('doc-form-area');
+    if(!fa) return;
+    fa.innerHTML = `<div style="background:#0f172a;border:1px solid #2563eb;border-radius:8px;padding:16px;margin-bottom:12px;">
+<div style="font-weight:600;color:#f1f5f9;margin-bottom:12px;">${idx>=0?'Edit Document':'Add New Document'}</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Document Type *</div>
+    <select id="docf-type" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;">
+      ${DOC_TYPES.map(function(t){ return '<option'+(d.type===t?' selected':'')+'>'+t+'</option>'; }).join('')}
+    </select></div>
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Document # / Sheet #</div>
+    <input id="docf-num" value="${escH(d.docNum||'')}" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;" placeholder="S-101, A-203…"></div>
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Title / Description *</div>
+    <input id="docf-title" value="${escH(d.title||'')}" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;" placeholder="Foundation Plan, Level 1"></div>
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Discipline</div>
+    <input id="docf-disc" value="${escH(d.discipline||'')}" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;" placeholder="Structural, Civil, Arch…"></div>
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Revision</div>
+    <input id="docf-rev" value="${escH(d.revision||'')}" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;" placeholder="0, 1, 2, A…"></div>
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Status</div>
+    <select id="docf-status" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;">
+      ${STATUSES.map(function(s){ return '<option'+(d.status===s?' selected':'')+'>'+s+'</option>'; }).join('')}
+    </select></div>
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Prepared By</div>
+    <input id="docf-prepby" value="${escH(d.preparedBy||'')}" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;" placeholder="Engineer/Architect firm"></div>
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Date Issued</div>
+    <input id="docf-issued" type="date" value="${d.dateIssued||''}" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;"></div>
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Date Received</div>
+    <input id="docf-received" type="date" value="${d.dateReceived||''}" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;"></div>
+  <div><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">File Location / URL</div>
+    <input id="docf-loc" value="${escH(d.fileLocation||'')}" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;" placeholder="Google Drive link, folder path…"></div>
+</div>
+<div style="margin-top:10px;"><div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Notes / Comments</div>
+  <textarea id="docf-notes" rows="2" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:7px;border-radius:6px;">${escH(d.notes||'')}</textarea></div>
+<div style="display:flex;gap:8px;margin-top:12px;">
+  <button onclick="saveDoc()" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;font-weight:600;">💾 Save</button>
+  <button onclick="cancelDocForm()" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:8px 16px;cursor:pointer;">Cancel</button>
+</div></div>`;
+  };
+
+  window.cancelDocForm = function(){
+    var fa = document.getElementById('doc-form-area');
+    if(fa) fa.innerHTML='';
+    editIndex=null;
+  };
+
+  window.saveDoc = function(){
+    var title = (document.getElementById('docf-title')||{}).value||'';
+    if(!title.trim()){ alert('Title is required.'); return; }
+    var entry = {
+      type:(document.getElementById('docf-type')||{}).value||'',
+      docNum:(document.getElementById('docf-num')||{}).value||'',
+      title:title.trim(),
+      discipline:(document.getElementById('docf-disc')||{}).value||'',
+      revision:(document.getElementById('docf-rev')||{}).value||'',
+      status:(document.getElementById('docf-status')||{}).value||'',
+      preparedBy:(document.getElementById('docf-prepby')||{}).value||'',
+      dateIssued:(document.getElementById('docf-issued')||{}).value||'',
+      dateReceived:(document.getElementById('docf-received')||{}).value||'',
+      fileLocation:(document.getElementById('docf-loc')||{}).value||'',
+      notes:(document.getElementById('docf-notes')||{}).value||''
+    };
+    var docs = loadDocs();
+    if(editIndex!==null) docs[editIndex]=entry;
+    else docs.push(entry);
+    saveDocs(docs);
+    cancelDocForm();
+    renderDocs();
+  };
+
+  function printDocRegister(){
+    var docs = loadDocs();
+    var st = getStats();
+    var coName = (document.getElementById('company-name')||{}).value||'Oncor Concrete';
+    var pjName = (typeof getCurrentProjectName==='function'?getCurrentProjectName():null)||'';
+    var todayStr = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+
+    var sorted = docs.slice().sort(function(a,b){
+      if(a.type!==b.type) return (a.type||'').localeCompare(b.type||'');
+      return (a.docNum||'').localeCompare(b.docNum||'');
+    });
+
+    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Drawing Register</title>';
+    html += '<style>body{font-family:Arial,sans-serif;font-size:10pt;color:#222;margin:0;padding:20px;}';
+    html += 'table{width:100%;border-collapse:collapse;margin-bottom:14px;}th,td{border:1px solid #ddd;padding:5px 7px;font-size:9pt;}th{background:#1e3a5f;color:#fff;}';
+    html += '.superseded{color:#aaa;font-style:italic;}.ifc{background:#f0fff4;}.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;}';
+    html += '.kpi{border:1px solid #ddd;border-radius:6px;padding:10px;text-align:center;}.kpi-label{font-size:9pt;color:#666;}.kpi-value{font-size:14pt;font-weight:bold;margin-top:4px;}';
+    html += '@media print{button{display:none!important;}}</style></head><body>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">';
+    html += '<div><div style="font-size:18pt;font-weight:800;color:#1e3a5f;">'+escH(coName)+'</div>';
+    if(pjName) html += '<div style="color:#555;font-size:11pt;">Project: '+escH(pjName)+'</div>';
+    html += '<div style="color:#555;font-size:10pt;">Generated: '+todayStr+'</div></div>';
+    html += '<div style="background:#1e3a5f;color:#fff;padding:8px 16px;border-radius:6px;font-weight:700;font-size:12pt;">📐 DRAWING &amp; DOCUMENT REGISTER</div></div>';
+
+    html += '<div class="kpi-grid">';
+    html += '<div class="kpi"><div class="kpi-label">Total Docs</div><div class="kpi-value">'+st.total+'</div></div>';
+    html += '<div class="kpi"><div class="kpi-label">IFC</div><div class="kpi-value" style="color:#16a34a;">'+st.ifc+'</div></div>';
+    html += '<div class="kpi"><div class="kpi-label">Under Review</div><div class="kpi-value" style="color:#d97706;">'+st.review+'</div></div>';
+    html += '<div class="kpi"><div class="kpi-label">Current (Active)</div><div class="kpi-value" style="color:#2563eb;">'+st.latest+'</div></div>';
+    html += '<div class="kpi"><div class="kpi-label">Superseded/Void</div><div class="kpi-value" style="color:#94a3b8;">'+st.superseded+'</div></div>';
+    html += '</div>';
+
+    // Group by type
+    var grouped = {};
+    sorted.forEach(function(d){ var t=d.type||'Other'; if(!grouped[t]) grouped[t]=[]; grouped[t].push(d); });
+
+    Object.keys(grouped).sort().forEach(function(type){
+      html += '<div style="font-size:11pt;font-weight:700;color:#1e3a5f;margin:14px 0 6px;">'+escH(type)+' ('+grouped[type].length+')</div>';
+      html += '<table><tr><th>Doc #</th><th>Title</th><th>Rev</th><th>Status</th><th>Discipline</th><th>Prepared By</th><th>Date Issued</th><th>Date Received</th><th>Notes</th></tr>';
+      grouped[type].forEach(function(d){
+        var isSuper = d.status==='Superseded'||d.status==='Void';
+        var isIFC = d.status==='Issued for Construction';
+        html += '<tr class="'+(isSuper?'superseded':(isIFC?'ifc':''))+'">'
+          +'<td style="font-family:monospace;font-weight:700;">'+escH(d.docNum||'—')+'</td>'
+          +'<td>'+escH(d.title||'—')+'</td>'
+          +'<td style="text-align:center;">'+escH(d.revision||'—')+'</td>'
+          +'<td>'+escH(d.status||'—')+'</td>'
+          +'<td>'+escH(d.discipline||'—')+'</td>'
+          +'<td>'+escH(d.preparedBy||'—')+'</td>'
+          +'<td>'+fmtDate(d.dateIssued)+'</td>'
+          +'<td>'+fmtDate(d.dateReceived)+'</td>'
+          +'<td style="font-size:9pt;">'+escH(d.notes||'')+'</td>'
+          +'</tr>';
+      });
+      html += '</table>';
+    });
+
+    html += '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;font-size:9pt;margin-bottom:12px;">'
+      +'<strong>📐 DRAWING MANAGEMENT NOTE:</strong> Always verify you are working from the current IFC (Issued for Construction) revision. Superseded drawings should be removed from jobsite immediately to prevent use of outdated details. When in doubt, confirm revision with the Engineer of Record.</div>';
+    html += '<div style="font-size:9pt;color:#666;border-top:1px solid #ddd;margin-top:14px;padding-top:8px;text-align:center;">CONFIDENTIAL — INTERNAL USE ONLY · '+escH(coName)+' · Oncor Takeoff Estimator</div>';
+    html += '<button onclick="window.print()" style="margin-top:14px;padding:8px 18px;background:#1e3a5f;color:#fff;border:none;border-radius:6px;cursor:pointer;">🖨️ Print / Save PDF</button>';
+    html += '</body></html>';
+
+    var w = window.open('','_blank');
+    w.document.write(html);
+    w.document.close();
+  }
+
+  function showDrawingModal(){
+    buildModal();
+    var m = document.getElementById(DOC_ID);
+    if(m){ m.style.display='flex'; renderDocs(); }
+  }
+  function closeDrawingModal(){
+    var m = document.getElementById(DOC_ID);
+    if(m) m.style.display='none';
+    cancelDocForm();
+  }
+  window.showDrawingModal = showDrawingModal;
+  window.closeDrawingModal = closeDrawingModal;
+
+  document.addEventListener('keydown',function(e){
+    if(e.altKey && e.key.toLowerCase()==='x'){
+      e.preventDefault();
+      var m = document.getElementById(DOC_ID);
+      if(m && m.style.display==='flex') closeDrawingModal();
+      else showDrawingModal();
+    }
+  });
+
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){
+      var apBtn = document.querySelector('button[onclick*="showAPModal"]');
+      if(!apBtn) return;
+      var parentRow = apBtn.closest('div');
+      if(!parentRow||!parentRow.parentNode) return;
+      var newRow = document.createElement('div');
+      newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML = '<button class="action-btn secondary" onclick="showDrawingModal()" title="Drawing & Document Register — track drawings, specs, submittals, revisions (Alt+X)" style="background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.3);color:#a5b4fc;">📐 Drawing Register</button>';
+      parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 3900);
+  });
+
+})();
+// ==================== END DRAWING & DOCUMENT REGISTER — Zeus ⚡ Session #74 ====================
+</script>
