@@ -152674,4 +152674,512 @@ ${d.totalYds > 0 ? `Cost/yd³: ${fmtMoney(d.totalBid/d.totalYds)}` : ''}
 
 })();
 // ==================== END PROFITABILITY ANALYZER — Zeus ⚡ Session #66 ====================
+
+// ==================== WEATHER FORECAST & POUR PLANNING — Zeus ⚡ Session #67 ====================
+// Purpose: Check weather conditions before scheduling pours. Shows ACI 305R (hot weather) and
+// ACI 306R (cold weather) alerts. Helps JFS avoid scheduling pours during rain, extreme temps,
+// or high winds. No API key required — uses wttr.in free service.
+(function(){
+  'use strict';
+
+  const MODAL_ID = 'oncor-weather-modal';
+  const DEFAULT_LOCATION = 'El Paso, TX';
+
+  function showWeather(){
+    let modal = document.getElementById(MODAL_ID);
+    if(modal){ modal.style.display = 'flex'; loadWeatherData(); return; }
+    
+    modal = document.createElement('div');
+    modal.id = MODAL_ID;
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);';
+    modal.innerHTML = `
+      <div style="background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);border:1px solid rgba(255,255,255,0.1);border-radius:16px;width:100%;max-width:700px;max-height:90vh;overflow:auto;box-shadow:0 25px 50px rgba(0,0,0,0.5);">
+        <div style="padding:20px;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <h2 style="margin:0;color:#38bdf8;font-size:1.1rem;">🌤️ Weather Forecast — Pour Planning</h2>
+            <p style="margin:4px 0 0;color:#64748b;font-size:0.75rem;">ACI 305R (Hot Weather) • ACI 306R (Cold Weather) • Pour Day Risk Assessment</p>
+          </div>
+          <button onclick="closeWeather()" style="background:rgba(255,255,255,0.1);border:none;color:#94a3b8;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:1.1rem;">✕</button>
+        </div>
+        <div style="padding:20px;" id="weatherContent">
+          <div style="text-align:center;padding:40px;color:#64748b;">Loading weather data...</div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function(e){ if(e.target===modal) closeWeather(); });
+    loadWeatherData();
+  }
+
+  window.showWeather = showWeather;
+  window.closeWeather = function(){ 
+    const m = document.getElementById(MODAL_ID); 
+    if(m) m.style.display = 'none'; 
+  };
+
+  async function loadWeatherData(){
+    const content = document.getElementById('weatherContent');
+    const loc = localStorage.getItem('oncor_weather_location') || DEFAULT_LOCATION;
+    
+    content.innerHTML = `
+      <div style="margin-bottom:16px;display:flex;gap:10px;align-items:center;">
+        <input type="text" id="weatherLoc" value="${loc}" placeholder="City, State or ZIP" style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:10px 14px;color:#fff;font-size:0.9rem;">
+        <button onclick="refreshWeather()" style="background:#0ea5e9;border:none;color:#fff;border-radius:8px;padding:10px 18px;cursor:pointer;font-weight:600;">🔄 Refresh</button>
+      </div>
+      <div style="text-align:center;padding:30px;color:#64748b;" id="weatherData">
+        <div style="font-size:2rem;margin-bottom:10px;">⏳</div>
+        Fetching forecast for ${loc}...
+      </div>
+    `;
+
+    try {
+      const resp = await fetch(`https://wttr.in/${encodeURIComponent(loc)}?format=j1`);
+      if(!resp.ok) throw new Error('Weather service unavailable');
+      const data = await resp.json();
+      renderWeatherData(data, loc);
+    } catch(err) {
+      document.getElementById('weatherData').innerHTML = `
+        <div style="color:#f87171;padding:20px;">
+          <div style="font-size:2rem;margin-bottom:10px;">⚠️</div>
+          Could not fetch weather data. Check your location or try again.<br>
+          <span style="font-size:0.8rem;color:#64748b;">${err.message}</span>
+        </div>
+      `;
+    }
+  }
+
+  window.refreshWeather = function(){
+    const loc = document.getElementById('weatherLoc')?.value || DEFAULT_LOCATION;
+    localStorage.setItem('oncor_weather_location', loc);
+    loadWeatherData();
+  };
+
+  function renderWeatherData(data, loc){
+    const curr = data.current_condition?.[0] || {};
+    const today = data.weather?.[0] || {};
+    const forecast = data.weather || [];
+    
+    const tempF = parseInt(curr.temp_F) || 0;
+    const humidity = parseInt(curr.humidity) || 0;
+    const windMph = parseInt(curr.windspeedMiles) || 0;
+    const highF = parseInt(today.maxtempF) || 0;
+    const lowF = parseInt(today.mintempF) || 0;
+    const desc = curr.weatherDesc?.[0]?.value || 'Unknown';
+    
+    // ACI compliance checks
+    const alerts = [];
+    if(highF > 90) alerts.push({type:'hot', msg:'ACI 305R: High temps >90°F — use retarder, ice water, early pours', color:'#ef4444'});
+    if(highF > 85 && humidity < 30) alerts.push({type:'hot', msg:'ACI 305R: Hot + dry conditions — high evaporation risk, use curing compound immediately', color:'#f97316'});
+    if(lowF < 50) alerts.push({type:'cold', msg:'ACI 306R: Cold weather <50°F — use heated water, protect fresh concrete', color:'#3b82f6'});
+    if(lowF < 40) alerts.push({type:'cold', msg:'ACI 306R: Near-freezing temps — do not pour unless heated enclosure available', color:'#8b5cf6'});
+    if(windMph > 15) alerts.push({type:'wind', msg:`High winds ${windMph} mph — increased evaporation, use windbreaks`, color:'#f59e0b'});
+    if(desc.toLowerCase().includes('rain') || desc.toLowerCase().includes('storm') || desc.toLowerCase().includes('shower')){
+      alerts.push({type:'rain', msg:'Rain forecast — do not pour, fresh concrete will be ruined', color:'#ef4444'});
+    }
+
+    const pourRating = alerts.length === 0 ? {label:'EXCELLENT', color:'#22c55e', emoji:'✅'} :
+                       alerts.some(a=>a.type==='rain') ? {label:'DO NOT POUR', color:'#ef4444', emoji:'🚫'} :
+                       alerts.length > 2 ? {label:'POOR', color:'#ef4444', emoji:'⚠️'} :
+                       alerts.length > 1 ? {label:'MARGINAL', color:'#f59e0b', emoji:'⚠️'} :
+                       {label:'CAUTION', color:'#f59e0b', emoji:'⚡'};
+
+    let html = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+        <div style="background:rgba(0,0,0,0.3);border-radius:12px;padding:16px;">
+          <div style="color:#64748b;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.5px;">Current Conditions</div>
+          <div style="font-size:2.5rem;font-weight:700;color:#fff;margin:8px 0;">${tempF}°F</div>
+          <div style="color:#94a3b8;font-size:0.9rem;">${desc}</div>
+          <div style="color:#64748b;font-size:0.8rem;margin-top:4px;">Wind: ${windMph} mph • Humidity: ${humidity}%</div>
+        </div>
+        <div style="background:rgba(0,0,0,0.3);border-radius:12px;padding:16px;">
+          <div style="color:#64748b;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.5px;">Pour Conditions Rating</div>
+          <div style="font-size:2rem;margin:8px 0;">${pourRating.emoji}</div>
+          <div style="font-size:1.1rem;font-weight:700;color:${pourRating.color};">${pourRating.label}</div>
+          <div style="color:#64748b;font-size:0.75rem;margin-top:4px;">High: ${highF}°F • Low: ${lowF}°F</div>
+        </div>
+      </div>
+    `;
+
+    if(alerts.length > 0){
+      html += `<div style="margin-bottom:16px;">`;
+      alerts.forEach(a => {
+        html += `<div style="background:rgba(0,0,0,0.3);border-left:3px solid ${a.color};border-radius:6px;padding:10px 14px;margin-bottom:8px;color:#e2e8f0;font-size:0.85rem;">${a.msg}</div>`;
+      });
+      html += `</div>`;
+    } else {
+      html += `<div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:14px;margin-bottom:16px;color:#86efac;font-size:0.9rem;text-align:center;">
+        ✅ Weather conditions are favorable for concrete placement today
+      </div>`;
+    }
+
+    // 3-day forecast
+    html += `<div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:16px;">
+      <div style="color:#64748b;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">3-Day Forecast</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">`;
+    
+    forecast.slice(0,3).forEach((day, i) => {
+      const dayName = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : new Date(day.date).toLocaleDateString('en-US',{weekday:'short'});
+      const dayHigh = parseInt(day.maxtempF) || 0;
+      const dayLow = parseInt(day.mintempF) || 0;
+      const dayDesc = day.hourly?.[4]?.weatherDesc?.[0]?.value || '';
+      const hasRain = dayDesc.toLowerCase().includes('rain') || dayDesc.toLowerCase().includes('storm');
+      const isHot = dayHigh > 90;
+      const isCold = dayLow < 50;
+      const dayIcon = hasRain ? '🌧️' : isHot ? '☀️' : isCold ? '❄️' : '⛅';
+      const dayColor = hasRain ? '#ef4444' : isHot ? '#f59e0b' : isCold ? '#3b82f6' : '#22c55e';
+      
+      html += `
+        <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px;text-align:center;">
+          <div style="color:#94a3b8;font-size:0.8rem;font-weight:600;">${dayName}</div>
+          <div style="font-size:1.8rem;margin:6px 0;">${dayIcon}</div>
+          <div style="color:#fff;font-weight:600;">${dayHigh}° / ${dayLow}°</div>
+          <div style="color:${dayColor};font-size:0.7rem;margin-top:4px;">${hasRain ? 'Rain ⚠️' : isHot ? 'Hot' : isCold ? 'Cold' : 'Good'}</div>
+        </div>
+      `;
+    });
+    
+    html += `</div></div>`;
+
+    // Best pour window recommendation
+    const bestHour = highF > 85 ? '5:00 AM - 9:00 AM' : lowF < 50 ? '10:00 AM - 2:00 PM' : '6:00 AM - 12:00 PM';
+    html += `
+      <div style="margin-top:16px;background:rgba(14,165,233,0.1);border:1px solid rgba(14,165,233,0.3);border-radius:8px;padding:14px;">
+        <div style="color:#38bdf8;font-weight:600;margin-bottom:6px;">🕐 Recommended Pour Window</div>
+        <div style="color:#e2e8f0;font-size:0.9rem;">${bestHour}</div>
+        <div style="color:#64748b;font-size:0.75rem;margin-top:4px;">
+          ${highF > 85 ? 'Early start recommended to avoid peak heat (ACI 305R)' : 
+            lowF < 50 ? 'Mid-day start recommended when temps rise above 50°F (ACI 306R)' : 
+            'Standard pour window — favorable conditions'}
+        </div>
+      </div>
+    `;
+
+    // Quick reference
+    html += `
+      <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:12px;">
+          <div style="color:#fca5a5;font-weight:600;font-size:0.8rem;margin-bottom:6px;">☀️ ACI 305R Hot Weather</div>
+          <ul style="color:#94a3b8;font-size:0.72rem;margin:0;padding-left:16px;">
+            <li>Concrete temp at delivery: max 90°F</li>
+            <li>Use Type D retarder admixture</li>
+            <li>Ice water or liquid nitrogen cooling</li>
+            <li>Apply curing compound immediately</li>
+            <li>Avoid placement when evaporation >0.2 lb/ft²/hr</li>
+          </ul>
+        </div>
+        <div style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:12px;">
+          <div style="color:#93c5fd;font-weight:600;font-size:0.8rem;margin-bottom:6px;">❄️ ACI 306R Cold Weather</div>
+          <ul style="color:#94a3b8;font-size:0.72rem;margin:0;padding-left:16px;">
+            <li>Concrete temp at placement: min 50°F</li>
+            <li>Heat mixing water to 140°F max</li>
+            <li>Use Type C accelerator or heated enclosure</li>
+            <li>Protect from freezing for 48+ hours</li>
+            <li>Do not pour on frozen subgrade</li>
+          </ul>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('weatherData').innerHTML = html;
+  }
+
+  // Keyboard shortcut: Ctrl+Shift+W (already used by Delivery Tickets, use Alt+W)
+  document.addEventListener('keydown', function(e){
+    if(e.altKey && e.key.toLowerCase() === 'w'){
+      e.preventDefault();
+      const m = document.getElementById(MODAL_ID);
+      if(m && m.style.display === 'flex') closeWeather();
+      else showWeather();
+    }
+  });
+
+  /* INJECT SIDEBAR BUTTON */
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){
+      const profitBtn = document.querySelector('button[onclick*="showProfitAnalyzer"]');
+      if(!profitBtn) return;
+      const newRow = document.createElement('div');
+      newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML = `<button class="action-btn secondary" onclick="showWeather()" title="Weather forecast for pour planning — ACI 305R/306R compliance alerts, 3-day forecast (Alt+W)" style="background:rgba(56,189,248,0.1);border-color:rgba(56,189,248,0.3);color:#7dd3fc;">🌤️ Weather</button>`;
+      const parentRow = profitBtn.closest('div');
+      if(parentRow&&parentRow.parentNode) parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 2500);
+  });
+
+})();
+// ==================== END WEATHER FORECAST — Zeus ⚡ Session #67 ====================
+
+// ==================== CONCRETE CALCULATOR QUICK TOOLS — Zeus ⚡ Session #67 ====================
+// Purpose: Quick standalone calculators for common field math — rebar weight, slump adjustment,
+// water addition limits, evaporation rate, cure time estimation. Fast answers without full takeoff.
+(function(){
+  'use strict';
+
+  const MODAL_ID = 'oncor-calc-modal';
+
+  function showCalcTools(){
+    let modal = document.getElementById(MODAL_ID);
+    if(modal){ modal.style.display = 'flex'; return; }
+    
+    modal = document.createElement('div');
+    modal.id = MODAL_ID;
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);';
+    modal.innerHTML = `
+      <div style="background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);border:1px solid rgba(255,255,255,0.1);border-radius:16px;width:100%;max-width:800px;max-height:90vh;overflow:auto;box-shadow:0 25px 50px rgba(0,0,0,0.5);">
+        <div style="padding:20px;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <h2 style="margin:0;color:#a78bfa;font-size:1.1rem;">🧮 Quick Calculators</h2>
+            <p style="margin:4px 0 0;color:#64748b;font-size:0.75rem;">Field math tools — rebar weight, water limits, evaporation, cure time</p>
+          </div>
+          <button onclick="closeCalcTools()" style="background:rgba(255,255,255,0.1);border:none;color:#94a3b8;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:1.1rem;">✕</button>
+        </div>
+        <div style="padding:20px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            
+            <!-- Rebar Weight Calculator -->
+            <div style="background:rgba(0,0,0,0.3);border-radius:12px;padding:16px;">
+              <div style="color:#f97316;font-weight:600;margin-bottom:12px;">🔩 Rebar Weight Calculator</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:0.72rem;color:#888;">Bar Size</label>
+                  <select id="calcRebarSize" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">
+                    <option value="0.376">#3 (0.376 lb/ft)</option>
+                    <option value="0.668">#4 (0.668 lb/ft)</option>
+                    <option value="1.043" selected>#5 (1.043 lb/ft)</option>
+                    <option value="1.502">#6 (1.502 lb/ft)</option>
+                    <option value="2.044">#7 (2.044 lb/ft)</option>
+                    <option value="2.670">#8 (2.670 lb/ft)</option>
+                    <option value="3.400">#9 (3.400 lb/ft)</option>
+                    <option value="4.303">#10 (4.303 lb/ft)</option>
+                    <option value="5.313">#11 (5.313 lb/ft)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:0.72rem;color:#888;">Length (feet)</label>
+                  <input type="number" id="calcRebarLen" value="20" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">
+                </div>
+              </div>
+              <div style="margin-bottom:10px;">
+                <label style="font-size:0.72rem;color:#888;">Quantity (bars)</label>
+                <input type="number" id="calcRebarQty" value="100" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">
+              </div>
+              <button onclick="calcRebarWeight()" style="width:100%;background:rgba(249,115,22,0.2);border:1px solid rgba(249,115,22,0.4);color:#fb923c;border-radius:6px;padding:8px;cursor:pointer;font-weight:600;">Calculate</button>
+              <div id="rebarResult" style="margin-top:10px;padding:10px;background:rgba(249,115,22,0.1);border-radius:6px;color:#fdba74;font-size:0.9rem;text-align:center;display:none;"></div>
+            </div>
+
+            <!-- Water Addition Limit (ASTM C94) -->
+            <div style="background:rgba(0,0,0,0.3);border-radius:12px;padding:16px;">
+              <div style="color:#3b82f6;font-weight:600;margin-bottom:12px;">💧 Water Addition Limit (ASTM C94)</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:0.72rem;color:#888;">Load Size (yd³)</label>
+                  <input type="number" id="calcWaterYd" value="10" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">
+                </div>
+                <div>
+                  <label style="font-size:0.72rem;color:#888;">Target Slump (in)</label>
+                  <input type="number" id="calcWaterSlump" value="5" step="0.5" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">
+                </div>
+              </div>
+              <div style="margin-bottom:10px;">
+                <label style="font-size:0.72rem;color:#888;">Current Slump (in)</label>
+                <input type="number" id="calcWaterCurr" value="3" step="0.5" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">
+              </div>
+              <button onclick="calcWaterLimit()" style="width:100%;background:rgba(59,130,246,0.2);border:1px solid rgba(59,130,246,0.4);color:#60a5fa;border-radius:6px;padding:8px;cursor:pointer;font-weight:600;">Calculate Max Water</button>
+              <div id="waterResult" style="margin-top:10px;padding:10px;background:rgba(59,130,246,0.1);border-radius:6px;color:#93c5fd;font-size:0.85rem;display:none;"></div>
+            </div>
+
+            <!-- Evaporation Rate (ACI 305R) -->
+            <div style="background:rgba(0,0,0,0.3);border-radius:12px;padding:16px;">
+              <div style="color:#ef4444;font-weight:600;margin-bottom:12px;">☀️ Evaporation Rate (ACI 305R)</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:0.72rem;color:#888;">Air Temp (°F)</label>
+                  <input type="number" id="calcEvapAir" value="95" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">
+                </div>
+                <div>
+                  <label style="font-size:0.72rem;color:#888;">Concrete Temp (°F)</label>
+                  <input type="number" id="calcEvapConc" value="85" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:0.72rem;color:#888;">Relative Humidity (%)</label>
+                  <input type="number" id="calcEvapRH" value="25" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">
+                </div>
+                <div>
+                  <label style="font-size:0.72rem;color:#888;">Wind Speed (mph)</label>
+                  <input type="number" id="calcEvapWind" value="10" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">
+                </div>
+              </div>
+              <button onclick="calcEvapRate()" style="width:100%;background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.4);color:#f87171;border-radius:6px;padding:8px;cursor:pointer;font-weight:600;">Calculate Evaporation</button>
+              <div id="evapResult" style="margin-top:10px;padding:10px;background:rgba(239,68,68,0.1);border-radius:6px;color:#fca5a5;font-size:0.85rem;display:none;"></div>
+            </div>
+
+            <!-- Strength Gain / Cure Time -->
+            <div style="background:rgba(0,0,0,0.3);border-radius:12px;padding:16px;">
+              <div style="color:#22c55e;font-weight:600;margin-bottom:12px;">⏱️ Strength Gain Estimator</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div>
+                  <label style="font-size:0.72rem;color:#888;">Design f'c (PSI)</label>
+                  <select id="calcCurePsi" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">
+                    <option value="3000">3000 PSI</option>
+                    <option value="4000" selected>4000 PSI</option>
+                    <option value="5000">5000 PSI</option>
+                    <option value="6000">6000 PSI</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:0.72rem;color:#888;">Avg. Temp (°F)</label>
+                  <input type="number" id="calcCureTemp" value="70" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#fff;font-size:0.85rem;">
+                </div>
+              </div>
+              <button onclick="calcStrengthGain()" style="width:100%;background:rgba(34,197,94,0.2);border:1px solid rgba(34,197,94,0.4);color:#4ade80;border-radius:6px;padding:8px;cursor:pointer;font-weight:600;">Show Strength Curve</button>
+              <div id="cureResult" style="margin-top:10px;padding:10px;background:rgba(34,197,94,0.1);border-radius:6px;color:#86efac;font-size:0.8rem;display:none;"></div>
+            </div>
+
+          </div>
+
+          <!-- Quick Reference -->
+          <div style="margin-top:16px;background:rgba(0,0,0,0.2);border-radius:12px;padding:16px;">
+            <div style="color:#94a3b8;font-weight:600;margin-bottom:10px;">📋 Quick Reference</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;font-size:0.75rem;color:#64748b;">
+              <div>
+                <div style="color:#f97316;font-weight:600;margin-bottom:4px;">Rebar lb/ft</div>
+                #3: 0.376 • #4: 0.668<br>#5: 1.043 • #6: 1.502<br>#7: 2.044 • #8: 2.670
+              </div>
+              <div>
+                <div style="color:#3b82f6;font-weight:600;margin-bottom:4px;">Water/yd³</div>
+                Typical: 27-32 gal/yd³<br>Max site add: 1 gal/yd³<br>per 1" slump increase
+              </div>
+              <div>
+                <div style="color:#ef4444;font-weight:600;margin-bottom:4px;">Evap Risk</div>
+                &lt;0.1: Low risk<br>0.1-0.2: Moderate<br>&gt;0.2: High — use fog/wind screen
+              </div>
+              <div>
+                <div style="color:#22c55e;font-weight:600;margin-bottom:4px;">Strength %</div>
+                1 day: ~16%<br>3 days: ~40%<br>7 days: ~65%<br>28 days: 100%
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function(e){ if(e.target===modal) closeCalcTools(); });
+  }
+
+  window.showCalcTools = showCalcTools;
+  window.closeCalcTools = function(){ 
+    const m = document.getElementById(MODAL_ID); 
+    if(m) m.style.display = 'none'; 
+  };
+
+  window.calcRebarWeight = function(){
+    const lbPerFt = parseFloat(document.getElementById('calcRebarSize').value);
+    const len = parseFloat(document.getElementById('calcRebarLen').value) || 0;
+    const qty = parseFloat(document.getElementById('calcRebarQty').value) || 0;
+    const totalLb = lbPerFt * len * qty;
+    const tons = totalLb / 2000;
+    const el = document.getElementById('rebarResult');
+    el.style.display = 'block';
+    el.innerHTML = `<strong>${totalLb.toLocaleString(undefined,{maximumFractionDigits:0})} lbs</strong> (${tons.toFixed(2)} tons)<br><span style="font-size:0.75rem;color:#94a3b8;">${qty} bars × ${len} ft × ${lbPerFt} lb/ft</span>`;
+  };
+
+  window.calcWaterLimit = function(){
+    const yd = parseFloat(document.getElementById('calcWaterYd').value) || 10;
+    const target = parseFloat(document.getElementById('calcWaterSlump').value) || 5;
+    const curr = parseFloat(document.getElementById('calcWaterCurr').value) || 3;
+    const slumpDiff = target - curr;
+    // ASTM C94 allows ~1 gal/yd³ per 1" slump increase, max total site addition usually capped
+    const maxGalPerYd = 1; // conservative
+    const waterNeeded = slumpDiff * maxGalPerYd * yd;
+    const maxAllowed = yd * 1; // 1 gal/yd³ max site add per ASTM C94 §11.8
+    const el = document.getElementById('waterResult');
+    el.style.display = 'block';
+    if(slumpDiff <= 0){
+      el.innerHTML = `<span style="color:#22c55e;">✅ Slump already at or above target. No water needed.</span>`;
+    } else if(waterNeeded > maxAllowed){
+      el.innerHTML = `<span style="color:#ef4444;">⚠️ Need ~${waterNeeded.toFixed(1)} gal but ASTM C94 max is ${maxAllowed.toFixed(1)} gal (1 gal/yd³).<br>Reject load or use water reducer.</span>`;
+    } else {
+      el.innerHTML = `<strong>Add up to ${waterNeeded.toFixed(1)} gallons</strong><br><span style="font-size:0.75rem;color:#94a3b8;">${slumpDiff.toFixed(1)}" slump increase × ${yd} yd³ × 1 gal/yd³/in</span>`;
+    }
+  };
+
+  window.calcEvapRate = function(){
+    // Simplified Menzel/ACI 305 evaporation formula (approximate)
+    const Ta = parseFloat(document.getElementById('calcEvapAir').value) || 95;
+    const Tc = parseFloat(document.getElementById('calcEvapConc').value) || 85;
+    const RH = parseFloat(document.getElementById('calcEvapRH').value) || 25;
+    const V = parseFloat(document.getElementById('calcEvapWind').value) || 10;
+    
+    // Approximate vapor pressure difference calculation
+    const ew_c = 0.04145 * Math.exp(17.27 * Tc / (Tc + 237.3)); // concrete surface
+    const ew_a = 0.04145 * Math.exp(17.27 * Ta / (Ta + 237.3)) * (RH/100);
+    const E = ((ew_c - ew_a) * (1 + 0.4 * V)) * 0.08; // lb/ft²/hr approximation
+    
+    const el = document.getElementById('evapResult');
+    el.style.display = 'block';
+    const risk = E > 0.2 ? 'HIGH RISK ⚠️' : E > 0.1 ? 'MODERATE ⚡' : 'LOW ✅';
+    const riskColor = E > 0.2 ? '#ef4444' : E > 0.1 ? '#f59e0b' : '#22c55e';
+    el.innerHTML = `<strong style="font-size:1.1rem;">${E.toFixed(3)} lb/ft²/hr</strong><br>
+      <span style="color:${riskColor};font-weight:600;">${risk}</span><br>
+      <span style="font-size:0.72rem;color:#94a3b8;">ACI 305R limit: 0.2 lb/ft²/hr<br>
+      ${E > 0.2 ? 'Use fogging, windbreaks, evaporation retarder, or delay pour' : E > 0.1 ? 'Monitor closely, have curing ready' : 'Conditions acceptable'}</span>`;
+  };
+
+  window.calcStrengthGain = function(){
+    const fc = parseInt(document.getElementById('calcCurePsi').value) || 4000;
+    const temp = parseFloat(document.getElementById('calcCureTemp').value) || 70;
+    // Simplified maturity-based strength gain (ACI 209)
+    const tempFactor = temp < 50 ? 0.6 : temp > 90 ? 1.1 : 1.0;
+    const pct1 = Math.round(16 * tempFactor);
+    const pct3 = Math.round(40 * tempFactor);
+    const pct7 = Math.round(65 * tempFactor);
+    const pct14 = Math.round(85 * tempFactor);
+    const pct28 = 100;
+    
+    const el = document.getElementById('cureResult');
+    el.style.display = 'block';
+    el.innerHTML = `
+      <div style="margin-bottom:6px;"><strong>Estimated Strength at ${fc} PSI (${temp}°F avg)</strong></div>
+      <table style="width:100%;font-size:0.75rem;">
+        <tr><td>1 day</td><td style="text-align:right;">${Math.round(fc * pct1/100)} PSI (${pct1}%)</td></tr>
+        <tr><td>3 days</td><td style="text-align:right;">${Math.round(fc * pct3/100)} PSI (${pct3}%)</td></tr>
+        <tr><td>7 days</td><td style="text-align:right;">${Math.round(fc * pct7/100)} PSI (${pct7}%)</td></tr>
+        <tr><td>14 days</td><td style="text-align:right;">${Math.round(fc * pct14/100)} PSI (${pct14}%)</td></tr>
+        <tr style="font-weight:600;"><td>28 days</td><td style="text-align:right;">${fc} PSI (${pct28}%)</td></tr>
+      </table>
+      <div style="font-size:0.7rem;color:#64748b;margin-top:6px;">
+        ${temp < 50 ? '⚠️ Cold temps slow cure — protect from freezing' : 
+          temp > 90 ? '⚠️ Hot temps accelerate early cure but may reduce ultimate strength' : 
+          '✅ Normal curing conditions'}
+      </div>
+    `;
+  };
+
+  // Keyboard shortcut: Alt+C
+  document.addEventListener('keydown', function(e){
+    if(e.altKey && e.key.toLowerCase() === 'c'){
+      e.preventDefault();
+      const m = document.getElementById(MODAL_ID);
+      if(m && m.style.display === 'flex') closeCalcTools();
+      else showCalcTools();
+    }
+  });
+
+  /* INJECT SIDEBAR BUTTON */
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){
+      const weatherBtn = document.querySelector('button[onclick*="showWeather"]');
+      if(!weatherBtn) return;
+      const newRow = document.createElement('div');
+      newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML = `<button class="action-btn secondary" onclick="showCalcTools()" title="Quick calculators — rebar weight, water limits, evaporation rate, strength gain (Alt+C)" style="background:rgba(167,139,250,0.1);border-color:rgba(167,139,250,0.3);color:#c4b5fd;">🧮 Calculators</button>`;
+      const parentRow = weatherBtn.closest('div');
+      if(parentRow&&parentRow.parentNode) parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 2600);
+  });
+
+})();
+// ==================== END QUICK CALCULATORS — Zeus ⚡ Session #67 ====================
 </script>
