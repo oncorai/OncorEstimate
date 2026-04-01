@@ -150610,3 +150610,584 @@ td{padding:6px 8px;border-bottom:1px solid #e2e8f0;}
 })();
 // ==================== END MATERIAL PROCUREMENT & PO TRACKER — Zeus ⚡ Session #62 ====================
 </script>
+<script>
+// ==================== MEETING MINUTES & ACTION ITEMS LOG — Zeus ⚡ Session #63 ====================
+(function(){
+  'use strict';
+
+  /* ─── STORAGE HELPERS ─── */
+  function getMeetingKey(){
+    const p=(document.getElementById('projectName')||{}).value||'default';
+    return 'oncor_meetings_v1_'+p.replace(/\s+/g,'_');
+  }
+  function getMeetingData(){
+    try{ return JSON.parse(localStorage.getItem(getMeetingKey()))||{meetings:[]}; }
+    catch(e){ return {meetings:[]}; }
+  }
+  function saveMeetingData(d){ localStorage.setItem(getMeetingKey(), JSON.stringify(d)); }
+
+  /* ─── HELPERS ─── */
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  function fmtDate(d){ if(!d) return '—'; try{ const dt=new Date(d+'T12:00:00'); return dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }catch(e){return d;} }
+  function fmtMoney(n){ return '$'+(parseFloat(n)||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+
+  const MEETING_TYPES = ['Pre-Construction','Weekly OAC','Progress Meeting','Safety Meeting','Design Review','Subcontractor Coordination','Owner Update','Closeout Meeting','Issue Resolution','Other'];
+  const ACTION_STATUSES = ['Open','In Progress','Complete','Cancelled','Deferred'];
+  const ACTION_PRIORITIES = ['Low','Medium','High','Critical'];
+
+  /* ─── UNIQUE ID ─── */
+  function genId(){ return 'M'+(Date.now()%1e7)+(Math.random()*9999|0); }
+
+  /* ─── GLOBAL STATE ─── */
+  let _editingMeetingId = null;
+
+  /* ─── OPEN MODAL ─── */
+  window.showMeetingLog = function(){
+    let modal = document.getElementById('meetingLogModal');
+    if(!modal){
+      modal = document.createElement('div');
+      modal.id = 'meetingLogModal';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10100;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+      modal.innerHTML = `<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;width:100%;max-width:1000px;max-height:90vh;overflow-y:auto;padding:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #334155;position:sticky;top:0;background:#1e293b;z-index:1;">
+          <div><div style="font-size:14pt;font-weight:700;color:#e2e8f0;">📋 Meeting Minutes & Action Items</div>
+          <div style="font-size:8.5pt;color:#64748b;">Document every meeting, assign action items, track to completion</div></div>
+          <button onclick="closeMeetingLog()" style="background:#374151;border:none;color:#9ca3af;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:10pt;">✕</button>
+        </div>
+        <div style="padding:16px 20px;">
+          <div id="meetingStatsBar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;"></div>
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+            <button onclick="showNewMeetingForm()" style="background:#7c3aed;border:none;color:#fff;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:9pt;font-weight:700;">+ New Meeting</button>
+            <button onclick="printAllMeetings()" style="background:#374151;border:none;color:#e2e8f0;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:9pt;">📋 Print All Minutes</button>
+            <button onclick="showOpenActions()" style="background:#374151;border:none;color:#e2e8f0;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:9pt;">⚡ Open Actions</button>
+          </div>
+          <div id="meetingFormArea"></div>
+          <div id="meetingListArea"></div>
+        </div>
+      </div>`;
+      modal.addEventListener('click', function(e){ if(e.target===modal) closeMeetingLog(); });
+      document.body.appendChild(modal);
+    }
+    modal.style.display = 'flex';
+    renderMeetingList();
+    renderMeetingStats();
+  };
+
+  window.closeMeetingLog = function(){
+    const modal = document.getElementById('meetingLogModal');
+    if(modal) modal.style.display = 'none';
+  };
+
+  /* ─── STATS BAR ─── */
+  function renderMeetingStats(){
+    const d = getMeetingData();
+    const meetings = d.meetings || [];
+    const allActions = meetings.flatMap(m => m.actions||[]);
+    const openActions = allActions.filter(a => ['Open','In Progress'].includes(a.status||'Open'));
+    const overdueActions = allActions.filter(a => {
+      if(!a.dueDate || ['Complete','Cancelled'].includes(a.status||'Open')) return false;
+      return new Date(a.dueDate) < new Date();
+    });
+    const el = document.getElementById('meetingStatsBar');
+    if(!el) return;
+    el.innerHTML = `
+      <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 14px;text-align:center;min-width:80px;">
+        <div style="font-size:13pt;font-weight:700;color:#7c3aed;">${meetings.length}</div>
+        <div style="font-size:7pt;color:#64748b;">Meetings</div>
+      </div>
+      <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 14px;text-align:center;min-width:80px;">
+        <div style="font-size:13pt;font-weight:700;color:#e2e8f0;">${allActions.length}</div>
+        <div style="font-size:7pt;color:#64748b;">Action Items</div>
+      </div>
+      <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 14px;text-align:center;min-width:80px;">
+        <div style="font-size:13pt;font-weight:700;color:${openActions.length>0?'#f59e0b':'#22c55e'};">${openActions.length}</div>
+        <div style="font-size:7pt;color:#64748b;">Open Actions</div>
+      </div>
+      <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 14px;text-align:center;min-width:80px;">
+        <div style="font-size:13pt;font-weight:700;color:${overdueActions.length>0?'#ef4444':'#22c55e'};">${overdueActions.length}${overdueActions.length>0?' ⚠️':''}</div>
+        <div style="font-size:7pt;color:#64748b;">Overdue</div>
+      </div>
+      <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 14px;text-align:center;min-width:80px;">
+        <div style="font-size:13pt;font-weight:700;color:#22c55e;">${allActions.filter(a=>a.status==='Complete').length}</div>
+        <div style="font-size:7pt;color:#64748b;">Completed</div>
+      </div>`;
+  }
+
+  /* ─── MEETING LIST ─── */
+  function renderMeetingList(){
+    const d = getMeetingData();
+    const meetings = (d.meetings||[]).slice().sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
+    const el = document.getElementById('meetingListArea');
+    if(!el) return;
+    if(!meetings.length){
+      el.innerHTML = `<div style="text-align:center;padding:40px;color:#64748b;"><div style="font-size:24pt;">📋</div><div style="margin-top:8px;">No meetings logged yet.</div><div style="font-size:8.5pt;margin-top:4px;">Click + New Meeting to document your first meeting.</div></div>`;
+      return;
+    }
+    el.innerHTML = meetings.map(m => {
+      const allActions = m.actions||[];
+      const openActs = allActions.filter(a=>['Open','In Progress'].includes(a.status||'Open'));
+      const overdueActs = allActions.filter(a=>{
+        if(!a.dueDate||['Complete','Cancelled'].includes(a.status||'Open')) return false;
+        return new Date(a.dueDate)<new Date();
+      });
+      const typeColor = {'Pre-Construction':'#7c3aed','Weekly OAC':'#0d9488','Progress Meeting':'#2563eb','Safety Meeting':'#dc2626','Design Review':'#9333ea','Subcontractor Coordination':'#d97706','Owner Update':'#059669','Closeout Meeting':'#475569','Issue Resolution':'#b45309','Other':'#64748b'}[m.type||'Other']||'#64748b';
+      return `<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px 16px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+          <div style="flex:1;min-width:200px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span style="background:${typeColor};color:#fff;font-size:7pt;font-weight:700;padding:2px 8px;border-radius:4px;">${esc(m.type||'Meeting')}</span>
+              <span style="font-weight:700;color:#e2e8f0;font-size:10pt;">${esc(m.title||'Untitled Meeting')}</span>
+              ${overdueActs.length>0?`<span style="background:#ef4444;color:#fff;font-size:6.5pt;font-weight:700;padding:2px 7px;border-radius:4px;">⚠️ OVERDUE ACTIONS</span>`:''}
+            </div>
+            <div style="font-size:8pt;color:#94a3b8;margin-top:4px;">
+              📅 ${fmtDate(m.date)} · 📍 ${esc(m.location||'TBD')} · 👤 ${esc(m.facilitator||'—')}
+              ${m.attendees?` · 🧑‍🤝‍🧑 ${esc(m.attendees.split('\n').filter(Boolean).length)} attendees`:''}
+            </div>
+            ${m.summary?`<div style="font-size:8.5pt;color:#cbd5e1;margin-top:5px;border-left:3px solid ${typeColor};padding-left:8px;">${esc(m.summary)}</div>`:''}
+            ${allActions.length>0?`<div style="margin-top:8px;">
+              <div style="font-size:7.5pt;color:#64748b;margin-bottom:4px;">ACTION ITEMS (${openActs.length} open / ${allActions.length} total)</div>
+              ${allActions.slice(0,3).map(a=>{
+                const overdue = a.dueDate && new Date(a.dueDate)<new Date() && !['Complete','Cancelled'].includes(a.status||'Open');
+                const priColor = {'Low':'#64748b','Medium':'#f59e0b','High':'#ef4444','Critical':'#dc2626'}[a.priority||'Medium']||'#f59e0b';
+                const stColor = {'Open':'#f59e0b','In Progress':'#2563eb','Complete':'#22c55e','Cancelled':'#64748b','Deferred':'#9333ea'}[a.status||'Open']||'#f59e0b';
+                return `<div style="display:flex;align-items:center;gap:6px;font-size:8pt;margin-bottom:3px;">
+                  <span style="color:${stColor};font-size:7pt;font-weight:700;">${esc(a.status||'Open')}</span>
+                  <span style="color:${priColor};font-size:6.5pt;">[${esc(a.priority||'Medium')}]</span>
+                  <span style="color:${overdue?'#ef4444':'#cbd5e1'};">${esc(a.description||'')}</span>
+                  ${a.assignedTo?`<span style="color:#94a3b8;">→ ${esc(a.assignedTo)}</span>`:''}
+                  ${a.dueDate?`<span style="color:${overdue?'#ef4444':'#64748b'};font-size:7pt;">${overdue?'⚠️ ':''} Due ${fmtDate(a.dueDate)}</span>`:''}
+                </div>`;
+              }).join('')}
+              ${allActions.length>3?`<div style="font-size:7.5pt;color:#64748b;">+ ${allActions.length-3} more action items</div>`:''}
+            </div>`:''}
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0;">
+            <button onclick="editMeeting('${m.id}')" style="background:#374151;border:none;color:#94a3b8;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:9pt;" title="Edit">✏️</button>
+            <button onclick="printMeetingMinutes('${m.id}')" style="background:#374151;border:none;color:#94a3b8;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:9pt;" title="Print Minutes">🖨</button>
+            <button onclick="deleteMeeting('${m.id}')" style="background:#374151;border:none;color:#94a3b8;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:9pt;" title="Delete">🗑</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  /* ─── NEW / EDIT FORM ─── */
+  window.showNewMeetingForm = function(id){
+    _editingMeetingId = id||null;
+    let m = { id: genId(), date: new Date().toISOString().slice(0,10), type:'Weekly OAC', title:'', location:'', facilitator:'', attendees:'', summary:'', decisions:'', nextMeeting:'', notes:'', actions:[] };
+    if(id){
+      const d = getMeetingData();
+      const found = (d.meetings||[]).find(x=>x.id===id);
+      if(found) m = JSON.parse(JSON.stringify(found));
+    }
+    const fa = document.getElementById('meetingFormArea');
+    if(!fa) return;
+    const typeOpts = MEETING_TYPES.map(t=>`<option value="${esc(t)}" ${m.type===t?'selected':''}>${esc(t)}</option>`).join('');
+    fa.innerHTML = `<div style="background:#172032;border:1px solid #7c3aed;border-radius:8px;padding:16px;margin-bottom:16px;">
+      <div style="font-weight:700;color:#a78bfa;font-size:10pt;margin-bottom:12px;">${id?'✏️ Edit Meeting':'+ New Meeting'}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:10px;">
+        <div><label style="font-size:8pt;color:#94a3b8;">Meeting Title *</label><br><input id="mf_title" value="${esc(m.title)}" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:6px 8px;font-size:9pt;box-sizing:border-box;" placeholder="e.g. Weekly OAC - Week 12"></div>
+        <div><label style="font-size:8pt;color:#94a3b8;">Meeting Type *</label><br><select id="mf_type" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:6px 8px;font-size:9pt;box-sizing:border-box;">${typeOpts}</select></div>
+        <div><label style="font-size:8pt;color:#94a3b8;">Date *</label><br><input id="mf_date" type="date" value="${esc(m.date)}" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:6px 8px;font-size:9pt;box-sizing:border-box;"></div>
+        <div><label style="font-size:8pt;color:#94a3b8;">Location / Platform</label><br><input id="mf_location" value="${esc(m.location)}" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:6px 8px;font-size:9pt;box-sizing:border-box;" placeholder="Jobsite Trailer / Zoom / GC Office"></div>
+        <div><label style="font-size:8pt;color:#94a3b8;">Facilitator / Chair</label><br><input id="mf_facilitator" value="${esc(m.facilitator)}" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:6px 8px;font-size:9pt;box-sizing:border-box;" placeholder="Name of person running meeting"></div>
+        <div><label style="font-size:8pt;color:#94a3b8;">Next Meeting Date</label><br><input id="mf_nextMeeting" type="date" value="${esc(m.nextMeeting)}" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:6px 8px;font-size:9pt;box-sizing:border-box;"></div>
+      </div>
+      <div style="margin-bottom:10px;"><label style="font-size:8pt;color:#94a3b8;">Attendees (one per line)</label><br>
+        <textarea id="mf_attendees" rows="3" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:6px 8px;font-size:9pt;box-sizing:border-box;resize:vertical;" placeholder="JFS - Oncor Concrete&#10;John Smith - GC PM&#10;Maria Lopez - Owner Rep">${esc(m.attendees)}</textarea></div>
+      <div style="margin-bottom:10px;"><label style="font-size:8pt;color:#94a3b8;">Meeting Summary / Discussion Topics</label><br>
+        <textarea id="mf_summary" rows="4" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:6px 8px;font-size:9pt;box-sizing:border-box;resize:vertical;" placeholder="Summary of topics discussed, current status, issues raised...">${esc(m.summary)}</textarea></div>
+      <div style="margin-bottom:10px;"><label style="font-size:8pt;color:#94a3b8;">Key Decisions Made</label><br>
+        <textarea id="mf_decisions" rows="3" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:6px 8px;font-size:9pt;box-sizing:border-box;resize:vertical;" placeholder="Decisions made during this meeting (e.g. approved revised pour schedule, agreed to CO #4)...">${esc(m.decisions)}</textarea></div>
+      <div style="margin-bottom:12px;"><label style="font-size:8pt;color:#94a3b8;">Additional Notes</label><br>
+        <textarea id="mf_notes" rows="2" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:6px 8px;font-size:9pt;box-sizing:border-box;resize:vertical;" placeholder="Any other notes...">${esc(m.notes)}</textarea></div>
+
+      <!-- ACTION ITEMS SECTION -->
+      <div style="border-top:1px solid #334155;padding-top:12px;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div style="font-weight:700;color:#f59e0b;font-size:9.5pt;">⚡ Action Items</div>
+          <button type="button" onclick="addActionItemRow()" style="background:#d97706;border:none;color:#fff;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:8pt;font-weight:700;">+ Add Action</button>
+        </div>
+        <div id="actionItemsContainer">
+          ${(m.actions||[]).map((a,i)=>buildActionRow(a,i)).join('')}
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button type="button" onclick="cancelMeetingForm()" style="background:#374151;border:none;color:#9ca3af;border-radius:6px;padding:7px 16px;cursor:pointer;font-size:9pt;">Cancel</button>
+        <button type="button" onclick="saveMeetingForm('${esc(m.id)}')" style="background:#7c3aed;border:none;color:#fff;border-radius:6px;padding:7px 16px;cursor:pointer;font-size:9pt;font-weight:700;">💾 Save Meeting</button>
+      </div>
+    </div>`;
+  };
+
+  window.editMeeting = function(id){ showNewMeetingForm(id); };
+
+  function buildActionRow(a, i){
+    const statOpts = ACTION_STATUSES.map(s=>`<option value="${esc(s)}" ${(a.status||'Open')===s?'selected':''}>${esc(s)}</option>`).join('');
+    const priOpts = ACTION_PRIORITIES.map(p=>`<option value="${esc(p)}" ${(a.priority||'Medium')===p?'selected':''}>${esc(p)}</option>`).join('');
+    return `<div class="action-item-row" data-idx="${i}" style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:8px 10px;margin-bottom:6px;display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;align-items:start;">
+      <div style="grid-column:1/-1;"><label style="font-size:7pt;color:#94a3b8;">Action Description *</label><br>
+        <input class="ai_desc" value="${esc(a.description||'')}" style="width:100%;background:#172032;border:1px solid #334155;color:#e2e8f0;border-radius:4px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;" placeholder="What needs to be done?"></div>
+      <div><label style="font-size:7pt;color:#94a3b8;">Assigned To</label><br>
+        <input class="ai_assigned" value="${esc(a.assignedTo||'')}" style="width:100%;background:#172032;border:1px solid #334155;color:#e2e8f0;border-radius:4px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;" placeholder="Name / Company"></div>
+      <div><label style="font-size:7pt;color:#94a3b8;">Due Date</label><br>
+        <input class="ai_due" type="date" value="${esc(a.dueDate||'')}" style="width:100%;background:#172032;border:1px solid #334155;color:#e2e8f0;border-radius:4px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;"></div>
+      <div><label style="font-size:7pt;color:#94a3b8;">Priority</label><br>
+        <select class="ai_priority" style="width:100%;background:#172032;border:1px solid #334155;color:#e2e8f0;border-radius:4px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;">${priOpts}</select></div>
+      <div><label style="font-size:7pt;color:#94a3b8;">Status</label><br>
+        <select class="ai_status" style="width:100%;background:#172032;border:1px solid #334155;color:#e2e8f0;border-radius:4px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;">${statOpts}</select></div>
+      <div style="grid-column:1/-1;"><label style="font-size:7pt;color:#94a3b8;">Notes / Resolution</label><br>
+        <input class="ai_notes" value="${esc(a.notes||'')}" style="width:100%;background:#172032;border:1px solid #334155;color:#e2e8f0;border-radius:4px;padding:5px 7px;font-size:8.5pt;box-sizing:border-box;" placeholder="Additional notes or resolution details"></div>
+      <div style="grid-column:4/5;display:flex;align-items:flex-end;padding-bottom:2px;">
+        <button type="button" onclick="this.closest('.action-item-row').remove()" style="background:#7f1d1d;border:none;color:#fca5a5;border-radius:4px;padding:5px 10px;cursor:pointer;font-size:9pt;">🗑</button>
+      </div>
+    </div>`;
+  }
+
+  window.addActionItemRow = function(){
+    const container = document.getElementById('actionItemsContainer');
+    if(!container) return;
+    const idx = container.querySelectorAll('.action-item-row').length;
+    const div = document.createElement('div');
+    div.innerHTML = buildActionRow({}, idx);
+    container.appendChild(div.firstElementChild);
+  };
+
+  function collectActions(){
+    const rows = document.querySelectorAll('#actionItemsContainer .action-item-row');
+    const actions = [];
+    rows.forEach((row,i) => {
+      const desc = (row.querySelector('.ai_desc')||{}).value||'';
+      if(!desc.trim()) return;
+      actions.push({
+        id: genId(),
+        description: desc.trim(),
+        assignedTo: (row.querySelector('.ai_assigned')||{}).value||'',
+        dueDate: (row.querySelector('.ai_due')||{}).value||'',
+        priority: (row.querySelector('.ai_priority')||{}).value||'Medium',
+        status: (row.querySelector('.ai_status')||{}).value||'Open',
+        notes: (row.querySelector('.ai_notes')||{}).value||''
+      });
+    });
+    return actions;
+  }
+
+  window.saveMeetingForm = function(id){
+    const title = (document.getElementById('mf_title')||{}).value||'';
+    const date = (document.getElementById('mf_date')||{}).value||'';
+    if(!title.trim()){ alert('Meeting title is required.'); return; }
+    if(!date){ alert('Meeting date is required.'); return; }
+    const m = {
+      id: id||genId(),
+      title: title.trim(),
+      type: (document.getElementById('mf_type')||{}).value||'Weekly OAC',
+      date: date,
+      location: (document.getElementById('mf_location')||{}).value||'',
+      facilitator: (document.getElementById('mf_facilitator')||{}).value||'',
+      nextMeeting: (document.getElementById('mf_nextMeeting')||{}).value||'',
+      attendees: (document.getElementById('mf_attendees')||{}).value||'',
+      summary: (document.getElementById('mf_summary')||{}).value||'',
+      decisions: (document.getElementById('mf_decisions')||{}).value||'',
+      notes: (document.getElementById('mf_notes')||{}).value||'',
+      actions: collectActions()
+    };
+    const d = getMeetingData();
+    const idx = (d.meetings||[]).findIndex(x=>x.id===id);
+    if(idx>=0) d.meetings[idx]=m; else d.meetings.push(m);
+    saveMeetingData(d);
+    cancelMeetingForm();
+    renderMeetingList();
+    renderMeetingStats();
+  };
+
+  window.cancelMeetingForm = function(){
+    const fa = document.getElementById('meetingFormArea');
+    if(fa) fa.innerHTML = '';
+    _editingMeetingId = null;
+  };
+
+  window.deleteMeeting = function(id){
+    if(!confirm('Delete this meeting and all its action items?')) return;
+    const d = getMeetingData();
+    d.meetings = (d.meetings||[]).filter(m=>m.id!==id);
+    saveMeetingData(d);
+    renderMeetingList();
+    renderMeetingStats();
+  };
+
+  /* ─── OPEN ACTIONS VIEW ─── */
+  window.showOpenActions = function(){
+    const d = getMeetingData();
+    const allActions = (d.meetings||[]).flatMap(m=>(m.actions||[]).map(a=>({...a,_meetingTitle:m.title,_meetingDate:m.date})));
+    const open = allActions.filter(a=>['Open','In Progress'].includes(a.status||'Open'));
+    open.sort((a,b)=>{
+      const pa = {'Critical':0,'High':1,'Medium':2,'Low':3}[a.priority]||2;
+      const pb = {'Critical':0,'High':1,'Medium':2,'Low':3}[b.priority]||2;
+      return pa-pb;
+    });
+    const el = document.getElementById('meetingListArea');
+    if(!el) return;
+    if(!open.length){
+      el.innerHTML = `<div style="text-align:center;padding:30px;color:#22c55e;"><div style="font-size:24pt;">✅</div><div style="margin-top:8px;font-weight:700;">All action items are complete!</div></div>`;
+      return;
+    }
+    el.innerHTML = `<div style="margin-bottom:10px;font-weight:700;color:#f59e0b;font-size:10pt;">⚡ Open Action Items (${open.length})</div>` +
+    open.map(a=>{
+      const overdue = a.dueDate && new Date(a.dueDate)<new Date();
+      const priColor = {'Low':'#64748b','Medium':'#f59e0b','High':'#ef4444','Critical':'#dc2626'}[a.priority||'Medium']||'#f59e0b';
+      const stColor = {'Open':'#f59e0b','In Progress':'#2563eb'}[a.status||'Open']||'#f59e0b';
+      return `<div style="background:#0f172a;border:1px solid ${overdue?'#ef4444':'#334155'};border-radius:7px;padding:10px 14px;margin-bottom:6px;">
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+          <div>
+            <span style="background:${priColor};color:#fff;font-size:6.5pt;font-weight:700;padding:2px 6px;border-radius:3px;margin-right:6px;">${esc(a.priority||'Medium')}</span>
+            <span style="color:${stColor};font-size:7.5pt;font-weight:700;margin-right:8px;">${esc(a.status||'Open')}</span>
+            <span style="color:#e2e8f0;font-size:9pt;">${esc(a.description)}</span>
+          </div>
+          <div style="font-size:8pt;color:#94a3b8;">
+            ${a.assignedTo?`👤 ${esc(a.assignedTo)}`:''}
+            ${a.dueDate?` · 📅 ${overdue?'<span style="color:#ef4444;font-weight:700;">⚠️ OVERDUE - ':'<span style="color:#94a3b8;">Due '}${fmtDate(a.dueDate)}</span>`:''}
+          </div>
+        </div>
+        <div style="font-size:7.5pt;color:#64748b;margin-top:4px;">From: ${esc(a._meetingTitle)} (${fmtDate(a._meetingDate)})</div>
+        ${a.notes?`<div style="font-size:8pt;color:#94a3b8;margin-top:3px;font-style:italic;">${esc(a.notes)}</div>`:''}
+      </div>`;
+    }).join('');
+  };
+
+  /* ─── PRINT SINGLE MEETING MINUTES ─── */
+  window.printMeetingMinutes = function(id){
+    const d = getMeetingData();
+    const m = (d.meetings||[]).find(x=>x.id===id);
+    if(!m) return;
+    const proj = (document.getElementById('projectName')||{}).value||'Project';
+    const comp = {
+      name: (document.getElementById('companyName')||{}).value||'Oncor Concrete',
+      address: (document.getElementById('companyAddress')||{}).value||'',
+      phone: (document.getElementById('companyPhone')||{}).value||'',
+      email: (document.getElementById('companyEmail')||{}).value||''
+    };
+    const attendeeList = (m.attendees||'').split('\n').filter(Boolean);
+    const actions = m.actions||[];
+    const typeColor = {'Pre-Construction':'#7c3aed','Weekly OAC':'#0d9488','Progress Meeting':'#2563eb','Safety Meeting':'#dc2626','Design Review':'#9333ea','Subcontractor Coordination':'#d97706','Owner Update':'#059669','Closeout Meeting':'#475569','Issue Resolution':'#b45309','Other':'#475569'}[m.type||'Other']||'#475569';
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Meeting Minutes — ${esc(m.title)}</title>
+    <style>
+      *{box-sizing:border-box;}
+      body{font-family:Arial,sans-serif;font-size:9pt;color:#111;margin:0;padding:16px 20px;}
+      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${typeColor};padding-bottom:10px;margin-bottom:14px;}
+      .co-name{font-size:13pt;font-weight:700;color:${typeColor};}
+      .badge{background:${typeColor};color:#fff;padding:3px 10px;border-radius:4px;font-size:8pt;font-weight:700;display:inline-block;margin-bottom:4px;}
+      .meta-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;}
+      .meta-cell{background:#f9fafb;border:1px solid #e5e7eb;border-radius:5px;padding:7px 10px;}
+      .meta-cell .label{font-size:7pt;color:#9ca3af;margin-bottom:2px;}
+      .meta-cell .val{font-size:9pt;font-weight:700;color:#111;}
+      .section{margin-bottom:12px;}
+      .section-title{font-size:9pt;font-weight:700;color:${typeColor};border-bottom:1px solid ${typeColor};padding-bottom:3px;margin-bottom:7px;}
+      .attendee-list{display:flex;flex-wrap:wrap;gap:6px;}
+      .attendee{background:#f3f4f6;border:1px solid #e5e7eb;border-radius:4px;padding:4px 8px;font-size:8pt;}
+      table{width:100%;border-collapse:collapse;margin-bottom:10px;}
+      th{background:${typeColor};color:#fff;padding:5px 6px;font-size:7.5pt;text-align:left;}
+      td{padding:4px 6px;font-size:8pt;border-bottom:1px solid #e5e7eb;vertical-align:top;}
+      tr:nth-child(even) td{background:#f9fafb;}
+      .action-overdue td{color:#dc2626!important;}
+      .priority-critical{color:#dc2626;font-weight:700;}
+      .priority-high{color:#ef4444;font-weight:700;}
+      .priority-medium{color:#d97706;}
+      .priority-low{color:#9ca3af;}
+      .status-complete{color:#22c55e;}
+      .status-open{color:#d97706;}
+      .sig-block{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:20px;}
+      .sig-cell{border-top:1px solid #111;padding-top:6px;}
+      .sig-cell .role{font-size:7pt;color:#9ca3af;}
+      .sig-cell .name{font-size:8.5pt;font-weight:700;margin-top:2px;}
+      .footer{margin-top:16px;font-size:7pt;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px;text-align:center;}
+      .text-box{background:#f9fafb;border:1px solid #e5e7eb;border-radius:4px;padding:8px 10px;font-size:8.5pt;white-space:pre-wrap;word-break:break-word;}
+      @media print{button{display:none!important;}}
+    </style></head><body>
+    <div class="hdr">
+      <div><div class="badge">MEETING MINUTES</div><div class="co-name">${esc(comp.name)}</div>
+      <div style="font-size:8pt;color:#555;">${esc(comp.address)}${comp.phone?' · '+esc(comp.phone):''}${comp.email?' · '+esc(comp.email):''}</div></div>
+      <div style="text-align:right;font-size:8.5pt;color:#555;">
+        <div style="font-size:11pt;font-weight:700;color:#111;">${esc(m.title)}</div>
+        <div><span style="background:${typeColor};color:#fff;padding:1px 7px;border-radius:3px;font-size:7.5pt;">${esc(m.type||'Meeting')}</span></div>
+        <div style="margin-top:3px;"><strong>Project:</strong> ${esc(proj)}</div>
+        <div><strong>Printed:</strong> ${new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
+      </div>
+    </div>
+
+    <div class="meta-grid">
+      <div class="meta-cell"><div class="label">Meeting Date</div><div class="val">${fmtDate(m.date)}</div></div>
+      <div class="meta-cell"><div class="label">Location / Platform</div><div class="val">${esc(m.location||'TBD')}</div></div>
+      <div class="meta-cell"><div class="label">Facilitator</div><div class="val">${esc(m.facilitator||'—')}</div></div>
+      <div class="meta-cell"><div class="label">Attendees</div><div class="val">${attendeeList.length} present</div></div>
+      <div class="meta-cell"><div class="label">Action Items</div><div class="val">${actions.length} total · ${actions.filter(a=>['Open','In Progress'].includes(a.status||'Open')).length} open</div></div>
+      <div class="meta-cell"><div class="label">Next Meeting</div><div class="val">${m.nextMeeting?fmtDate(m.nextMeeting):'TBD'}</div></div>
+    </div>
+
+    ${attendeeList.length>0?`<div class="section"><div class="section-title">ATTENDEES</div>
+    <div class="attendee-list">${attendeeList.map(a=>`<div class="attendee">${esc(a.trim())}</div>`).join('')}</div></div>`:''}
+
+    ${m.summary?`<div class="section"><div class="section-title">DISCUSSION / MEETING SUMMARY</div>
+    <div class="text-box">${esc(m.summary)}</div></div>`:''}
+
+    ${m.decisions?`<div class="section"><div class="section-title">KEY DECISIONS MADE</div>
+    <div class="text-box">${esc(m.decisions)}</div></div>`:''}
+
+    ${m.notes?`<div class="section"><div class="section-title">ADDITIONAL NOTES</div>
+    <div class="text-box">${esc(m.notes)}</div></div>`:''}
+
+    ${actions.length>0?`<div class="section"><div class="section-title">ACTION ITEMS (${actions.length})</div>
+    <table>
+      <thead><tr><th>#</th><th>Action Item</th><th>Assigned To</th><th>Due Date</th><th>Priority</th><th>Status</th><th>Notes</th></tr></thead>
+      <tbody>
+        ${actions.map((a,i)=>{
+          const overdue = a.dueDate && new Date(a.dueDate)<new Date() && !['Complete','Cancelled'].includes(a.status||'Open');
+          return `<tr class="${overdue?'action-overdue':''}">
+            <td>${i+1}</td>
+            <td>${esc(a.description)}</td>
+            <td>${esc(a.assignedTo||'—')}</td>
+            <td style="${overdue?'color:#dc2626;font-weight:700;':''}">${fmtDate(a.dueDate)}${overdue?' ⚠️':''}</td>
+            <td class="priority-${(a.priority||'Medium').toLowerCase()}">${esc(a.priority||'Medium')}</td>
+            <td class="status-${(a.status||'Open').toLowerCase().replace(' ','-')}">${esc(a.status||'Open')}</td>
+            <td style="font-size:7.5pt;">${esc(a.notes||'—')}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table></div>`:''}
+
+    <div class="sig-block">
+      <div class="sig-cell"><div class="role">Prepared By</div><div class="name">${esc(comp.name)}</div><div style="margin-top:18px;border-top:1px solid #111;padding-top:3px;font-size:7pt;color:#9ca3af;">Signature / Date</div></div>
+      <div class="sig-cell"><div class="role">Distributed To</div><div class="name">All Attendees</div><div style="margin-top:18px;border-top:1px solid #111;padding-top:3px;font-size:7pt;color:#9ca3af;">Date Distributed</div></div>
+      <div class="sig-cell"><div class="role">Acknowledged By</div><div class="name">GC / Owner Rep</div><div style="margin-top:18px;border-top:1px solid #111;padding-top:3px;font-size:7pt;color:#9ca3af;">Signature / Date</div></div>
+    </div>
+    <div class="footer">Meeting Minutes · ${esc(proj)} · ${esc(comp.name)} · These minutes are the official record of this meeting. Please review and notify ${esc(comp.name)} within 48 hours of any discrepancies.</div>
+    <br><button onclick="window.print()">🖨 Print / Save PDF</button>
+    </body></html>`;
+    const w = window.open('','_blank');
+    if(w){ w.document.write(html); w.document.close(); }
+  };
+
+  /* ─── PRINT ALL MEETINGS REPORT ─── */
+  window.printAllMeetings = function(){
+    const d = getMeetingData();
+    const meetings = (d.meetings||[]).slice().sort((a,b)=>new Date(a.date||0)-new Date(b.date||0));
+    if(!meetings.length){ alert('No meetings to print.'); return; }
+    const proj = (document.getElementById('projectName')||{}).value||'Project';
+    const comp = {
+      name: (document.getElementById('companyName')||{}).value||'Oncor Concrete',
+      address: (document.getElementById('companyAddress')||{}).value||'',
+      phone: (document.getElementById('companyPhone')||{}).value||'',
+      email: (document.getElementById('companyEmail')||{}).value||''
+    };
+    const allActions = meetings.flatMap(m=>(m.actions||[]).map(a=>({...a,_meetingTitle:m.title,_meetingDate:m.date})));
+    const openActions = allActions.filter(a=>['Open','In Progress'].includes(a.status||'Open'));
+    const overdueActions = allActions.filter(a=>{
+      if(!a.dueDate||['Complete','Cancelled'].includes(a.status||'Open')) return false;
+      return new Date(a.dueDate)<new Date();
+    });
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Meeting Log — ${esc(proj)}</title>
+    <style>
+      *{box-sizing:border-box;}
+      body{font-family:Arial,sans-serif;font-size:9pt;color:#111;margin:0;padding:16px 20px;}
+      .hdr{display:flex;justify-content:space-between;border-bottom:3px solid #7c3aed;padding-bottom:10px;margin-bottom:14px;}
+      .badge{background:#7c3aed;color:#fff;padding:3px 10px;border-radius:4px;font-size:8pt;font-weight:700;display:inline-block;margin-bottom:4px;}
+      h1{margin:2px 0;font-size:13pt;color:#7c3aed;}
+      .stats{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
+      .stat{background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:8px 14px;flex:1;text-align:center;min-width:80px;}
+      .stat .v{font-size:12pt;font-weight:700;color:#7c3aed;}
+      .stat .l{font-size:7pt;color:#9ca3af;}
+      table{width:100%;border-collapse:collapse;margin-bottom:14px;}
+      th{background:#7c3aed;color:#fff;padding:5px 6px;font-size:7.5pt;text-align:left;}
+      td{padding:4px 6px;font-size:8pt;border-bottom:1px solid #e5e7eb;vertical-align:top;}
+      tr:nth-child(even) td{background:#f9fafb;}
+      .overdue td{background:#fef2f2!important;color:#dc2626!important;}
+      tfoot td{font-weight:700;border-top:2px solid #7c3aed;}
+      h3{font-size:9.5pt;color:#7c3aed;border-bottom:1px solid #e5e7eb;padding-bottom:4px;margin:14px 0 7px;}
+      .footer{margin-top:16px;font-size:7pt;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px;text-align:center;}
+      @media print{button{display:none!important;}}
+    </style></head><body>
+    <div class="hdr">
+      <div><div class="badge">MEETING LOG — CONFIDENTIAL</div><h1>${esc(comp.name)}</h1>
+      <div style="font-size:8pt;color:#555;">${esc(comp.address)}${comp.phone?' · '+esc(comp.phone):''}${comp.email?' · '+esc(comp.email):''}</div></div>
+      <div style="text-align:right;font-size:8.5pt;color:#555;">
+        <div><strong>Project:</strong> ${esc(proj)}</div>
+        <div><strong>Printed:</strong> ${new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="v">${meetings.length}</div><div class="l">Meetings</div></div>
+      <div class="stat"><div class="v">${allActions.length}</div><div class="l">Total Actions</div></div>
+      <div class="stat"><div class="v" style="color:${openActions.length>0?'#d97706':'#22c55e'}">${openActions.length}</div><div class="l">Open Actions</div></div>
+      <div class="stat"><div class="v" style="color:${overdueActions.length>0?'#dc2626':'#22c55e'}">${overdueActions.length}</div><div class="l">Overdue</div></div>
+      <div class="stat"><div class="v" style="color:#22c55e;">${allActions.filter(a=>a.status==='Complete').length}</div><div class="l">Complete</div></div>
+    </div>
+
+    <h3>MEETING LOG</h3>
+    <table>
+      <thead><tr><th>#</th><th>Date</th><th>Type</th><th>Title</th><th>Location</th><th>Facilitator</th><th>Attendees</th><th>Actions</th><th>Open</th></tr></thead>
+      <tbody>${meetings.map((m,i)=>{
+        const attendeeCount = (m.attendees||'').split('\n').filter(Boolean).length;
+        const openCnt = (m.actions||[]).filter(a=>['Open','In Progress'].includes(a.status||'Open')).length;
+        return `<tr><td>${i+1}</td><td>${fmtDate(m.date)}</td><td>${esc(m.type||'Meeting')}</td><td>${esc(m.title)}</td><td>${esc(m.location||'—')}</td><td>${esc(m.facilitator||'—')}</td><td style="text-align:center;">${attendeeCount}</td><td style="text-align:center;">${(m.actions||[]).length}</td><td style="text-align:center;${openCnt>0?'color:#d97706;font-weight:700;':''}">${openCnt}</td></tr>`;
+      }).join('')}</tbody>
+    </table>
+
+    ${openActions.length>0?`<h3>OPEN ACTION ITEMS (${openActions.length})</h3>
+    <table>
+      <thead><tr><th>#</th><th>Action</th><th>Assigned To</th><th>Due Date</th><th>Priority</th><th>Status</th><th>Meeting Source</th></tr></thead>
+      <tbody>${openActions.map((a,i)=>{
+        const overdue = a.dueDate && new Date(a.dueDate)<new Date();
+        return `<tr class="${overdue?'overdue':''}">
+          <td>${i+1}</td><td>${esc(a.description)}</td><td>${esc(a.assignedTo||'—')}</td>
+          <td>${fmtDate(a.dueDate)}${overdue?' ⚠️':''}</td><td>${esc(a.priority||'Medium')}</td>
+          <td>${esc(a.status||'Open')}</td><td style="font-size:7.5pt;">${esc(a._meetingTitle)} (${fmtDate(a._meetingDate)})</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`:''}
+
+    <div class="footer">Meeting Log · ${esc(proj)} · ${esc(comp.name)} · CONFIDENTIAL — INTERNAL USE ONLY</div>
+    <br><button onclick="window.print()">🖨 Print / Save PDF</button>
+    </body></html>`;
+    const w = window.open('','_blank');
+    if(w){ w.document.write(html); w.document.close(); }
+  };
+
+  /* ─── EXPOSE STATS FOR PROJECT STATUS CARD ─── */
+  window._getMeetingStats = function(){
+    const d = getMeetingData();
+    const meetings = d.meetings||[];
+    const allActions = meetings.flatMap(m=>m.actions||[]);
+    const openActions = allActions.filter(a=>['Open','In Progress'].includes(a.status||'Open'));
+    const overdueActions = allActions.filter(a=>{
+      if(!a.dueDate||['Complete','Cancelled'].includes(a.status||'Open')) return false;
+      return new Date(a.dueDate)<new Date();
+    });
+    return { totalMeetings: meetings.length, totalActions: allActions.length, openActions: openActions.length, overdueActions: overdueActions.length };
+  };
+
+  /* ─── KEYBOARD SHORTCUT Ctrl+Shift+G ─── */
+  document.addEventListener('keydown', function(e){
+    if(e.ctrlKey && e.shiftKey && (e.key==='G'||e.key==='g')){
+      e.preventDefault();
+      const modal = document.getElementById('meetingLogModal');
+      if(modal && modal.style.display!=='none') closeMeetingLog(); else showMeetingLog();
+    }
+  });
+
+  /* ─── INJECT SIDEBAR BUTTON ─── */
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){
+      const poBtn = document.querySelector('button[onclick*="showPOTracker"]');
+      if(!poBtn) return;
+      const newRow = document.createElement('div');
+      newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML = `<button class="action-btn secondary" onclick="showMeetingLog()" title="Meeting Minutes & Action Items Log — Document every meeting, assign action items, track to completion. (Ctrl+Shift+G)" style="background:rgba(124,58,237,0.1);border-color:rgba(124,58,237,0.3);color:#a78bfa;">📋 Meetings</button>`;
+      const parentRow = poBtn.closest('div');
+      if(parentRow && parentRow.parentNode) parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 2000);
+  });
+
+})();
+// ==================== END MEETING MINUTES & ACTION ITEMS LOG — Zeus ⚡ Session #63 ====================
+</script>
