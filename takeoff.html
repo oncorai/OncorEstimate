@@ -147556,3 +147556,343 @@ td{padding:6px 8px;border-bottom:1px solid #e2e8f0;}
 })();
 // ==================== END JOB COST TRACKER — Zeus ⚡ Session #56 ====================
 </script>
+
+<script>
+// ==================== SUBCONTRACTOR MANAGEMENT TRACKER — Zeus ⚡ Session #57 ====================
+(function() {
+  'use strict';
+
+  // ─── Storage helpers ───
+  function getProj() {
+    const pf = document.getElementById('projectName');
+    return (pf && pf.value.trim()) ? pf.value.trim() : 'default';
+  }
+  function getSubs() {
+    try { return JSON.parse(localStorage.getItem('oncor_subs_v1_' + getProj())) || []; }
+    catch(e) { return []; }
+  }
+  function saveSubs(arr) {
+    localStorage.setItem('oncor_subs_v1_' + getProj(), JSON.stringify(arr));
+  }
+  function genId() { return 'sub_' + Date.now() + '_' + Math.random().toString(36).slice(2,7); }
+  function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function fmtC(n) {
+    if (!n && n!==0) return '—';
+    return new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:0,maximumFractionDigits:0}).format(n);
+  }
+  function today() { return new Date().toISOString().slice(0,10); }
+  function daysUntil(dateStr) {
+    if (!dateStr) return null;
+    const diff = (new Date(dateStr) - new Date(today())) / 86400000;
+    return Math.ceil(diff);
+  }
+  function certStatus(dateStr) {
+    const d = daysUntil(dateStr);
+    if (d === null) return { label: 'No Date', cls: 'gray' };
+    if (d < 0) return { label: 'EXPIRED', cls: 'red' };
+    if (d <= 30) return { label: d + 'd', cls: 'amber' };
+    return { label: 'OK', cls: 'green' };
+  }
+
+  const SCOPES = ['Rebar Placement','Rebar Supply & Place','Saw Cutting','Concrete Pump','Epoxy Flooring','Polished Concrete','Post-Tension','Demolition','Earthwork / Grading','Utility Rough-In','Electrical','Plumbing','HVAC','Structural Steel','Masonry','Roofing','Framing','Drywall','Painting','Landscaping','Site Concrete','Other'];
+  const PAYMENT_STATUS = ['Not Started','In Progress','Partially Paid','Paid in Full','Disputed','Withheld'];
+  const WAIVER_STATUS = ['None','Conditional Sent','Conditional Received','Unconditional Sent','Unconditional Received'];
+
+  // ─── Build modal ───
+  function buildModal() {
+    const overlay = document.createElement('div');
+    overlay.id = 'oncor-sub-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99990;display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = `
+      <div id="oncor-sub-box" style="background:#0f172a;border:1px solid #334155;border-radius:12px;width:min(960px,96vw);max-height:88vh;display:flex;flex-direction:column;font-family:system-ui,sans-serif;color:#e2e8f0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #1e293b;">
+          <span style="font-size:1.05rem;font-weight:700;color:#38bdf8;">🤝 Subcontractor Management</span>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button id="sub-print-btn" style="background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:0.78rem;">🖨 Sub Schedule</button>
+            <button id="sub-add-btn" style="background:#10b981;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:0.78rem;">+ Add Sub</button>
+            <button onclick="document.getElementById('oncor-sub-overlay').remove()" style="background:transparent;border:none;color:#94a3b8;cursor:pointer;font-size:1.2rem;">✕</button>
+          </div>
+        </div>
+        <div id="sub-stats-bar" style="display:flex;gap:10px;padding:10px 18px;border-bottom:1px solid #1e293b;flex-wrap:wrap;"></div>
+        <div id="sub-list" style="flex:1;overflow-y:auto;padding:14px 18px;"></div>
+        <div id="sub-form-wrap" style="display:none;padding:14px 18px;border-top:1px solid #1e293b;background:#0f172a;max-height:55vh;overflow-y:auto;"></div>
+      </div>
+    `;
+    overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
+    return overlay;
+  }
+
+  function renderStats() {
+    const subs = getSubs();
+    const totalContract = subs.reduce((s,x)=>s+(x.contractAmt||0),0);
+    const totalPaid = subs.reduce((s,x)=>s+(x.amtPaid||0),0);
+    const totalOutstanding = totalContract - totalPaid;
+    const expiredCOIs = subs.filter(x=>{
+      const ds = [x.glExpiry,x.wcExpiry,x.autoExpiry].filter(Boolean);
+      return ds.some(d=>daysUntil(d)<0);
+    }).length;
+    const urgentCOIs = subs.filter(x=>{
+      const ds = [x.glExpiry,x.wcExpiry,x.autoExpiry].filter(Boolean);
+      return ds.some(d=>{ const u=daysUntil(d); return u>=0&&u<=30; });
+    }).length;
+    const bar = document.getElementById('sub-stats-bar');
+    if (!bar) return;
+    const card = (label,val,color)=>`<div style="background:#1e293b;border-radius:8px;padding:8px 14px;min-width:130px;"><div style="font-size:0.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;">${label}</div><div style="font-size:1.15rem;font-weight:700;color:${color||'#38bdf8'};">${val}</div></div>`;
+    bar.innerHTML =
+      card('Subs on Job', subs.length, '#38bdf8') +
+      card('Total Subcontracted', fmtC(totalContract), '#10b981') +
+      card('Total Paid Out', fmtC(totalPaid), '#a78bfa') +
+      card('Outstanding', fmtC(totalOutstanding), totalOutstanding>0?'#f59e0b':'#10b981') +
+      (expiredCOIs>0?card('Expired COIs ⚠️', expiredCOIs, '#ef4444'):'') +
+      (urgentCOIs>0?card('COI Expiring Soon', urgentCOIs, '#f97316'):'');
+  }
+
+  function renderList() {
+    const subs = getSubs();
+    const list = document.getElementById('sub-list');
+    if (!list) return;
+    if (!subs.length) {
+      list.innerHTML = `<div style="text-align:center;color:#64748b;padding:40px;">No subcontractors added yet. Click "+ Add Sub" to start.</div>`;
+      return;
+    }
+    const rows = subs.map((s,i)=>{
+      const gl = certStatus(s.glExpiry);
+      const wc = certStatus(s.wcExpiry);
+      const au = certStatus(s.autoExpiry);
+      const clrMap = {green:'#10b981',amber:'#f59e0b',red:'#ef4444',gray:'#64748b'};
+      const badge = (st)=>`<span style="background:${clrMap[st.cls]}22;color:${clrMap[st.cls]};border:1px solid ${clrMap[st.cls]}44;border-radius:4px;padding:1px 6px;font-size:0.65rem;font-weight:700;">${st.label}</span>`;
+      const payPct = s.contractAmt ? Math.round((s.amtPaid||0)/s.contractAmt*100) : 0;
+      const payBar = s.contractAmt ? `<div style="background:#1e293b;border-radius:3px;height:5px;width:100%;margin-top:3px;"><div style="background:${payPct>=100?'#10b981':payPct>=50?'#f59e0b':'#3b82f6'};border-radius:3px;height:5px;width:${Math.min(payPct,100)}%;"></div></div>` : '';
+      return `<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px 14px;margin-bottom:8px;">
+        <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:200px;">
+            <div style="font-weight:700;font-size:0.95rem;color:#f1f5f9;">${escH(s.name)}</div>
+            <div style="font-size:0.75rem;color:#94a3b8;">${escH(s.scope||'—')}${s.license?' · Lic: '+escH(s.license):''}</div>
+            ${s.contact?`<div style="font-size:0.72rem;color:#64748b;margin-top:2px;">${escH(s.contact)}${s.phone?' · '+escH(s.phone):''}</div>`:''}
+          </div>
+          <div style="min-width:130px;">
+            <div style="font-size:0.68rem;color:#94a3b8;text-transform:uppercase;">Contract / Paid</div>
+            <div style="font-size:0.9rem;font-weight:700;color:#10b981;">${fmtC(s.contractAmt||0)}</div>
+            <div style="font-size:0.75rem;color:#a78bfa;">Paid: ${fmtC(s.amtPaid||0)}</div>
+            ${payBar}
+            <div style="font-size:0.65rem;color:#64748b;">${payPct}% paid · ${fmtC((s.contractAmt||0)-(s.amtPaid||0))} out</div>
+          </div>
+          <div style="min-width:160px;">
+            <div style="font-size:0.68rem;color:#94a3b8;text-transform:uppercase;margin-bottom:3px;">Insurance COIs</div>
+            <div style="display:flex;flex-direction:column;gap:2px;">
+              <div style="font-size:0.7rem;">GL: ${badge(gl)} ${s.glExpiry?escH(s.glExpiry):''}</div>
+              <div style="font-size:0.7rem;">WC: ${badge(wc)} ${s.wcExpiry?escH(s.wcExpiry):''}</div>
+              <div style="font-size:0.7rem;">Auto: ${badge(au)} ${s.autoExpiry?escH(s.autoExpiry):''}</div>
+            </div>
+          </div>
+          <div style="min-width:150px;">
+            <div style="font-size:0.68rem;color:#94a3b8;text-transform:uppercase;">Payment / Lien Waiver</div>
+            <div style="font-size:0.75rem;color:#cbd5e1;margin-top:3px;">${escH(s.paymentStatus||'—')}</div>
+            <div style="font-size:0.7rem;color:#64748b;margin-top:2px;">Waiver: ${escH(s.waiverStatus||'None')}</div>
+            ${s.retainage?`<div style="font-size:0.68rem;color:#f59e0b;">Retainage: ${fmtC(s.retainage)}</div>`:''}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
+            <button onclick="editSub('${s.id}')" style="background:transparent;border:1px solid #334155;color:#94a3b8;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:0.7rem;">✏️</button>
+            <button onclick="deleteSub('${s.id}')" style="background:transparent;border:1px solid #ef444433;color:#ef4444;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:0.7rem;">🗑</button>
+          </div>
+        </div>
+        ${s.notes?`<div style="margin-top:8px;font-size:0.72rem;color:#64748b;border-top:1px solid #334155;padding-top:6px;">📝 ${escH(s.notes)}</div>`:''}
+      </div>`;
+    }).join('');
+    list.innerHTML = rows;
+  }
+
+  function showForm(sub) {
+    const wrap = document.getElementById('sub-form-wrap');
+    if (!wrap) return;
+    const editing = !!sub;
+    const s = sub || { id: genId(), name:'', scope:'', contact:'', phone:'', email:'', license:'', contractAmt:'', amtPaid:'', retainage:'', glExpiry:'', wcExpiry:'', autoExpiry:'', paymentStatus:'Not Started', waiverStatus:'None', notes:'' };
+    wrap.style.display = 'block';
+    wrap.innerHTML = `
+      <div style="font-size:0.85rem;font-weight:700;color:#38bdf8;margin-bottom:10px;">${editing?'Edit':'New'} Subcontractor</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">
+        ${fld('sub-s-name','Company Name','text',s.name,'',true)}
+        ${fld('sub-s-scope','Scope of Work','select',s.scope,SCOPES.map(x=>`<option value="${x}"${x===s.scope?' selected':''}>${x}</option>`).join(''))}
+        ${fld('sub-s-contact','Contact Name','text',s.contact)}
+        ${fld('sub-s-phone','Phone','tel',s.phone)}
+        ${fld('sub-s-email','Email','email',s.email)}
+        ${fld('sub-s-license','License #','text',s.license)}
+        ${fld('sub-s-contract','Contract Amount ($)','number',s.contractAmt)}
+        ${fld('sub-s-paid','Amount Paid ($)','number',s.amtPaid)}
+        ${fld('sub-s-retainage','Retainage Held ($)','number',s.retainage)}
+        ${fld('sub-s-gl','GL Cert Expiry','date',s.glExpiry)}
+        ${fld('sub-s-wc','WC Cert Expiry','date',s.wcExpiry)}
+        ${fld('sub-s-auto','Auto Cert Expiry','date',s.autoExpiry)}
+        ${fld('sub-s-pay','Payment Status','select',s.paymentStatus,PAYMENT_STATUS.map(x=>`<option value="${x}"${x===s.paymentStatus?' selected':''}>${x}</option>`).join(''))}
+        ${fld('sub-s-waiver','Lien Waiver Status','select',s.waiverStatus,WAIVER_STATUS.map(x=>`<option value="${x}"${x===s.waiverStatus?' selected':''}>${x}</option>`).join(''))}
+      </div>
+      <div style="margin-top:10px;">
+        <label style="font-size:0.72rem;color:#94a3b8;">Notes</label>
+        <textarea id="sub-s-notes" rows="2" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px;font-size:0.78rem;box-sizing:border-box;">${escH(s.notes||'')}</textarea>
+      </div>
+      <input type="hidden" id="sub-s-id" value="${s.id}">
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button onclick="saveSub()" style="background:#10b981;color:#fff;border:none;border-radius:6px;padding:7px 18px;cursor:pointer;font-size:0.8rem;">💾 Save</button>
+        <button onclick="cancelSubForm()" style="background:transparent;border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:0.8rem;">Cancel</button>
+      </div>
+    `;
+  }
+
+  function fld(id,label,type,val,inner,req) {
+    if (type==='select') return `<div><label for="${id}" style="font-size:0.68rem;color:#94a3b8;display:block;margin-bottom:2px;">${label}</label><select id="${id}" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:5px;font-size:0.78rem;">${inner}</select></div>`;
+    return `<div><label for="${id}" style="font-size:0.68rem;color:#94a3b8;display:block;margin-bottom:2px;">${label}${req?' *':''}</label><input id="${id}" type="${type}" value="${escH(val||'')}" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:5px;font-size:0.78rem;box-sizing:border-box;"></div>`;
+  }
+
+  function g(id) { const el=document.getElementById(id); return el?el.value.trim():''; }
+  function gn(id) { const v=parseFloat(g(id)); return isNaN(v)?0:v; }
+
+  window.saveSub = function() {
+    const name = g('sub-s-name');
+    if (!name) { alert('Company name required.'); return; }
+    const id = g('sub-s-id') || genId();
+    const subs = getSubs();
+    const idx = subs.findIndex(x=>x.id===id);
+    const obj = { id, name, scope:g('sub-s-scope'), contact:g('sub-s-contact'), phone:g('sub-s-phone'), email:g('sub-s-email'), license:g('sub-s-license'), contractAmt:gn('sub-s-contract'), amtPaid:gn('sub-s-paid'), retainage:gn('sub-s-retainage'), glExpiry:g('sub-s-gl'), wcExpiry:g('sub-s-wc'), autoExpiry:g('sub-s-auto'), paymentStatus:g('sub-s-pay'), waiverStatus:g('sub-s-waiver'), notes:g('sub-s-notes') };
+    if (idx>=0) subs[idx]=obj; else subs.push(obj);
+    saveSubs(subs);
+    cancelSubForm();
+    renderStats();
+    renderList();
+    showSubToast(idx>=0?'Subcontractor updated.':'Subcontractor added.');
+  };
+
+  window.editSub = function(id) {
+    const subs = getSubs();
+    const sub = subs.find(x=>x.id===id);
+    if (sub) showForm(sub);
+  };
+
+  window.deleteSub = function(id) {
+    if (!confirm('Delete this subcontractor?')) return;
+    const subs = getSubs().filter(x=>x.id!==id);
+    saveSubs(subs);
+    renderStats();
+    renderList();
+  };
+
+  window.cancelSubForm = function() {
+    const wrap = document.getElementById('sub-form-wrap');
+    if (wrap) { wrap.style.display='none'; wrap.innerHTML=''; }
+  };
+
+  function printSubSchedule() {
+    const subs = getSubs();
+    const proj = getProj();
+    const comp = {
+      name: (document.getElementById('companyName')||{}).value||'Oncor Concrete',
+      address: (document.getElementById('companyAddress')||{}).value||'El Paso, TX',
+      phone: (document.getElementById('companyPhone')||{}).value||'',
+      email: (document.getElementById('companyEmail')||{}).value||''
+    };
+    const totalContract = subs.reduce((s,x)=>s+(x.contractAmt||0),0);
+    const totalPaid = subs.reduce((s,x)=>s+(x.amtPaid||0),0);
+    const clrMap = {green:'#16a34a',amber:'#d97706',red:'#dc2626',gray:'#6b7280'};
+    const certBadge = (st)=>`<span style="background:${clrMap[st.cls]}22;color:${clrMap[st.cls]};border:1px solid ${clrMap[st.cls]}66;border-radius:3px;padding:1px 5px;font-size:7pt;font-weight:700;">${st.label}</span>`;
+    const rows = subs.map(s=>`
+      <tr>
+        <td style="font-weight:600;">${escH(s.name)}<br><span style="font-size:7pt;color:#6b7280;">${escH(s.scope||'')}</span></td>
+        <td>${escH(s.contact||'—')}<br><span style="font-size:7pt;color:#6b7280;">${escH(s.phone||'')}${s.email?' · '+escH(s.email):''}</span></td>
+        <td style="text-align:right;">${fmtC(s.contractAmt||0)}</td>
+        <td style="text-align:right;">${fmtC(s.amtPaid||0)}</td>
+        <td style="text-align:right;color:${(s.contractAmt||0)-(s.amtPaid||0)>0?'#b45309':'#16a34a'};">${fmtC((s.contractAmt||0)-(s.amtPaid||0))}</td>
+        <td style="font-size:7.5pt;">${certBadge(certStatus(s.glExpiry))} GL<br>${certBadge(certStatus(s.wcExpiry))} WC<br>${certBadge(certStatus(s.autoExpiry))} Auto</td>
+        <td style="font-size:7.5pt;">${escH(s.paymentStatus||'—')}<br><span style="color:#6b7280;">${escH(s.waiverStatus||'None')}</span></td>
+      </tr>`).join('');
+    const html = `<!DOCTYPE html><html><head><title>Subcontractor Schedule — ${escH(proj)}</title>
+    <style>
+      body{font-family:Arial,sans-serif;font-size:9pt;color:#1a1a1a;margin:24px;}
+      h1{font-size:14pt;margin:0;}h2{font-size:10pt;margin:4px 0;}
+      table{width:100%;border-collapse:collapse;margin-top:14px;}
+      th{background:#1e3a5f;color:#fff;padding:5px 7px;font-size:7.5pt;text-align:left;}
+      td{padding:5px 7px;border-bottom:1px solid #e5e7eb;vertical-align:top;}
+      tr:nth-child(even) td{background:#f8fafc;}
+      .total-row td{font-weight:700;background:#f1f5f9;border-top:2px solid #1e3a5f;}
+      .stat-card{display:inline-block;background:#f1f5f9;border-radius:6px;padding:8px 14px;margin:4px;min-width:120px;text-align:center;}
+      .stat-label{font-size:7pt;color:#6b7280;text-transform:uppercase;}
+      .stat-value{font-size:12pt;font-weight:700;color:#1e3a5f;}
+      @media print{body{margin:10px;}}
+    </style></head><body>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1e3a5f;padding-bottom:8px;margin-bottom:10px;">
+      <div><h1>${escH(comp.name)}</h1><div style="font-size:8pt;color:#6b7280;">${escH(comp.address)}${comp.phone?' · '+escH(comp.phone):''}${comp.email?' · '+escH(comp.email):''}</div></div>
+      <div style="text-align:right;"><div style="font-size:11pt;font-weight:700;color:#1e3a5f;">SUBCONTRACTOR SCHEDULE</div><div style="font-size:8pt;color:#6b7280;">Project: ${escH(proj)} · Printed: ${new Date().toLocaleDateString()}</div></div>
+    </div>
+    <div>
+      <div class="stat-card"><div class="stat-label">Subs</div><div class="stat-value">${subs.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Total Subcontracted</div><div class="stat-value">${fmtC(totalContract)}</div></div>
+      <div class="stat-card"><div class="stat-label">Total Paid Out</div><div class="stat-value">${fmtC(totalPaid)}</div></div>
+      <div class="stat-card"><div class="stat-label">Outstanding</div><div class="stat-value" style="color:${totalContract-totalPaid>0?'#b45309':'#16a34a'};">${fmtC(totalContract-totalPaid)}</div></div>
+    </div>
+    <table>
+      <thead><tr><th>Sub / Scope</th><th>Contact</th><th style="text-align:right;">Contract</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Outstanding</th><th>Insurance COIs</th><th>Status / Waiver</th></tr></thead>
+      <tbody>${rows}
+        <tr class="total-row"><td colspan="2">TOTALS</td><td style="text-align:right;">${fmtC(totalContract)}</td><td style="text-align:right;">${fmtC(totalPaid)}</td><td style="text-align:right;">${fmtC(totalContract-totalPaid)}</td><td colspan="2"></td></tr>
+      </tbody>
+    </table>
+    <div style="text-align:center;font-size:6.5pt;color:#9ca3af;margin-top:14px;border-top:1px solid #e5e7eb;padding-top:8px;">${escH(comp.name)} · Subcontractor Schedule · ${escH(proj)} · Printed: ${new Date().toLocaleDateString()}<br>CONFIDENTIAL — INTERNAL USE ONLY</div>
+    <div style="text-align:center;margin-top:6px;"><button onclick="window.print()" style="padding:5px 14px;background:#1e3a5f;color:#fff;border:none;border-radius:4px;cursor:pointer;">🖨 Print / Save PDF</button></div>
+    </body></html>`;
+    const win = window.open('','_blank','width=1050,height=700');
+    if (!win) { alert('Pop-up blocked.'); return; }
+    win.document.write(html);
+    win.document.close();
+  }
+
+  function showSubToast(msg) {
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;color:#10b981;border:1px solid #334155;border-radius:8px;padding:10px 20px;font-size:0.82rem;z-index:999999;font-weight:600;pointer-events:none;';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(()=>t.remove(), 2200);
+  }
+
+  function showSubTracker() {
+    const existing = document.getElementById('oncor-sub-overlay');
+    if (existing) { existing.remove(); return; }
+    const modal = buildModal();
+    document.body.appendChild(modal);
+    renderStats();
+    renderList();
+    document.getElementById('sub-add-btn').addEventListener('click', ()=>showForm(null));
+    document.getElementById('sub-print-btn').addEventListener('click', printSubSchedule);
+  }
+
+  // ─── Keyboard shortcut Ctrl+Shift+U ───
+  document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey||e.metaKey) && e.shiftKey && (e.key==='U'||e.key==='u')) {
+      e.preventDefault();
+      showSubTracker();
+    }
+  });
+
+  // ─── Sidebar button (inject after Job Costs button) ───
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      const jcBtn = document.querySelector('button[onclick*="showJobCostTracker"]');
+      if (!jcBtn) return;
+      const newRow = document.createElement('div');
+      newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML = `<button class="action-btn secondary" onclick="showSubTracker()" title="Subcontractor Management — Track subs by scope, contract amount, insurance COIs, payment status, and lien waiver status. Print sub schedule for GC. (Ctrl+Shift+U)" style="background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.3);color:#10b981;">🤝 Subcontractors</button>`;
+      const parentRow = jcBtn.closest('div');
+      if (parentRow && parentRow.parentNode) parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 1300);
+  });
+
+  window.showSubTracker = showSubTracker;
+
+  // ─── Expose stats for Project Status Card ───
+  window._getSubStats = function() {
+    const subs = getSubs();
+    const totalContract = subs.reduce((s,x)=>s+(x.contractAmt||0),0);
+    const totalPaid = subs.reduce((s,x)=>s+(x.amtPaid||0),0);
+    const expiredCOIs = subs.filter(x=>[x.glExpiry,x.wcExpiry,x.autoExpiry].filter(Boolean).some(d=>daysUntil(d)<0)).length;
+    return { count:subs.length, totalContract, totalPaid, outstanding:totalContract-totalPaid, expiredCOIs };
+  };
+
+})();
+// ==================== END SUBCONTRACTOR MANAGEMENT TRACKER — Zeus ⚡ Session #57 ====================
+</script>
