@@ -1,5 +1,57 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 1, 2026 - 21:45 UTC (Overnight Cron #80)
+**Status:** ✅ PRE-POUR INSPECTION & READINESS CHECKLIST added (+493 lines)
+
+### What Was Added:
+
+**✅ Pre-Pour Inspection & Readiness Checklist (Alt+K):**
+- New `✅ Pre-Pour Checklist` button injected in sidebar below Waste & Volume Log
+- `Alt+K` keyboard shortcut opens/toggles the modal
+- **Purpose:** Document every go/no-go decision before a pour — the formal inspection record that proves JFS checked every critical item before ordering concrete. On commercial jobs, GC supers and special inspectors sign off pre-pour. This gives JFS a professional, ACI/ASTM-compliant checklist.
+
+**9 Checklist Sections (56 items total):**
+1. 🏔️ **Subgrade & Formwork** (10 items) — compaction, vapor barrier, form dimensions, bracing, release agent, sleeves, grade pins, no standing water
+2. 🔩 **Rebar & Embedded Items** (10 items) — size/spacing per drawings, cover/chairs, lap splices, dowels, WWR position, embeds secured, fiber confirmed, special inspection sign-off
+3. 📏 **Joint Layout & Saw Cutting Plan** (5 items) — control joints staked, isolation joints at columns, construction joints, expansion filler, saw crew scheduled
+4. 🧪 **Mix Design & Batch Plant** (7 items) — approved mix design, submittal approved, order confirmed, delivery time, truck interval, backup plant, w/cm ratio per exposure class
+5. 🌤️ **Weather & Environmental** (8 items) — forecast clear, ACI 305R (>90°F), ACI 306R (<40°F), wind speed, evaporation rate calculated, ice/blankets available, pour timing
+6. 🚜 **Equipment & Crew** (9 items) — pump confirmed, vibrators on-site, trowels/screed confirmed, crew count, foreman on-site, first aid/wash station
+7. 🔬 **QC & Testing** (7 items) — ACI-certified tech scheduled, test equipment on-site, cylinder curing, testing lab notified, special inspection program, ticket log ready
+8. 🦺 **Safety & Site Access** (7 items) — barricades, PPE, burn wash station, SDS on-site, emergency contacts, truck access, toolbox talk complete
+9. 📋 **Notifications & Approvals** (7 items) — GC notified, owner notified, city inspector, rebar inspection signed, EOR approved, open RFIs answered, submittals approved
+
+**Checklist Logic:**
+- Each item: ✅ OK / ❌ Not OK / — N/A (3-way toggle)
+- Completion % auto-calculated excluding N/A items
+- Color-coded progress bar (red <70%, amber 70-90%, green ≥90%)
+- Failed items (❌) listed prominently in summary card
+- Go/No-Go Decision: Status (Go Approved / Hold / No Go / Postponed / Completed), Authorized By, Decision Notes
+
+**Record List View:**
+- Stats bar: Total Checklists / ✅ Approved Go / ⚠️ On Hold / 🚫 No Go / ✔ Completed
+- Per-card: Pour name, date, first truck time, element type, grid location, inspector, weather, ordered yd³/PSI
+- Completion progress bar + failed items callout
+- Edit / Print / Delete per record
+
+**Printable Outputs:**
+- **Individual Checklist Record** — company header, 9-cell meta grid (pour name/date/first truck/element/yd³-PSI/inspector/location/plant/weather), Go/No-Go status banner (color-coded), Notes box, all 9 sections with ✅/❌/N/A per item (❌ rows highlighted red), **3-column signature block** (Inspector/Foreman + GC/Owner Rep Authorization + Special Inspector cert #), standards footer (ACI 302.1R, 305R, 306R, 318-19, ASTM C94, C172, OSHA 1926)
+- **Full Project Inspection Log** — all checklists in one table: Pour Name/Date/Element/Qty-PSI/Completion %/Failed Items/Status — CONFIDENTIAL footer
+
+**Integration:**
+- `window._getPPIRStats()` exposed for Project Status Card
+- Returns: total, go, noGo
+- localStorage per project: `oncor_ppir_v1_[projectname]`
+
+**Why this matters:** On any commercial concrete pour, a missed checklist item is a potential disaster. Rebar chairs missing = slab fails 28-day breaks. Formwork bracing inadequate = blowout. Water in the pour area = rejected load. With this tool, JFS works through a systematic 56-item pre-pour inspection before every pour, documents it, gets a signature, and has a paper trail showing due diligence. If there's ever a dispute about quality ("you didn't check the rebar before pouring"), JFS has a signed record showing every item was verified. Also double-checks weather, batch plant confirmation, and QC setup — the items that get missed when rushing.
+
+**Commits:**
+- 605ec85: ✅ Pre-Pour Inspection & Readiness Checklist (Alt+K) (+493 lines) [Session #80]
+
+**Total Lines:** ~159,783 | **New Alt+ Shortcuts:** Alt+K (Pre-Pour Checklist)
+
+---
+
 ## 🗂️📊🧱 SESSION: Apr 1, 2026 - 20:36 UTC (Overnight Cron #77–79)
 **Status:** ✅ CORRESPONDENCE LOG + CTC FORECAST + WASTE RECONCILIATION added (+1,042 lines total)
 
