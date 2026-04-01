@@ -1,5 +1,121 @@
 # Overnight Build Tasks - 2026-02-14
 
+## 📇 SESSION: Apr 1, 2026 - 12:12 UTC (Overnight Cron #69)
+**Status:** ✅ CLIENT & GC CONTACT BOOK added (+408 lines)
+
+### What Was Added:
+
+**📇 Client & GC Contact Book (Alt+B):**
+- New `📇 Contact Book` button injected in sidebar below Bid Pipeline
+- `Alt+B` keyboard shortcut opens/toggles the contact book modal
+- **Purpose:** A CRM-style contact manager for all GCs, owners, architects, suppliers, and relationships. Track who you know, how warm the relationship is, when you last talked, and who needs follow-up.
+
+**Stats Bar (live):**
+- Total Contacts / Active / General Contractors / Owners/Developers / Prospects/Leads / Suppliers
+
+**Contact Form (12 fields):**
+- Contact Name (required), Company / Organization, Title / Role
+- Phone, Email, City / Office Location
+- Contact Type (12 types: General Contractor, Subcontractor, Owner/Developer, Architect, Structural Engineer, Civil Engineer, Supplier/Vendor, Batch Plant, Inspector/Testing Lab, City/Municipality, Bonding/Insurance, Other)
+- Relationship Status (6: Active, Prospect, Warm Lead, Past Client, Not a Fit, Inactive)
+- How We Met / Source (8 options: Referral, Bid Board, Cold Outreach, Networking Event, Job Site, Online/Website, Repeat Client, Other)
+- Contractor License #
+- Last Contact Date + Next Follow-Up Date
+- Bid History / Projects Bid Together (e.g. "Bid 3 jobs 2025 — won Mesa Verde Apts")
+- Notes / Relationship Notes
+
+**Contact List View:**
+- Sorted: Active first → Warm Lead → Prospect → others, then alphabetical by company
+- Per-card: name + company + title / type badge (color-coded by type) + status badge + source tag / phone + email + city + license / Bid history note / Last contact date with "90d ago ⚠️" staleness alert / Next follow-up date
+- Search by name, company, phone, email, title, notes
+- Filter by Contact Type + Relationship Status
+- Edit (✏️), Delete (🗑) per card
+
+**Printable Contact Directory:**
+- Company header (name, phone, email)
+- CONTACT DIRECTORY badge + generated date + total count/active summary
+- **Grouped by Contact Type** — each type gets its own section with header
+- Per section table: Name / Company / Title / Phone / Email / Status / Notes
+- CONFIDENTIAL — INTERNAL USE ONLY footer
+
+**Staleness Alert Logic:**
+- If last contact was >90 days ago: red "Xd ago ⚠️" badge
+- If last contact was 30-90 days ago: amber "Xd ago" badge
+- Helps JFS see which relationships need nurturing
+
+**Integration:**
+- `window._getContactStats()` exposed for future Project Status Card integration
+- Returns: total, active, prospects, overdueFollowUp
+- localStorage global key `oncor_contacts_v1` — cross-project (contacts not per-project)
+
+**Why this matters:** JFS bids 3-5 jobs per week across multiple GCs. Without a contact book, relationships are in his phone or his head. With this, he can track every GC he's bid with, note their preferred concrete specs, flag warm leads, and see at a glance who he hasn't talked to in 3 months. "I've got 8 active GC relationships, 4 warm leads, and 3 batch plant contacts." Over time the notes field builds intel — "Sundt PM Mike Rodriguez likes early morning pours. Beck Group always wants 4000 PSI fiber mix. Martin Marietta batch plant — talk to Carlos for priority scheduling."
+
+**Commits:**
+- 57562a1: 📇 Client & GC Contact Book (Alt+B) (+408 lines) [Session #69]
+
+**Total Lines:** ~153,934 | **New Alt+ Shortcuts:** Alt+B (Contact Book)
+
+---
+
+## 📈 SESSION: Apr 1, 2026 - 11:12 UTC (Overnight Cron #68)
+**Status:** ✅ BID PIPELINE & WIN/LOSS TRACKER added (+341 lines)
+
+### What Was Added:
+
+**📈 Bid Pipeline & Win/Loss Tracker (Alt+P):**
+- New `📈 Bid Pipeline` button injected in sidebar below Calculators
+- `Alt+P` keyboard shortcut opens/toggles the pipeline modal
+- **Purpose:** Cross-project business development dashboard — track every bid opportunity, win/loss rate, pipeline revenue, and follow-up cadence. The BD layer above the estimator.
+
+**Stats Bar (live, across all bids):**
+- **Total Bids** — all bid opportunities logged
+- **Win Rate** — won / (won + lost), color-coded (green ≥50%, amber ≥30%, red <30%)
+- **Won Value** — total dollar value of all won bids
+- **Pipeline** — total value of Preparing + Submitted + Under Review bids
+- **Lost Value** — total value of lost bids (good for calibration)
+- **Follow-Up Due** — count of active bids with follow-up date within 7 days (⚡ alert)
+
+**Bid Entry Form (12 fields):**
+- Project Name (required), Client/GC, Bid Type (8: Commercial/Industrial/Municipal/Residential/Infrastructure/Site Concrete/Private Owner/Other)
+- Bid Date, Bid Amount ($), Estimated yd³
+- $/yd³ — auto-calculated live from Amount ÷ yd³ (read-only display)
+- Status (8: Preparing/Submitted/Under Review/Won/Lost/No Bid/On Hold/Withdrawn)
+- Decision/Award Date, Follow-Up Date
+- Notes (Why Won / Why Lost / lessons learned)
+- Competitor / Awarded To (if lost — for competitive intelligence)
+
+**Bid List View (table):**
+- Status filter tabs: All / Preparing / Submitted / Under Review / Won / Lost / No Bid / On Hold
+- Search by project name, client/GC, or notes
+- Per-row: Project, Client, Bid Date, Amount, Status badge (color-coded), Follow-Up date + overdue badge, Notes excerpt
+- Edit (✏️), Delete (🗑) per bid
+- Won rows highlighted green, Lost rows highlighted red in print
+
+**Follow-Up Alert Banner:**
+- Amber banner at bottom shows all bids needing follow-up within 7 days
+- Lists project names + follow-up dates inline
+
+**Printable Bid Pipeline Report:**
+- Company header (name, phone, email)
+- 6-card stats header (Total / Win Rate / Won Value / Pipeline / Won Count / Lost Count)
+- Full bid table: Project / Client / Type / Bid Date / Bid Amount / yd³ / $/yd³ / Status / Notes
+- Grand totals row (total bid value + total yd³)
+- Won rows highlighted green, Lost rows highlighted red
+- CONFIDENTIAL — INTERNAL USE ONLY footer
+
+**Storage:** localStorage global key `oncor_pipeline_v1` — cross-project (all bids in one place, not per-project)
+
+**Integration hook:** `window._getPipelineStats()` exposed for future Project Status Card integration
+
+**Why this matters:** JFS bids 3-5 jobs per week. Without tracking, he has no idea what his win rate is, which GCs he wins with, or whether he should be chasing more jobs. With this dashboard: "I've bid $2.1M worth of work this month. Won $480K. Win rate is 28%. 3 bids need follow-up this week." Over time, the notes field builds a competitive intelligence database — "Sundt always takes the lowest number, don't underbid trying to win Sundt jobs." This is the business development layer that makes Oncor a real company, not just a guy with an estimator.
+
+**Commits:**
+- b001b72: 📈 Bid Pipeline & Win/Loss Tracker (Alt+P) (+341 lines) [Session #68]
+
+**Total Lines:** ~153,526 | **New Alt+ Shortcuts:** Alt+P (Bid Pipeline)
+
+---
+
 ## 🌤️ SESSION: Apr 1, 2026 - 10:12 UTC (Overnight Cron #67)
 **Status:** ✅ WEATHER FORECAST + QUICK CALCULATORS added (+508 lines)
 
