@@ -148832,3 +148832,530 @@ td{padding:6px 8px;border-bottom:1px solid #e2e8f0;}
 })();
 // ==================== END DELIVERY TICKET LOG — Zeus ⚡ Session #59 ====================
 </script>
+
+<script>
+// ==================== CREW TIME CARD & LABOR TRACKER — Zeus ⚡ Session #60 ====================
+// Ctrl+Shift+H | Track daily crew hours, OT, cost vs budget, weekly timesheets
+// localStorage: oncor_timecards_v1_[projectname]
+(function() {
+  'use strict';
+
+  /* ─── STORAGE HELPERS ─── */
+  function getStorageKey() {
+    const proj = (document.getElementById('projectName')||{}).value || 'default';
+    return 'oncor_timecards_v1_' + proj.replace(/\s+/g,'_').toLowerCase();
+  }
+
+  function getTimecards() {
+    try { return JSON.parse(localStorage.getItem(getStorageKey()) || '[]'); } catch(e) { return []; }
+  }
+
+  function saveTimecards(arr) {
+    localStorage.setItem(getStorageKey(), JSON.stringify(arr));
+  }
+
+  /* ─── FORMATTING HELPERS ─── */
+  function fmtC(v) { return '$' + (parseFloat(v)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  const TRADE_RATES = {
+    'Foreman':90, 'Concrete Finisher (Journeyman)':78, 'Concrete Finisher (Apprentice)':54,
+    'Laborer':52, 'Pump Operator':88, 'Saw Cutter':72, 'Rebar Placer':68,
+    'Form Setter':65, 'Screed Operator':70, 'Trowel Operator':72,
+    'Equipment Operator':85, 'Ironworker':80, 'Carpenter (Forms)':74, 'Helper/Tender':46, 'Other':60
+  };
+  const TRADES = Object.keys(TRADE_RATES);
+
+  const STATUS_COLORS = { 'Working':'#10b981','On Leave':'#f59e0b','Sick':'#f97316','No Show':'#dc2626','Terminated':'#6b7280' };
+
+  /* ─── MODAL RENDER ─── */
+  function showTimeTracker() {
+    let modal = document.getElementById('tc-modal');
+    if (modal) { modal.style.display = modal.style.display==='none'?'flex':'none'; if(modal.style.display==='flex') renderTCList(); return; }
+
+    modal = document.createElement('div');
+    modal.id = 'tc-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9900;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+    modal.innerHTML = `
+      <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:12px;width:100%;max-width:1000px;padding:24px;color:#e2e8f0;position:relative;margin:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+          <div>
+            <div style="font-size:1.25rem;font-weight:700;color:#14b8a6;">👷 Crew Time Card & Labor Tracker</div>
+            <div style="font-size:0.75rem;color:#64748b;margin-top:2px;">Track daily crew hours · overtime · cost vs budget · Ctrl+Shift+H</div>
+          </div>
+          <button onclick="this.closest('#tc-modal').style.display='none'" style="background:rgba(220,38,38,0.2);border:1px solid rgba(220,38,38,0.4);color:#f87171;border-radius:6px;padding:4px 12px;cursor:pointer;font-weight:700;">✕</button>
+        </div>
+        <div id="tc-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:18px;"></div>
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+          <button onclick="showTCForm(null)" style="background:#14b8a6;border:none;color:#fff;padding:7px 16px;border-radius:6px;cursor:pointer;font-weight:600;">+ New Entry</button>
+          <button onclick="printLaborReport()" style="background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.4);color:#818cf8;padding:7px 14px;border-radius:6px;cursor:pointer;">🖨 Print Labor Report</button>
+          <select id="tc-filter-week" onchange="renderTCList()" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:6px 10px;border-radius:6px;margin-left:auto;">
+            <option value="">All Dates</option>
+          </select>
+          <select id="tc-filter-worker" onchange="renderTCList()" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:6px 10px;border-radius:6px;">
+            <option value="">All Workers</option>
+          </select>
+        </div>
+        <div id="tc-list"></div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function(e) { if(e.target===modal) modal.style.display='none'; });
+    renderTCList();
+  }
+
+  function computeStats(cards) {
+    let totalHrs=0, totalOT=0, totalCost=0, totalWorkers=new Set(), totalDays=new Set();
+    cards.forEach(c => {
+      const reg = parseFloat(c.hoursReg||0);
+      const ot = parseFloat(c.hoursOT||0);
+      const rate = parseFloat(c.rate||0);
+      totalHrs += reg + ot;
+      totalOT += ot;
+      totalCost += reg*rate + ot*rate*1.5;
+      totalWorkers.add(c.workerName);
+      totalDays.add(c.workDate);
+    });
+    return { totalHrs, totalOT, totalCost, totalWorkers: totalWorkers.size, totalDays: totalDays.size };
+  }
+
+  function renderTCList() {
+    const cards = getTimecards();
+    const stats = computeStats(cards);
+
+    // stats bar
+    const statsEl = document.getElementById('tc-stats');
+    if (statsEl) statsEl.innerHTML = `
+      <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:#14b8a6;">${stats.totalDays}</div><div style="font-size:0.72rem;color:#94a3b8;">Work Days</div></div>
+      <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:#60a5fa;">${stats.totalWorkers}</div><div style="font-size:0.72rem;color:#94a3b8;">Workers Logged</div></div>
+      <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:#e2e8f0;">${stats.totalHrs.toFixed(1)} hrs</div><div style="font-size:0.72rem;color:#94a3b8;">Total Hours</div></div>
+      <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:${stats.totalOT>0?'#f59e0b':'#94a3b8'};">${stats.totalOT.toFixed(1)} hrs</div><div style="font-size:0.72rem;color:#94a3b8;">Overtime Hours</div></div>
+      <div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:#10b981;">${fmtC(stats.totalCost)}</div><div style="font-size:0.72rem;color:#94a3b8;">Total Labor Cost</div></div>`;
+
+    // populate worker filter
+    const wFilter = document.getElementById('tc-filter-worker');
+    const wVal = wFilter ? wFilter.value : '';
+    const workers = [...new Set(cards.map(c=>c.workerName).filter(Boolean))].sort();
+    if (wFilter) {
+      wFilter.innerHTML = '<option value="">All Workers</option>' + workers.map(w=>`<option value="${esc(w)}" ${w===wVal?'selected':''}>${esc(w)}</option>`).join('');
+    }
+
+    // populate week filter
+    const wkFilter = document.getElementById('tc-filter-week');
+    const wkVal = wkFilter ? wkFilter.value : '';
+    const weeks = [...new Set(cards.map(c=>getWeekLabel(c.workDate)).filter(Boolean))].sort().reverse();
+    if (wkFilter) {
+      wkFilter.innerHTML = '<option value="">All Dates</option>' + weeks.map(w=>`<option value="${esc(w)}" ${w===wkVal?'selected':''}>${esc(w)}</option>`).join('');
+    }
+
+    // filter
+    let filtered = cards.slice().sort((a,b)=>(b.workDate||'').localeCompare(a.workDate||''));
+    if (wVal) filtered = filtered.filter(c=>c.workerName===wVal);
+    if (wkVal) filtered = filtered.filter(c=>getWeekLabel(c.workDate)===wkVal);
+
+    const listEl = document.getElementById('tc-list');
+    if (!listEl) return;
+
+    if (!filtered.length) {
+      listEl.innerHTML = `<div style="text-align:center;color:#64748b;padding:40px;">No time entries yet — click + New Entry to log hours</div>`;
+      return;
+    }
+
+    // group by date
+    const byDate = {};
+    filtered.forEach(c => { const d=c.workDate||'Unknown'; if(!byDate[d]) byDate[d]=[]; byDate[d].push(c); });
+
+    let html = '';
+    Object.keys(byDate).sort((a,b)=>b.localeCompare(a)).forEach(date => {
+      const dayCards = byDate[date];
+      const dayStats = computeStats(dayCards);
+      const dayLabel = date !== 'Unknown' ? new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric',year:'numeric'}) : 'Unknown Date';
+
+      html += `<div style="margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;background:#1e3a5f;border-radius:8px 8px 0 0;padding:8px 14px;margin-bottom:2px;">
+          <span style="font-weight:700;color:#93c5fd;">📅 ${esc(dayLabel)}</span>
+          <span style="font-size:0.78rem;color:#94a3b8;">${dayStats.totalWorkers} workers · ${dayStats.totalHrs.toFixed(1)} hrs · <span style="color:#10b981;">${fmtC(dayStats.totalCost)}</span></span>
+        </div>`;
+
+      dayCards.forEach((c,i) => {
+        const idx = cards.indexOf(c);
+        const reg = parseFloat(c.hoursReg||0);
+        const ot = parseFloat(c.hoursOT||0);
+        const rate = parseFloat(c.rate||0);
+        const cost = reg*rate + ot*rate*1.5;
+        const statusColor = STATUS_COLORS[c.status] || '#94a3b8';
+
+        html += `<div style="background:#1e293b;border:1px solid #334155;border-top:none;padding:10px 14px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;align-items:center;${i===dayCards.length-1?'border-radius:0 0 8px 8px;':''}">
+          <div>
+            <div style="font-weight:600;color:#e2e8f0;">${esc(c.workerName||'Unnamed')}</div>
+            <div style="font-size:0.72rem;color:#94a3b8;">${esc(c.trade||'—')}</div>
+            <div style="font-size:0.7rem;margin-top:2px;"><span style="background:${statusColor}22;color:${statusColor};border-radius:4px;padding:1px 6px;">${esc(c.status||'Working')}</span></div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:0.78rem;color:#94a3b8;">Regular</div>
+            <div style="font-weight:600;">${reg.toFixed(1)} hrs @ ${fmtC(rate)}/hr</div>
+            ${ot>0?`<div style="font-size:0.72rem;color:#f59e0b;">OT: ${ot.toFixed(1)} hrs @ ${fmtC(rate*1.5)}/hr</div>`:''}
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:0.78rem;color:#94a3b8;">Work Area</div>
+            <div style="font-size:0.82rem;">${esc(c.workArea||'—')}</div>
+            ${c.task?`<div style="font-size:0.72rem;color:#64748b;">${esc(c.task)}</div>`:''}
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:0.78rem;color:#94a3b8;">Cost</div>
+            <div style="font-weight:700;color:#10b981;font-size:1rem;">${fmtC(cost)}</div>
+          </div>
+          <div style="display:flex;gap:4px;">
+            <button onclick="showTCForm(${idx})" style="background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.4);color:#818cf8;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.75rem;">✏️</button>
+            <button onclick="deleteTCEntry(${idx})" style="background:rgba(220,38,38,0.15);border:1px solid rgba(220,38,38,0.3);color:#f87171;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.75rem;">🗑</button>
+          </div>
+        </div>`;
+        if (c.notes) html += `<div style="background:#0f172a;border:1px solid #334155;border-top:none;padding:4px 14px;font-size:0.72rem;color:#94a3b8;${i===dayCards.length-1?'border-radius:0 0 8px 8px;':''}">📝 ${esc(c.notes)}</div>`;
+      });
+      html += '</div>';
+    });
+    listEl.innerHTML = html;
+  }
+
+  function getWeekLabel(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr+'T12:00:00');
+    if (isNaN(d)) return '';
+    const day = d.getDay();
+    const mon = new Date(d); mon.setDate(d.getDate() - (day===0?6:day-1));
+    const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+    const fmt = dt => dt.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    return `Week of ${fmt(mon)} – ${fmt(sun)}`;
+  }
+
+  /* ─── FORM ─── */
+  function showTCForm(editIdx) {
+    let existing = null;
+    if (editIdx !== null) {
+      const cards = getTimecards();
+      existing = cards[editIdx];
+    }
+
+    let overlay = document.getElementById('tc-form-overlay');
+    if (overlay) overlay.remove();
+
+    overlay = document.createElement('div');
+    overlay.id = 'tc-form-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;';
+
+    const today = new Date().toISOString().split('T')[0];
+    const e = existing || {};
+    const tradeOptions = TRADES.map(t => `<option value="${esc(t)}" ${e.trade===t?'selected':''}>${esc(t)}</option>`).join('');
+    const rateDefault = e.rate || (e.trade ? (TRADE_RATES[e.trade]||60) : 60);
+
+    overlay.innerHTML = `
+      <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:10px;padding:22px;width:100%;max-width:580px;color:#e2e8f0;max-height:90vh;overflow-y:auto;">
+        <div style="font-size:1rem;font-weight:700;color:#14b8a6;margin-bottom:16px;">👷 ${editIdx!==null?'Edit':'New'} Time Entry</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:3px;">Work Date *</label>
+            <input type="date" id="tc-f-date" value="${esc(e.workDate||today)}" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px 10px;border-radius:6px;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:3px;">Worker Name *</label>
+            <input type="text" id="tc-f-name" placeholder="Full name" value="${esc(e.workerName||'')}" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px 10px;border-radius:6px;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:3px;">Trade / Classification</label>
+            <select id="tc-f-trade" onchange="tcUpdateRate()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px 10px;border-radius:6px;box-sizing:border-box;">
+              ${tradeOptions}
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:3px;">Hourly Rate ($/hr)</label>
+            <input type="number" id="tc-f-rate" value="${esc(rateDefault)}" min="0" step="0.50" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px 10px;border-radius:6px;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:3px;">Regular Hours *</label>
+            <input type="number" id="tc-f-reg" value="${esc(e.hoursReg||8)}" min="0" max="24" step="0.25" oninput="tcCalcCost()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px 10px;border-radius:6px;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:3px;">OT Hours (1.5×)</label>
+            <input type="number" id="tc-f-ot" value="${esc(e.hoursOT||0)}" min="0" max="12" step="0.25" oninput="tcCalcCost()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px 10px;border-radius:6px;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:3px;">Work Area / Pour</label>
+            <input type="text" id="tc-f-area" placeholder="e.g. Slab Grid A, Footings 1-12" value="${esc(e.workArea||'')}" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px 10px;border-radius:6px;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:3px;">Task / Activity</label>
+            <select id="tc-f-task" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px 10px;border-radius:6px;box-sizing:border-box;">
+              ${['Forming','Rebar Placement','Concrete Placing','Screeding','Bull Floating','Power Troweling','Finishing','Curing','Stripping Forms','Cleanup','Saw Cutting','Patching','General Labor','Standby/Delay','Other'].map(t=>`<option value="${esc(t)}" ${e.task===t?'selected':''}>${esc(t)}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:3px;">Status</label>
+            <select id="tc-f-status" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px 10px;border-radius:6px;box-sizing:border-box;">
+              ${Object.keys(STATUS_COLORS).map(s=>`<option value="${esc(s)}" ${(e.status||'Working')===s?'selected':''}>${esc(s)}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:3px;">Cost Preview</label>
+            <div id="tc-cost-preview" style="background:#14b8a626;border:1px solid #14b8a640;border-radius:6px;padding:8px 10px;font-weight:700;color:#14b8a6;font-size:1rem;">—</div>
+          </div>
+        </div>
+        <div style="margin-top:12px;">
+          <label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:3px;">Notes (delays, issues, injuries, equipment used)</label>
+          <textarea id="tc-f-notes" rows="2" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px 10px;border-radius:6px;box-sizing:border-box;resize:vertical;">${esc(e.notes||'')}</textarea>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+          <button onclick="document.getElementById('tc-form-overlay').remove()" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:7px 18px;border-radius:6px;cursor:pointer;">Cancel</button>
+          <button onclick="saveTCEntry(${editIdx})" style="background:#14b8a6;border:none;color:#fff;padding:7px 22px;border-radius:6px;cursor:pointer;font-weight:600;">Save Entry</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+    tcCalcCost();
+  }
+
+  window.tcUpdateRate = function() {
+    const trade = (document.getElementById('tc-f-trade')||{}).value;
+    const rateInput = document.getElementById('tc-f-rate');
+    if (rateInput && TRADE_RATES[trade]) rateInput.value = TRADE_RATES[trade];
+    tcCalcCost();
+  };
+
+  window.tcCalcCost = function() {
+    const reg = parseFloat((document.getElementById('tc-f-reg')||{}).value||0);
+    const ot = parseFloat((document.getElementById('tc-f-ot')||{}).value||0);
+    const rate = parseFloat((document.getElementById('tc-f-rate')||{}).value||0);
+    const cost = reg*rate + ot*rate*1.5;
+    const el = document.getElementById('tc-cost-preview');
+    if (el) el.textContent = fmtC(cost);
+  };
+
+  window.saveTCEntry = function(editIdx) {
+    const date = (document.getElementById('tc-f-date')||{}).value;
+    const name = ((document.getElementById('tc-f-name')||{}).value||'').trim();
+    if (!date || !name) { alert('Work date and worker name are required.'); return; }
+
+    const entry = {
+      workDate: date,
+      workerName: name,
+      trade: (document.getElementById('tc-f-trade')||{}).value || 'Other',
+      rate: parseFloat((document.getElementById('tc-f-rate')||{}).value||60),
+      hoursReg: parseFloat((document.getElementById('tc-f-reg')||{}).value||0),
+      hoursOT: parseFloat((document.getElementById('tc-f-ot')||{}).value||0),
+      workArea: ((document.getElementById('tc-f-area')||{}).value||'').trim(),
+      task: (document.getElementById('tc-f-task')||{}).value || 'General Labor',
+      status: (document.getElementById('tc-f-status')||{}).value || 'Working',
+      notes: ((document.getElementById('tc-f-notes')||{}).value||'').trim(),
+      savedAt: Date.now()
+    };
+
+    const cards = getTimecards();
+    if (editIdx !== null && editIdx >= 0) {
+      cards[editIdx] = entry;
+    } else {
+      cards.push(entry);
+    }
+    saveTimecards(cards);
+    document.getElementById('tc-form-overlay').remove();
+    renderTCList();
+    showTCToast('Time entry saved');
+  };
+
+  window.deleteTCEntry = function(idx) {
+    if (!confirm('Delete this time entry?')) return;
+    const cards = getTimecards();
+    cards.splice(idx, 1);
+    saveTimecards(cards);
+    renderTCList();
+    showTCToast('Entry deleted');
+  };
+
+  /* ─── PRINT REPORT ─── */
+  function printLaborReport() {
+    const cards = getTimecards();
+    if (!cards.length) { alert('No time entries to print.'); return; }
+
+    const proj = (document.getElementById('projectName')||{}).value || 'Project';
+    const comp = {
+      companyName: (document.getElementById('companyName')||{}).value||'Oncor Concrete',
+      companyAddress: (document.getElementById('companyAddress')||{}).value||'',
+      companyPhone: (document.getElementById('companyPhone')||{}).value||'',
+      companyEmail: (document.getElementById('companyEmail')||{}).value||''
+    };
+    const stats = computeStats(cards);
+
+    // worker summary table
+    const byWorker = {};
+    cards.forEach(c => {
+      if (!byWorker[c.workerName]) byWorker[c.workerName] = { trade:c.trade, rate:c.rate, reg:0, ot:0, cost:0, days:new Set() };
+      const w = byWorker[c.workerName];
+      const reg = parseFloat(c.hoursReg||0);
+      const ot = parseFloat(c.hoursOT||0);
+      const rate = parseFloat(c.rate||0);
+      w.reg += reg; w.ot += ot; w.cost += reg*rate + ot*rate*1.5; w.days.add(c.workDate);
+    });
+
+    const workerRows = Object.entries(byWorker).sort((a,b)=>b[1].cost-a[1].cost).map(([name,w])=>`
+      <tr>
+        <td>${esc(name)}</td>
+        <td>${esc(w.trade)}</td>
+        <td style="text-align:center;">${w.days.size}</td>
+        <td style="text-align:right;">${w.reg.toFixed(1)}</td>
+        <td style="text-align:right;color:#b45309;">${w.ot.toFixed(1)}</td>
+        <td style="text-align:right;">${(w.reg+w.ot).toFixed(1)}</td>
+        <td style="text-align:right;">\$${w.rate.toFixed(2)}</td>
+        <td style="text-align:right;font-weight:700;">\$${w.cost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      </tr>`).join('');
+
+    // daily detail rows
+    const sorted = cards.slice().sort((a,b)=>a.workDate.localeCompare(b.workDate)||a.workerName.localeCompare(b.workerName));
+    const detailRows = sorted.map(c => {
+      const reg = parseFloat(c.hoursReg||0);
+      const ot = parseFloat(c.hoursOT||0);
+      const rate = parseFloat(c.rate||0);
+      const cost = reg*rate + ot*rate*1.5;
+      return `<tr>
+        <td>${esc(c.workDate)}</td>
+        <td>${esc(c.workerName)}</td>
+        <td>${esc(c.trade)}</td>
+        <td>${esc(c.workArea||'—')}</td>
+        <td>${esc(c.task||'—')}</td>
+        <td style="text-align:right;">${reg.toFixed(1)}</td>
+        <td style="text-align:right;">${ot.toFixed(1)}</td>
+        <td style="text-align:right;">\$${rate.toFixed(2)}</td>
+        <td style="text-align:right;font-weight:700;color:green;">\$${cost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        <td>${esc(c.status||'—')}</td>
+      </tr>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Labor Report — ${esc(proj)}</title>
+    <style>
+      body { font-family: Arial, sans-serif; font-size: 9pt; color: #111; margin: 0; padding: 16px; }
+      .hdr { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; border-bottom:2px solid #1e3a5f; padding-bottom:10px; }
+      .badge { background:#1e3a5f; color:#fff; padding:3px 10px; border-radius:4px; font-size:8pt; font-weight:700; display:inline-block; margin-bottom:4px; }
+      h1 { margin:2px 0; font-size:13pt; color:#1e3a5f; }
+      .hdr-right { text-align:right; font-size:8pt; color:#555; }
+      .stats { display:flex; gap:12px; margin-bottom:12px; }
+      .stat { background:#f1f5f9; border:1px solid #e2e8f0; border-radius:6px; padding:8px 14px; flex:1; text-align:center; }
+      .stat .val { font-size:13pt; font-weight:700; color:#1e3a5f; }
+      .stat .lbl { font-size:7pt; color:#64748b; }
+      table { width:100%; border-collapse:collapse; margin-bottom:14px; }
+      th { background:#1e3a5f; color:#fff; padding:5px 6px; font-size:7.5pt; text-align:left; }
+      td { padding:4px 6px; font-size:8pt; border-bottom:1px solid #e2e8f0; }
+      tr:nth-child(even) td { background:#f8fafc; }
+      tfoot td { background:#f1f5f9; font-weight:700; border-top:2px solid #1e3a5f; }
+      h2 { font-size:10pt; color:#1e3a5f; margin:14px 0 6px; border-bottom:1px solid #ddd; padding-bottom:3px; }
+      .footer { margin-top:16px; font-size:7pt; color:#888; border-top:1px solid #ccc; padding-top:8px; text-align:center; }
+      @media print { button { display:none!important; } }
+    </style></head><body>
+    <div class="hdr">
+      <div>
+        <div class="badge">CREW LABOR REPORT — INTERNAL USE ONLY</div>
+        <h1>${esc(comp.companyName)}</h1>
+        <div style="font-size:8pt;color:#555;">${esc(comp.companyAddress)} ${comp.companyPhone ? '· '+esc(comp.companyPhone) : ''} ${comp.companyEmail ? '· '+esc(comp.companyEmail) : ''}</div>
+      </div>
+      <div class="hdr-right">
+        <div><strong>Project:</strong> ${esc(proj)}</div>
+        <div><strong>Printed:</strong> ${new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
+        <div><strong>Period:</strong> All dates on record</div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="val">${stats.totalDays}</div><div class="lbl">Work Days</div></div>
+      <div class="stat"><div class="val">${stats.totalWorkers}</div><div class="lbl">Workers</div></div>
+      <div class="stat"><div class="val">${stats.totalHrs.toFixed(1)}</div><div class="lbl">Total Hours</div></div>
+      <div class="stat"><div class="val">${stats.totalOT.toFixed(1)}</div><div class="lbl">OT Hours</div></div>
+      <div class="stat"><div class="val">\$${stats.totalCost.toLocaleString('en-US',{minimumFractionDigits:2})}</div><div class="lbl">Total Labor Cost</div></div>
+    </div>
+    <h2>Worker Summary</h2>
+    <table>
+      <thead><tr>
+        <th>Worker</th><th>Trade</th><th style="text-align:center;">Days</th>
+        <th style="text-align:right;">Reg Hrs</th><th style="text-align:right;">OT Hrs</th>
+        <th style="text-align:right;">Total Hrs</th><th style="text-align:right;">Rate/hr</th>
+        <th style="text-align:right;">Total Cost</th>
+      </tr></thead>
+      <tbody>${workerRows}</tbody>
+      <tfoot><tr>
+        <td colspan="3">TOTALS — ${Object.keys(byWorker).length} workers</td>
+        <td style="text-align:right;">${(stats.totalHrs - stats.totalOT).toFixed(1)}</td>
+        <td style="text-align:right;">${stats.totalOT.toFixed(1)}</td>
+        <td style="text-align:right;">${stats.totalHrs.toFixed(1)}</td>
+        <td></td>
+        <td style="text-align:right;">\$${stats.totalCost.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+      </tr></tfoot>
+    </table>
+    <h2>Daily Detail Log</h2>
+    <table>
+      <thead><tr>
+        <th>Date</th><th>Worker</th><th>Trade</th><th>Work Area</th><th>Task</th>
+        <th style="text-align:right;">Reg</th><th style="text-align:right;">OT</th>
+        <th style="text-align:right;">Rate</th><th style="text-align:right;">Cost</th><th>Status</th>
+      </tr></thead>
+      <tbody>${detailRows}</tbody>
+      <tfoot><tr>
+        <td colspan="5">TOTALS — ${cards.length} entries</td>
+        <td style="text-align:right;">${(stats.totalHrs-stats.totalOT).toFixed(1)}</td>
+        <td style="text-align:right;">${stats.totalOT.toFixed(1)}</td>
+        <td></td>
+        <td style="text-align:right;">\$${stats.totalCost.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+        <td></td>
+      </tr></tfoot>
+    </table>
+    <button onclick="window.print()" style="margin-top:14px;padding:8px 18px;background:#1e3a5f;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:9pt;">🖨 Print / Save PDF</button>
+    <div class="footer">${esc(comp.companyName)} · Crew Labor Report · ${esc(proj)} · Printed: ${new Date().toLocaleDateString()}<br>
+    FLSA / TX Payday Law — CONFIDENTIAL — INTERNAL USE ONLY</div>
+    </body></html>`;
+
+    const w = window.open('','_blank');
+    if (w) { w.document.write(html); w.document.close(); }
+  }
+
+  /* ─── TOAST ─── */
+  function showTCToast(msg) {
+    let t = document.getElementById('tc-toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'tc-toast';
+      t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#14b8a6;color:#fff;padding:8px 18px;border-radius:8px;font-size:0.82rem;font-weight:600;z-index:99999;opacity:0;transition:opacity 0.3s;pointer-events:none;';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.opacity = '1';
+    setTimeout(() => { t.style.opacity = '0'; }, 2200);
+  }
+
+  /* ─── GLOBALS ─── */
+  window.showTimeTracker = showTimeTracker;
+  window.showTCForm = showTCForm;
+  window.printLaborReport = printLaborReport;
+
+  /* ─── KEYBOARD SHORTCUT Ctrl+Shift+H ─── */
+  document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey||e.metaKey) && e.shiftKey && (e.key==='H'||e.key==='h')) {
+      e.preventDefault();
+      showTimeTracker();
+    }
+  });
+
+  /* ─── SIDEBAR BUTTON (inject after Delivery Tickets button) ─── */
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      const dlBtn = document.querySelector('button[onclick*="showTicketLog"]');
+      if (!dlBtn) return;
+      const newRow = document.createElement('div');
+      newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+      newRow.innerHTML = `<button class="action-btn secondary" onclick="showTimeTracker()" title="Crew Time Card & Labor Tracker — Log daily crew hours, OT, cost vs budget by worker. 15 trade classifications with El Paso 2025 prevailing wage defaults. Weekly summaries and printable labor report. (Ctrl+Shift+H)" style="background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.3);color:#818cf8;">👷 Crew Time Cards</button>`;
+      const parentRow = dlBtn.closest('div');
+      if (parentRow && parentRow.parentNode) parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+    }, 1600);
+  });
+
+  /* ─── EXPOSE STATS FOR PROJECT STATUS CARD ─── */
+  window._getCrewStats = function() {
+    const cards = getTimecards();
+    const stats = computeStats(cards);
+    return { totalEntries: cards.length, totalHrs: stats.totalHrs, totalOT: stats.totalOT, totalCost: stats.totalCost, totalWorkers: stats.totalWorkers };
+  };
+
+})();
+// ==================== END CREW TIME CARD & LABOR TRACKER — Zeus ⚡ Session #60 ====================
+</script>
