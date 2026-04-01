@@ -159014,3 +159014,277 @@ document.addEventListener('DOMContentLoaded',function(){
 })();
 // ==================== END COST-TO-COMPLETE FORECAST — Zeus ⚡ Session #78 ====================
 </script>
+
+<script>
+// ==================== START CONCRETE WASTE & VOLUME RECONCILIATION — Zeus ⚡ Session #79 ====================
+(function(){
+'use strict';
+
+var WASTE_ID = 'oncorWasteModal';
+
+function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmt2(n){ return Number(n||0).toFixed(2); }
+function fmt$(n){ return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+
+function getWasteKey(){
+  var pn=''; try{ pn=(document.getElementById('projectName')||{}).value||''; }catch(x){}
+  return 'oncor_waste_v1_'+(pn||'_global');
+}
+function loadWaste(){ try{ return JSON.parse(localStorage.getItem(getWasteKey())||'[]'); }catch(x){ return []; } }
+function saveWaste(arr){ localStorage.setItem(getWasteKey(), JSON.stringify(arr)); }
+
+var WASTE_CAUSES = ['Over-Order Buffer (Planned)','Form Blowout','Grade Low Spots','Pump Waste / Priming','Rejected Load (Returned)','Short Load Delivered','Leftover — Returned to Plant','Washout Waste','Excess from Changed Quantity','Over-excavation','Other'];
+var WASTE_TYPES = ['Slab','Footing','Foundation Wall','Grade Beam','Column/Pier','Curb','Sidewalk','Other'];
+
+function buildWasteModal(){
+  if(document.getElementById(WASTE_ID)) return;
+  var modal = document.createElement('div');
+  modal.id = WASTE_ID;
+  modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10500;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+  modal.innerHTML = [
+    '<div style="background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:12px;width:100%;max-width:920px;margin:auto;overflow:hidden;">',
+    '<div style="padding:18px 20px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:space-between;">',
+    '<div><span style="font-size:1.1rem;font-weight:700;color:#e2e8f0;">🧱 Concrete Volume & Waste Reconciliation</span><span style="font-size:0.75rem;color:#94a3b8;margin-left:10px;">Alt+V</span></div>',
+    '<div style="display:flex;gap:8px;">',
+    '<button onclick="printWasteReport()" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);color:#ccc;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;">🖨 Print</button>',
+    '<button onclick="closeWasteModal()" style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.3);color:#f87171;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;">✕ Close</button>',
+    '</div></div>',
+    '<div id="wasteStats" style="display:flex;gap:10px;padding:12px 20px;background:rgba(0,0,0,0.2);flex-wrap:wrap;"></div>',
+    '<!-- Project Totals Inputs -->',
+    '<div style="padding:14px 20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;border-bottom:1px solid rgba(255,255,255,0.06);">',
+    wInp('wasteEstYds','Est. yd³ (from Takeoff)','number','Est. quantity on drawings'),
+    wInp('wasteOrderedYds','Total yd³ Ordered','number','From delivery tickets'),
+    wInp('wasteActualYds','Actual yd³ Placed','number','Measured in-place'),
+    wInp('wastePricePerYd','Concrete Price ($/yd³)','number','Batch plant unit price'),
+    '</div>',
+    '<!-- Waste Events List -->',
+    '<div style="padding:14px 20px 0;">',
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">',
+    '<span style="font-size:0.85rem;font-weight:600;color:#94a3b8;">WASTE & VARIANCE EVENTS</span>',
+    '<button onclick="openWasteForm()" style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.35);color:#34d399;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.82rem;">+ Add Event</button>',
+    '</div>',
+    '<div id="wasteList" style="max-height:300px;overflow-y:auto;"></div>',
+    '</div>',
+    '<!-- Add/Edit Form -->',
+    '<div id="wasteFormWrap" style="display:none;border-top:1px solid rgba(255,255,255,0.08);padding:14px 20px;"></div>',
+    '</div>'
+  ].join('');
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e){ if(e.target===modal) closeWasteModal(); });
+  // bind inputs
+  ['wasteEstYds','wasteOrderedYds','wasteActualYds','wastePricePerYd'].forEach(function(id){
+    setTimeout(function(){
+      var el=document.getElementById(id); if(el) el.addEventListener('input', renderWasteStats);
+    }, 100);
+  });
+}
+
+function wInp(id,label,type,ph){
+  return '<div><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:3px;">'+label+'</label>'
+    +'<input id="'+id+'" type="'+type+'" placeholder="'+escH(ph)+'" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;padding:7px 9px;border-radius:6px;font-size:0.85rem;box-sizing:border-box;"></div>';
+}
+
+var wasteEditIdx = -1;
+
+function renderWasteStats(){
+  var est = parseFloat((document.getElementById('wasteEstYds')||{}).value)||0;
+  var ordered = parseFloat((document.getElementById('wasteOrderedYds')||{}).value)||0;
+  var actual = parseFloat((document.getElementById('wasteActualYds')||{}).value)||0;
+  var price = parseFloat((document.getElementById('wastePricePerYd')||{}).value)||0;
+  var events = loadWaste();
+  var totalEventWaste = events.reduce(function(s,e){ return s+(parseFloat(e.yds)||0); },0);
+  var orderOverEst = ordered - est;
+  var wastePct = ordered>0 ? ((ordered-actual)/ordered*100) : 0;
+  var wasteCost = (ordered-actual)*price;
+  var st = document.getElementById('wasteStats'); if(!st) return;
+  var cards = [
+    {l:'Est. yd³',v:fmt2(est),c:'#94a3b8'},
+    {l:'Ordered yd³',v:fmt2(ordered),c:'#60a5fa'},
+    {l:'Actual Placed',v:fmt2(actual),c:'#34d399'},
+    {l:'Waste yd³',v:fmt2(Math.max(0,ordered-actual)),c:wastePct>8?'#f87171':wastePct>4?'#fbbf24':'#34d399'},
+    {l:'Waste %',v:fmt2(wastePct)+'%',c:wastePct>8?'#f87171':wastePct>4?'#fbbf24':'#34d399'},
+    {l:'Waste Cost',v:fmt$(wasteCost),c:wasteCost>2000?'#f87171':wasteCost>500?'#fbbf24':'#34d399'},
+    {l:'Logged Events',v:events.length,c:'#94a3b8'}
+  ];
+  st.innerHTML = cards.map(function(c){
+    return '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px 12px;text-align:center;min-width:90px;">'
+      +'<div style="font-size:1.15rem;font-weight:700;color:'+c.c+';">'+c.v+'</div>'
+      +'<div style="font-size:0.68rem;color:#94a3b8;">'+c.l+'</div></div>';
+  }).join('');
+  renderWasteList();
+}
+window.renderWasteStats = renderWasteStats;
+
+function renderWasteList(){
+  var arr = loadWaste();
+  var el = document.getElementById('wasteList'); if(!el) return;
+  if(!arr.length){ el.innerHTML='<div style="color:#64748b;text-align:center;padding:24px;">No waste events logged. Click "+ Add Event" to document concrete waste.</div>'; return; }
+  el.innerHTML = arr.map(function(e,i){
+    var price = parseFloat((document.getElementById('wastePricePerYd')||{}).value)||0;
+    var cost = (parseFloat(e.yds)||0)*price;
+    return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:7px;padding:10px 12px;margin-bottom:7px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">'
+      +'<div style="flex:1;">'
+      +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+      +'<span style="font-size:0.88rem;font-weight:600;color:#e2e8f0;">'+escH(e.pourName||e.cause)+'</span>'
+      +'<span style="background:rgba(251,191,36,0.1);color:#fbbf24;font-size:0.7rem;padding:2px 7px;border-radius:4px;">'+escH(e.cause)+'</span>'
+      +(e.element?'<span style="font-size:0.7rem;color:#94a3b8;">'+escH(e.element)+'</span>':'')
+      +'</div>'
+      +'<div style="font-size:0.78rem;color:#94a3b8;margin-top:3px;">'
+      +(e.date?'<span>'+e.date+'</span> · ':'')
+      +'<span style="color:#f87171;font-weight:600;">'+fmt2(e.yds)+' yd³ waste</span>'
+      +(price>0?' · <span style="color:#fbbf24;">'+fmt$(cost)+'</span>':'')
+      +(e.ticketRef?' · Ticket: '+escH(e.ticketRef):'')
+      +'</div>'
+      +(e.notes?'<div style="font-size:0.75rem;color:#94a3b8;margin-top:2px;">'+escH(e.notes)+'</div>':'')
+      +'</div>'
+      +'<div style="display:flex;gap:5px;flex-shrink:0;">'
+      +'<button onclick="openWasteForm('+i+')" style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);color:#93c5fd;border-radius:5px;padding:3px 7px;cursor:pointer;font-size:0.73rem;">✏️</button>'
+      +'<button onclick="deleteWasteEvent('+i+')" style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.3);color:#f87171;border-radius:5px;padding:3px 7px;cursor:pointer;font-size:0.73rem;">🗑</button>'
+      +'</div></div>';
+  }).join('');
+}
+window.renderWasteList = renderWasteList;
+
+function openWasteForm(idx){
+  wasteEditIdx = (idx===undefined)?-1:idx;
+  var e = idx>=0 ? (loadWaste()[idx]||{}) : {};
+  var fw=document.getElementById('wasteFormWrap'); if(!fw) return;
+  fw.style.display='block';
+  fw.innerHTML = [
+    '<div style="font-size:0.88rem;font-weight:600;color:#e2e8f0;margin-bottom:10px;">'+(idx>=0?'Edit Event':'Log Waste / Variance Event')+'</div>',
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;">',
+    wInpVal('wFPour','Pour / Area Name','text',e.pourName||'','e.g. Slab Grid A-D'),
+    wSelField('wFCause','Cause / Reason',WASTE_CAUSES,e.cause||WASTE_CAUSES[0]),
+    wSelField('wFElement','Element Type',WASTE_TYPES,e.element||WASTE_TYPES[0]),
+    wInpVal('wFYds','Waste yd³ *','number',e.yds||'','cubic yards'),
+    wInpVal('wFDate','Date','date',e.date||todayStr(),''),
+    wInpVal('wFTicket','Ticket # / Ref','text',e.ticketRef||'','Delivery ticket #'),
+    '</div>',
+    '<div style="margin-top:8px;"><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:3px;">Notes</label>',
+    '<textarea id="wFNotes" rows="2" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;border-radius:6px;padding:7px;font-size:0.82rem;resize:vertical;box-sizing:border-box;">'+escH(e.notes||'')+'</textarea></div>',
+    '<div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end;">',
+    '<button onclick="closeWasteForm()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#94a3b8;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.82rem;">Cancel</button>',
+    '<button onclick="saveWasteEvent()" style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.35);color:#34d399;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.82rem;">💾 Save</button>',
+    '</div>'
+  ].join('');
+}
+window.openWasteForm = openWasteForm;
+
+function todayStr(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function wInpVal(id,label,type,val,ph){ return '<div><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:3px;">'+label+'</label><input id="'+id+'" type="'+type+'" value="'+escH(String(val))+'" placeholder="'+escH(ph)+'" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;padding:7px 9px;border-radius:6px;font-size:0.82rem;box-sizing:border-box;"></div>'; }
+function wSelField(id,label,opts,val){ return '<div><label style="font-size:0.75rem;color:#94a3b8;display:block;margin-bottom:3px;">'+label+'</label><select id="'+id+'" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;padding:7px 9px;border-radius:6px;font-size:0.82rem;box-sizing:border-box;">'+opts.map(function(o){ return '<option'+(o===val?' selected':'')+'>'+escH(o)+'</option>'; }).join('')+'</select></div>'; }
+function gv(id){ var e=document.getElementById(id); return e?(e.value||''):''; }
+
+function saveWasteEvent(){
+  var yds = parseFloat(gv('wFYds'));
+  if(!yds||yds<=0){ alert('Waste yd³ is required.'); return; }
+  var arr=loadWaste();
+  var entry={pourName:gv('wFPour').trim(),cause:gv('wFCause'),element:gv('wFElement'),yds:yds,date:gv('wFDate'),ticketRef:gv('wFTicket').trim(),notes:gv('wFNotes').trim()};
+  if(wasteEditIdx>=0) arr[wasteEditIdx]=entry; else arr.push(entry);
+  saveWaste(arr);
+  closeWasteForm();
+  renderWasteStats();
+}
+window.saveWasteEvent = saveWasteEvent;
+
+function closeWasteForm(){
+  var fw=document.getElementById('wasteFormWrap'); if(fw) fw.style.display='none';
+  wasteEditIdx=-1;
+}
+window.closeWasteForm = closeWasteForm;
+
+function deleteWasteEvent(idx){
+  if(!confirm('Delete this waste event?')) return;
+  var arr=loadWaste(); arr.splice(idx,1); saveWaste(arr); renderWasteStats();
+}
+window.deleteWasteEvent = deleteWasteEvent;
+
+function printWasteReport(){
+  var est=parseFloat((document.getElementById('wasteEstYds')||{}).value)||0;
+  var ordered=parseFloat((document.getElementById('wasteOrderedYds')||{}).value)||0;
+  var actual=parseFloat((document.getElementById('wasteActualYds')||{}).value)||0;
+  var price=parseFloat((document.getElementById('wastePricePerYd')||{}).value)||0;
+  var arr=loadWaste();
+  var co={}; try{ co.name=(document.getElementById('companyName')||{}).value||'Oncor'; }catch(x){}
+  var pn=''; try{ pn=(document.getElementById('projectName')||{}).value||'Project'; }catch(x){}
+  var wastePct=ordered>0?((ordered-actual)/ordered*100):0;
+  var wasteCost=(ordered-actual)*price;
+  var w=window.open('','_blank','width=950,height=750');
+  if(!w) return;
+  w.document.write([
+    '<!DOCTYPE html><html><head><title>Concrete Waste Report — '+pn+'</title>',
+    '<style>body{font-family:Arial,sans-serif;color:#1e293b;padding:30px;max-width:900px;margin:0 auto;font-size:9pt;}',
+    'table{width:100%;border-collapse:collapse;margin-top:10px;}td,th{border:1px solid #cbd5e1;padding:6px 9px;}th{background:#f1f5f9;font-weight:700;text-align:left;}',
+    '.stat{display:inline-block;text-align:center;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;margin:4px;}',
+    '@media print{.noprint{display:none;}}',
+    '</style></head><body>',
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;">',
+    '<div><strong style="font-size:13pt;">'+escH(co.name||'Oncor')+'</strong></div>',
+    '<div style="text-align:right;"><span style="background:#0f172a;color:#fff;font-weight:700;font-size:11pt;padding:5px 14px;border-radius:4px;">CONCRETE WASTE & VOLUME RECONCILIATION</span><br/>',
+    '<strong>'+escH(pn)+'</strong> | <span style="font-size:8pt;">'+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})+'</span></div>',
+    '</div><hr style="margin:12px 0;border-color:#e2e8f0;"/>',
+    '<div style="margin-bottom:14px;">',
+    [
+      {l:'Est. yd³',v:fmt2(est)},
+      {l:'Ordered yd³',v:fmt2(ordered)},
+      {l:'Actual Placed',v:fmt2(actual)},
+      {l:'Waste yd³',v:fmt2(Math.max(0,ordered-actual))},
+      {l:'Waste %',v:fmt2(wastePct)+'%'},
+      {l:'Waste Cost',v:fmt$(wasteCost)}
+    ].map(function(s){ return '<span class="stat"><strong style="font-size:12pt;">'+s.v+'</strong><br/>'+s.l+'</span>'; }).join(''),
+    '</div>',
+    '<table><thead><tr><th>#</th><th>Pour / Area</th><th>Cause</th><th>Element</th><th>Date</th><th>Waste yd³</th>'+(price>0?'<th>Cost</th>':'')+'<th>Ticket Ref</th><th>Notes</th></tr></thead><tbody>',
+    arr.map(function(e,i){
+      return '<tr><td>'+(i+1)+'</td><td>'+escH(e.pourName||'—')+'</td><td>'+escH(e.cause)+'</td><td>'+escH(e.element)+'</td><td>'+escH(e.date||'—')+'</td><td style="font-weight:600;color:#dc2626;">'+fmt2(e.yds)+'</td>'+(price>0?'<td>'+fmt$((e.yds||0)*price)+'</td>':'')+'<td>'+escH(e.ticketRef||'—')+'</td><td>'+escH((e.notes||'').slice(0,80))+'</td></tr>';
+    }).join(''),
+    '<tr style="font-weight:700;background:#f1f5f9;"><td colspan="5">TOTAL WASTE LOGGED</td><td style="color:#dc2626;">'+fmt2(arr.reduce(function(s,e){ return s+(parseFloat(e.yds)||0); },0))+'</td>'+(price>0?'<td>'+fmt$(arr.reduce(function(s,e){ return s+(parseFloat(e.yds)||0); },0)*price)+'</td>':'')+'<td colspan="2"></td></tr>',
+    '</tbody></table>',
+    '<div style="margin-top:14px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:10px 14px;font-size:8.5pt;">',
+    '<strong>Industry Benchmarks (ACI 304R):</strong> Acceptable concrete waste: 3–5% for slabs, 5–8% for complex elements. Pump priming waste: ~0.5–1 yd³ per pour. Target: &lt;5% total project waste.',
+    '</div>',
+    '<div style="margin-top:20px;font-size:7.5pt;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:8px;">CONFIDENTIAL — INTERNAL USE ONLY — ONCOR CONSTRUCTION MANAGEMENT</div>',
+    '<div class="noprint" style="margin-top:20px;text-align:center;"><button onclick="window.print()" style="background:#0f172a;color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:10pt;">🖨 Print / Save PDF</button></div>',
+    '</body></html>'
+  ].join(''));
+  w.document.close();
+}
+window.printWasteReport = printWasteReport;
+
+function showWasteModal(){
+  buildWasteModal();
+  var m=document.getElementById(WASTE_ID); if(!m) return;
+  m.style.display='flex';
+  renderWasteStats();
+}
+window.showWasteModal = showWasteModal;
+
+function closeWasteModal(){
+  var m=document.getElementById(WASTE_ID); if(m) m.style.display='none';
+}
+window.closeWasteModal = closeWasteModal;
+
+document.addEventListener('keydown',function(e){
+  if(e.altKey && e.key.toLowerCase()==='v'){
+    e.preventDefault();
+    var m=document.getElementById(WASTE_ID);
+    if(m && m.style.display==='flex') closeWasteModal();
+    else showWasteModal();
+  }
+});
+
+document.addEventListener('DOMContentLoaded',function(){
+  setTimeout(function(){
+    var ctcBtn = document.querySelector('button[onclick*="showCTCModal"]');
+    if(!ctcBtn) return;
+    var parentRow = ctcBtn.closest('div');
+    if(!parentRow||!parentRow.parentNode) return;
+    var newRow = document.createElement('div');
+    newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+    newRow.innerHTML = '<button class="action-btn secondary" onclick="showWasteModal()" title="Concrete Volume & Waste Reconciliation — est vs ordered vs actual, waste events log, waste % and cost (Alt+V)" style="background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.3);color:#fca5a5;">🧱 Waste & Volume Log</button>';
+    parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+  }, 4800);
+});
+
+})();
+// ==================== END CONCRETE WASTE & VOLUME RECONCILIATION — Zeus ⚡ Session #79 ====================
+</script>
