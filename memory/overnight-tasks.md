@@ -1,5 +1,82 @@
 # Overnight Build Tasks - 2026-02-14
 
+## 🗂️📊🧱 SESSION: Apr 1, 2026 - 20:36 UTC (Overnight Cron #77–79)
+**Status:** ✅ CORRESPONDENCE LOG + CTC FORECAST + WASTE RECONCILIATION added (+1,042 lines total)
+
+### What Was Added:
+
+**🗂️ Project Correspondence & Transmittal Log (Alt+E) — Session #77 (+411 lines):**
+- New `🗂️ Correspondence Log` button below Calendar & Milestones
+- `Alt+E` keyboard shortcut opens/toggles the modal
+- **Purpose:** Track every formal project communication — letters, emails, faxes, transmittals, notices, legal correspondence. The paper trail that proves what was said, when, and how.
+
+**Features:**
+- 16 correspondence types (Letter, Email, Fax, Transmittal, Notice, Memo, RFI Response, Submittal Response, CO Correspondence, Pay Application, Meeting Minutes, Contract, Subpoena/Legal, Daily Report, Site Directive, Other)
+- Direction: Outgoing (Sent) / Incoming (Received)
+- Fields: Subject, Date, From (11 options), To (11 options), Method (9 delivery methods), Ref # / Log #, Status (Active / For Record / Requires Response / Response Received / Closed / Disputed), Response Due date, Attachment/File Ref, Notes
+- **Overdue Response** auto-detection — red "OVERDUE RESPONSE" badge when past response due date
+- Search + filter by direction + filter by status
+- Edit / Print individual / Delete per entry
+- **Printable Individual Correspondence Record** — header, meta grid, notes, dual signature block
+- **Printable Full Correspondence Log** — table sorted newest-first with overdue highlighted, overdue warning callout
+- Stats bar: Total / Outgoing / Incoming / Needs Response / Overdue Response
+- localStorage per project: `oncor_corr_v1_[projectname]`
+
+**Why this matters:** When a GC disputes a change order or claims "we never received that notice," JFS needs to show a paper trail. This log documents every communication — who sent what to whom, when, how (certified mail vs email), and whether a response is still pending. The "Requires Response" status with due date prevents JFS from missing a deadline that could cost him rights. Formal correspondence log = project administration at a GC level.
+
+---
+
+**📊 Cost-to-Complete Forecast (Alt+F) — Session #78 (+357 lines):**
+- New `📊 CTC Forecast` button below Correspondence Log
+- `Alt+F` keyboard shortcut opens/toggles the modal
+- **Purpose:** Real-time project financial forecasting. Budget vs Spent vs EAC per cost category. Project if the job will finish over or under budget. Know before it's too late.
+
+**Features:**
+- 16 cost categories: Concrete Materials, Labor, Formwork, Rebar, Pump, Saw Cutting, Fiber, Base Course, Vapor Barrier, Equipment Rental, Subcontractors, Testing, Mobilization, Misc, Overhead, Contingency
+- **⚡ Seed from Estimate** — auto-populates budget column from lastEstimate data (concrete, labor, formwork, rebar, pump, overhead, etc.)
+- Per-category inputs: Budget ($), Spent to Date ($), % Complete (0–100)
+- **Auto-calculated columns:** Cost-to-Complete (Budget − Spent), EAC (Estimate at Completion), Variance (Budget − EAC)
+- Totals row with color-coded over/under indicator
+- 7-card KPI summary bar: Budget / Spent to Date / CTC / EAC / Projected Profit / Projected Margin / Burn Rate
+- Contract Value + Revenue Earned inputs for margin calculation
+- Color-coded health: green (healthy) / amber (watch) / red (over budget)
+- Forecast notes/assumptions textarea
+- Auto-save on every change
+- **Printable CTC Report** — header, KPI cards, full category table with variance column, notes section
+- localStorage per project: `oncor_ctc_v1_[projectname]`
+
+**Why this matters:** JFS wins a $480K job. At 60% complete, concrete is 15% over budget, labor is 12% over. Without CTC, he finds out at the end when it's too late. With this tool, he sees it when the job is 40% done and can adjust: negotiate a concrete delivery schedule, tighten crew size, request a CO. EAC = Estimate at Completion tells him exactly what the total cost will be based on current spending rate. Projected Profit and Margin at the bottom answer the only question that matters: "Am I going to make money on this job?"
+
+---
+
+**🧱 Concrete Volume & Waste Reconciliation (Alt+V) — Session #79 (+274 lines):**
+- New `🧱 Waste & Volume Log` button below CTC Forecast
+- `Alt+V` keyboard shortcut opens/toggles the modal
+- **Purpose:** Track est. yd³ vs ordered yd³ vs actual yd³ placed. Document every waste event with cause, ticket ref, and cost. See waste % and waste dollar impact in real time.
+
+**Features:**
+- Top inputs: Est. yd³ (from takeoff), Ordered yd³ (from delivery tickets), Actual Placed, Concrete Price/yd³
+- Auto-calculated stats: Waste yd³ / Waste % / Waste Cost — color-coded (green <4%, amber 4-8%, red >8%)
+- **Waste Events Log:** add individual waste events per pour:
+  - 11 waste causes: Over-Order Buffer, Form Blowout, Grade Low Spots, Pump Waste, Rejected Load, Short Load, Leftover Returned, Washout Waste, Excess from Changed Qty, Over-excavation, Other
+  - Element type (Slab/Footing/Wall/Grade Beam/Pier/Curb/Other)
+  - yd³ wasted, date, ticket # reference, notes
+  - Edit / delete per event
+  - Cost per event auto-calculated from price/yd³
+- **Printable Waste Report** — KPI grid, full event table, ACI 304R benchmark callout (acceptable waste 3-8% per ACI)
+- localStorage per project: `oncor_waste_v1_[projectname]`
+
+**Why this matters:** On a 200 CY pour, even 5% waste = 10 CY = ~$1,900 at $190/CY. Over a year of jobs, untracked waste is thousands in lost margin. When JFS documents form blowouts, pump priming waste, and returned loads, he can: (1) calibrate future buffer percentages, (2) identify root causes (bad forms = reduce waste by better bracing), and (3) show the GC documented proof when requesting a CO for over-excavated grades that required extra concrete.
+
+**Commits:**
+- 6fa67b2: 🗂️ Correspondence & Transmittal Log (Alt+E) (+411 lines) [Session #77]
+- 06323e7: 📊 Cost-to-Complete Forecast (Alt+F) (+357 lines) [Session #78]
+- 0f20fff: 🧱 Concrete Volume & Waste Reconciliation (Alt+V) (+274 lines) [Session #79]
+
+**Total Lines:** ~159,290 | **New Alt+ Shortcuts:** Alt+E (Correspondence), Alt+F (CTC Forecast), Alt+V (Waste Log)
+
+---
+
 ## 💳 SESSION: Apr 1, 2026 - 17:17 UTC (Overnight Cron #74)
 **Status:** ✅ ACCOUNTS PAYABLE & BILL TRACKER + DRAWING & DOCUMENT REGISTER added (+689 lines)
 
@@ -2780,3 +2857,154 @@ Pre-Construction, Weekly OAC, Progress Meeting, Safety Meeting, Design Review, S
 - 393df16: 🏗️ Inspection Log & Permit Tracker (Alt+N) (+497 lines) [Session #71]
 
 **Total Lines:** ~154,831 | **New Alt+ Shortcuts:** Alt+N (Inspections)
+
+---
+
+## 📋 SESSION: Apr 1, 2026 - 18:23 UTC (Overnight Cron #75)
+**Status:** ✅ T&M WORK ORDER LOG added (+579 lines)
+
+### What Was Added:
+
+**📋 T&M Work Order Log (Alt+T):**
+- New `📋 T&M Work Orders` button injected in sidebar below Drawing Register
+- `Alt+T` keyboard shortcut opens/toggles the T&M modal
+- **Purpose:** Track every Time & Material work order on a project — log labor, materials, and equipment with markup, generate professional printable T&M tickets for GC signature, and track billing status. The paper trail that gets T&M work paid.
+
+**Stats Bar (live):**
+- **Total WOs** — count of all logged work orders
+- **Total Value** — sum of all WO totals (direct + markup)
+- **Signed Value** — total value of Signed/Invoiced/Paid WOs (green = authorized)
+- **Unsigned/Pending** — value at risk (amber alert when any pending signature)
+- **Invoiced/Paid** — count of billed/collected WOs
+
+**10 Work Order Types:**
+Directed Extra Work, Owner Change, Differing Site Condition, Unforeseen Obstruction, GC Request, Emergency Repair, Acceleration, Markup Only (Materials), Standby / Idle Time, Other
+
+**7 Statuses:**
+Draft, Pending Signature, Signed, Disputed, Invoiced, Paid, Void (color-coded)
+
+**Work Order Form (header fields):**
+- WO # (auto-generated WO-001, WO-002...), Date, Type
+- Status, GC / Owner Rep, GC / Project, Description (required), Area / Location, Markup %, Notes
+
+**👷 Labor Lines (dynamic rows):**
+- Trade (13 options with El Paso 2025 auto-fill rates: Foreman $90 → Helper $46)
+- Rate $/hr (auto-populated from trade, overridable)
+- Regular Hours + OT Hours (auto-calculates at 1.5× for OT)
+- Worker Name
+- Live subtotal per row
+
+**🧱 Material Lines (dynamic rows):**
+- Material Description, Qty, Unit (12 units: CY/ton/lb/SF/LF/EA/bags/rolls/gal/LS/HR/Other), Unit Price
+- Live subtotal per row
+
+**🚜 Equipment Lines (dynamic rows):**
+- Equipment Type (15 options: Boom Pump, Line Pump, Vibrator, Saw, Trowel, Crane, Lift, etc.)
+- Description/Owner, Qty/Hrs, Rate Unit (per HR/Day/Pour/LS), Rate $
+- Live subtotal per row
+
+**Live WO Total Display:**
+- Auto-calculates as you type: Direct Cost Subtotal + Markup % = WO Total
+- Large teal total shown in form header
+
+**WO List View:**
+- Sorted by creation date (newest first)
+- Filter by Status + Search by WO#/description/GC/notes
+- Per-card: WO# (monospace blue) + type badge + status badge + "NEEDS SIGNATURE" warning
+- GC name, date, description excerpt
+- Large WO Total (teal) + Labor/Mat/Equip/Direct breakdown
+- Edit (✏️), Print Ticket (🖨️), Delete (🗑️)
+
+**Printable T&M Ticket:**
+- Company header (name, project) + T&M WORK ORDER badge with WO# and status
+- 6-cell meta grid (GC/Client, GC Rep, Work Area, Date, Type, Markup %)
+- Description of Work box
+- **Labor Table** — Worker, Trade, Reg/OT Hours, Rate, Reg Amount, OT Amount, Subtotal
+- **Materials Table** — Description, Qty, Unit, Unit Price, Subtotal
+- **Equipment Table** — Type, Description, Hrs, Rate Unit, Rate, Subtotal
+- **Cost Summary box** (dark blue) — Labor / Materials / Equipment / Direct Subtotal / OH+Profit markup / **WORK ORDER TOTAL** (large)
+- T&M Authorization legal notice (cites TX Prompt Payment Act)
+- **Dual signature block** — Submitted By (Contractor) / Authorized By (GC/Owner Rep) with signature lines, printed name, title, date
+
+**Printable T&M Report (full project):**
+- Company header + T&M WORK ORDER REPORT badge
+- 5-card KPI stats (Total WOs / Total Value / Signed Value / Unsigned/Pending / Invoiced/Paid)
+- Full WO summary table: WO#, Date, Type, Description, GC/Client, Labor, Materials, Equipment, Direct Cost, Markup%, WO Total, Status — with grand total row
+- Amber warning box when unsigned T&M value is outstanding: "Get GC signatures before invoicing"
+- CONFIDENTIAL footer
+
+**Integration:**
+- `window._getTMStats()` exposed for Project Status Card
+- Returns: total, totalAmt, signed, signedAmt, unsigned, unsignedAmt, invoiced
+- localStorage per project: `oncor_tm_v1_[projectname]`
+
+**Why this matters:** On commercial jobs, GCs regularly ask concrete subs to do extra work that's "real quick" — clear a conflict, place extra concrete for a changed detail, stand by while they fix an issue. Without T&M documentation, that work is free. With this log, every directed extra gets logged, priced at actual cost + markup, and printed on a professional T&M ticket for the GC rep to sign on-the-spot. Once signed, it becomes a binding document for invoicing. The "Unsigned/Pending" alert ensures nothing goes to the GC's accounts payable without authorization. T&M disputes are among the most common construction claims — this tool creates the paper trail that wins them.
+
+**Commits:**
+- 5fa54b1: 📋 T&M Work Order Log (Alt+T) (+579 lines) [Session #75]
+
+**Total Lines:** ~157,807 | **New Alt+ Shortcuts:** Alt+T (T&M Work Orders)
+
+---
+
+## 📅 SESSION: Apr 1, 2026 - 19:31 UTC (Overnight Cron #76)
+**Status:** ✅ PROJECT CALENDAR & MILESTONE TRACKER added (+441 lines)
+
+### What Was Added:
+
+**📅 Project Calendar & Milestone Tracker (Alt+L):**
+- New `📅 Calendar & Milestones` button injected in sidebar below T&M Work Orders
+- `Alt+L` keyboard shortcut opens/toggles the calendar modal
+- **Purpose:** Unified project timeline that aggregates key dates from ALL other modules into one view — pours, inspections, lien deadlines, pay apps, meetings, equipment returns, quote expiries, permits, and user-added milestones.
+
+**Stats Bar (live):**
+- **Total Events** — all events (manual + auto-pulled)
+- **Upcoming 7d** — events in the next 7 days (amber alert)
+- **Overdue** — past-due events (red alert)
+- **Your Milestones** — manually added milestones
+- **Auto-Pulled** — events pulled from other modules
+
+**Three Views:**
+1. **📋 Upcoming** (default) — next 30 events chronologically, grouped by month
+2. **📆 Month** — traditional calendar grid with event chips per day, prev/next navigation
+3. **📋 Full List** — complete event history, past + future, with month groupings
+
+**Auto-Pulled Events (from 9 other modules):**
+- **Pour Schedule** — pour dates auto-imported
+- **Inspection Log** — all inspection dates
+- **Permits** — permit expiry dates
+- **Lien Tracker** — NTO deadline, lien affidavit deadline, bond claim deadline
+- **Meeting Log** — next meeting dates + open action item due dates
+- **Equipment Rentals** — return dates for On Rent equipment
+- **Supplier Quotes** — quote expiry dates (non-awarded)
+- **Pay Applications** — period end dates
+- **AP & Bills** — bill due dates for unpaid/partial bills
+
+**Manual Milestone Types (22):**
+Project Start, Project Completion, Pour Day, Inspection, Pay Application Due, Lien Deadline, Subcontractor Deadline, Material Delivery, Meeting, RFI Due, Submittal Due, Change Order Deadline, Equipment Return, Quote Expiry, Safety Milestone, Owner Walkthrough, Punch List Due, Retainage Release, Permit Expiry, Mobilization, Demobilization, Other
+
+**Add Milestone Form (inline at bottom of modal):**
+- Date (required), Label (required), Type dropdown, Notes (optional)
+- One-click add, instant refresh
+
+**Event Display:**
+- Color-coded by type (pour = blue, lien = red, inspection = amber, etc.)
+- TODAY badge, "Xd" countdown badge for events within 7 days
+- PAST badge on overdue manual events
+- Auto-pulled events tagged "Auto" (non-deletable)
+- Manual events have delete (🗑) button
+- Month grouping headers for easy scanning
+
+**Printable Calendar Report:**
+- Company header + PROJECT CALENDAR & MILESTONE REPORT badge
+- 5-card KPI stats (Total / Upcoming / Overdue / Manual / Auto-Pulled)
+- Full event table: Date / Event / Type / Source / Notes / Status
+- Status color-coded: Past (red) / TODAY (green) / Upcoming (blue) / In Xd (near-term)
+- CONFIDENTIAL footer + Print/Save PDF
+
+**Why this matters:** With 30+ project management modules all storing dates, JFS has critical deadlines scattered everywhere — lien deadline in the lien tracker, inspection tomorrow in the inspection log, equipment return overdue in rentals, pay app period end coming up. Without a unified calendar, things fall through. With Alt+L, he opens one view and sees everything on one timeline: "In the next 7 days — 2 inspections, 1 pour, 1 lien deadline, 3 equipment returns due." The month view shows the whole picture. The upcoming view is the daily driver.
+
+**Commits:**
+- 41604ca: 📅 Project Calendar & Milestone Tracker (Alt+L) (+441 lines) [Session #76]
+
+**Total Lines:** ~158,248 | **New Alt+ Shortcuts:** Alt+L (Calendar & Milestones)
