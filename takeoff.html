@@ -168978,3 +168978,732 @@ document.addEventListener('keydown', function(e) {
 })();
 // ==================== END SESSION #94 — Zeus ⚡ Waste Analysis (Ctrl+Alt+G) + Pour Quality Score (Ctrl+Alt+H) + Sub Performance (Ctrl+Alt+I) ====================
 </script>
+
+<script>
+// ==================== SESSION #95 — Zeus ⚡ ACI Compliance Monitor (Ctrl+Alt+J) + Quick Invoice Generator (Ctrl+Alt+K) + Project Info Board (Ctrl+Alt+L) ====================
+(function() {
+'use strict';
+
+// ==================== ACI COMPLIANCE MONITOR (Ctrl+Alt+J) ====================
+function getACIData() {
+  var proj = (typeof currentProjectName === 'function' ? currentProjectName() : null) ||
+    (typeof window.currentProject !== 'undefined' ? window.currentProject : null) ||
+    (window._lastProject) || 'default';
+  var deliveries = [];
+  var qcTests = [];
+  try {
+    var dk = 'oncor_delivery_tickets_v1_' + proj;
+    var dd = localStorage.getItem(dk);
+    if (dd) deliveries = JSON.parse(dd);
+  } catch(e) {}
+  try {
+    var qk = 'oncor_qc_log_v1_' + proj;
+    var qd = localStorage.getItem(qk);
+    if (qd) qcTests = JSON.parse(qd);
+  } catch(e) {}
+  return { deliveries: deliveries, qcTests: qcTests };
+}
+
+function buildACIModal() {
+  var data = getACIData();
+  var deliveries = data.deliveries;
+  var qcTests = data.qcTests;
+
+  // Analyze flags
+  var flags = {
+    hotWeather: [],      // ACI 305R >90°F
+    coldWeather: [],     // ACI 306R <50°F
+    waterAdded: [],      // ASTM C94 water on-site
+    overSlump: [],       // slump over max
+    rejectedLoads: [],   // rejected tickets
+    failedBreaks: [],    // failed 28-day cylinders
+    lowBreaks: [],       // low avg or low min
+    evapRisk: [],        // high evaporation conditions
+  };
+
+  deliveries.forEach(function(d) {
+    var temp = parseFloat(d.concTemp || d.temp || 0);
+    var slump = parseFloat(d.slump || 0);
+    var maxSlump = parseFloat(d.maxSlump || 0);
+    var water = parseFloat(d.waterAdded || d.waterOnSite || 0);
+    var status = (d.status || '').toLowerCase();
+
+    if (temp > 90 && temp < 200) flags.hotWeather.push({ ticket: d.ticketNum || d.id || '—', temp: temp, date: d.date || d.pourDate, area: d.pourArea || d.area });
+    if (temp > 0 && temp < 50) flags.coldWeather.push({ ticket: d.ticketNum || d.id || '—', temp: temp, date: d.date || d.pourDate, area: d.pourArea || d.area });
+    if (water > 0) flags.waterAdded.push({ ticket: d.ticketNum || d.id || '—', gallons: water, date: d.date || d.pourDate, area: d.pourArea || d.area });
+    if (slump > 0 && maxSlump > 0 && slump > maxSlump) flags.overSlump.push({ ticket: d.ticketNum || d.id || '—', slump: slump, max: maxSlump, date: d.date || d.pourDate, area: d.pourArea || d.area });
+    if (status === 'rejected') flags.rejectedLoads.push({ ticket: d.ticketNum || d.id || '—', reason: d.rejectionReason || d.notes || '', date: d.date || d.pourDate, area: d.pourArea || d.area });
+  });
+
+  qcTests.forEach(function(q) {
+    var fc = parseFloat(q.specPSI || q.fc || 0);
+    var b1 = parseFloat(q.break28a || q.day28a || 0);
+    var b2 = parseFloat(q.break28b || q.day28b || 0);
+    if (fc > 0 && (b1 > 0 || b2 > 0)) {
+      var avg = (b1 + b2) / (b1 > 0 && b2 > 0 ? 2 : 1);
+      var minB = Math.min(b1 > 0 ? b1 : 99999, b2 > 0 ? b2 : 99999);
+      if (minB === 99999) minB = avg;
+      var threshold = fc - 500;
+      if (avg < fc && minB < threshold) {
+        flags.failedBreaks.push({ setId: q.cylinderSetId || q.id || '—', fc: fc, avg: Math.round(avg), minB: Math.round(minB), date: q.testDate || q.date, area: q.pourName || q.area });
+      } else if (avg < fc || minB < threshold) {
+        flags.lowBreaks.push({ setId: q.cylinderSetId || q.id || '—', fc: fc, avg: Math.round(avg), minB: Math.round(minB), date: q.testDate || q.date, area: q.pourName || q.area });
+      }
+    }
+  });
+
+  var totalFlags = flags.hotWeather.length + flags.coldWeather.length + flags.waterAdded.length +
+    flags.overSlump.length + flags.rejectedLoads.length + flags.failedBreaks.length + flags.lowBreaks.length;
+  var criticalFlags = flags.failedBreaks.length + flags.rejectedLoads.length;
+  var noData = deliveries.length === 0 && qcTests.length === 0;
+
+  var colorHeader = criticalFlags > 0 ? '#dc2626' : (totalFlags > 0 ? '#f59e0b' : '#10b981');
+  var statusLabel = criticalFlags > 0 ? '🔴 Critical Issues Found' : (totalFlags > 0 ? '⚠️ Warnings Detected' : '✅ No Issues Found');
+
+  function flagTable(items, cols, renderRow, emptyMsg) {
+    if (!items.length) return '<p style="color:#64748b;font-style:italic;font-size:12px;margin:4px 0;">' + emptyMsg + '</p>';
+    var s = '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:4px;">';
+    s += '<tr style="background:rgba(255,255,255,0.05);">' + cols.map(function(c) { return '<th style="text-align:left;padding:5px 8px;color:#94a3b8;border-bottom:1px solid #334155;">' + c + '</th>'; }).join('') + '</tr>';
+    items.forEach(function(item) { s += '<tr style="border-bottom:1px solid #1e293b;">' + renderRow(item) + '</tr>'; });
+    s += '</table>';
+    return s;
+  }
+  function td(v, color) { return '<td style="padding:5px 8px;color:' + (color || '#e2e8f0') + ';">' + (v || '—') + '</td>'; }
+
+  var sections = [
+    {
+      title: '❌ Failed 28-Day Cylinders (ACI 318-19 §26.12.3)',
+      severity: 'critical',
+      ref: 'ACI 318-19 §26.12.4 — investigation required. Both avg < f\'c AND min < f\'c−500 psi.',
+      count: flags.failedBreaks.length,
+      html: flagTable(flags.failedBreaks, ['Set ID', 'Spec f\'c', 'Avg 28d', 'Min 28d', 'Date', 'Pour Area'],
+        function(i) { return td(i.setId,'#a78bfa') + td(i.fc+' PSI','#94a3b8') + td(i.avg+' PSI','#dc2626') + td(i.minB+' PSI','#dc2626') + td(i.date,'#94a3b8') + td(i.area,'#e2e8f0'); },
+        'No failed cylinder sets logged.')
+    },
+    {
+      title: '⚠️ Low Break Warnings (ACI 318-19 §26.12.3)',
+      severity: 'warning',
+      ref: 'Avg < f\'c or min < f\'c−500 psi — monitor, may need investigation.',
+      count: flags.lowBreaks.length,
+      html: flagTable(flags.lowBreaks, ['Set ID', 'Spec f\'c', 'Avg 28d', 'Min 28d', 'Date', 'Pour Area'],
+        function(i) { return td(i.setId,'#a78bfa') + td(i.fc+' PSI','#94a3b8') + td(i.avg+' PSI','#f59e0b') + td(i.minB+' PSI','#f59e0b') + td(i.date,'#94a3b8') + td(i.area,'#e2e8f0'); },
+        'No low-break warnings.')
+    },
+    {
+      title: '🚫 Rejected Concrete Loads',
+      severity: 'critical',
+      ref: 'ASTM C94 — rejected loads must be documented and removed from volume counts.',
+      count: flags.rejectedLoads.length,
+      html: flagTable(flags.rejectedLoads, ['Ticket #', 'Date', 'Pour Area', 'Reason'],
+        function(i) { return td(i.ticket,'#a78bfa') + td(i.date,'#94a3b8') + td(i.area,'#e2e8f0') + td(i.reason,'#f87171'); },
+        'No rejected loads logged.')
+    },
+    {
+      title: '💧 Water Added On-Site (ASTM C94 §11.8)',
+      severity: 'warning',
+      ref: 'Max 1 gal/CY site addition. Any water addition must be documented. Over limit = rejection.',
+      count: flags.waterAdded.length,
+      html: flagTable(flags.waterAdded, ['Ticket #', 'Gallons Added', 'Date', 'Pour Area'],
+        function(i) { return td(i.ticket,'#a78bfa') + td(i.gallons+' gal','#f59e0b') + td(i.date,'#94a3b8') + td(i.area,'#e2e8f0'); },
+        'No on-site water additions logged.')
+    },
+    {
+      title: '☀️ Hot Weather Pours — ACI 305R (Concrete Temp >90°F)',
+      severity: 'warning',
+      ref: 'ACI 305R-10: precautions required above 90°F. Document ice water, retarder, curing.',
+      count: flags.hotWeather.length,
+      html: flagTable(flags.hotWeather, ['Ticket #', 'Concrete Temp', 'Date', 'Pour Area'],
+        function(i) { return td(i.ticket,'#a78bfa') + td(i.temp+'°F','#f97316') + td(i.date,'#94a3b8') + td(i.area,'#e2e8f0'); },
+        'No hot weather temp exceedances logged.')
+    },
+    {
+      title: '❄️ Cold Weather Pours — ACI 306R (Concrete Temp <50°F)',
+      severity: 'warning',
+      ref: 'ACI 306R-16: heated water, protection required. Curing temp must be maintained.',
+      count: flags.coldWeather.length,
+      html: flagTable(flags.coldWeather, ['Ticket #', 'Concrete Temp', 'Date', 'Pour Area'],
+        function(i) { return td(i.ticket,'#a78bfa') + td(i.temp+'°F','#60a5fa') + td(i.date,'#94a3b8') + td(i.area,'#e2e8f0'); },
+        'No cold weather temp exceedances logged.')
+    },
+    {
+      title: '📏 Over-Slump Loads (ASTM C143)',
+      severity: 'warning',
+      ref: 'Slump exceeds specified max. Do not add water. Consider rejection if significantly over.',
+      count: flags.overSlump.length,
+      html: flagTable(flags.overSlump, ['Ticket #', 'Actual Slump', 'Max Slump', 'Date', 'Pour Area'],
+        function(i) { return td(i.ticket,'#a78bfa') + td(i.slump+'"','#f59e0b') + td(i.max+'"','#94a3b8') + td(i.date,'#94a3b8') + td(i.area,'#e2e8f0'); },
+        'No over-slump loads logged.')
+    },
+  ];
+
+  var sectionsHtml = sections.map(function(s) {
+    var borderColor = s.count > 0 ? (s.severity === 'critical' ? '#dc2626' : '#f59e0b') : '#10b981';
+    var badgeColor = s.count > 0 ? (s.severity === 'critical' ? '#dc2626' : '#f59e0b') : '#10b981';
+    return '<div style="background:rgba(30,41,59,0.5);border:1px solid ' + borderColor + ';border-radius:8px;padding:14px;margin-bottom:10px;">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">' +
+        '<span style="font-size:13px;font-weight:600;color:#e2e8f0;">' + s.title + '</span>' +
+        '<span style="background:' + badgeColor + ';color:#fff;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700;">' + s.count + '</span>' +
+      '</div>' +
+      '<p style="color:#64748b;font-size:11px;margin:0 0 8px 0;">' + s.ref + '</p>' +
+      s.html +
+    '</div>';
+  }).join('');
+
+  var html = '<div id="aci-compliance-modal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding-top:40px;backdrop-filter:blur(4px);">' +
+    '<div style="background:#0f172a;border:1px solid #334155;border-radius:16px;width:92%;max-width:860px;max-height:88vh;overflow-y:auto;box-shadow:0 25px 80px rgba(0,0,0,0.6);display:flex;flex-direction:column;">' +
+      '<div style="background:linear-gradient(135deg,rgba(220,38,38,0.15),rgba(15,23,42,0));padding:20px 24px 14px;border-bottom:1px solid #1e293b;flex-shrink:0;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+          '<div>' +
+            '<h2 style="margin:0 0 2px 0;font-size:18px;color:#e2e8f0;">📋 ACI Compliance Monitor</h2>' +
+            '<p style="margin:0;font-size:12px;color:#64748b;">ACI 305R · ACI 306R · ACI 318-19 · ASTM C94 · ASTM C143 — Session #95</p>' +
+          '</div>' +
+          '<button onclick="document.getElementById(\'aci-compliance-modal\').remove();" style="background:rgba(100,116,139,0.2);color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">✕ Close</button>' +
+        '</div>' +
+      '</div>' +
+      '<div style="padding:20px 24px;flex:1;">' +
+        (noData
+          ? '<div style="text-align:center;padding:40px;color:#64748b;"><p style="font-size:40px;margin:0 0 12px;">📋</p><p style="font-size:16px;color:#94a3b8;">No QC or Delivery Ticket data found.</p><p style="font-size:13px;margin-top:8px;">Log delivery tickets (Ctrl+Shift+W) and QC tests (Ctrl+Shift+Q) to see compliance flags here.</p></div>'
+          : '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;">' +
+              '<div style="background:rgba(220,38,38,0.12);border:1px solid rgba(220,38,38,0.3);border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:800;color:#dc2626;">' + criticalFlags + '</div><div style="font-size:11px;color:#94a3b8;margin-top:2px;">Critical Issues</div></div>' +
+              '<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:800;color:#f59e0b;">' + (totalFlags - criticalFlags) + '</div><div style="font-size:11px;color:#94a3b8;margin-top:2px;">Warnings</div></div>' +
+              '<div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:800;color:' + colorHeader + ';">' + statusLabel + '</div></div>' +
+            '</div>' +
+            '<div style="background:rgba(30,41,59,0.6);border:1px solid #334155;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#94a3b8;">' +
+              '📊 Data sources: <strong style="color:#e2e8f0;">' + deliveries.length + ' delivery tickets</strong> + <strong style="color:#e2e8f0;">' + qcTests.length + ' QC tests</strong> logged for this project.' +
+            '</div>' +
+            sectionsHtml
+        ) +
+      '</div>' +
+      '<div style="padding:12px 24px;border-top:1px solid #1e293b;flex-shrink:0;display:flex;gap:8px;justify-content:flex-end;">' +
+        '<button onclick="printACIReport();" style="background:rgba(220,38,38,0.2);color:#fca5a5;border:1px solid rgba(220,38,38,0.4);border-radius:6px;padding:8px 16px;cursor:pointer;font-size:13px;">🖨️ Print Compliance Report</button>' +
+        '<button onclick="document.getElementById(\'aci-compliance-modal\').remove();" style="background:rgba(100,116,139,0.2);color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:13px;">Close</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  var m = document.createElement('div');
+  m.innerHTML = html;
+  m.firstChild.addEventListener('click', function(e) { if (e.target === m.firstChild) m.firstChild.remove(); });
+  document.body.appendChild(m.firstChild);
+}
+
+window.printACIReport = function() {
+  var data = getACIData();
+  var d = data.deliveries; var q = data.qcTests;
+  var w = window.open('', '_blank');
+  w.document.write('<html><head><title>ACI Compliance Report</title><style>body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:20px;}h1{font-size:18px;}h3{font-size:13px;margin:14px 0 4px;}table{width:100%;border-collapse:collapse;margin-bottom:10px;}th{background:#eee;border:1px solid #ccc;padding:4px 8px;text-align:left;}td{border:1px solid #ddd;padding:4px 8px;}.crit{background:#fee2e2;}.warn{background:#fef9c3;}.ok{color:green;}.badge-crit{background:#dc2626;color:#fff;border-radius:999px;padding:1px 8px;}.badge-warn{background:#f59e0b;color:#fff;border-radius:999px;padding:1px 8px;}@media print{.no-print{display:none;}}</style></head><body>');
+  w.document.write('<div style="display:flex;justify-content:space-between;margin-bottom:10px;"><div><h1>ACI Compliance Monitor Report</h1><p>Sources: ' + d.length + ' delivery tickets · ' + q.length + ' QC tests | Standards: ACI 305R, 306R, 318-19, ASTM C94, C143</p></div><button class="no-print" onclick="window.print()">🖨️ Print / PDF</button></div>');
+  w.document.write('<p><em>Generated: ' + new Date().toLocaleString() + ' | CONFIDENTIAL — INTERNAL USE ONLY</em></p><hr>');
+  w.document.write('</body></html>');
+  w.document.close();
+};
+
+var aciModal = null;
+function openACIModal() {
+  var existing = document.getElementById('aci-compliance-modal');
+  if (existing) { existing.remove(); return; }
+  buildACIModal();
+}
+
+// Sidebar button
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn = document.createElement('button');
+    btn.id = 'oncor-aci-btn';
+    btn.innerHTML = '📋 ACI Compliance';
+    btn.title = 'ACI Compliance Monitor (Ctrl+Alt+J)';
+    btn.onclick = openACIModal;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(239,68,68,0.12);color:#f87171;border:1px solid rgba(239,68,68,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(239,68,68,0.25)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(239,68,68,0.12)'; };
+    var subPerfBtn = document.getElementById('oncor-sub-perf-btn');
+    if (subPerfBtn && subPerfBtn.parentNode) {
+      subPerfBtn.parentNode.insertBefore(btn, subPerfBtn.nextSibling);
+    } else {
+      btn.style.cssText += 'position:fixed;bottom:130px;right:20px;z-index:9000;width:auto;';
+      document.body.appendChild(btn);
+    }
+  }, 10000);
+});
+// ==================== END ACI COMPLIANCE MONITOR ====================
+
+
+// ==================== QUICK INVOICE GENERATOR (Ctrl+Alt+K) ====================
+var qiModalEl = null;
+
+function getQIData() {
+  var proj = (typeof currentProjectName === 'function' ? currentProjectName() : null) ||
+    (typeof window.currentProject !== 'undefined' ? window.currentProject : null) ||
+    (window._lastProject) || '';
+  var k = 'oncor_quick_invoices_v1_' + (proj || 'global');
+  try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch(e) { return []; }
+}
+function saveQIData(items) {
+  var proj = (typeof currentProjectName === 'function' ? currentProjectName() : null) ||
+    (typeof window.currentProject !== 'undefined' ? window.currentProject : null) ||
+    (window._lastProject) || '';
+  var k = 'oncor_quick_invoices_v1_' + (proj || 'global');
+  localStorage.setItem(k, JSON.stringify(items));
+}
+function nextQINum(items) {
+  var max = 0;
+  items.forEach(function(i) {
+    var n = parseInt((i.num || '').replace(/\D/g, '')) || 0;
+    if (n > max) max = n;
+  });
+  return 'INV-' + String(max + 1).padStart(3, '0');
+}
+
+function buildQIModal() {
+  var items = getQIData();
+  var le = (typeof window.lastEstimate !== 'undefined' && window.lastEstimate) ? window.lastEstimate : {};
+  var ci = {};
+  try { ci = JSON.parse(localStorage.getItem('oncor_company_info') || '{}'); } catch(e) {}
+  var projName = (typeof window.currentProject !== 'undefined' && window.currentProject) ? window.currentProject : (ci.projectName || '');
+  var clientName = (typeof window.clientName !== 'undefined' && window.clientName) ? window.clientName : (le.clientName || ci.clientName || '');
+  var estTotal = le.totalBid ? '$' + parseFloat(le.totalBid).toLocaleString(undefined, {minimumFractionDigits:2,maximumFractionDigits:2}) : '';
+
+  var totalOutstanding = items.filter(function(i) { return i.status !== 'Paid' && i.status !== 'Voided'; }).reduce(function(a,i) { return a + (parseFloat(i.amount) || 0); }, 0);
+  var totalPaid = items.filter(function(i) { return i.status === 'Paid'; }).reduce(function(a,i) { return a + (parseFloat(i.amount) || 0); }, 0);
+  var overdue = items.filter(function(i) {
+    return i.status === 'Unpaid' && i.dueDate && new Date(i.dueDate) < new Date();
+  }).length;
+
+  var itemRows = items.map(function(inv, idx) {
+    var isOverdue = inv.status === 'Unpaid' && inv.dueDate && new Date(inv.dueDate) < new Date();
+    var statusColors = { 'Unpaid': '#f59e0b', 'Paid': '#10b981', 'Disputed': '#ef4444', 'Voided': '#64748b', 'Partial': '#3b82f6' };
+    var sc = statusColors[inv.status] || '#94a3b8';
+    return '<tr style="border-bottom:1px solid #1e293b;">' +
+      '<td style="padding:8px 10px;color:#a78bfa;font-family:monospace;">' + inv.num + '</td>' +
+      '<td style="padding:8px 10px;color:#e2e8f0;">' + (inv.clientName || clientName || '—') + '</td>' +
+      '<td style="padding:8px 10px;color:#94a3b8;font-size:12px;">' + (inv.description || '').substring(0,40) + (inv.description && inv.description.length>40?'…':'') + '</td>' +
+      '<td style="padding:8px 10px;color:#e2e8f0;">' + (inv.invoiceDate || '—') + '</td>' +
+      '<td style="padding:8px 10px;color:' + (isOverdue ? '#ef4444' : '#94a3b8') + ';">' + (inv.dueDate || '—') + (isOverdue ? ' <span style="background:#ef4444;color:#fff;border-radius:3px;font-size:10px;padding:1px 4px;">OVERDUE</span>' : '') + '</td>' +
+      '<td style="padding:8px 10px;color:#34d399;font-weight:700;">$' + parseFloat(inv.amount||0).toLocaleString(undefined,{minimumFractionDigits:2}) + '</td>' +
+      '<td style="padding:8px 10px;"><span style="background:' + sc + '22;color:' + sc + ';border:1px solid ' + sc + '44;border-radius:999px;padding:2px 8px;font-size:11px;">' + inv.status + '</span></td>' +
+      '<td style="padding:8px 10px;">' +
+        '<button onclick="printQuickInvoice(' + idx + ');" title="Print Invoice" style="background:rgba(59,130,246,0.2);color:#60a5fa;border:1px solid rgba(59,130,246,0.3);border-radius:4px;padding:3px 8px;cursor:pointer;font-size:11px;margin-right:4px;">🖨️</button>' +
+        '<button onclick="deleteQI(' + idx + ');" title="Delete" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);border-radius:4px;padding:3px 8px;cursor:pointer;font-size:11px;">🗑</button>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+
+  var today = new Date(); var y = today.getFullYear(); var m = String(today.getMonth()+1).padStart(2,'0'); var d = String(today.getDate()).padStart(2,'0');
+  var todayStr = y + '-' + m + '-' + d;
+  var dueStr = y + '-' + m + '-' + String(today.getDate()+30).padStart(2,'0');
+
+  var html = '<div id="qi-modal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding-top:30px;backdrop-filter:blur(4px);">' +
+    '<div style="background:#0f172a;border:1px solid #334155;border-radius:16px;width:94%;max-width:920px;max-height:90vh;overflow-y:auto;box-shadow:0 25px 80px rgba(0,0,0,0.6);display:flex;flex-direction:column;">' +
+      '<div style="background:linear-gradient(135deg,rgba(16,185,129,0.15),rgba(15,23,42,0));padding:18px 24px 12px;border-bottom:1px solid #1e293b;flex-shrink:0;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+          '<div><h2 style="margin:0 0 2px 0;font-size:18px;color:#e2e8f0;">💰 Quick Invoice Generator</h2>' +
+          '<p style="margin:0;font-size:12px;color:#64748b;">Fast lump-sum, T&M, milestone & retainage invoices — Session #95</p></div>' +
+          '<button onclick="document.getElementById(\'qi-modal\').remove();" style="background:rgba(100,116,139,0.2);color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">✕ Close</button>' +
+        '</div>' +
+      '</div>' +
+      '<div style="padding:16px 24px;flex:1;">' +
+        '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">' +
+          '<div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#34d399;">' + items.length + '</div><div style="font-size:11px;color:#94a3b8;">Total Invoices</div></div>' +
+          '<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#f59e0b;">$' + totalOutstanding.toLocaleString(undefined,{minimumFractionDigits:0}) + '</div><div style="font-size:11px;color:#94a3b8;">Outstanding</div></div>' +
+          '<div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#10b981;">$' + totalPaid.toLocaleString(undefined,{minimumFractionDigits:0}) + '</div><div style="font-size:11px;color:#94a3b8;">Collected</div></div>' +
+          '<div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#ef4444;">' + overdue + '</div><div style="font-size:11px;color:#94a3b8;">Overdue</div></div>' +
+        '</div>' +
+        '<div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:10px;padding:14px;margin-bottom:14px;">' +
+          '<h3 style="margin:0 0 10px 0;font-size:13px;color:#34d399;">➕ New Invoice</h3>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">' +
+            '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Invoice #</label><input id="qi-num" value="' + nextQINum(items) + '" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;"></div>' +
+            '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Client / GC</label><input id="qi-client" value="' + (clientName || '') + '" placeholder="Client name" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;"></div>' +
+            '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Invoice Type</label><select id="qi-type" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;"><option>Lump Sum</option><option>T&M Work Order</option><option>Milestone</option><option>Retainage Release</option><option>Change Order</option><option>Progress Billing</option><option>Mobilization</option><option>Final Invoice</option><option>Other</option></select></div>' +
+          '</div>' +
+          '<div style="margin-bottom:8px;"><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Description / Scope</label><input id="qi-desc" placeholder="e.g. Concrete flatwork — Building A slab-on-grade per CO #3" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;"></div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">' +
+            '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Invoice Date</label><input id="qi-idate" type="date" value="' + todayStr + '" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;"></div>' +
+            '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Due Date</label><input id="qi-ddate" type="date" value="' + dueStr + '" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;"></div>' +
+            '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Amount ($)</label><input id="qi-amount" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;background:#1e293b;border:1px solid #34d399;border-radius:6px;padding:7px 10px;color:#34d399;font-size:14px;font-weight:700;box-sizing:border-box;"></div>' +
+            '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Status</label><select id="qi-status" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;"><option>Unpaid</option><option>Partial</option><option>Paid</option><option>Disputed</option><option>Voided</option></select></div>' +
+            '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Ref / CO #</label><input id="qi-ref" placeholder="CO-001, PA-3..." style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;"></div>' +
+          '</div>' +
+          '<div style="margin-bottom:8px;"><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Notes</label><input id="qi-notes" placeholder="Payment terms, bank details, special instructions..." style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;"></div>' +
+          '<button onclick="saveQI();" style="background:rgba(16,185,129,0.3);color:#34d399;border:1px solid rgba(16,185,129,0.5);border-radius:6px;padding:8px 20px;cursor:pointer;font-size:13px;font-weight:600;">💾 Save Invoice</button>' +
+        '</div>' +
+        '<h3 style="font-size:13px;color:#94a3b8;margin:0 0 8px 0;">📋 Invoice History (' + items.length + ')</h3>' +
+        (items.length === 0
+          ? '<p style="color:#64748b;font-style:italic;text-align:center;padding:20px;">No invoices yet. Create one above.</p>'
+          : '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+              '<tr style="background:rgba(255,255,255,0.05);"><th style="text-align:left;padding:7px 10px;color:#94a3b8;border-bottom:1px solid #334155;">Invoice #</th><th style="text-align:left;padding:7px 10px;color:#94a3b8;border-bottom:1px solid #334155;">Client</th><th style="text-align:left;padding:7px 10px;color:#94a3b8;border-bottom:1px solid #334155;">Description</th><th style="text-align:left;padding:7px 10px;color:#94a3b8;border-bottom:1px solid #334155;">Invoice Date</th><th style="text-align:left;padding:7px 10px;color:#94a3b8;border-bottom:1px solid #334155;">Due Date</th><th style="text-align:left;padding:7px 10px;color:#94a3b8;border-bottom:1px solid #334155;">Amount</th><th style="text-align:left;padding:7px 10px;color:#94a3b8;border-bottom:1px solid #334155;">Status</th><th style="text-align:left;padding:7px 10px;color:#94a3b8;border-bottom:1px solid #334155;">Actions</th></tr>' +
+              itemRows +
+            '</table></div>'
+        ) +
+      '</div>' +
+      '<div style="padding:10px 24px;border-top:1px solid #1e293b;flex-shrink:0;display:flex;justify-content:flex-end;">' +
+        '<button onclick="document.getElementById(\'qi-modal\').remove();" style="background:rgba(100,116,139,0.2);color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:13px;">Close</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  var container = document.createElement('div');
+  container.innerHTML = html;
+  container.firstChild.addEventListener('click', function(e) { if (e.target === container.firstChild) container.firstChild.remove(); });
+  document.body.appendChild(container.firstChild);
+}
+
+window.saveQI = function() {
+  var items = getQIData();
+  var inv = {
+    num: (document.getElementById('qi-num') || {}).value || nextQINum(items),
+    clientName: (document.getElementById('qi-client') || {}).value || '',
+    type: (document.getElementById('qi-type') || {}).value || 'Lump Sum',
+    description: (document.getElementById('qi-desc') || {}).value || '',
+    invoiceDate: (document.getElementById('qi-idate') || {}).value || '',
+    dueDate: (document.getElementById('qi-ddate') || {}).value || '',
+    amount: parseFloat((document.getElementById('qi-amount') || {}).value) || 0,
+    status: (document.getElementById('qi-status') || {}).value || 'Unpaid',
+    ref: (document.getElementById('qi-ref') || {}).value || '',
+    notes: (document.getElementById('qi-notes') || {}).value || '',
+    created: new Date().toISOString()
+  };
+  if (!inv.amount) { alert('Please enter an invoice amount.'); return; }
+  items.push(inv);
+  saveQIData(items);
+  var m = document.getElementById('qi-modal');
+  if (m) m.remove();
+  buildQIModal();
+};
+
+window.deleteQI = function(idx) {
+  if (!confirm('Delete this invoice?')) return;
+  var items = getQIData();
+  items.splice(idx, 1);
+  saveQIData(items);
+  var m = document.getElementById('qi-modal');
+  if (m) m.remove();
+  buildQIModal();
+};
+
+window.printQuickInvoice = function(idx) {
+  var items = getQIData();
+  var inv = items[idx];
+  if (!inv) return;
+  var ci = {};
+  try { ci = JSON.parse(localStorage.getItem('oncor_company_info') || '{}'); } catch(e) {}
+  var projName = (typeof window.currentProject !== 'undefined' && window.currentProject) ? window.currentProject : (ci.projectName || 'Project');
+  var coName = ci.companyName || 'Company Name';
+  var coPhone = ci.phone || '';
+  var coEmail = ci.email || '';
+  var coAddr = ci.address || '';
+  var coLic = ci.license || '';
+  var isOverdue = inv.status === 'Unpaid' && inv.dueDate && new Date(inv.dueDate) < new Date();
+  var w = window.open('', '_blank');
+  var amtFmt = parseFloat(inv.amount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  w.document.write('<!DOCTYPE html><html><head><title>Invoice ' + inv.num + '</title><style>');
+  w.document.write('body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:30px;max-width:780px;margin:0 auto;}');
+  w.document.write('.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;border-bottom:3px solid #1e293b;padding-bottom:15px;}');
+  w.document.write('.company{font-size:11px;color:#555;line-height:1.7;}.inv-badge{background:#0f172a;color:#fff;border-radius:8px;padding:10px 20px;text-align:right;}');
+  w.document.write('.amount-box{background:#0f172a;color:#fff;border-radius:8px;padding:20px;text-align:center;margin:20px 0;}');
+  w.document.write('.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:16px;}');
+  w.document.write('.meta-label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px;}.meta-val{font-size:13px;color:#111;font-weight:600;margin-top:1px;}');
+  w.document.write('.sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:30px;}');
+  w.document.write('.sig-box{border-top:2px solid #333;padding-top:6px;font-size:10px;color:#555;}');
+  w.document.write('.overdue{background:#fee2e2;border:1px solid #fca5a5;border-radius:6px;padding:8px 14px;margin-bottom:14px;font-size:11px;color:#dc2626;font-weight:600;}');
+  w.document.write('@media print{.no-print{display:none;}}');
+  w.document.write('</style></head><body>');
+  w.document.write('<div class="header">');
+  w.document.write('<div class="company"><strong style="font-size:16px;color:#0f172a;">' + coName + '</strong><br>' + coAddr + (coAddr ? '<br>' : '') + coPhone + (coEmail ? ' · ' + coEmail : '') + (coLic ? '<br>License: ' + coLic : '') + '</div>');
+  w.document.write('<div class="inv-badge"><div style="font-size:11px;opacity:0.7;margin-bottom:2px;">INVOICE</div><div style="font-size:20px;font-weight:800;">' + inv.num + '</div><div style="font-size:11px;opacity:0.7;margin-top:2px;">' + inv.type + '</div></div>');
+  w.document.write('</div>');
+  if (isOverdue) w.document.write('<div class="overdue">⚠️ OVERDUE — This invoice was due on ' + inv.dueDate + '. TX Prompt Payment Act §28.004 — 1.5%/month interest accruing on past-due amounts.</div>');
+  w.document.write('<div class="meta-grid">');
+  w.document.write('<div><div class="meta-label">Bill To</div><div class="meta-val">' + (inv.clientName || '—') + '</div></div>');
+  w.document.write('<div><div class="meta-label">Project</div><div class="meta-val">' + projName + '</div></div>');
+  w.document.write('<div><div class="meta-label">Invoice Date</div><div class="meta-val">' + (inv.invoiceDate || '—') + '</div></div>');
+  w.document.write('<div><div class="meta-label">Due Date</div><div class="meta-val" style="color:' + (isOverdue ? '#dc2626' : '#111') + ';">' + (inv.dueDate || 'Net 30') + '</div></div>');
+  if (inv.ref) { w.document.write('<div><div class="meta-label">Reference</div><div class="meta-val">' + inv.ref + '</div></div>'); }
+  w.document.write('</div>');
+  w.document.write('<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:16px;"><div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px;">Description of Work</div><div style="font-size:13px;color:#111;">' + (inv.description || '—') + '</div>' + (inv.notes ? '<div style="margin-top:8px;font-size:11px;color:#555;border-top:1px solid #e2e8f0;padding-top:6px;">' + inv.notes + '</div>' : '') + '</div>');
+  w.document.write('<div class="amount-box"><div style="font-size:11px;opacity:0.7;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">INVOICE AMOUNT DUE</div><div style="font-size:36px;font-weight:900;color:#34d399;">$' + amtFmt + '</div><div style="font-size:11px;opacity:0.6;margin-top:4px;">' + inv.status + '</div></div>');
+  w.document.write('<p style="font-size:10px;color:#666;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;margin-bottom:20px;">TX Prompt Payment Act, Property Code Ch. 28: Payment due within 35 days of invoice receipt. Late payments accrue interest at 1.5% per month. Contractor reserves lien rights under TX Property Code Ch. 53.</p>');
+  w.document.write('<div class="sig-grid"><div class="sig-box">Submitted By: ' + coName + '<br><br>Signature: ___________________________<br><br>Printed Name: ______________________<br><br>Date: _____________________________</div>');
+  w.document.write('<div class="sig-box">Received & Approved By:<br><br>Signature: ___________________________<br><br>Printed Name: ______________________<br><br>Title: _____________________________<br><br>Date: _____________________________</div></div>');
+  w.document.write('<div class="no-print" style="text-align:center;margin-top:20px;"><button onclick="window.print();" style="background:#0f172a;color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:14px;cursor:pointer;">🖨️ Print / Save as PDF</button></div>');
+  w.document.write('</body></html>');
+  w.document.close();
+};
+
+function openQIModal() {
+  var existing = document.getElementById('qi-modal');
+  if (existing) { existing.remove(); return; }
+  buildQIModal();
+}
+
+// Sidebar button
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn = document.createElement('button');
+    btn.id = 'oncor-qi-btn';
+    btn.innerHTML = '💰 Quick Invoice';
+    btn.title = 'Quick Invoice Generator (Ctrl+Alt+K)';
+    btn.onclick = openQIModal;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(16,185,129,0.12);color:#34d399;border:1px solid rgba(16,185,129,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(16,185,129,0.25)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(16,185,129,0.12)'; };
+    var aciBtn = document.getElementById('oncor-aci-btn');
+    if (aciBtn && aciBtn.parentNode) {
+      aciBtn.parentNode.insertBefore(btn, aciBtn.nextSibling);
+    } else {
+      btn.style.cssText += 'position:fixed;bottom:160px;right:20px;z-index:9000;width:auto;';
+      document.body.appendChild(btn);
+    }
+  }, 10500);
+});
+// ==================== END QUICK INVOICE GENERATOR ====================
+
+
+// ==================== PROJECT INFORMATION BOARD (Ctrl+Alt+L) ====================
+var pibModalEl = null;
+
+function getPIBData() {
+  var proj = (typeof currentProjectName === 'function' ? currentProjectName() : null) ||
+    (typeof window.currentProject !== 'undefined' ? window.currentProject : null) ||
+    (window._lastProject) || '';
+  var k = 'oncor_pib_v1_' + (proj || 'global');
+  try {
+    var d = JSON.parse(localStorage.getItem(k) || 'null');
+    if (d) return d;
+  } catch(e) {}
+  var ci = {};
+  try { ci = JSON.parse(localStorage.getItem('oncor_company_info') || '{}'); } catch(e) {}
+  var le = {};
+  try { if (typeof window.lastEstimate !== 'undefined' && window.lastEstimate) le = window.lastEstimate; } catch(e) {}
+  return {
+    projectName: proj || le.projectName || '',
+    clientName: le.clientName || '',
+    gcCompany: '',
+    gcContactName: '',
+    gcPhone: '',
+    gcEmail: '',
+    ownerName: '',
+    ownerPhone: '',
+    architectName: '',
+    architectPhone: '',
+    inspectorName: '',
+    inspectorPhone: '',
+    batchPlantName: '',
+    batchPlantPhone: '',
+    batchPlantContact: '',
+    laboratorName: '',
+    laboratorPhone: '',
+    emergencyContact1: '',
+    emergencyPhone1: '',
+    emergencyContact2: '',
+    emergencyPhone2: '',
+    hospital: 'University Medical Center (El Paso) — 4815 Alameda Ave — (915) 521-7602',
+    poisonControl: '1-800-222-1222',
+    specNotes: '',
+    concretePSI: le.primaryPSI || '4000',
+    slumpSpec: '5" max (ACI 305R)',
+    fiberSpec: '',
+    exposureClass: '',
+    retainagePercent: '10',
+    projectNumber: '',
+    permitNumber: '',
+    startDate: '',
+    completionDate: '',
+    customNotes: '',
+    lastUpdated: ''
+  };
+}
+function savePIBData(data) {
+  var proj = (typeof currentProjectName === 'function' ? currentProjectName() : null) ||
+    (typeof window.currentProject !== 'undefined' ? window.currentProject : null) ||
+    (window._lastProject) || '';
+  var k = 'oncor_pib_v1_' + (proj || 'global');
+  data.lastUpdated = new Date().toISOString();
+  localStorage.setItem(k, JSON.stringify(data));
+}
+
+function buildPIBModal() {
+  var d = getPIBData();
+  function fld(id, label, val, ph, type) {
+    return '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">' + label + '</label>' +
+      (type === 'textarea'
+        ? '<textarea id="pib-' + id + '" rows="3" placeholder="' + (ph||'') + '" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:12px;box-sizing:border-box;resize:vertical;">' + (val||'') + '</textarea>'
+        : '<input id="pib-' + id + '" type="' + (type||'text') + '" value="' + ((val||'').replace(/"/g,'&quot;')) + '" placeholder="' + (ph||'') + '" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;">') +
+    '</div>';
+  }
+  function section(title, color, content) {
+    return '<div style="background:rgba(30,41,59,0.5);border:1px solid ' + (color||'#334155') + ';border-radius:10px;padding:14px;margin-bottom:12px;">' +
+      '<h3 style="margin:0 0 10px 0;font-size:13px;color:' + (color||'#94a3b8') + ';">' + title + '</h3>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' + content + '</div>' +
+    '</div>';
+  }
+
+  var html = '<div id="pib-modal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding-top:30px;backdrop-filter:blur(4px);">' +
+    '<div style="background:#0f172a;border:1px solid #334155;border-radius:16px;width:94%;max-width:920px;max-height:90vh;overflow-y:auto;box-shadow:0 25px 80px rgba(0,0,0,0.6);display:flex;flex-direction:column;">' +
+      '<div style="background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(15,23,42,0));padding:18px 24px 12px;border-bottom:1px solid #1e293b;flex-shrink:0;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+          '<div><h2 style="margin:0 0 2px 0;font-size:18px;color:#e2e8f0;">🗺️ Project Information Board</h2>' +
+          '<p style="margin:0;font-size:12px;color:#64748b;">Job bulletin board · key contacts · spec requirements · emergency info — Session #95</p></div>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button onclick="printPIB();" style="background:rgba(99,102,241,0.2);color:#818cf8;border:1px solid rgba(99,102,241,0.4);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">🖨️ Print Board</button>' +
+            '<button onclick="document.getElementById(\'pib-modal\').remove();" style="background:rgba(100,116,139,0.2);color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">✕ Close</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="padding:16px 24px;flex:1;">' +
+        section('📋 Project Identity', '#818cf8',
+          fld('projectName','Project Name',d.projectName,'e.g. Camelback Office Building') +
+          fld('projectNumber','Project Number',d.projectNumber,'e.g. OC-2026-001') +
+          fld('clientName','Client / Owner',d.clientName,'GC or owner company') +
+          fld('gcCompany','General Contractor',d.gcCompany,'GC company name') +
+          fld('permitNumber','Building Permit #',d.permitNumber,'City permit number') +
+          fld('startDate','Start Date',d.startDate,'','date') +
+          fld('completionDate','Completion Date',d.completionDate,'','date') +
+          fld('retainagePercent','Retainage %',d.retainagePercent,'10')
+        ) +
+        section('📞 Key Project Contacts', '#34d399',
+          fld('gcContactName','GC Project Manager',d.gcContactName,'Name') +
+          fld('gcPhone','GC PM Phone',d.gcPhone,'(915) 555-0100') +
+          fld('gcEmail','GC PM Email',d.gcEmail,'pm@gccompany.com') +
+          fld('ownerName','Owner Rep',d.ownerName,'Name') +
+          fld('ownerPhone','Owner Phone',d.ownerPhone,'(915) 555-0200') +
+          fld('architectName','Architect / EOR',d.architectName,'Name + firm') +
+          fld('architectPhone','Architect Phone',d.architectPhone,'(915) 555-0300') +
+          fld('inspectorName','Special Inspector / Testing Lab',d.inspectorName,'Name + lab') +
+          fld('inspectorPhone','Inspector Phone',d.inspectorPhone,'(915) 555-0400')
+        ) +
+        section('🚚 Suppliers & Subs', '#f59e0b',
+          fld('batchPlantName','Batch Plant / Supplier',d.batchPlantName,'Martin Marietta, CEMEX...') +
+          fld('batchPlantPhone','Batch Plant Phone',d.batchPlantPhone,'(915) 555-0500') +
+          fld('batchPlantContact','Batch Plant Contact',d.batchPlantContact,'Sales rep or dispatcher name') +
+          fld('laboratorName','Testing Laboratory',d.laboratorName,'Lab company name') +
+          fld('laboratorPhone','Lab Phone',d.laboratorPhone,'(915) 555-0600')
+        ) +
+        section('🚨 Emergency Contacts', '#ef4444',
+          fld('emergencyContact1','Emergency Contact 1',d.emergencyContact1,'Name + role') +
+          fld('emergencyPhone1','Phone 1',d.emergencyPhone1,'Cell number') +
+          fld('emergencyContact2','Emergency Contact 2',d.emergencyContact2,'Name + role') +
+          fld('emergencyPhone2','Phone 2',d.emergencyPhone2,'Cell number') +
+          fld('hospital','Nearest Hospital / ER',d.hospital,'Hospital name + address') +
+          fld('poisonControl','Poison Control',d.poisonControl,'1-800-222-1222')
+        ) +
+        section('📐 Concrete Spec Requirements', '#60a5fa',
+          fld('concretePSI','Required f\'c (PSI)',d.concretePSI,'4000') +
+          fld('slumpSpec','Slump Specification',d.slumpSpec,'5" max') +
+          fld('fiberSpec','Fiber Type & Dose',d.fiberSpec,'e.g. Synthetic macro 1.5 lb/CY') +
+          fld('exposureClass','ACI 318-19 Exposure Class',d.exposureClass,'e.g. W1, F0, S0, C0') +
+          '<div style="grid-column:1/-1;">' + fld('specNotes','Additional Spec Notes / Special Requirements',d.specNotes,'Hot weather precautions, retarder required, curing plan...','textarea') + '</div>'
+        ) +
+        section('📝 General Notes & Reminders', '#a78bfa',
+          '<div style="grid-column:1/-1;">' + fld('customNotes','Field Notes / Reminders / Important Info',d.customNotes,'Any other critical info for the field crew...','textarea') + '</div>'
+        ) +
+        '<div style="display:flex;gap:8px;justify-content:center;margin-top:4px;">' +
+          '<button onclick="savePIB();" style="background:rgba(99,102,241,0.3);color:#818cf8;border:1px solid rgba(99,102,241,0.5);border-radius:6px;padding:10px 24px;cursor:pointer;font-size:14px;font-weight:600;">💾 Save Information Board</button>' +
+          '<button onclick="printPIB();" style="background:rgba(16,185,129,0.2);color:#34d399;border:1px solid rgba(16,185,129,0.4);border-radius:6px;padding:10px 24px;cursor:pointer;font-size:14px;">🖨️ Print / PDF</button>' +
+        '</div>' +
+      '</div>' +
+      '<div style="padding:10px 24px;border-top:1px solid #1e293b;flex-shrink:0;text-align:right;">' +
+        (d.lastUpdated ? '<span style="font-size:11px;color:#64748b;">Last saved: ' + new Date(d.lastUpdated).toLocaleString() + '</span>' : '') +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  var container = document.createElement('div');
+  container.innerHTML = html;
+  container.firstChild.addEventListener('click', function(e) { if (e.target === container.firstChild) container.firstChild.remove(); });
+  document.body.appendChild(container.firstChild);
+}
+
+window.savePIB = function() {
+  var fields = ['projectName','projectNumber','clientName','gcCompany','gcContactName','gcPhone','gcEmail','ownerName','ownerPhone','architectName','architectPhone','inspectorName','inspectorPhone','batchPlantName','batchPlantPhone','batchPlantContact','laboratorName','laboratorPhone','emergencyContact1','emergencyPhone1','emergencyContact2','emergencyPhone2','hospital','poisonControl','concretePSI','slumpSpec','fiberSpec','exposureClass','specNotes','retainagePercent','permitNumber','startDate','completionDate','customNotes'];
+  var d = {};
+  fields.forEach(function(f) { var el = document.getElementById('pib-' + f); d[f] = el ? el.value : ''; });
+  savePIBData(d);
+  var btn = document.querySelector('button[onclick="savePIB();"]');
+  if (btn) { btn.textContent = '✅ Saved!'; setTimeout(function() { btn.textContent = '💾 Save Information Board'; }, 2000); }
+};
+
+window.printPIB = function() {
+  var d = getPIBData();
+  var w = window.open('', '_blank');
+  function row(label, val) {
+    if (!val) return '';
+    return '<tr><td style="font-size:11px;color:#555;padding:5px 10px;border-bottom:1px solid #f0f0f0;white-space:nowrap;width:160px;">' + label + '</td><td style="font-size:12px;color:#111;padding:5px 10px;border-bottom:1px solid #f0f0f0;font-weight:600;">' + val + '</td></tr>';
+  }
+  function sec(title, color, rows) {
+    return '<div style="border:2px solid ' + color + ';border-radius:8px;margin-bottom:14px;overflow:hidden;break-inside:avoid;"><div style="background:' + color + ';color:#fff;padding:6px 14px;font-size:13px;font-weight:700;">' + title + '</div><table style="width:100%;border-collapse:collapse;">' + rows + '</table></div>';
+  }
+  w.document.write('<!DOCTYPE html><html><head><title>Project Info Board — ' + (d.projectName||'') + '</title><style>body{font-family:Arial,sans-serif;padding:20px;max-width:900px;margin:0 auto;}@media print{.no-print{display:none;}}</style></head><body>');
+  w.document.write('<div style="text-align:center;margin-bottom:16px;border-bottom:3px solid #0f172a;padding-bottom:12px;"><div style="font-size:20px;font-weight:900;color:#0f172a;">🗺️ PROJECT INFORMATION BOARD</div><div style="font-size:14px;color:#555;">' + (d.projectName || 'Project') + (d.projectNumber ? ' · ' + d.projectNumber : '') + '</div><div style="font-size:11px;color:#999;margin-top:4px;">Generated: ' + new Date().toLocaleString() + ' | CONFIDENTIAL — POST IN FIELD TRAILER</div></div>');
+  w.document.write(sec('📋 PROJECT IDENTITY','#6366f1',row('Project Name',d.projectName)+row('Project #',d.projectNumber)+row('Client / Owner',d.clientName)+row('General Contractor',d.gcCompany)+row('Building Permit #',d.permitNumber)+row('Start Date',d.startDate)+row('Completion Date',d.completionDate)+row('Retainage %',d.retainagePercent ? d.retainagePercent + '%' : '')));
+  w.document.write(sec('📞 KEY CONTACTS','#10b981',row('GC Project Manager',d.gcContactName)+row('GC PM Phone',d.gcPhone)+row('GC PM Email',d.gcEmail)+row('Owner Rep',d.ownerName)+row('Owner Phone',d.ownerPhone)+row('Architect / EOR',d.architectName)+row('Architect Phone',d.architectPhone)+row('Special Inspector',d.inspectorName)+row('Inspector Phone',d.inspectorPhone)));
+  w.document.write(sec('🚚 SUPPLIERS','#f59e0b',row('Batch Plant',d.batchPlantName)+row('Batch Plant Phone',d.batchPlantPhone)+row('Batch Plant Contact',d.batchPlantContact)+row('Testing Lab',d.laboratorName)+row('Lab Phone',d.laboratorPhone)));
+  w.document.write(sec('🚨 EMERGENCY CONTACTS','#ef4444',row('Emergency Contact 1',d.emergencyContact1)+row('Phone 1',d.emergencyPhone1)+row('Emergency Contact 2',d.emergencyContact2)+row('Phone 2',d.emergencyPhone2)+'<tr><td style="font-size:11px;color:#dc2626;padding:5px 10px;font-weight:700;border-bottom:1px solid #f0f0f0;">Hospital / ER</td><td style="font-size:12px;color:#dc2626;padding:5px 10px;font-weight:700;border-bottom:1px solid #f0f0f0;">' + (d.hospital||'—') + '</td></tr>'+row('Poison Control',d.poisonControl)));
+  w.document.write(sec('📐 CONCRETE SPEC REQUIREMENTS','#3b82f6',row('Required f\'c',d.concretePSI ? d.concretePSI + ' PSI' : '')+row('Slump Specification',d.slumpSpec)+row('Fiber Type & Dose',d.fiberSpec)+row('Exposure Class (ACI 318-19)',d.exposureClass)+(d.specNotes ? '<tr><td style="font-size:11px;color:#555;padding:5px 10px;width:160px;border-bottom:1px solid #f0f0f0;vertical-align:top;">Spec Notes</td><td style="font-size:12px;color:#111;padding:5px 10px;border-bottom:1px solid #f0f0f0;">' + d.specNotes.replace(/\n/g,'<br>') + '</td></tr>' : '')));
+  if (d.customNotes) w.document.write(sec('📝 FIELD NOTES & REMINDERS','#a78bfa','<tr><td colspan="2" style="padding:8px 12px;font-size:12px;">' + d.customNotes.replace(/\n/g,'<br>') + '</td></tr>'));
+  w.document.write('<div class="no-print" style="text-align:center;margin-top:16px;"><button onclick="window.print();" style="background:#0f172a;color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:14px;cursor:pointer;">🖨️ Print / Save as PDF</button></div>');
+  w.document.write('</body></html>');
+  w.document.close();
+};
+
+function openPIBModal() {
+  var existing = document.getElementById('pib-modal');
+  if (existing) { existing.remove(); return; }
+  buildPIBModal();
+}
+
+// Sidebar button
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn = document.createElement('button');
+    btn.id = 'oncor-pib-btn';
+    btn.innerHTML = '🗺️ Project Info Board';
+    btn.title = 'Project Information Board (Ctrl+Alt+L)';
+    btn.onclick = openPIBModal;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(99,102,241,0.12);color:#818cf8;border:1px solid rgba(99,102,241,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(99,102,241,0.25)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(99,102,241,0.12)'; };
+    var qiBtn = document.getElementById('oncor-qi-btn');
+    if (qiBtn && qiBtn.parentNode) {
+      qiBtn.parentNode.insertBefore(btn, qiBtn.nextSibling);
+    } else {
+      btn.style.cssText += 'position:fixed;bottom:190px;right:20px;z-index:9000;width:auto;';
+      document.body.appendChild(btn);
+    }
+  }, 11000);
+});
+// ==================== END PROJECT INFORMATION BOARD ====================
+
+
+// ==================== KEYBOARD SHORTCUTS — Session #95 ====================
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.altKey) {
+    if (e.key === 'j' || e.key === 'J') { e.preventDefault(); openACIModal(); }
+    if (e.key === 'k' || e.key === 'K') { e.preventDefault(); openQIModal(); }
+    if (e.key === 'l' || e.key === 'L') { e.preventDefault(); openPIBModal(); }
+  }
+});
+// ==================== END KEYBOARD SHORTCUTS ====================
+
+// ==================== EXPOSE STATS FOR PROJECT STATUS CARD ====================
+window._getACIStats = function() {
+  var data = getACIData();
+  var d = data.deliveries; var q = data.qcTests;
+  var failed = 0, water = 0, hot = 0, cold = 0;
+  d.forEach(function(t) {
+    var temp = parseFloat(t.concTemp||t.temp||0);
+    if (parseFloat(t.waterAdded||t.waterOnSite||0) > 0) water++;
+    if (temp > 90 && temp < 200) hot++;
+    if (temp > 0 && temp < 50) cold++;
+  });
+  q.forEach(function(t) {
+    var fc = parseFloat(t.specPSI||t.fc||0); var b1 = parseFloat(t.break28a||t.day28a||0); var b2 = parseFloat(t.break28b||t.day28b||0);
+    if (fc > 0 && (b1>0||b2>0)) { var avg=(b1+b2)/((b1>0&&b2>0)?2:1); var mn=Math.min(b1>0?b1:99999,b2>0?b2:99999); if(mn===99999)mn=avg; if(avg<fc&&mn<fc-500)failed++; }
+  });
+  return { deliveries: d.length, qcTests: q.length, failedBreaks: failed, waterAdded: water, hotWeather: hot, coldWeather: cold };
+};
+window._getPIBData = function() { return getPIBData(); };
+// ==================== END EXPOSE ====================
+
+})();
+// ==================== END SESSION #95 — Zeus ⚡ ACI Compliance Monitor (Ctrl+Alt+J) + Quick Invoice Generator (Ctrl+Alt+K) + Project Info Board (Ctrl+Alt+L) ====================
+</script>
