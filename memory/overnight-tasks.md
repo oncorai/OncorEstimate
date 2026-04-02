@@ -1,5 +1,78 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 2, 2026 - 00:00 UTC (Overnight Cron #86)
+**Status:** ✅ UNIT PRICE REFERENCE added (+295 lines)
+
+### What Was Added:
+
+**📊 Unit Price Reference — El Paso 2025-2026 (Alt+J):**
+- New `📊 Unit Prices` button injected in sidebar below Field Markup
+- `Alt+J` keyboard shortcut opens/toggles the modal
+- **Purpose:** Quick look-up reference for El Paso concrete market pricing — labor rates, concrete by PSI, rebar, pump, formwork, sawcutting, equipment rental, testing. Use when estimating in the field or verifying supplier quotes.
+
+**11 Categories with 100+ Unit Prices:**
+1. 🏗️ **Ready-Mix Concrete** — 2500-6000 PSI, fiber adder, hot weather, Saturday, short load
+2. 👷 **Labor Rates** — Foreman $90/hr through Helper $46/hr, 12 classifications
+3. 🔩 **Rebar by Weight** — #3-#8 per lb, epoxy adder
+4. 🔩 **Rebar Installed** — /SF rates for SOG light/standard/heavy, WWF
+5. 🚚 **Concrete Pump** — Boom 32m/38m/42m+, line pump, OT, standby
+6. 📐 **Formwork** — Edge, wall, footing, grade beam, curb /SF & /LF
+7. 🧹 **Finishing & Flatwork** — Broom, trowel, exposed, stamped, polished, epoxy
+8. 🔪 **Saw Cutting** — Control joints 4"/6"/8"+, full-depth, mobilization
+9. 🚜 **Site Work** — Flex base, vapor barrier, curing, expansion joint, dowels
+10. 🔧 **Equipment Rental** — Vibrator, saw, trowel, laser screed, bobcat, lifts
+11. 🧪 **Testing & Inspection** — Cylinder set, breaks, slump, air, compaction, special inspector
+
+**Tab Navigation:**
+- Click category tabs to switch views
+- Active tab highlighted purple
+- All prices shown in sortable table with notes
+
+**Commits:**
+- 0aad6a7: 📊 Unit Price Reference El Paso 2025-2026 (Alt+J) (+295 lines) [Session #86]
+
+**Total Lines:** ~162,359 | **New Alt+ Shortcuts:** Alt+J (Unit Prices)
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 00:00 UTC (Overnight Cron #85)
+**Status:** ✅ FIELD MARKUP CALCULATOR added (+376 lines)
+
+### What Was Added:
+
+**🧮 Field Markup Calculator (Alt+Y):**
+- New `🧮 Field Markup` button injected in sidebar below Handoff Checklist
+- `Alt+Y` keyboard shortcut opens/toggles the modal
+- **Purpose:** Quick T&M pricing in the field. Add labor hours, materials, equipment, and subs — apply configurable OH&P markups — get total to bill. Copy summary to clipboard for texts/emails.
+
+**Configurable Markup Percentages:**
+- Labor OH&P % (default 30%)
+- Material markup % (default 15%)
+- Equipment markup % (default 15%)
+- Subcontractor markup % (default 10%)
+- Bond/Insurance % (default 2.5%)
+
+**Line Item Entry:**
+- **Labor:** Description, Hours, Rate ($/hr) — auto-calculates subtotal
+- **Materials:** Description, Qty, Price — auto-calculates subtotal
+- **Equipment:** Description, Qty, Rate — auto-calculates subtotal
+- **Subs:** Description, Amount — direct entry
+- Add/remove rows dynamically
+- Live totals update as you type
+
+**Summary Panel:**
+- 4-card breakdown: Labor / Materials / Equipment / Subs (with markup applied)
+- Subtotal + Bond/Insurance + **TOTAL TO BILL** (large green)
+- Copy Summary button — copies formatted text to clipboard
+- Clear All button
+
+**Commits:**
+- 9675ec1: 🧮 Field Markup Calculator (Alt+Y) (+376 lines) [Session #85]
+
+**Total Lines:** ~162,064 | **New Alt+ Shortcuts:** Alt+Y (Field Markup)
+
+---
+
 ## ✅ SESSION: Apr 2, 2026 - 00:00 UTC (Overnight Cron #84)
 **Status:** ✅ PROJECT HANDOFF CHECKLIST added (+454 lines)
 
