@@ -160155,3 +160155,549 @@ document.addEventListener('DOMContentLoaded', function(){
 })();
 // ==================== END CONCRETE MIX DESIGN LIBRARY — Zeus ⚡ Session #81 ====================
 </script>
+
+<script>
+// ==================== SUB BID LEVELING SHEET — Zeus ⚡ Session #82 ====================
+(function(){
+'use strict';
+
+var SBL_ID = 'oncorSBLModal';
+var SBL_STORE_KEY = 'oncor_sbl_v1';
+
+function getSBLProjectKey(){
+  var n = (typeof getCurrentProjectName === 'function') ? getCurrentProjectName() : '';
+  return SBL_STORE_KEY + (n ? '_' + n.replace(/[^a-z0-9]/gi,'_').toLowerCase() : '');
+}
+
+function loadSBLData(){
+  try { return JSON.parse(localStorage.getItem(getSBLProjectKey()) || '[]'); } catch(e){ return []; }
+}
+
+function saveSBLData(d){ localStorage.setItem(getSBLProjectKey(), JSON.stringify(d)); }
+
+var SBL_SCOPE_TYPES = ['Saw Cutting','Concrete Pump','Rebar Placement','Rebar Supply & Place',
+  'Epoxy Flooring','Polished Concrete','Post-Tension','Formwork (System)','Demolition',
+  'Earthwork / Grading','Testing / Special Inspection','Land Surveying','Utility Rough-In',
+  'Masonry','Structural Steel','Framing','Roofing','Electrical','Plumbing','HVAC',
+  'Site Concrete','Landscaping','Painting / Coatings','Fire Sprinkler','Other'];
+
+var SBL_AWARD_REASONS = ['Lowest Bid','Best Value','Local / Preferred Vendor',
+  'Best Qualifications','Prior Experience','Owner-Specified','Best Schedule',
+  'Scope Complete (no gaps)','Best Terms','Price + Scope Balance'];
+
+var SBL_CURR_PKG = null;
+var SBL_CURR_BIDDER = null;
+
+function sblGenId(){ return 'p' + Date.now() + Math.floor(Math.random()*9000+1000); }
+
+function sblFormatMoney(v){
+  var n = parseFloat(v) || 0;
+  if(n === 0) return '—';
+  var neg = n < 0;
+  var s = Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
+  return (neg ? '(' : '') + '$' + s + (neg ? ')' : '');
+}
+
+// ── Build Modal ──────────────────────────────────────────────────────────────
+function buildSBLModal(){
+  if(document.getElementById(SBL_ID)) return;
+  var m = document.createElement('div');
+  m.id = SBL_ID;
+  m.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10400;overflow-y:auto;padding:20px;box-sizing:border-box;';
+  m.innerHTML = [
+    '<div style="max-width:1100px;margin:0 auto;background:#0f172a;border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:0;overflow:hidden;">',
+      // Header
+      '<div style="background:linear-gradient(135deg,rgba(99,102,241,0.2),rgba(168,85,247,0.15));padding:20px 24px;border-bottom:1px solid rgba(99,102,241,0.2);display:flex;align-items:center;gap:12px;">',
+        '<span style="font-size:24px;">⚖️</span>',
+        '<div style="flex:1;">',
+          '<h2 style="color:#a5b4fc;margin:0;font-size:1.2rem;">Subcontractor Bid Leveling Sheet</h2>',
+          '<p style="color:#64748b;margin:0;font-size:0.8rem;">Compare sub bids head-to-head • Scope level & adjust • Award analysis</p>',
+        '</div>',
+        '<button onclick="closeSBLModal()" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#f87171;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;">✕ Close</button>',
+      '</div>',
+      // Stats bar
+      '<div id="sblStatsBar" style="display:flex;gap:12px;flex-wrap:wrap;padding:12px 24px;background:rgba(0,0,0,0.2);border-bottom:1px solid rgba(255,255,255,0.05);"></div>',
+      // Content
+      '<div style="display:flex;gap:0;">',
+        // Left: package list
+        '<div style="width:260px;min-width:220px;border-right:1px solid rgba(255,255,255,0.07);padding:16px;flex-shrink:0;">',
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">',
+            '<span style="color:#a5b4fc;font-size:0.85rem;font-weight:600;">BID PACKAGES</span>',
+            '<button onclick="sblNewPackage()" style="margin-left:auto;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:0.75rem;">+ Add</button>',
+          '</div>',
+          '<div id="sblPkgList" style="display:flex;flex-direction:column;gap:6px;"></div>',
+          '<p id="sblNoPkgs" style="color:#475569;font-size:0.8rem;text-align:center;margin-top:20px;">No packages yet.<br>Click + Add to create one.</p>',
+        '</div>',
+        // Right: active package
+        '<div style="flex:1;padding:20px;overflow-x:auto;">',
+          '<div id="sblPkgDetail" style=""></div>',
+          '<div id="sblNoPkgSelected" style="color:#475569;text-align:center;padding:60px 20px;">',
+            '<div style="font-size:40px;margin-bottom:12px;">⚖️</div>',
+            '<p style="font-size:0.9rem;">Select or create a bid package to get started.</p>',
+          '</div>',
+        '</div>',
+      '</div>',
+      // Footer actions
+      '<div style="padding:14px 24px;border-top:1px solid rgba(255,255,255,0.07);display:flex;gap:8px;flex-wrap:wrap;align-items:center;">',
+        '<button onclick="sblPrintAll()" style="background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;padding:7px 14px;border-radius:6px;cursor:pointer;font-size:0.8rem;">🖨️ Print All Packages</button>',
+        '<span style="color:#475569;font-size:0.75rem;margin-left:auto;">Alt+S to toggle • Ctrl+Shift+I for Project Status</span>',
+      '</div>',
+    '</div>'
+  ].join('');
+  document.body.appendChild(m);
+}
+
+// ── Package List Sidebar ──────────────────────────────────────────────────────
+function sblRenderPkgList(){
+  var data = loadSBLData();
+  var list = document.getElementById('sblPkgList');
+  var none = document.getElementById('sblNoPkgs');
+  if(!list) return;
+  if(!data.length){ list.innerHTML=''; if(none) none.style.display='block'; return; }
+  if(none) none.style.display='none';
+  list.innerHTML = data.map(function(pkg){
+    var lowest = sblLowest(pkg);
+    var active = SBL_CURR_PKG === pkg.id;
+    var awarded = pkg.awardedTo ? '<span style="background:rgba(34,197,94,0.15);color:#4ade80;padding:1px 5px;border-radius:3px;font-size:0.7rem;">✓ Awarded</span>' : '';
+    return [
+      '<div onclick="sblSelectPackage(\''+pkg.id+'\')" style="cursor:pointer;padding:10px;border-radius:8px;border:1px solid '+(active?'rgba(99,102,241,0.5)':'rgba(255,255,255,0.07)')+';background:'+(active?'rgba(99,102,241,0.1)':'rgba(0,0,0,0.2)')+';transition:all 0.15s;">',
+        '<div style="display:flex;align-items:flex-start;gap:6px;">',
+          '<span style="font-size:0.8rem;color:#94a3b8;flex:1;font-weight:600;">'+(pkg.scopeType||'Package')+'</span>',
+          '<button onclick="event.stopPropagation();sblDeletePackage(\''+pkg.id+'\')" style="background:none;border:none;color:#475569;cursor:pointer;font-size:0.75rem;padding:0;">🗑</button>',
+        '</div>',
+        '<div style="font-size:0.75rem;color:#64748b;margin-top:2px;">'+(pkg.name||'(unnamed)')+'</div>',
+        '<div style="display:flex;align-items:center;gap:6px;margin-top:4px;">',
+          '<span style="color:#22d3ee;font-size:0.75rem;font-weight:600;">'+(lowest>0?sblFormatMoney(lowest):'—')+'</span>',
+          '<span style="color:#475569;font-size:0.7rem;">'+(pkg.bidders&&pkg.bidders.length?pkg.bidders.length+' bidder'+(pkg.bidders.length!==1?'s':''):'No bidders')+'</span>',
+        '</div>',
+        awarded,
+      '</div>'
+    ].join('');
+  }).join('');
+}
+
+function sblLowest(pkg){
+  if(!pkg.bidders||!pkg.bidders.length) return 0;
+  var vals = pkg.bidders.map(function(b){ return parseFloat(b.baseBid)||0; }).filter(function(v){ return v>0; });
+  return vals.length ? Math.min.apply(null,vals) : 0;
+}
+
+// ── Stats Bar ─────────────────────────────────────────────────────────────────
+function sblRenderStats(){
+  var bar = document.getElementById('sblStatsBar');
+  if(!bar) return;
+  var data = loadSBLData();
+  var totalPkgs = data.length;
+  var totalBidders = data.reduce(function(s,p){ return s+(p.bidders?p.bidders.length:0); },0);
+  var awarded = data.filter(function(p){ return p.awardedTo; }).length;
+  var totalAwarded = data.reduce(function(s,p){
+    if(!p.awardedTo) return s;
+    var b = p.bidders && p.bidders.find(function(x){ return x.id===p.awardedTo; });
+    return s + (b ? (parseFloat(b.leveledBid||b.baseBid)||0) : 0);
+  },0);
+  var stats = [
+    ['📦 Packages', totalPkgs, '#a5b4fc'],
+    ['👷 Bidders', totalBidders, '#94a3b8'],
+    ['✓ Awarded', awarded, '#4ade80'],
+    ['💰 Awarded Value', sblFormatMoney(totalAwarded), '#22d3ee'],
+  ];
+  bar.innerHTML = stats.map(function(s){
+    return '<div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px 12px;min-width:100px;">' +
+      '<div style="color:'+s[2]+';font-size:1.1rem;font-weight:700;">'+s[1]+'</div>' +
+      '<div style="color:#64748b;font-size:0.7rem;">'+s[0]+'</div></div>';
+  }).join('');
+}
+
+// ── Package Detail ─────────────────────────────────────────────────────────────
+function sblSelectPackage(id){
+  SBL_CURR_PKG = id;
+  sblRenderPkgList();
+  sblRenderDetail();
+}
+
+function sblRenderDetail(){
+  var det = document.getElementById('sblPkgDetail');
+  var none = document.getElementById('sblNoPkgSelected');
+  if(!det) return;
+  var data = loadSBLData();
+  var pkg = data.find(function(p){ return p.id===SBL_CURR_PKG; });
+  if(!pkg){ det.innerHTML=''; if(none) none.style.display='flex'; return; }
+  if(none) none.style.display='none';
+
+  var lowest = sblLowest(pkg);
+
+  var bidderRows = '';
+  if(pkg.bidders && pkg.bidders.length){
+    bidderRows = pkg.bidders.map(function(b,i){
+      var base = parseFloat(b.baseBid)||0;
+      var adj = parseFloat(b.adjustment)||0;
+      var leveled = base + adj;
+      var diff = lowest > 0 && leveled > 0 ? leveled - lowest : 0;
+      var isLowest = leveled > 0 && leveled === sblLeveledLowest(pkg);
+      var awarded = pkg.awardedTo === b.id;
+      return [
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);'+(awarded?'background:rgba(34,197,94,0.05);':'')+'">',
+          '<td style="padding:8px 6px;color:#e2e8f0;font-size:0.85rem;font-weight:600;">',
+            (awarded?'<span style="color:#4ade80;margin-right:4px;">✓</span>':''),
+            b.company||('Bidder '+(i+1)),
+          '</td>',
+          '<td style="padding:8px 6px;text-align:right;"><input type="text" value="'+(b.contact||'')+'" onchange="sblUpdateBidder(\''+pkg.id+'\',\''+b.id+'\',\'contact\',this.value)" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;padding:3px 6px;border-radius:4px;font-size:0.75rem;width:110px;"></td>',
+          '<td style="padding:8px 6px;text-align:right;"><input type="number" value="'+(b.baseBid||'')+'" placeholder="0" onchange="sblUpdateBidder(\''+pkg.id+'\',\''+b.id+'\',\'baseBid\',this.value)" style="background:rgba(255,255,255,0.05);border:1px solid rgba(22,163,74,0.3);color:#4ade80;padding:3px 6px;border-radius:4px;font-size:0.85rem;width:110px;text-align:right;"></td>',
+          '<td style="padding:8px 6px;text-align:right;"><input type="number" value="'+(b.adjustment||'')+'" placeholder="0" onchange="sblUpdateBidder(\''+pkg.id+'\',\''+b.id+'\',\'adjustment\',this.value)" style="background:rgba(255,255,255,0.05);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;padding:3px 6px;border-radius:4px;font-size:0.85rem;width:90px;text-align:right;"></td>',
+          '<td style="padding:8px 6px;text-align:right;font-weight:700;color:'+(isLowest?'#4ade80':'#e2e8f0')+';font-size:0.9rem;">'+(leveled>0?sblFormatMoney(leveled):'—')+'</td>',
+          '<td style="padding:8px 6px;text-align:right;color:'+(diff>0?'#f87171':'#94a3b8')+';font-size:0.8rem;">'+(diff>0?'+'+sblFormatMoney(diff):isLowest&&leveled>0?'LOWEST':'—')+'</td>',
+          '<td style="padding:8px 6px;text-align:right;">',
+            '<select onchange="sblUpdateBidder(\''+pkg.id+'\',\''+b.id+'\',\'bondingLicense\',this.value)" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;padding:2px 4px;border-radius:4px;font-size:0.7rem;">',
+              ['Yes','No','Unknown'].map(function(o){ return '<option value="'+o+'"'+(b.bondingLicense===o?' selected':'')+'>'+(o==='Yes'?'✅ Yes':o==='No'?'❌ No':'?')+' Licensed</option>'; }).join(''),
+            '</select>',
+          '</td>',
+          '<td style="padding:8px 6px;text-align:right;">',
+            '<textarea rows="1" onchange="sblUpdateBidder(\''+pkg.id+'\',\''+b.id+'\',\'exclusions\',this.value)" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);color:#64748b;padding:3px 6px;border-radius:4px;font-size:0.7rem;width:130px;resize:vertical;">'+(b.exclusions||'')+'</textarea>',
+          '</td>',
+          '<td style="padding:8px 6px;text-align:center;">',
+            '<button onclick="sblAwardTo(\''+pkg.id+'\',\''+b.id+'\')" style="background:'+(awarded?'rgba(34,197,94,0.2)':'rgba(255,255,255,0.05)')+';border:1px solid '+(awarded?'rgba(34,197,94,0.4)':'rgba(255,255,255,0.1)')+';color:'+(awarded?'#4ade80':'#94a3b8')+';padding:3px 8px;border-radius:4px;cursor:pointer;font-size:0.75rem;">'+(awarded?'✓ Awarded':'Award')+'</button>',
+            ' <button onclick="sblDeleteBidder(\''+pkg.id+'\',\''+b.id+'\')" style="background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.2);color:#f87171;padding:3px 6px;border-radius:4px;cursor:pointer;font-size:0.7rem;">✕</button>',
+          '</td>',
+        '</tr>'
+      ].join('');
+    }).join('');
+  }
+
+  det.innerHTML = [
+    // Package header bar
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">',
+      '<span style="color:#a5b4fc;font-size:1rem;font-weight:700;">'+(pkg.scopeType||'Bid Package')+'</span>',
+      '<span style="color:#64748b;font-size:0.85rem;">—</span>',
+      '<input type="text" value="'+(pkg.name||'')+'" placeholder="Package name / project scope" onchange="sblUpdatePkg(\''+pkg.id+'\',\'name\',this.value)" style="flex:1;min-width:200px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;padding:5px 10px;border-radius:6px;font-size:0.85rem;">',
+      '<button onclick="sblPrintPackage(\''+pkg.id+'\')" style="background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:0.8rem;">🖨️ Print</button>',
+    '</div>',
+    // Package metadata row
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">',
+      '<div style="flex:1;min-width:150px;">',
+        '<label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:3px;">Scope Type</label>',
+        '<select onchange="sblUpdatePkg(\''+pkg.id+'\',\'scopeType\',this.value)" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;padding:5px;border-radius:6px;font-size:0.8rem;">',
+          SBL_SCOPE_TYPES.map(function(t){ return '<option value="'+t+'"'+(pkg.scopeType===t?' selected':'')+'>' + t + '</option>'; }).join(''),
+        '</select>',
+      '</div>',
+      '<div style="flex:1;min-width:130px;">',
+        '<label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:3px;">Budget / Estimate</label>',
+        '<input type="number" value="'+(pkg.budget||'')+'" placeholder="0" onchange="sblUpdatePkg(\''+pkg.id+'\',\'budget\',this.value)" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#fbbf24;padding:5px;border-radius:6px;font-size:0.85rem;">',
+      '</div>',
+      '<div style="flex:1;min-width:130px;">',
+        '<label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:3px;">Bid Due Date</label>',
+        '<input type="date" value="'+(pkg.bidDue||'')+'" onchange="sblUpdatePkg(\''+pkg.id+'\',\'bidDue\',this.value)" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;padding:5px;border-radius:6px;font-size:0.8rem;">',
+      '</div>',
+    '</div>',
+    // Scope description
+    '<div style="margin-bottom:14px;">',
+      '<label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:3px;">Scope Description / Inclusions</label>',
+      '<textarea rows="2" onchange="sblUpdatePkg(\''+pkg.id+'\',\'scopeDesc\',this.value)" style="width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);color:#94a3b8;padding:6px;border-radius:6px;font-size:0.8rem;resize:vertical;box-sizing:border-box;">'+(pkg.scopeDesc||'')+'</textarea>',
+    '</div>',
+    // Bidder table
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">',
+      '<span style="color:#94a3b8;font-size:0.8rem;font-weight:600;">BIDDERS</span>',
+      '<button onclick="sblAddBidder(\''+pkg.id+'\')" style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);color:#4ade80;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:0.75rem;">+ Add Bidder</button>',
+      (pkg.bidders&&pkg.bidders.length?'<span style="color:#64748b;font-size:0.75rem;">Lowest leveled: <strong style="color:#22d3ee;">'+sblFormatMoney(sblLeveledLowest(pkg))+'</strong></span>':''),
+      (pkg.budget?'<span style="color:#64748b;font-size:0.75rem;margin-left:auto;">vs budget: <strong style="color:'+(sblLeveledLowest(pkg)>parseFloat(pkg.budget)?'#f87171':'#4ade80')+';">'+(sblLeveledLowest(pkg)>0?sblFormatMoney(sblLeveledLowest(pkg)-parseFloat(pkg.budget)):'—')+'</strong></span>':''),
+    '</div>',
+    (pkg.bidders&&pkg.bidders.length ? [
+      '<div style="overflow-x:auto;">',
+      '<table style="width:100%;border-collapse:collapse;min-width:800px;">',
+        '<thead>',
+          '<tr style="border-bottom:1px solid rgba(99,102,241,0.3);">',
+            '<th style="padding:6px;text-align:left;color:#64748b;font-size:0.72rem;font-weight:600;">COMPANY</th>',
+            '<th style="padding:6px;text-align:right;color:#64748b;font-size:0.72rem;">CONTACT</th>',
+            '<th style="padding:6px;text-align:right;color:#4ade80;font-size:0.72rem;">BASE BID</th>',
+            '<th style="padding:6px;text-align:right;color:#fbbf24;font-size:0.72rem;">ADJUSTMENT</th>',
+            '<th style="padding:6px;text-align:right;color:#a5b4fc;font-size:0.72rem;">LEVELED BID</th>',
+            '<th style="padding:6px;text-align:right;color:#64748b;font-size:0.72rem;">vs LOW</th>',
+            '<th style="padding:6px;text-align:right;color:#64748b;font-size:0.72rem;">LICENSE</th>',
+            '<th style="padding:6px;text-align:right;color:#64748b;font-size:0.72rem;">EXCL / NOTES</th>',
+            '<th style="padding:6px;text-align:center;color:#64748b;font-size:0.72rem;">AWARD</th>',
+          '</tr>',
+        '</thead>',
+        '<tbody>',bidderRows,'</tbody>',
+      '</table>',
+      '</div>'
+    ].join('') : '<div style="color:#475569;font-size:0.8rem;padding:20px;text-align:center;border:1px dashed rgba(255,255,255,0.08);border-radius:8px;">No bidders yet — click + Add Bidder to start comparing.</div>'),
+    // Award section
+    (pkg.bidders&&pkg.bidders.length ? [
+      '<div style="margin-top:16px;padding:12px;background:rgba(0,0,0,0.2);border-radius:8px;border:1px solid rgba(255,255,255,0.06);">',
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;">',
+          '<div style="flex:1;min-width:150px;">',
+            '<label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:3px;">Award Recommendation</label>',
+            '<select onchange="sblUpdatePkg(\''+pkg.id+'\',\'awardReason\',this.value)" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;padding:5px;border-radius:6px;font-size:0.8rem;">',
+              '<option value="">— select reason —</option>',
+              SBL_AWARD_REASONS.map(function(r){ return '<option value="'+r+'"'+(pkg.awardReason===r?' selected':'')+'>'+ r +'</option>'; }).join(''),
+            '</select>',
+          '</div>',
+          '<div style="flex:2;min-width:200px;">',
+            '<label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:3px;">Award / Leveling Notes</label>',
+            '<textarea rows="2" onchange="sblUpdatePkg(\''+pkg.id+'\',\'awardNotes\',this.value)" style="width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);color:#94a3b8;padding:5px;border-radius:6px;font-size:0.78rem;resize:vertical;box-sizing:border-box;">'+(pkg.awardNotes||'')+'</textarea>',
+          '</div>',
+        '</div>',
+      '</div>'
+    ].join('') : ''),
+  ].join('');
+}
+
+function sblLeveledLowest(pkg){
+  if(!pkg.bidders||!pkg.bidders.length) return 0;
+  var vals = pkg.bidders.map(function(b){
+    var lev = (parseFloat(b.baseBid)||0) + (parseFloat(b.adjustment)||0);
+    return lev > 0 ? lev : 0;
+  }).filter(function(v){ return v > 0; });
+  return vals.length ? Math.min.apply(null, vals) : 0;
+}
+
+// ── CRUD ──────────────────────────────────────────────────────────────────────
+function sblNewPackage(){
+  var data = loadSBLData();
+  var pkg = { id: sblGenId(), scopeType: 'Saw Cutting', name: '', budget:'', bidDue:'', scopeDesc:'', bidders:[], awardedTo:'', awardReason:'', awardNotes:'' };
+  data.push(pkg);
+  saveSBLData(data);
+  SBL_CURR_PKG = pkg.id;
+  sblRenderPkgList(); sblRenderDetail(); sblRenderStats();
+}
+
+function sblDeletePackage(id){
+  if(!confirm('Delete this bid package?')) return;
+  var data = loadSBLData().filter(function(p){ return p.id !== id; });
+  saveSBLData(data);
+  if(SBL_CURR_PKG === id) SBL_CURR_PKG = data.length ? data[data.length-1].id : null;
+  sblRenderPkgList(); sblRenderDetail(); sblRenderStats();
+}
+
+function sblUpdatePkg(id, field, val){
+  var data = loadSBLData();
+  var pkg = data.find(function(p){ return p.id===id; });
+  if(!pkg) return;
+  pkg[field] = val;
+  saveSBLData(data);
+  sblRenderPkgList(); sblRenderStats();
+  // Re-render detail only if leveled bid / budget changed
+  if(field==='budget'||field==='scopeType') sblRenderDetail();
+}
+
+function sblAddBidder(pkgId){
+  var data = loadSBLData();
+  var pkg = data.find(function(p){ return p.id===pkgId; });
+  if(!pkg) return;
+  pkg.bidders = pkg.bidders || [];
+  var n = pkg.bidders.length + 1;
+  pkg.bidders.push({ id: sblGenId(), company:'', contact:'', baseBid:'', adjustment:'', bondingLicense:'Unknown', exclusions:'' });
+  saveSBLData(data);
+  sblRenderDetail(); sblRenderPkgList(); sblRenderStats();
+}
+
+function sblDeleteBidder(pkgId, bId){
+  var data = loadSBLData();
+  var pkg = data.find(function(p){ return p.id===pkgId; });
+  if(!pkg) return;
+  pkg.bidders = pkg.bidders.filter(function(b){ return b.id!==bId; });
+  if(pkg.awardedTo===bId) pkg.awardedTo = '';
+  saveSBLData(data);
+  sblRenderDetail(); sblRenderPkgList(); sblRenderStats();
+}
+
+function sblUpdateBidder(pkgId, bId, field, val){
+  var data = loadSBLData();
+  var pkg = data.find(function(p){ return p.id===pkgId; });
+  if(!pkg) return;
+  var b = pkg.bidders && pkg.bidders.find(function(x){ return x.id===bId; });
+  if(!b) return;
+  b[field] = val;
+  saveSBLData(data);
+  // Re-render for live bid math
+  if(field==='baseBid'||field==='adjustment') sblRenderDetail();
+  sblRenderPkgList(); sblRenderStats();
+}
+
+function sblAwardTo(pkgId, bId){
+  var data = loadSBLData();
+  var pkg = data.find(function(p){ return p.id===pkgId; });
+  if(!pkg) return;
+  pkg.awardedTo = (pkg.awardedTo === bId) ? '' : bId;
+  saveSBLData(data);
+  sblRenderDetail(); sblRenderPkgList(); sblRenderStats();
+}
+
+// ── Print ─────────────────────────────────────────────────────────────────────
+function sblBuildPrintHTML(pkgs){
+  var co = (typeof window.companyName !== 'undefined' ? window.companyName : '') ||
+           (document.getElementById('companyName')?document.getElementById('companyName').value:'') || 'Oncor';
+  var proj = (typeof getCurrentProjectName === 'function') ? getCurrentProjectName() : '';
+  var rows = pkgs.map(function(pkg, pi){
+    var lowest = sblLeveledLowest(pkg);
+    var awardedBidder = pkg.awardedTo && pkg.bidders ? pkg.bidders.find(function(b){ return b.id===pkg.awardedTo; }) : null;
+    var bidderTable = '';
+    if(pkg.bidders && pkg.bidders.length){
+      bidderTable = '<table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:8px;">' +
+        '<thead><tr style="background:#f3f4f6;">' +
+          '<th style="border:1px solid #d1d5db;padding:5px 6px;text-align:left;">Company</th>' +
+          '<th style="border:1px solid #d1d5db;padding:5px 6px;text-align:left;">Contact</th>' +
+          '<th style="border:1px solid #d1d5db;padding:5px 6px;text-align:right;">Base Bid</th>' +
+          '<th style="border:1px solid #d1d5db;padding:5px 6px;text-align:right;">Adjustment</th>' +
+          '<th style="border:1px solid #d1d5db;padding:5px 6px;text-align:right;font-weight:700;">Leveled Bid</th>' +
+          '<th style="border:1px solid #d1d5db;padding:5px 6px;text-align:right;">vs Low</th>' +
+          '<th style="border:1px solid #d1d5db;padding:5px 6px;text-align:center;">Licensed</th>' +
+          '<th style="border:1px solid #d1d5db;padding:5px 6px;">Exclusions / Notes</th>' +
+          '<th style="border:1px solid #d1d5db;padding:5px 6px;text-align:center;">Award</th>' +
+        '</tr></thead><tbody>' +
+        pkg.bidders.map(function(b, bi){
+          var base = parseFloat(b.baseBid)||0;
+          var adj = parseFloat(b.adjustment)||0;
+          var leveled = base + adj;
+          var isLow = leveled > 0 && leveled === lowest;
+          var awarded = pkg.awardedTo === b.id;
+          var diff = lowest > 0 && leveled > 0 && !isLow ? leveled - lowest : 0;
+          return '<tr style="background:'+(awarded?'#f0fdf4':bi%2===1?'#f9fafb':'white')+';font-weight:'+(awarded?'700':'400')+';">' +
+            '<td style="border:1px solid #d1d5db;padding:5px 6px;">'+(awarded?'★ ':'')+''+(b.company||('Bidder '+(bi+1)))+'</td>' +
+            '<td style="border:1px solid #d1d5db;padding:5px 6px;color:#4b5563;">'+(b.contact||'')+'</td>' +
+            '<td style="border:1px solid #d1d5db;padding:5px 6px;text-align:right;">'+(base>0?('$'+base.toLocaleString()):'—')+'</td>' +
+            '<td style="border:1px solid #d1d5db;padding:5px 6px;text-align:right;color:'+(adj>0?'#b45309':adj<0?'#166534':'inherit')+';">'+(adj!==0?((adj>0?'+':'')+'$'+adj.toLocaleString()):'—')+'</td>' +
+            '<td style="border:1px solid #d1d5db;padding:5px 6px;text-align:right;font-weight:700;color:'+(isLow?'#166534':'#111827')+';">'+(leveled>0?('$'+leveled.toLocaleString()):'—')+'</td>' +
+            '<td style="border:1px solid #d1d5db;padding:5px 6px;text-align:right;color:'+(diff>0?'#991b1b':'#374151')+';">'+(isLow&&leveled>0?'LOWEST':diff>0?'+$'+diff.toLocaleString():'—')+'</td>' +
+            '<td style="border:1px solid #d1d5db;padding:5px 6px;text-align:center;">'+(b.bondingLicense==='Yes'?'✅':b.bondingLicense==='No'?'❌':'?')+'</td>' +
+            '<td style="border:1px solid #d1d5db;padding:5px 6px;color:#6b7280;font-size:10px;">'+(b.exclusions||'')+'</td>' +
+            '<td style="border:1px solid #d1d5db;padding:5px 6px;text-align:center;">'+(awarded?'<strong style="color:#166534;">AWARDED</strong>':'')+'</td>' +
+          '</tr>';
+        }).join('') + '</tbody></table>';
+    }
+    return [
+      '<div style="margin-bottom:32px;page-break-inside:avoid;">',
+        '<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;padding:12px 16px;margin-bottom:8px;">',
+          '<div style="display:flex;align-items:center;gap:10px;">',
+            '<span style="background:#1e40af;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;">PKG '+(pi+1)+'</span>',
+            '<span style="font-weight:700;font-size:13px;">'+(pkg.scopeType||'Package')+' — '+(pkg.name||'')+'</span>',
+            (pkg.bidDue?'<span style="margin-left:auto;color:#6b7280;font-size:11px;">Bid Due: '+pkg.bidDue+'</span>':''),
+            (pkg.budget?'<span style="color:#6b7280;font-size:11px;margin-left:8px;">Budget: $'+parseFloat(pkg.budget).toLocaleString()+'</span>':''),
+          '</div>',
+          (pkg.scopeDesc?'<p style="margin:6px 0 0;color:#4b5563;font-size:11px;">'+(pkg.scopeDesc)+'</p>':''),
+        '</div>',
+        bidderTable || '<p style="color:#9ca3af;font-size:11px;font-style:italic;">No bidders logged.</p>',
+        (pkg.awardedTo && awardedBidder ? [
+          '<div style="margin-top:8px;padding:8px 12px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;display:flex;gap:12px;align-items:flex-start;">',
+            '<span style="font-size:14px;">✅</span>',
+            '<div style="font-size:11px;">',
+              '<strong style="color:#166534;">AWARDED TO: '+(awardedBidder.company||'Selected Bidder')+'</strong>',
+              (pkg.awardReason?'  |  Reason: '+pkg.awardReason:''),
+              (pkg.awardNotes?'<br><span style="color:#4b5563;">'+pkg.awardNotes+'</span>':''),
+            '</div>',
+          '</div>'
+        ].join('') : ''),
+      '</div>'
+    ].join('');
+  }).join('');
+
+  var today = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  return '<!DOCTYPE html><html><head><title>Sub Bid Leveling Sheet</title>' +
+    '<style>body{font-family:Arial,sans-serif;font-size:12px;color:#111827;margin:0;padding:20px;}' +
+    '@media print{body{margin:0;padding:12px;}}h1,h2,h3{margin:0;}' +
+    '.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1e40af;padding-bottom:12px;margin-bottom:20px;}' +
+    '.badge{display:inline-block;background:#1e40af;color:white;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;}' +
+    '</style></head><body>' +
+    '<div class="header"><div><h1 style="font-size:18px;color:#1e40af;">'+co+'</h1>' +
+    '<p style="color:#6b7280;font-size:11px;margin:2px 0;">SUBCONTRACTOR BID LEVELING SHEET</p>' +
+    (proj?'<p style="margin:2px 0;font-size:11px;color:#4b5563;">Project: <strong>'+proj+'</strong></p>':'') +
+    '</div><div style="text-align:right;"><span class="badge">⚖️ BID LEVELING</span>' +
+    '<br><p style="color:#6b7280;font-size:11px;margin:4px 0;">Prepared: '+today+'</p>' +
+    '<p style="color:#6b7280;font-size:11px;margin:2px 0;">'+pkgs.length+' Package'+(pkgs.length!==1?'s':'')+'</p>' +
+    '</div></div>' +
+    rows +
+    '<div style="margin-top:24px;padding:10px 14px;background:#fefce8;border:1px solid #fef08a;border-radius:6px;font-size:10px;color:#854d0e;">' +
+    '⚖️ Base Bid = contractor\'s submitted price. Adjustment = scope gap additions or scope inclusion credits used to level bids to an apples-to-apples comparison. ' +
+    'Leveled Bid = Base Bid + Adjustment. Award decision based on leveled bid, qualifications, and project-specific factors.' +
+    '</div>' +
+    '<div style="margin-top:16px;border-top:1px solid #d1d5db;padding-top:8px;display:flex;gap:40px;">'+
+    '<div><p style="font-size:10px;color:#6b7280;margin:0 0 4px;">Prepared By (Estimator)</p><div style="border-bottom:1px solid #9ca3af;width:200px;margin-top:20px;"></div></div>' +
+    '<div><p style="font-size:10px;color:#6b7280;margin:0 0 4px;">Approved By (Principal / PM)</p><div style="border-bottom:1px solid #9ca3af;width:200px;margin-top:20px;"></div></div>' +
+    '<div style="margin-left:auto;text-align:right;"><p style="font-size:9px;color:#9ca3af;font-style:italic;">CONFIDENTIAL — INTERNAL USE ONLY</p></div>' +
+    '</div>' +
+    '</body></html>';
+}
+
+function sblPrintPackage(id){
+  var data = loadSBLData();
+  var pkg = data.find(function(p){ return p.id===id; });
+  if(!pkg) return;
+  var w = window.open('','_blank');
+  w.document.write(sblBuildPrintHTML([pkg]));
+  w.document.close(); w.focus(); setTimeout(function(){ w.print(); }, 400);
+}
+
+function sblPrintAll(){
+  var data = loadSBLData();
+  if(!data.length){ alert('No bid packages to print.'); return; }
+  var w = window.open('','_blank');
+  w.document.write(sblBuildPrintHTML(data));
+  w.document.close(); w.focus(); setTimeout(function(){ w.print(); }, 400);
+}
+
+// ── Show / Hide ───────────────────────────────────────────────────────────────
+function showSBLModal(){
+  buildSBLModal();
+  var m = document.getElementById(SBL_ID);
+  if(!m) return;
+  m.style.display = 'block';
+  sblRenderStats(); sblRenderPkgList();
+  if(SBL_CURR_PKG) sblRenderDetail();
+}
+
+function closeSBLModal(){
+  var m = document.getElementById(SBL_ID);
+  if(m) m.style.display = 'none';
+}
+
+window.showSBLModal = showSBLModal;
+window.closeSBLModal = closeSBLModal;
+window.sblNewPackage = sblNewPackage;
+window.sblDeletePackage = sblDeletePackage;
+window.sblUpdatePkg = sblUpdatePkg;
+window.sblAddBidder = sblAddBidder;
+window.sblDeleteBidder = sblDeleteBidder;
+window.sblUpdateBidder = sblUpdateBidder;
+window.sblAwardTo = sblAwardTo;
+window.sblSelectPackage = sblSelectPackage;
+window.sblPrintPackage = sblPrintPackage;
+window.sblPrintAll = sblPrintAll;
+
+// Stats hook for Project Status Card
+window._getSBLStats = function(){
+  var data = loadSBLData();
+  var awarded = data.filter(function(p){ return p.awardedTo; }).length;
+  var totalAwarded = data.reduce(function(s,p){
+    if(!p.awardedTo) return s;
+    var b = p.bidders && p.bidders.find(function(x){ return x.id===p.awardedTo; });
+    return s + (b ? ((parseFloat(b.baseBid)||0)+(parseFloat(b.adjustment)||0)) : 0);
+  },0);
+  return { totalPackages: data.length, awarded: awarded, totalAwarded: totalAwarded };
+};
+
+// Alt+S keyboard shortcut
+document.addEventListener('keydown', function(e){
+  if(e.altKey && e.key.toLowerCase()==='s'){
+    e.preventDefault();
+    var m = document.getElementById(SBL_ID);
+    if(m && m.style.display!=='none') closeSBLModal();
+    else showSBLModal();
+  }
+});
+
+// Inject sidebar button after Mix Design Library button
+document.addEventListener('DOMContentLoaded', function(){
+  setTimeout(function(){
+    var mdlBtn = document.querySelector('button[onclick*="showMDLModal"]');
+    if(!mdlBtn) return;
+    var parentRow = mdlBtn.closest('div');
+    if(!parentRow||!parentRow.parentNode) return;
+    var newRow = document.createElement('div');
+    newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+    newRow.innerHTML = '<button class="action-btn secondary" onclick="showSBLModal()" title="Subcontractor Bid Leveling Sheet — compare sub bids head-to-head, level for scope gaps, award and document (Alt+S)" style="background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.3);color:#a5b4fc;">⚖️ Sub Bid Leveling</button>';
+    parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+  }, 5600);
+});
+
+})();
+// ==================== END SUB BID LEVELING SHEET — Zeus ⚡ Session #82 ====================
+</script>
