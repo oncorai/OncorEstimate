@@ -168541,3 +168541,440 @@ document.addEventListener('keydown', function(e) {
 })();
 // ==================== END SESSION #93 — Zeus ⚡ Productivity Dashboard + JHA + Project Scorecard ====================
 </script>
+
+<script>
+// ==================== SESSION #94 — Zeus ⚡ Material Waste Analysis + Pour Quality Scorecard + Subcontractor Performance Tracker ====================
+(function() {
+'use strict';
+
+// ==================== 📊 MATERIAL WASTE ANALYSIS DASHBOARD (Ctrl+Alt+G) ====================
+var wasteModal = null;
+
+function buildWasteModal() {
+  if (wasteModal) { wasteModal.remove(); wasteModal = null; }
+  var proj = (typeof window.currentProjectName === 'function' ? window.currentProjectName() : null) || 'default';
+  var wasteKey = 'oncor_waste_v1_' + proj;
+  var wasteData = {};
+  try { wasteData = JSON.parse(localStorage.getItem(wasteKey) || '{}'); } catch(e) {}
+  var events = wasteData.events || [];
+  var estYds = parseFloat(wasteData.estYds) || 0;
+  var orderedYds = parseFloat(wasteData.orderedYds) || 0;
+  var actualYds = parseFloat(wasteData.actualYds) || 0;
+  var pricePerYd = parseFloat(wasteData.pricePerYd) || 190;
+
+  // Cross-project aggregate
+  var allProjects = [];
+  try { allProjects = JSON.parse(localStorage.getItem('oncorProjects') || '[]'); } catch(e) {}
+  var xpWaste = [];
+  allProjects.forEach(function(p) {
+    var k = 'oncor_waste_v1_' + (p.name || '');
+    try {
+      var d = JSON.parse(localStorage.getItem(k) || '{}');
+      if (d.estYds) xpWaste.push({ name: p.name, est: parseFloat(d.estYds)||0, actual: parseFloat(d.actualYds)||0, ordered: parseFloat(d.orderedYds)||0, price: parseFloat(d.pricePerYd)||190, events: d.events||[] });
+    } catch(e2) {}
+  });
+
+  var wasteYds = Math.max(0, orderedYds - actualYds);
+  var wastePct = orderedYds > 0 ? (wasteYds / orderedYds * 100).toFixed(1) : '0.0';
+  var wasteCost = (wasteYds * pricePerYd).toFixed(0);
+
+  // Event category breakdown
+  var catMap = {};
+  events.forEach(function(ev) {
+    var c = ev.cause || 'Other';
+    if (!catMap[c]) catMap[c] = { cnt: 0, yds: 0 };
+    catMap[c].cnt++;
+    catMap[c].yds += parseFloat(ev.yds) || 0;
+  });
+  var catRows = Object.keys(catMap).sort(function(a,b){ return catMap[b].yds - catMap[a].yds; }).map(function(c) {
+    var pct = wasteYds > 0 ? (catMap[c].yds / wasteYds * 100).toFixed(0) : 0;
+    return '<tr><td style="padding:6px 10px;color:#e2e8f0;">'+c+'</td><td style="padding:6px 10px;text-align:center;color:#38bdf8;">'+catMap[c].cnt+'</td><td style="padding:6px 10px;text-align:right;color:#fb923c;">'+catMap[c].yds.toFixed(1)+' yd³</td><td style="padding:6px 10px;text-align:right;"><div style="background:rgba(251,146,60,0.15);border-radius:4px;padding:2px 8px;color:#fb923c;font-size:12px;">'+pct+'%</div></td></tr>';
+  }).join('');
+
+  // Cross-project rows
+  var xpRows = xpWaste.map(function(p) {
+    var wYds = Math.max(0, p.ordered - p.actual);
+    var wPct = p.ordered > 0 ? (wYds / p.ordered * 100).toFixed(1) : '0.0';
+    var wCost = (wYds * p.price).toFixed(0);
+    var color = parseFloat(wPct) < 4 ? '#4ade80' : parseFloat(wPct) < 8 ? '#fb923c' : '#f87171';
+    return '<tr><td style="padding:6px 10px;color:#e2e8f0;max-width:160px;overflow:hidden;text-overflow:ellipsis;">'+p.name+'</td><td style="padding:6px 10px;text-align:right;color:#38bdf8;">'+p.est.toFixed(0)+'</td><td style="padding:6px 10px;text-align:right;color:#a78bfa;">'+p.ordered.toFixed(0)+'</td><td style="padding:6px 10px;text-align:right;color:#fb923c;">'+wYds.toFixed(1)+'</td><td style="padding:6px 10px;text-align:center;"><span style="color:'+color+';font-weight:700;">'+wPct+'%</span></td><td style="padding:6px 10px;text-align:right;color:#f87171;">$'+parseInt(wCost).toLocaleString()+'</td></tr>';
+  }).join('') || '<tr><td colspan="6" style="text-align:center;padding:20px;color:#64748b;">No cross-project data yet</td></tr>';
+
+  var statusColor = parseFloat(wastePct) < 4 ? '#4ade80' : parseFloat(wastePct) < 8 ? '#fb923c' : '#f87171';
+  var statusLabel = parseFloat(wastePct) < 4 ? '✅ Within ACI 304R Benchmark' : parseFloat(wastePct) < 8 ? '⚠️ Moderate — Review Causes' : '🔴 High Waste — Action Required';
+
+  var m = document.createElement('div');
+  m.id = 'waste-analysis-modal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:10500;display:flex;align-items:center;justify-content:center;padding:20px;';
+  m.innerHTML = '<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;width:100%;max-width:860px;max-height:90vh;overflow-y:auto;padding:24px;color:#e2e8f0;font-family:system-ui,sans-serif;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
+      '<h2 style="margin:0;font-size:20px;color:#f8fafc;">📊 Material Waste Analysis Dashboard</h2>' +
+      '<button onclick="document.getElementById(\'waste-analysis-modal\').remove();" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer;">✕</button>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">' +
+      '<div style="background:#0f172a;border-radius:8px;padding:14px;text-align:center;"><div style="color:#64748b;font-size:11px;margin-bottom:4px;">EST. VOLUME</div><div style="font-size:22px;font-weight:700;color:#38bdf8;">'+estYds.toFixed(0)+' yd³</div></div>' +
+      '<div style="background:#0f172a;border-radius:8px;padding:14px;text-align:center;"><div style="color:#64748b;font-size:11px;margin-bottom:4px;">ORDERED</div><div style="font-size:22px;font-weight:700;color:#a78bfa;">'+orderedYds.toFixed(0)+' yd³</div></div>' +
+      '<div style="background:#0f172a;border-radius:8px;padding:14px;text-align:center;"><div style="color:#64748b;font-size:11px;margin-bottom:4px;">WASTE</div><div style="font-size:22px;font-weight:700;color:'+statusColor+';">'+wasteYds.toFixed(1)+' yd³</div></div>' +
+      '<div style="background:#0f172a;border-radius:8px;padding:14px;text-align:center;"><div style="color:#64748b;font-size:11px;margin-bottom:4px;">WASTE COST</div><div style="font-size:22px;font-weight:700;color:#f87171;">$'+parseInt(wasteCost).toLocaleString()+'</div></div>' +
+    '</div>' +
+    '<div style="background:#0f172a;border-radius:8px;padding:14px;margin-bottom:20px;display:flex;align-items:center;gap:16px;">' +
+      '<div style="font-size:36px;font-weight:900;color:'+statusColor+';">'+wastePct+'%</div>' +
+      '<div><div style="font-size:14px;color:'+statusColor+';font-weight:600;">'+statusLabel+'</div><div style="font-size:12px;color:#64748b;margin-top:4px;">ACI 304R Benchmark: 3–8% acceptable. Below 4% = excellent. Above 8% = investigate.</div></div>' +
+    '</div>' +
+    (catRows ? '<div style="margin-bottom:20px;"><h3 style="color:#94a3b8;font-size:13px;text-transform:uppercase;margin-bottom:8px;">Waste by Cause (Current Project)</h3><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#0f172a;"><th style="padding:8px 10px;text-align:left;color:#64748b;font-size:11px;">CAUSE</th><th style="padding:8px 10px;text-align:center;color:#64748b;font-size:11px;">EVENTS</th><th style="padding:8px 10px;text-align:right;color:#64748b;font-size:11px;">VOLUME</th><th style="padding:8px 10px;text-align:right;color:#64748b;font-size:11px;">SHARE</th></tr></thead><tbody>'+catRows+'</tbody></table></div>' : '<p style="color:#64748b;font-style:italic;margin-bottom:20px;">No waste events logged yet. Use Alt+V (Waste & Volume Log) to log waste events.</p>') +
+    '<div><h3 style="color:#94a3b8;font-size:13px;text-transform:uppercase;margin-bottom:8px;">Cross-Project Waste Comparison</h3><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:500px;"><thead><tr style="background:#0f172a;"><th style="padding:8px 10px;text-align:left;color:#64748b;font-size:11px;">PROJECT</th><th style="padding:8px 10px;text-align:right;color:#64748b;font-size:11px;">EST. yd³</th><th style="padding:8px 10px;text-align:right;color:#64748b;font-size:11px;">ORDERED</th><th style="padding:8px 10px;text-align:right;color:#64748b;font-size:11px;">WASTE yd³</th><th style="padding:8px 10px;text-align:center;color:#64748b;font-size:11px;">RATE</th><th style="padding:8px 10px;text-align:right;color:#64748b;font-size:11px;">COST</th></tr></thead><tbody>'+xpRows+'</tbody></table></div></div>' +
+    '<div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end;">' +
+      '<button onclick="window._printWasteAnalysis();" style="background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);border-radius:6px;padding:8px 16px;cursor:pointer;font-size:13px;">🖨 Print Report</button>' +
+      '<button onclick="document.getElementById(\'waste-analysis-modal\').remove();" style="background:rgba(100,116,139,0.2);color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:13px;">Close</button>' +
+    '</div>' +
+  '</div>';
+  m.addEventListener('click', function(e) { if (e.target === m) m.remove(); });
+  document.body.appendChild(m);
+  wasteModal = m;
+}
+
+window._printWasteAnalysis = function() {
+  var win = window.open('', '_blank', 'width=900,height=700');
+  if (!win) return;
+  var proj = (typeof window.currentProjectName === 'function' ? window.currentProjectName() : null) || 'Project';
+  var company = (document.getElementById('companyName') || {}).value || 'Oncor Construction';
+  win.document.write('<!DOCTYPE html><html><head><title>Waste Analysis Report</title><style>body{font-family:Arial,sans-serif;margin:30px;color:#111;} h1{font-size:20px;} h2{font-size:15px;color:#334155;border-bottom:1px solid #e2e8f0;padding-bottom:6px;} table{width:100%;border-collapse:collapse;margin-top:8px;} th{background:#f1f5f9;padding:8px;text-align:left;font-size:12px;border:1px solid #e2e8f0;} td{padding:8px;font-size:12px;border:1px solid #e2e8f0;} .header{display:flex;justify-content:space-between;align-items:flex-start;} .badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;} </style></head><body>');
+  win.document.write('<div class="header"><div><h1>'+company+'</h1></div><div style="text-align:right;font-size:12px;color:#64748b;">MATERIAL WASTE ANALYSIS REPORT<br>Project: '+proj+'<br>'+new Date().toLocaleDateString()+'</div></div>');
+  win.document.write('<p style="font-size:11px;color:#64748b;">Benchmark: ACI 304R acceptable waste range 3–8%. Below 4% = excellent. Above 8% = investigate root causes.</p>');
+  win.document.write('<script>window.print();<\/script></body></html>');
+  win.document.close();
+};
+
+function openWasteModal() {
+  var existing = document.getElementById('waste-analysis-modal');
+  if (existing) { existing.remove(); return; }
+  buildWasteModal();
+}
+
+// Sidebar button
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn = document.createElement('button');
+    btn.id = 'oncor-waste-analysis-btn';
+    btn.innerHTML = '📊 Waste Analysis';
+    btn.title = 'Material Waste Analysis Dashboard (Ctrl+Alt+G)';
+    btn.onclick = openWasteModal;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(251,146,60,0.12);color:#fb923c;border:1px solid rgba(251,146,60,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(251,146,60,0.25)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(251,146,60,0.12)'; };
+    var scorecardBtn = document.getElementById('oncor-scorecard-btn');
+    if (scorecardBtn && scorecardBtn.parentNode) {
+      scorecardBtn.parentNode.insertBefore(btn, scorecardBtn.nextSibling);
+    } else {
+      btn.style.cssText += 'position:fixed;bottom:180px;right:20px;z-index:9000;width:auto;';
+      document.body.appendChild(btn);
+    }
+  }, 9300);
+});
+// ==================== END MATERIAL WASTE ANALYSIS DASHBOARD ====================
+
+
+// ==================== 🎯 POUR QUALITY SCORECARD (Ctrl+Alt+H) ====================
+var pourQualityModal = null;
+
+function buildPourQualityModal() {
+  if (pourQualityModal) { pourQualityModal.remove(); pourQualityModal = null; }
+  var proj = (typeof window.currentProjectName === 'function' ? window.currentProjectName() : null) || 'default';
+
+  // Pull QC log data
+  var qcKey = 'oncor_qc_log_v1_' + proj;
+  var qcEntries = [];
+  try { qcEntries = JSON.parse(localStorage.getItem(qcKey) || '[]'); } catch(e) {}
+
+  // Pull delivery ticket data
+  var dtKey = 'oncor_delivery_tickets_v1_' + proj;
+  var dtEntries = [];
+  try { dtEntries = JSON.parse(localStorage.getItem(dtKey) || '[]'); } catch(e) {}
+
+  // Pull pre-pour checklist data
+  var ppKey = 'oncor_ppir_v1_' + proj;
+  var ppEntries = [];
+  try { ppEntries = JSON.parse(localStorage.getItem(ppKey) || '[]'); } catch(e) {}
+
+  // Score each pour (group by pourName from QC log)
+  var pours = {};
+  qcEntries.forEach(function(q) {
+    var n = q.pourName || q.pour || 'Pour';
+    if (!pours[n]) pours[n] = { name: n, qc: [], dt: [], pp: null, score: 0, issues: [] };
+    pours[n].qc.push(q);
+  });
+  dtEntries.forEach(function(d) {
+    var n = d.pourName || d.pour || 'Pour';
+    if (!pours[n]) pours[n] = { name: n, qc: [], dt: [], pp: null, score: 0, issues: [] };
+    pours[n].dt.push(d);
+  });
+  ppEntries.forEach(function(p) {
+    var n = p.pourName || p.pour || 'Pour';
+    if (!pours[n]) pours[n] = { name: n, qc: [], dt: [], pp: null, score: 0, issues: [] };
+    pours[n].pp = p;
+  });
+
+  // Scoring algorithm (100 pts max)
+  var scoredPours = Object.values(pours).map(function(p) {
+    var score = 100;
+    var issues = [];
+    var details = [];
+
+    // QC checks (up to -40)
+    p.qc.forEach(function(q) {
+      if (q.result === 'FAIL' || q.result === 'fail') { score -= 20; issues.push('28-day break FAIL'); }
+      else if (q.result === 'LOW_AVG' || q.result === 'low_avg') { score -= 10; issues.push('Low average strength'); }
+      else if (q.result === 'LOW_MIN' || q.result === 'low_min') { score -= 8; issues.push('Low min cylinder strength'); }
+      else if (q.result === 'PASS' || q.result === 'pass') { details.push('✅ Cylinders passed'); }
+      if (parseFloat(q.slump) > parseFloat(q.maxSlump || 5)) { score -= 5; issues.push('Over-slump'); }
+      if (parseFloat(q.waterAdded) > 0) { score -= 5; issues.push('Water added on-site (ASTM C94)'); }
+      if (parseFloat(q.concreteTemp) > 90) { score -= 3; issues.push('High concrete temp (ACI 305R)'); }
+      if (parseFloat(q.concreteTemp) < 50) { score -= 3; issues.push('Low concrete temp (ACI 306R)'); }
+    });
+
+    // Delivery checks (up to -30)
+    var rejectedLoads = 0;
+    var waterIssues = 0;
+    var overSlump = 0;
+    p.dt.forEach(function(d) {
+      if (d.status === 'Rejected') { rejectedLoads++; score -= 10; }
+      if (parseFloat(d.waterAdded) > 0) { waterIssues++; score -= 3; }
+      if (parseFloat(d.slump) > parseFloat(d.maxSlump || 5)) { overSlump++; score -= 3; }
+    });
+    if (rejectedLoads > 0) issues.push(rejectedLoads + ' rejected load(s)');
+    if (waterIssues > 0) issues.push(waterIssues + ' water-added ticket(s)');
+    if (overSlump > 0) issues.push(overSlump + ' over-slump load(s)');
+
+    // Pre-pour checklist (up to -30)
+    if (p.pp) {
+      var pct = parseFloat(p.pp.completionPct || p.pp.pct || 0);
+      if (pct < 80) { score -= 20; issues.push('Pre-pour checklist <80% complete'); }
+      else if (pct < 100) { score -= 5; issues.push('Pre-pour checklist incomplete'); }
+      else details.push('✅ Pre-pour checklist 100%');
+    }
+
+    score = Math.max(0, Math.min(100, score));
+    var grade = score >= 90 ? { label: 'A', color: '#4ade80' } : score >= 80 ? { label: 'B', color: '#a3e635' } : score >= 70 ? { label: 'C', color: '#fb923c' } : score >= 60 ? { label: 'D', color: '#f87171' } : { label: 'F', color: '#ef4444' };
+    return { name: p.name, score: score, grade: grade, issues: issues, details: details, qcCount: p.qc.length, dtCount: p.dt.length };
+  });
+
+  var totalPours = scoredPours.length;
+  var avgScore = totalPours > 0 ? (scoredPours.reduce(function(a,b){ return a + b.score; }, 0) / totalPours).toFixed(0) : 0;
+  var aCount = scoredPours.filter(function(p){ return p.grade.label === 'A'; }).length;
+  var failCount = scoredPours.filter(function(p){ return p.grade.label === 'F'; }).length;
+
+  var pourRows = scoredPours.length > 0 ? scoredPours.map(function(p) {
+    var issueHtml = p.issues.length > 0 ? '<div style="margin-top:6px;">'+p.issues.map(function(i){ return '<span style="background:rgba(239,68,68,0.15);color:#f87171;padding:2px 6px;border-radius:4px;font-size:11px;margin-right:4px;">'+i+'</span>'; }).join('')+'</div>' : '<div style="color:#4ade80;font-size:12px;margin-top:4px;">No issues detected</div>';
+    return '<div style="background:#0f172a;border-radius:8px;padding:14px;border-left:4px solid '+p.grade.color+';margin-bottom:10px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+        '<div style="font-weight:600;color:#f8fafc;">'+p.name+'</div>' +
+        '<div style="display:flex;align-items:center;gap:10px;">' +
+          '<span style="font-size:11px;color:#64748b;">'+p.qcCount+' QC tests · '+p.dtCount+' tickets</span>' +
+          '<div style="background:'+p.grade.color+';color:#0f172a;font-weight:900;font-size:18px;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;">'+p.grade.label+'</div>' +
+          '<div style="font-size:24px;font-weight:700;color:'+p.grade.color+';">'+p.score+'</div>' +
+        '</div>' +
+      '</div>' +
+      issueHtml +
+    '</div>';
+  }).join('') : '<div style="text-align:center;padding:40px;color:#64748b;"><div style="font-size:48px;">🎯</div><div style="margin-top:8px;">No pour data available.</div><div style="font-size:12px;margin-top:4px;">Log QC tests (Alt+U) and delivery tickets (Ctrl+Shift+W) to generate scores.</div></div>';
+
+  var avgColor = parseInt(avgScore) >= 90 ? '#4ade80' : parseInt(avgScore) >= 75 ? '#fb923c' : '#f87171';
+
+  var m = document.createElement('div');
+  m.id = 'pour-quality-modal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:10500;display:flex;align-items:center;justify-content:center;padding:20px;';
+  m.innerHTML = '<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;width:100%;max-width:800px;max-height:90vh;overflow-y:auto;padding:24px;color:#e2e8f0;font-family:system-ui,sans-serif;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
+      '<h2 style="margin:0;font-size:20px;color:#f8fafc;">🎯 Pour Quality Scorecard</h2>' +
+      '<button onclick="document.getElementById(\'pour-quality-modal\').remove();" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer;">✕</button>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">' +
+      '<div style="background:#0f172a;border-radius:8px;padding:14px;text-align:center;"><div style="color:#64748b;font-size:11px;margin-bottom:4px;">POURS SCORED</div><div style="font-size:28px;font-weight:700;color:#38bdf8;">'+totalPours+'</div></div>' +
+      '<div style="background:#0f172a;border-radius:8px;padding:14px;text-align:center;"><div style="color:#64748b;font-size:11px;margin-bottom:4px;">AVG SCORE</div><div style="font-size:28px;font-weight:700;color:'+avgColor+';">'+avgScore+'</div></div>' +
+      '<div style="background:#0f172a;border-radius:8px;padding:14px;text-align:center;"><div style="color:#64748b;font-size:11px;margin-bottom:4px;">GRADE A POURS</div><div style="font-size:28px;font-weight:700;color:#4ade80;">'+aCount+'</div></div>' +
+      '<div style="background:#0f172a;border-radius:8px;padding:14px;text-align:center;"><div style="color:#64748b;font-size:11px;margin-bottom:4px;">FAILING POURS</div><div style="font-size:28px;font-weight:700;color:#f87171;">'+failCount+'</div></div>' +
+    '</div>' +
+    '<div style="background:#0f172a;border-radius:6px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#64748b;">Scoring: A (90–100) · B (80–89) · C (70–79) · D (60–69) · F (&lt;60). Points deducted for: failed/low cylinder breaks, over-slump loads, water additions (ASTM C94), rejected loads, low pre-pour checklist %, extreme concrete temps.</div>' +
+    pourRows +
+    '<div style="margin-top:16px;text-align:right;">' +
+      '<button onclick="document.getElementById(\'pour-quality-modal\').remove();" style="background:rgba(100,116,139,0.2);color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:13px;">Close</button>' +
+    '</div>' +
+  '</div>';
+  m.addEventListener('click', function(e) { if (e.target === m) m.remove(); });
+  document.body.appendChild(m);
+  pourQualityModal = m;
+}
+
+function openPourQualityModal() {
+  var existing = document.getElementById('pour-quality-modal');
+  if (existing) { existing.remove(); return; }
+  buildPourQualityModal();
+}
+
+// Sidebar button
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn = document.createElement('button');
+    btn.id = 'oncor-pour-quality-btn';
+    btn.innerHTML = '🎯 Pour Quality Score';
+    btn.title = 'Pour Quality Scorecard (Ctrl+Alt+H)';
+    btn.onclick = openPourQualityModal;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(74,222,128,0.12);color:#4ade80;border:1px solid rgba(74,222,128,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(74,222,128,0.25)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(74,222,128,0.12)'; };
+    var wasteBtn = document.getElementById('oncor-waste-analysis-btn');
+    if (wasteBtn && wasteBtn.parentNode) {
+      wasteBtn.parentNode.insertBefore(btn, wasteBtn.nextSibling);
+    } else {
+      btn.style.cssText += 'position:fixed;bottom:140px;right:20px;z-index:9000;width:auto;';
+      document.body.appendChild(btn);
+    }
+  }, 9400);
+});
+// ==================== END POUR QUALITY SCORECARD ====================
+
+
+// ==================== 🤝 SUBCONTRACTOR PERFORMANCE TRACKER (Ctrl+Alt+I) ====================
+var subPerfModal = null;
+
+function buildSubPerfModal() {
+  if (subPerfModal) { subPerfModal.remove(); subPerfModal = null; }
+  var proj = (typeof window.currentProjectName === 'function' ? window.currentProjectName() : null) || 'default';
+  var subKey = 'oncor_subs_v1_' + proj;
+  var subs = [];
+  try { subs = JSON.parse(localStorage.getItem(subKey) || '[]'); } catch(e) {}
+
+  // Get cross-project sub performance history
+  var allProjects = [];
+  try { allProjects = JSON.parse(localStorage.getItem('oncorProjects') || '[]'); } catch(e) {}
+  var subHistory = {};
+  allProjects.forEach(function(p) {
+    var k = 'oncor_subs_v1_' + (p.name || '');
+    try {
+      var sArr = JSON.parse(localStorage.getItem(k) || '[]');
+      sArr.forEach(function(s) {
+        var name = (s.company || '').trim().toLowerCase();
+        if (!name) return;
+        if (!subHistory[name]) subHistory[name] = { display: s.company, scope: s.scope, jobs: 0, totalContract: 0, totalPaid: 0, issues: 0 };
+        subHistory[name].jobs++;
+        subHistory[name].totalContract += parseFloat(s.contractAmt || s.amount || 0);
+        subHistory[name].totalPaid += parseFloat(s.amtPaid || s.paid || 0);
+        // COI issues
+        var today = new Date();
+        if (s.glExpiry && new Date(s.glExpiry) < today) subHistory[name].issues++;
+        if (s.wcExpiry && new Date(s.wcExpiry) < today) subHistory[name].issues++;
+        if (s.payStatus === 'Disputed' || s.paymentStatus === 'Disputed') subHistory[name].issues++;
+      });
+    } catch(e2) {}
+  });
+
+  var histRows = Object.values(subHistory).sort(function(a,b){ return b.totalContract - a.totalContract; }).slice(0, 20).map(function(s) {
+    var payPct = s.totalContract > 0 ? (s.totalPaid / s.totalContract * 100).toFixed(0) : 0;
+    var issueColor = s.issues === 0 ? '#4ade80' : s.issues <= 2 ? '#fb923c' : '#f87171';
+    return '<tr><td style="padding:8px 10px;color:#e2e8f0;">'+s.display+'</td><td style="padding:8px 10px;color:#64748b;font-size:12px;">'+s.scope+'</td><td style="padding:8px 10px;text-align:center;color:#38bdf8;">'+s.jobs+'</td><td style="padding:8px 10px;text-align:right;color:#a78bfa;">$'+Math.round(s.totalContract).toLocaleString()+'</td><td style="padding:8px 10px;text-align:right;color:#4ade80;">'+payPct+'%</td><td style="padding:8px 10px;text-align:center;"><span style="color:'+issueColor+';font-weight:700;">'+s.issues+'</span></td></tr>';
+  }).join('') || '<tr><td colspan="6" style="text-align:center;padding:20px;color:#64748b;">No subcontractor history found across saved projects.</td></tr>';
+
+  // Current project detail
+  var today2 = new Date();
+  var subCards = subs.length > 0 ? subs.map(function(s) {
+    var glOk = !s.glExpiry || new Date(s.glExpiry) >= today2;
+    var wcOk = !s.wcExpiry || new Date(s.wcExpiry) >= today2;
+    var autoOk = !s.autoExpiry || new Date(s.autoExpiry) >= today2;
+    var paidAmt = parseFloat(s.amtPaid || 0);
+    var contractAmt = parseFloat(s.contractAmt || s.amount || 0);
+    var pct = contractAmt > 0 ? Math.min(100, (paidAmt / contractAmt * 100)).toFixed(0) : 0;
+    var outstanding = contractAmt - paidAmt;
+    var hasIssue = !glOk || !wcOk || !autoOk || s.payStatus === 'Disputed';
+    var borderColor = hasIssue ? '#f87171' : '#334155';
+    return '<div style="background:#0f172a;border:1px solid '+borderColor+';border-radius:8px;padding:14px;margin-bottom:8px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
+        '<div><div style="font-weight:600;color:#f8fafc;">'+s.company+'</div><div style="font-size:12px;color:#64748b;margin-top:2px;">'+s.scope+'</div></div>' +
+        '<div style="text-align:right;"><div style="color:#a78bfa;font-weight:700;">$'+contractAmt.toLocaleString()+'</div><div style="font-size:11px;color:#64748b;margin-top:2px;">contract</div></div>' +
+      '</div>' +
+      '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">' +
+        '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba('+(glOk?'74,222,128':'239,68,68')+',0.15);color:'+(glOk?'#4ade80':'#f87171')+';">GL '+(glOk?'✓':'EXPIRED')+'</span>' +
+        '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba('+(wcOk?'74,222,128':'239,68,68')+',0.15);color:'+(wcOk?'#4ade80':'#f87171')+';">WC '+(wcOk?'✓':'EXPIRED')+'</span>' +
+        '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba('+(autoOk?'74,222,128':'239,68,68')+',0.15);color:'+(autoOk?'#4ade80':'#f87171')+';">AUTO '+(autoOk?'✓':'EXPIRED')+'</span>' +
+        (s.payStatus ? '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(167,139,250,0.15);color:#a78bfa;">'+s.payStatus+'</span>' : '') +
+        (s.lienStatus ? '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(56,189,248,0.15);color:#38bdf8;">'+s.lienStatus+'</span>' : '') +
+      '</div>' +
+      '<div style="margin-top:10px;">' +
+        '<div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;margin-bottom:4px;"><span>Paid: $'+paidAmt.toLocaleString()+' ('+pct+'%)</span><span style="color:'+(outstanding>0?'#fb923c':'#4ade80')+';">Outstanding: $'+outstanding.toLocaleString()+'</span></div>' +
+        '<div style="background:#1e293b;border-radius:4px;height:6px;overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:'+(pct==100?'#4ade80':'#a78bfa')+';border-radius:4px;"></div></div>' +
+      '</div>' +
+    '</div>';
+  }).join('') : '<div style="text-align:center;padding:30px;color:#64748b;"><div style="font-size:36px;">🤝</div><div style="margin-top:8px;">No subs on this project yet.</div><div style="font-size:12px;margin-top:4px;">Use Ctrl+Shift+U to add subcontractors.</div></div>';
+
+  var m = document.createElement('div');
+  m.id = 'sub-perf-modal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:10500;display:flex;align-items:center;justify-content:center;padding:20px;';
+  m.innerHTML = '<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;width:100%;max-width:860px;max-height:90vh;overflow-y:auto;padding:24px;color:#e2e8f0;font-family:system-ui,sans-serif;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
+      '<h2 style="margin:0;font-size:20px;color:#f8fafc;">🤝 Subcontractor Performance Tracker</h2>' +
+      '<button onclick="document.getElementById(\'sub-perf-modal\').remove();" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer;">✕</button>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">' +
+      '<div>' +
+        '<h3 style="color:#94a3b8;font-size:13px;text-transform:uppercase;margin-bottom:12px;letter-spacing:1px;">Current Project Subs</h3>' +
+        subCards +
+      '</div>' +
+      '<div>' +
+        '<h3 style="color:#94a3b8;font-size:13px;text-transform:uppercase;margin-bottom:12px;letter-spacing:1px;">Cross-Project History</h3>' +
+        '<table style="width:100%;border-collapse:collapse;">' +
+          '<thead><tr style="background:#0f172a;"><th style="padding:8px 10px;text-align:left;color:#64748b;font-size:11px;">COMPANY</th><th style="padding:8px 10px;text-align:left;color:#64748b;font-size:11px;">SCOPE</th><th style="padding:8px 10px;text-align:center;color:#64748b;font-size:11px;">JOBS</th><th style="padding:8px 10px;text-align:right;color:#64748b;font-size:11px;">VOLUME</th><th style="padding:8px 10px;text-align:right;color:#64748b;font-size:11px;">PAY%</th><th style="padding:8px 10px;text-align:center;color:#64748b;font-size:11px;">ISSUES</th></tr></thead>' +
+          '<tbody>'+histRows+'</tbody>' +
+        '</table>' +
+        '<div style="margin-top:12px;font-size:11px;color:#475569;">Issues = expired COIs + disputed payments. Use to evaluate which subs to rehire and flag risk patterns.</div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="margin-top:16px;text-align:right;">' +
+      '<button onclick="document.getElementById(\'sub-perf-modal\').remove();" style="background:rgba(100,116,139,0.2);color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:13px;">Close</button>' +
+    '</div>' +
+  '</div>';
+  m.addEventListener('click', function(e) { if (e.target === m) m.remove(); });
+  document.body.appendChild(m);
+  subPerfModal = m;
+}
+
+function openSubPerfModal() {
+  var existing = document.getElementById('sub-perf-modal');
+  if (existing) { existing.remove(); return; }
+  buildSubPerfModal();
+}
+
+// Sidebar button
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn = document.createElement('button');
+    btn.id = 'oncor-sub-perf-btn';
+    btn.innerHTML = '🤝 Sub Performance';
+    btn.title = 'Subcontractor Performance Tracker (Ctrl+Alt+I)';
+    btn.onclick = openSubPerfModal;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(167,139,250,0.12);color:#a78bfa;border:1px solid rgba(167,139,250,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(167,139,250,0.25)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(167,139,250,0.12)'; };
+    var pourQualBtn = document.getElementById('oncor-pour-quality-btn');
+    if (pourQualBtn && pourQualBtn.parentNode) {
+      pourQualBtn.parentNode.insertBefore(btn, pourQualBtn.nextSibling);
+    } else {
+      btn.style.cssText += 'position:fixed;bottom:100px;right:20px;z-index:9000;width:auto;';
+      document.body.appendChild(btn);
+    }
+  }, 9500);
+});
+// ==================== END SUBCONTRACTOR PERFORMANCE TRACKER ====================
+
+
+// ==================== KEYBOARD SHORTCUTS — Session #94 ====================
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.altKey) {
+    if (e.key === 'g' || e.key === 'G') { e.preventDefault(); openWasteModal(); }
+    if (e.key === 'h' || e.key === 'H') { e.preventDefault(); openPourQualityModal(); }
+    if (e.key === 'i' || e.key === 'I') { e.preventDefault(); openSubPerfModal(); }
+  }
+});
+// ==================== END KEYBOARD SHORTCUTS ====================
+
+})();
+// ==================== END SESSION #94 — Zeus ⚡ Waste Analysis (Ctrl+Alt+G) + Pour Quality Score (Ctrl+Alt+H) + Sub Performance (Ctrl+Alt+I) ====================
+</script>
