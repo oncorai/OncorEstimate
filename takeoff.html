@@ -164544,4 +164544,427 @@ document.addEventListener('DOMContentLoaded', function(){
 
 })();
 // ==================== END BID COMPARISON & COMPETITOR ANALYSIS — Zeus ⚡ Session #89 ====================
+
+// ==================== CREW PRODUCTIVITY TRACKER — Zeus ⚡ Session #89 ====================
+// Purpose: Track actual vs estimated labor hours, build historical productivity data for better estimates
+// Alt+3 keyboard shortcut
+(function(){
+'use strict';
+
+var CPT_ID = 'oncor-cpt-modal';
+var CPT_STORAGE = 'oncor_crew_productivity_v1';
+
+// ── Get/save data
+function getCPTData(){
+  try {
+    var d = localStorage.getItem(CPT_STORAGE);
+    return d ? JSON.parse(d) : { projects: [], crewMembers: [] };
+  } catch(e){ return { projects: [], crewMembers: [] }; }
+}
+function saveCPTData(data){
+  localStorage.setItem(CPT_STORAGE, JSON.stringify(data));
+}
+
+// ── Build modal
+function buildCPTModal(){
+  if(document.getElementById(CPT_ID)) return;
+  var m = document.createElement('div');
+  m.id = CPT_ID;
+  m.style.cssText = 'display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:10000;overflow:auto;';
+  m.innerHTML = '<div style="background:#1e293b;max-width:950px;margin:30px auto;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.4);max-height:90vh;overflow:hidden;display:flex;flex-direction:column;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#059669 0%,#047857 100%);">'+
+      '<div style="display:flex;align-items:center;gap:10px;"><span style="font-size:1.5rem;">👷</span><span style="font-size:1.1rem;font-weight:700;color:#fff;">Crew Productivity Tracker</span></div>'+
+      '<button onclick="closeCPTModal()" style="background:rgba(255,255,255,0.2);border:none;color:#fff;width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:1rem;">✕</button>'+
+    '</div>'+
+    '<div id="cpt-stats" style="padding:12px 16px;background:rgba(5,150,105,0.1);border-bottom:1px solid rgba(255,255,255,0.05);"></div>'+
+    '<div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;gap:8px;flex-wrap:wrap;">'+
+      '<button id="cpt-tab-projects" onclick="cptSwitchTab(\'projects\')" style="padding:6px 14px;border-radius:6px;border:none;cursor:pointer;font-size:0.85rem;background:#059669;color:#fff;">📋 Projects</button>'+
+      '<button id="cpt-tab-rates" onclick="cptSwitchTab(\'rates\')" style="padding:6px 14px;border-radius:6px;border:1px solid rgba(255,255,255,0.2);cursor:pointer;font-size:0.85rem;background:transparent;color:#94a3b8;">📊 Productivity Rates</button>'+
+      '<button id="cpt-tab-crew" onclick="cptSwitchTab(\'crew\')" style="padding:6px 14px;border-radius:6px;border:1px solid rgba(255,255,255,0.2);cursor:pointer;font-size:0.85rem;background:transparent;color:#94a3b8;">👥 Crew Directory</button>'+
+      '<div style="flex:1;"></div>'+
+      '<button onclick="cptPrint()" style="padding:6px 14px;border-radius:6px;border:1px solid rgba(255,255,255,0.2);cursor:pointer;font-size:0.85rem;background:transparent;color:#94a3b8;">🖨 Print</button>'+
+    '</div>'+
+    '<div id="cpt-content" style="flex:1;overflow:auto;padding:16px;"></div>'+
+  '</div>';
+  m.onclick = function(e){ if(e.target===m) closeCPTModal(); };
+  document.body.appendChild(m);
+}
+
+var cptTab = 'projects';
+var cptEditIdx = -1;
+
+function cptSwitchTab(tab){
+  cptTab = tab;
+  var tabs = ['projects','rates','crew'];
+  tabs.forEach(function(t){
+    var btn = document.getElementById('cpt-tab-'+t);
+    if(!btn) return;
+    if(t===tab){
+      btn.style.background='#059669'; btn.style.color='#fff'; btn.style.border='none';
+    } else {
+      btn.style.background='transparent'; btn.style.color='#94a3b8'; btn.style.border='1px solid rgba(255,255,255,0.2)';
+    }
+  });
+  cptRender();
+}
+
+function cptRender(){
+  cptRenderStats();
+  var c = document.getElementById('cpt-content');
+  if(!c) return;
+  if(cptTab==='projects') cptRenderProjects(c);
+  else if(cptTab==='rates') cptRenderRates(c);
+  else if(cptTab==='crew') cptRenderCrew(c);
+}
+
+function cptRenderStats(){
+  var s = document.getElementById('cpt-stats');
+  if(!s) return;
+  var data = getCPTData();
+  var projects = data.projects.filter(function(p){ return p.actualHours && p.estimatedHours; });
+  var totalEst = projects.reduce(function(a,p){ return a + (parseFloat(p.estimatedHours)||0); },0);
+  var totalAct = projects.reduce(function(a,p){ return a + (parseFloat(p.actualHours)||0); },0);
+  var efficiency = totalEst>0 ? Math.round(totalEst/totalAct*100) : 0;
+  var totalYd3 = projects.reduce(function(a,p){ return a + (parseFloat(p.yd3)||0); },0);
+  var yd3PerHour = totalAct>0 ? (totalYd3/totalAct).toFixed(2) : '0.00';
+  var effColor = efficiency>=100?'#10b981':efficiency>=85?'#f59e0b':'#ef4444';
+  s.innerHTML = '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;">'+
+    '<div style="text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:#f1f5f9;">'+data.projects.length+'</div><div style="font-size:0.7rem;color:#64748b;">Projects</div></div>'+
+    '<div style="text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:#14b8a6;">'+totalEst.toFixed(0)+'</div><div style="font-size:0.7rem;color:#64748b;">Est Hours</div></div>'+
+    '<div style="text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:#a78bfa;">'+totalAct.toFixed(0)+'</div><div style="font-size:0.7rem;color:#64748b;">Actual Hours</div></div>'+
+    '<div style="text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:'+effColor+';">'+efficiency+'%</div><div style="font-size:0.7rem;color:#64748b;">Efficiency</div></div>'+
+    '<div style="text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:#fcd34d;">'+yd3PerHour+'</div><div style="font-size:0.7rem;color:#64748b;">yd³/Hour</div></div>'+
+    '<div style="text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:#f1f5f9;">'+data.crewMembers.length+'</div><div style="font-size:0.7rem;color:#64748b;">Crew</div></div>'+
+  '</div>';
+}
+
+function cptRenderProjects(c){
+  var data = getCPTData();
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+    '<div style="font-size:1rem;font-weight:600;color:#f1f5f9;">Project Labor Tracking</div>'+
+    '<button onclick="cptShowForm(-1)" style="background:#059669;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.85rem;">+ New Project</button>'+
+  '</div>';
+  if(!data.projects.length){
+    html += '<div style="text-align:center;padding:40px;color:#64748b;">'+
+      '<div style="font-size:2.5rem;margin-bottom:12px;">📋</div>'+
+      '<div>No projects tracked yet.</div>'+
+      '<div style="font-size:0.85rem;margin-top:8px;">Log completed projects with actual vs estimated hours.</div>'+
+    '</div>';
+  } else {
+    html += '<div style="display:flex;flex-direction:column;gap:12px;">';
+    data.projects.slice().reverse().forEach(function(proj, idx){
+      var realIdx = data.projects.length - 1 - idx;
+      var eff = proj.estimatedHours && proj.actualHours ? Math.round(parseFloat(proj.estimatedHours)/parseFloat(proj.actualHours)*100) : null;
+      var effColor = eff>=100?'#10b981':eff>=85?'#f59e0b':'#ef4444';
+      var diff = proj.actualHours && proj.estimatedHours ? parseFloat(proj.actualHours) - parseFloat(proj.estimatedHours) : null;
+      html += '<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:10px;border-left:4px solid '+(eff>=100?'#10b981':eff>=85?'#f59e0b':'#ef4444')+';padding:14px 16px;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">'+
+          '<div style="flex:1;">'+
+            '<div style="font-weight:600;color:#f1f5f9;font-size:0.95rem;">'+escHtml(proj.name||'Unnamed')+'</div>'+
+            '<div style="color:#94a3b8;font-size:0.8rem;margin-top:4px;">'+escHtml(proj.workType||'')+(proj.completedDate?' • Completed '+proj.completedDate:'')+'</div>'+
+          '</div>'+
+          (eff!==null?'<span style="background:rgba('+(eff>=100?'16,185,129':eff>=85?'245,158,11':'239,68,68')+',0.15);color:'+effColor+';padding:4px 10px;border-radius:4px;font-size:0.85rem;font-weight:600;">'+eff+'% Eff</span>':'')+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:12px;">'+
+          '<div><div style="font-size:0.7rem;color:#64748b;">Est Hours</div><div style="font-size:1rem;font-weight:600;color:#14b8a6;">'+(proj.estimatedHours||'—')+'</div></div>'+
+          '<div><div style="font-size:0.7rem;color:#64748b;">Actual Hours</div><div style="font-size:1rem;font-weight:600;color:#a78bfa;">'+(proj.actualHours||'—')+'</div></div>'+
+          '<div><div style="font-size:0.7rem;color:#64748b;">Variance</div><div style="font-size:1rem;font-weight:600;color:'+(diff>0?'#ef4444':diff<0?'#10b981':'#64748b')+';">'+(diff!==null?(diff>0?'+':'')+diff.toFixed(1)+' hrs':'—')+'</div></div>'+
+          '<div><div style="font-size:0.7rem;color:#64748b;">yd³</div><div style="font-size:1rem;font-weight:600;color:#fcd34d;">'+(proj.yd3||'—')+'</div></div>'+
+          '<div><div style="font-size:0.7rem;color:#64748b;">Crew Size</div><div style="font-size:1rem;font-weight:600;color:#f1f5f9;">'+(proj.crewSize||'—')+'</div></div>'+
+        '</div>'+
+        (proj.notes?'<div style="margin-top:10px;background:rgba(255,255,255,0.03);padding:8px 10px;border-radius:6px;font-size:0.8rem;color:#94a3b8;">'+escHtml(proj.notes)+'</div>':'')+
+        '<div style="display:flex;gap:8px;margin-top:12px;">'+
+          '<button onclick="cptShowForm('+realIdx+')" style="background:rgba(255,255,255,0.05);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.75rem;">✏️ Edit</button>'+
+          '<button onclick="cptDelete('+realIdx+')" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.2);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.75rem;">🗑 Delete</button>'+
+        '</div>'+
+      '</div>';
+    });
+    html += '</div>';
+  }
+  c.innerHTML = html;
+}
+
+function cptShowForm(idx){
+  cptEditIdx = idx;
+  var data = getCPTData();
+  var proj = idx>=0 && data.projects[idx] ? data.projects[idx] : {};
+  var c = document.getElementById('cpt-content');
+  if(!c) return;
+  var workTypes = ['Flatwork','Footings','Walls','Piers','Curb & Gutter','Sidewalk','Foundation','Warehouse Floor','Parking Lot','Drive Lanes','Decorative','Stamped','Colored','Other'];
+  var html = '<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:20px;">'+
+    '<div style="font-size:1rem;font-weight:600;color:#f1f5f9;margin-bottom:16px;">'+(idx>=0?'Edit':'New')+' Project</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+
+      '<div><label style="font-size:0.75rem;color:#64748b;">Project Name *</label><input id="cpt-name" type="text" value="'+escHtml(proj.name||'')+'" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.9rem;margin-top:4px;"></div>'+
+      '<div><label style="font-size:0.75rem;color:#64748b;">Work Type</label><select id="cpt-worktype" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.9rem;margin-top:4px;">'+
+        '<option value="">—</option>'+workTypes.map(function(t){ return '<option value="'+t+'"'+(proj.workType===t?' selected':'')+'>'+t+'</option>'; }).join('')+
+      '</select></div>'+
+      '<div><label style="font-size:0.75rem;color:#64748b;">Completed Date</label><input id="cpt-date" type="date" value="'+(proj.completedDate||'')+'" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.9rem;margin-top:4px;"></div>'+
+      '<div><label style="font-size:0.75rem;color:#64748b;">yd³ Poured</label><input id="cpt-yd3" type="number" step="0.1" value="'+(proj.yd3||'')+'" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.9rem;margin-top:4px;"></div>'+
+      '<div><label style="font-size:0.75rem;color:#64748b;">Estimated Labor Hours</label><input id="cpt-esthrs" type="number" step="0.5" value="'+(proj.estimatedHours||'')+'" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.9rem;margin-top:4px;"></div>'+
+      '<div><label style="font-size:0.75rem;color:#64748b;">Actual Labor Hours</label><input id="cpt-acthrs" type="number" step="0.5" value="'+(proj.actualHours||'')+'" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.9rem;margin-top:4px;"></div>'+
+      '<div><label style="font-size:0.75rem;color:#64748b;">Crew Size</label><input id="cpt-crewsize" type="number" value="'+(proj.crewSize||'')+'" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.9rem;margin-top:4px;"></div>'+
+      '<div><label style="font-size:0.75rem;color:#64748b;">Foreman</label><input id="cpt-foreman" type="text" value="'+escHtml(proj.foreman||'')+'" placeholder="Foreman name" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.9rem;margin-top:4px;"></div>'+
+    '</div>'+
+    '<div style="margin-top:12px;"><label style="font-size:0.75rem;color:#64748b;">Notes (issues, weather, lessons learned)</label><textarea id="cpt-notes" rows="2" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.85rem;margin-top:4px;resize:vertical;">'+escHtml(proj.notes||'')+'</textarea></div>'+
+    '<div style="display:flex;gap:8px;margin-top:16px;">'+
+      '<button onclick="cptSave()" style="background:#059669;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:0.9rem;">💾 Save</button>'+
+      '<button onclick="cptRender()" style="background:rgba(255,255,255,0.1);color:#94a3b8;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:0.9rem;">Cancel</button>'+
+    '</div>'+
+  '</div>';
+  c.innerHTML = html;
+}
+
+function cptSave(){
+  var name = document.getElementById('cpt-name')?.value.trim();
+  if(!name){ alert('Project name is required.'); return; }
+  var proj = {
+    name: name,
+    workType: document.getElementById('cpt-worktype')?.value,
+    completedDate: document.getElementById('cpt-date')?.value,
+    yd3: document.getElementById('cpt-yd3')?.value,
+    estimatedHours: document.getElementById('cpt-esthrs')?.value,
+    actualHours: document.getElementById('cpt-acthrs')?.value,
+    crewSize: document.getElementById('cpt-crewsize')?.value,
+    foreman: document.getElementById('cpt-foreman')?.value.trim(),
+    notes: document.getElementById('cpt-notes')?.value.trim()
+  };
+  var data = getCPTData();
+  // Add foreman to crew if new
+  if(proj.foreman){
+    var exists = data.crewMembers.find(function(m){ return m.name.toLowerCase()===proj.foreman.toLowerCase(); });
+    if(!exists){
+      data.crewMembers.push({ name: proj.foreman, role: 'Foreman', projects: 1 });
+    } else {
+      exists.projects = (exists.projects||0) + 1;
+    }
+  }
+  if(cptEditIdx>=0){
+    data.projects[cptEditIdx] = proj;
+  } else {
+    data.projects.push(proj);
+  }
+  saveCPTData(data);
+  cptEditIdx = -1;
+  cptRender();
+}
+
+function cptDelete(idx){
+  if(!confirm('Delete this project?')) return;
+  var data = getCPTData();
+  data.projects.splice(idx,1);
+  saveCPTData(data);
+  cptRender();
+}
+
+function cptRenderRates(c){
+  var data = getCPTData();
+  var projects = data.projects.filter(function(p){ return p.actualHours && p.yd3; });
+  if(!projects.length){
+    c.innerHTML = '<div style="text-align:center;padding:60px;color:#64748b;">'+
+      '<div style="font-size:2.5rem;margin-bottom:12px;">📊</div>'+
+      '<div>No data for productivity rates yet.</div>'+
+      '<div style="font-size:0.85rem;margin-top:8px;">Log completed projects with yd³ and actual hours.</div>'+
+    '</div>';
+    return;
+  }
+  // Group by work type
+  var byType = {};
+  projects.forEach(function(p){
+    var t = p.workType || 'Unknown';
+    if(!byType[t]) byType[t] = { projects: 0, yd3: 0, hours: 0, estHours: 0 };
+    byType[t].projects++;
+    byType[t].yd3 += parseFloat(p.yd3)||0;
+    byType[t].hours += parseFloat(p.actualHours)||0;
+    byType[t].estHours += parseFloat(p.estimatedHours)||0;
+  });
+  var html = '<div style="font-size:1rem;font-weight:600;color:#f1f5f9;margin-bottom:16px;">📊 Productivity Rates by Work Type</div>'+
+    '<div style="background:rgba(5,150,105,0.1);border:1px solid rgba(5,150,105,0.2);border-radius:8px;padding:12px 16px;margin-bottom:16px;">'+
+      '<div style="font-size:0.85rem;color:#10b981;font-weight:600;margin-bottom:8px;">💡 How to use these rates:</div>'+
+      '<div style="font-size:0.8rem;color:#94a3b8;">Use the yd³/hour rate to estimate labor for future jobs of the same type. Multiply your takeoff yd³ by the rate to get estimated labor hours.</div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">';
+  Object.keys(byType).sort(function(a,b){ return byType[b].projects - byType[a].projects; }).forEach(function(t){
+    var d = byType[t];
+    var yd3PerHour = d.hours>0 ? (d.yd3/d.hours).toFixed(2) : '0.00';
+    var efficiency = d.estHours>0 ? Math.round(d.estHours/d.hours*100) : null;
+    var effColor = efficiency>=100?'#10b981':efficiency>=85?'#f59e0b':'#ef4444';
+    html += '<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:14px;">'+
+      '<div style="font-weight:600;color:#f1f5f9;font-size:0.95rem;margin-bottom:10px;">'+escHtml(t)+'</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">'+
+        '<div><div style="font-size:1.3rem;font-weight:700;color:#fcd34d;">'+yd3PerHour+'</div><div style="font-size:0.7rem;color:#64748b;">yd³ / hour</div></div>'+
+        '<div><div style="font-size:1.3rem;font-weight:700;color:'+(efficiency?effColor:'#64748b')+';">'+(efficiency?efficiency+'%':'—')+'</div><div style="font-size:0.7rem;color:#64748b;">Efficiency</div></div>'+
+        '<div><div style="font-size:1rem;font-weight:600;color:#14b8a6;">'+d.yd3.toFixed(0)+'</div><div style="font-size:0.7rem;color:#64748b;">Total yd³</div></div>'+
+        '<div><div style="font-size:1rem;font-weight:600;color:#a78bfa;">'+d.hours.toFixed(0)+'</div><div style="font-size:0.7rem;color:#64748b;">Total Hours</div></div>'+
+      '</div>'+
+      '<div style="margin-top:8px;font-size:0.75rem;color:#64748b;">Based on '+d.projects+' project'+(d.projects>1?'s':'')+'</div>'+
+    '</div>';
+  });
+  html += '</div>';
+  // Overall average
+  var totalYd3 = projects.reduce(function(a,p){ return a + (parseFloat(p.yd3)||0); },0);
+  var totalHours = projects.reduce(function(a,p){ return a + (parseFloat(p.actualHours)||0); },0);
+  var avgYd3PerHour = totalHours>0 ? (totalYd3/totalHours).toFixed(2) : '0.00';
+  html += '<div style="margin-top:16px;background:rgba(30,41,59,0.8);border:2px solid rgba(5,150,105,0.3);border-radius:10px;padding:16px;">'+
+    '<div style="font-size:0.9rem;font-weight:600;color:#f1f5f9;margin-bottom:8px;">📈 Overall Average (All Work Types)</div>'+
+    '<div style="display:flex;gap:24px;">'+
+      '<div><span style="font-size:1.5rem;font-weight:700;color:#10b981;">'+avgYd3PerHour+'</span><span style="color:#64748b;font-size:0.9rem;margin-left:6px;">yd³/hour</span></div>'+
+      '<div><span style="font-size:1.1rem;color:#f1f5f9;">'+totalYd3.toFixed(0)+'</span><span style="color:#64748b;font-size:0.85rem;margin-left:4px;">total yd³</span></div>'+
+      '<div><span style="font-size:1.1rem;color:#f1f5f9;">'+totalHours.toFixed(0)+'</span><span style="color:#64748b;font-size:0.85rem;margin-left:4px;">total hours</span></div>'+
+      '<div><span style="font-size:1.1rem;color:#f1f5f9;">'+projects.length+'</span><span style="color:#64748b;font-size:0.85rem;margin-left:4px;">projects</span></div>'+
+    '</div>'+
+  '</div>';
+  c.innerHTML = html;
+}
+
+function cptRenderCrew(c){
+  var data = getCPTData();
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+    '<div style="font-size:1rem;font-weight:600;color:#f1f5f9;">Crew Directory</div>'+
+    '<button onclick="cptAddCrew()" style="background:#059669;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.85rem;">+ Add Crew Member</button>'+
+  '</div>';
+  if(!data.crewMembers.length){
+    html += '<div style="text-align:center;padding:40px;color:#64748b;">'+
+      '<div style="font-size:2.5rem;margin-bottom:12px;">👥</div>'+
+      '<div>No crew members tracked yet.</div>'+
+      '<div style="font-size:0.85rem;margin-top:8px;">Foremen are auto-added when logging projects.</div>'+
+    '</div>';
+  } else {
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">';
+    data.crewMembers.forEach(function(m, idx){
+      var roleColor = m.role==='Foreman'?'#f59e0b':m.role==='Finisher'?'#3b82f6':m.role==='Laborer'?'#64748b':'#a78bfa';
+      html += '<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:14px;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+          '<div style="font-weight:600;color:#f1f5f9;font-size:0.95rem;">'+escHtml(m.name)+'</div>'+
+          '<span style="background:rgba(255,255,255,0.1);color:'+roleColor+';padding:2px 8px;border-radius:4px;font-size:0.7rem;">'+escHtml(m.role||'—')+'</span>'+
+        '</div>'+
+        (m.phone?'<div style="font-size:0.8rem;color:#94a3b8;margin-top:6px;">📞 '+escHtml(m.phone)+'</div>':'')+
+        '<div style="font-size:0.75rem;color:#64748b;margin-top:6px;">'+(m.projects||0)+' projects</div>'+
+        '<div style="display:flex;gap:6px;margin-top:10px;">'+
+          '<button onclick="cptEditCrew('+idx+')" style="background:rgba(255,255,255,0.05);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);padding:5px 10px;border-radius:4px;cursor:pointer;font-size:0.7rem;">✏️</button>'+
+          '<button onclick="cptDeleteCrew('+idx+')" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.2);padding:5px 10px;border-radius:4px;cursor:pointer;font-size:0.7rem;">🗑</button>'+
+        '</div>'+
+      '</div>';
+    });
+    html += '</div>';
+  }
+  c.innerHTML = html;
+}
+
+function cptAddCrew(){
+  var name = prompt('Crew member name:');
+  if(!name) return;
+  var role = prompt('Role (Foreman / Finisher / Laborer / Other):','Laborer');
+  var phone = prompt('Phone number (optional):','');
+  var data = getCPTData();
+  data.crewMembers.push({ name: name.trim(), role: role||'', phone: phone||'', projects: 0 });
+  saveCPTData(data);
+  cptRender();
+}
+
+function cptEditCrew(idx){
+  var data = getCPTData();
+  if(!data.crewMembers[idx]) return;
+  var m = data.crewMembers[idx];
+  var role = prompt('Role for '+m.name+':', m.role||'');
+  if(role===null) return;
+  var phone = prompt('Phone number:', m.phone||'');
+  data.crewMembers[idx].role = role;
+  data.crewMembers[idx].phone = phone||'';
+  saveCPTData(data);
+  cptRender();
+}
+
+function cptDeleteCrew(idx){
+  if(!confirm('Delete this crew member?')) return;
+  var data = getCPTData();
+  data.crewMembers.splice(idx,1);
+  saveCPTData(data);
+  cptRender();
+}
+
+function cptPrint(){
+  var data = getCPTData();
+  var html = '<!DOCTYPE html><html><head><title>Crew Productivity Report</title>'+
+    '<style>body{font-family:system-ui,sans-serif;padding:30px;max-width:900px;margin:0 auto;} '+
+    'h1{font-size:1.3rem;border-bottom:2px solid #059669;padding-bottom:8px;} h2{font-size:1.1rem;margin-top:24px;} '+
+    'table{width:100%;border-collapse:collapse;margin:16px 0;font-size:0.85rem;} '+
+    'th,td{border:1px solid #ddd;padding:8px;text-align:left;} '+
+    'th{background:#f1f5f9;} '+
+    '@media print{button{display:none;}}</style>'+
+    '</head><body>'+
+    '<h1>👷 Crew Productivity Report</h1>'+
+    '<p style="color:#666;">Generated: '+new Date().toLocaleDateString()+'</p>'+
+    '<h2>Projects</h2>'+
+    '<table><thead><tr><th>Project</th><th>Work Type</th><th>yd³</th><th>Est Hrs</th><th>Actual Hrs</th><th>Efficiency</th><th>Foreman</th></tr></thead><tbody>';
+  data.projects.forEach(function(p){
+    var eff = p.estimatedHours && p.actualHours ? Math.round(parseFloat(p.estimatedHours)/parseFloat(p.actualHours)*100) : '—';
+    html += '<tr><td>'+escHtml(p.name)+'</td><td>'+escHtml(p.workType||'')+'</td><td>'+(p.yd3||'—')+'</td><td>'+(p.estimatedHours||'—')+'</td><td>'+(p.actualHours||'—')+'</td><td>'+eff+(eff!=='—'?'%':'')+'</td><td>'+escHtml(p.foreman||'')+'</td></tr>';
+  });
+  html += '</tbody></table>'+
+    '<h2>Crew Members</h2>'+
+    '<table><thead><tr><th>Name</th><th>Role</th><th>Phone</th><th>Projects</th></tr></thead><tbody>';
+  data.crewMembers.forEach(function(m){
+    html += '<tr><td>'+escHtml(m.name)+'</td><td>'+escHtml(m.role||'')+'</td><td>'+escHtml(m.phone||'')+'</td><td>'+(m.projects||0)+'</td></tr>';
+  });
+  html += '</tbody></table>'+
+    '<p style="color:#999;font-size:0.8rem;margin-top:24px;">CONFIDENTIAL — INTERNAL USE ONLY</p>'+
+    '<button onclick="window.print()" style="margin-top:16px;padding:10px 24px;background:#059669;color:#fff;border:none;border-radius:6px;cursor:pointer;">🖨 Print</button>'+
+    '</body></html>';
+  var w = window.open('','_blank');
+  if(w){ w.document.write(html); w.document.close(); }
+}
+
+function escHtml(s){
+  if(!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showCPTModal(){
+  buildCPTModal();
+  var m = document.getElementById(CPT_ID);
+  if(m){ m.style.display='block'; cptRender(); }
+}
+function closeCPTModal(){
+  var m = document.getElementById(CPT_ID);
+  if(m) m.style.display='none';
+}
+
+// Expose
+window.showCPTModal = showCPTModal;
+window.closeCPTModal = closeCPTModal;
+window.cptSwitchTab = cptSwitchTab;
+window.cptShowForm = cptShowForm;
+window.cptSave = cptSave;
+window.cptDelete = cptDelete;
+window.cptAddCrew = cptAddCrew;
+window.cptEditCrew = cptEditCrew;
+window.cptDeleteCrew = cptDeleteCrew;
+window.cptPrint = cptPrint;
+
+// Alt+3 keyboard shortcut
+document.addEventListener('keydown', function(e){
+  if(e.altKey && e.key==='3'){
+    e.preventDefault();
+    var m = document.getElementById(CPT_ID);
+    if(m && m.style.display!=='none') closeCPTModal();
+    else showCPTModal();
+  }
+});
+
+// Inject sidebar button after Competitor Analysis
+document.addEventListener('DOMContentLoaded', function(){
+  setTimeout(function(){
+    var bcaBtn = document.querySelector('button[onclick*="showBCAModal"]');
+    if(!bcaBtn) return;
+    var parentRow = bcaBtn.closest('div');
+    if(!parentRow||!parentRow.parentNode) return;
+    var newRow = document.createElement('div');
+    newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+    newRow.innerHTML = '<button class="action-btn secondary" onclick="showCPTModal()" title="Crew Productivity Tracker — track actual vs estimated labor hours, build productivity rates (Alt+3)" style="background:rgba(5,150,105,0.08);border-color:rgba(5,150,105,0.3);color:#6ee7b7;">👷 Crew Productivity</button>';
+    parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+  }, 6900);
+});
+
+})();
+// ==================== END CREW PRODUCTIVITY TRACKER — Zeus ⚡ Session #89 ====================
 </script>
