@@ -169706,4 +169706,717 @@ window._getPIBData = function() { return getPIBData(); };
 
 })();
 // ==================== END SESSION #95 — Zeus ⚡ ACI Compliance Monitor (Ctrl+Alt+J) + Quick Invoice Generator (Ctrl+Alt+K) + Project Info Board (Ctrl+Alt+L) ====================
+
+// ==================== SESSION #96 — Zeus ⚡ Project Scorecard (Ctrl+Alt+M) + Daily Brief Generator (Ctrl+Alt+N) + Subcontract Review Checklist (Ctrl+Alt+O) ====================
+(function() {
+'use strict';
+
+// ==================== PROJECT SCORECARD (Ctrl+Alt+M) ====================
+function getScoreData() {
+  var proj = (window._lastProject) || '';
+  var raw = localStorage.getItem('oncor_scorecard_v1_' + (proj || 'global'));
+  if (raw) { try { return JSON.parse(raw); } catch(e){} }
+  return { manualOverrides: {}, notes: '', lastUpdated: '' };
+}
+function saveScoreData(data) {
+  var proj = (window._lastProject) || '';
+  data.lastUpdated = new Date().toISOString();
+  localStorage.setItem('oncor_scorecard_v1_' + (proj || 'global'), JSON.stringify(data));
+}
+
+function computeProjectScores() {
+  var scores = {};
+
+  // 1. FINANCIAL HEALTH (AR, AP, CTC)
+  var proj = (window._lastProject) || 'global';
+  var arRaw = localStorage.getItem('oncor_ar_v1_' + proj); var arData = [];
+  try { arData = JSON.parse(arRaw) || []; } catch(e){}
+  var overdueAR = 0; var totalAR = 0;
+  arData.forEach(function(i) {
+    totalAR += parseFloat(i.amount||0);
+    if (['Unpaid','Partial'].includes(i.status) && i.dueDate && new Date(i.dueDate) < new Date()) overdueAR++;
+  });
+  var ctcRaw = localStorage.getItem('oncor_ctc_v1_' + proj); var ctcData = {};
+  try { ctcData = JSON.parse(ctcRaw) || {}; } catch(e){}
+  var ctcCats = ctcData.categories || [];
+  var totalBudget = ctcCats.reduce(function(s,c){return s+parseFloat(c.budget||0);},0);
+  var totalEAC = ctcCats.reduce(function(s,c){
+    var sp = parseFloat(c.spent||0); var pc = parseFloat(c.pct||0)/100; var eac = pc>0 ? sp/pc : sp;
+    return s + eac;
+  },0);
+  var finScore = 100;
+  if (overdueAR > 0) finScore -= Math.min(overdueAR * 15, 40);
+  if (totalBudget > 0 && totalEAC > totalBudget) { var overPct = (totalEAC - totalBudget) / totalBudget; finScore -= Math.min(Math.round(overPct * 100), 40); }
+  scores.financial = { score: Math.max(0, finScore), label: 'Financial Health', icon: '💵' };
+
+  // 2. SCHEDULE / MILESTONES
+  var inspRaw = localStorage.getItem('oncor_inspections_v1_' + proj); var inspData = [];
+  try { inspData = JSON.parse(inspRaw) || []; } catch(e){}
+  var failedInsp = inspData.filter(function(i){return i.status === 'Failed' || i.status === 'Re-Inspection Required';}).length;
+  var expPermits = 0;
+  var permRaw = localStorage.getItem('oncor_permits_v1_' + proj); var permData = [];
+  try { permData = JSON.parse(permRaw) || []; } catch(e){}
+  permData.forEach(function(p) { if (p.status === 'Active' && p.expiry && new Date(p.expiry) < new Date()) expPermits++; });
+  var schedScore = 100 - (failedInsp * 10) - (expPermits * 20);
+  scores.schedule = { score: Math.max(0, schedScore), label: 'Schedule / Permits', icon: '📅' };
+
+  // 3. QUALITY (QC / Cylinder breaks / ACI compliance)
+  var qcRaw = localStorage.getItem('oncor_qc_log_v1_' + proj); var qcData = [];
+  try { qcData = JSON.parse(qcRaw) || []; } catch(e){}
+  var failedBreaks = 0; var totalBreaks = 0;
+  qcData.forEach(function(t) {
+    var fc = parseFloat(t.specPSI||t.fc||0); var b1 = parseFloat(t.break28a||0); var b2 = parseFloat(t.break28b||0);
+    if (fc > 0 && (b1>0||b2>0)) { totalBreaks++; var avg=(b1+b2)/((b1>0&&b2>0)?2:1); var mn=Math.min(b1>0?b1:99999,b2>0?b2:99999); if(mn===99999)mn=avg; if(avg<fc&&mn<fc-500)failedBreaks++; }
+  });
+  var dtRaw = localStorage.getItem('oncor_delivery_tickets_v1_' + proj); var dtData = [];
+  try { dtData = JSON.parse(dtRaw) || []; } catch(e){}
+  var rejLoads = dtData.filter(function(t){return t.status==='Rejected';}).length;
+  var waterLoads = dtData.filter(function(t){return parseFloat(t.waterAdded||0)>0;}).length;
+  var qualScore = 100 - (failedBreaks * 25) - (rejLoads * 10) - (waterLoads * 5);
+  scores.quality = { score: Math.max(0, qualScore), label: 'Quality / QC', icon: '🧪' };
+
+  // 4. SAFETY
+  var safeRaw = localStorage.getItem('oncor_safety_v1_' + proj); var safeData = { talks: [], incidents: [] };
+  try { safeData = JSON.parse(safeRaw) || { talks: [], incidents: [] }; } catch(e){}
+  var oshaRec = (safeData.incidents||[]).filter(function(i){return i.oshaRecordable==='Yes';}).length;
+  var critIncidents = (safeData.incidents||[]).filter(function(i){return i.severity==='Critical';}).length;
+  var safeScore = 100 - (oshaRec * 30) - (critIncidents * 15);
+  // also penalize for no recent safety talks
+  var recentTalk = false;
+  (safeData.talks||[]).forEach(function(t){ if(t.date && new Date(t.date) > new Date(Date.now() - 14*86400000)) recentTalk=true; });
+  if ((safeData.talks||[]).length > 0 && !recentTalk) safeScore -= 10;
+  scores.safety = { score: Math.max(0, safeScore), label: 'Safety', icon: '🦺' };
+
+  // 5. LEGAL / DOCUMENTATION (Lien, Submittals, RFIs, CO)
+  var lienRaw = localStorage.getItem('oncor_lien_notices_v1_' + proj); var lienData = {};
+  try { lienData = JSON.parse(lienRaw) || {}; } catch(e){}
+  var lienScore = 100;
+  if (lienData.firstWorkDate) {
+    var ntoDeadline = new Date(lienData.firstWorkDate); ntoDeadline.setDate(ntoDeadline.getDate()+30);
+    var hasNTO = (lienData.notices||[]).some(function(n){return n.type&&n.type.includes('Notice to Owner')&&n.status==='Sent';});
+    if (!hasNTO && new Date() > ntoDeadline) lienScore -= 40;
+    else if (!hasNTO) lienScore -= 10;
+  }
+  var subRaw = localStorage.getItem('oncor_submittal_log_v1'); var subData = [];
+  try { subData = JSON.parse(subRaw) || []; } catch(e){}
+  var r2r = subData.filter(function(s){return s.status==='Revise & Resubmit';}).length;
+  lienScore -= r2r * 10;
+  var rfiRaw = localStorage.getItem('oncor_rfi_log_v1'); var rfiData = [];
+  try { rfiData = JSON.parse(rfiRaw) || []; } catch(e){}
+  var overdueRFI = rfiData.filter(function(r){return r.status==='Open'&&r.responseDate&&new Date(r.responseDate)<new Date();}).length;
+  lienScore -= overdueRFI * 5;
+  scores.legal = { score: Math.max(0, lienScore), label: 'Legal / Docs', icon: '⚖️' };
+
+  // 6. RISK (Risk Register)
+  var rrRaw = localStorage.getItem('oncor_rr_v1_' + proj); var rrData = [];
+  try { rrData = JSON.parse(rrRaw) || []; } catch(e){}
+  var critical = rrData.filter(function(r){return r.score>=20&&['Open','Monitoring'].includes(r.status);}).length;
+  var high = rrData.filter(function(r){return r.score>=12&&r.score<20&&['Open','Monitoring'].includes(r.status);}).length;
+  var riskScore = 100 - (critical * 20) - (high * 8);
+  scores.risk = { score: Math.max(0, riskScore), label: 'Risk Register', icon: '⚠️' };
+
+  return scores;
+}
+
+function gradeFromScore(s) {
+  if (s >= 90) return { grade: 'A', color: '#10b981', bg: 'rgba(16,185,129,0.15)' };
+  if (s >= 80) return { grade: 'B', color: '#34d399', bg: 'rgba(52,211,153,0.12)' };
+  if (s >= 70) return { grade: 'C', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' };
+  if (s >= 60) return { grade: 'D', color: '#f97316', bg: 'rgba(249,115,22,0.15)' };
+  return { grade: 'F', color: '#ef4444', bg: 'rgba(239,68,68,0.15)' };
+}
+
+function buildScorecardModal() {
+  var scores = computeProjectScores();
+  var keys = ['financial','schedule','quality','safety','legal','risk'];
+  var totalScore = Math.round(keys.reduce(function(s,k){return s+(scores[k]?scores[k].score:0);},0)/keys.length);
+  var overall = gradeFromScore(totalScore);
+  var proj = (window._lastProject) || 'this project';
+  var data = getScoreData();
+
+  var cardsHtml = keys.map(function(k) {
+    var s = scores[k]; var g = gradeFromScore(s.score);
+    var bars = Math.round(s.score / 10);
+    return '<div style="background:rgba(15,23,42,0.6);border:1px solid '+g.color+';border-radius:10px;padding:14px;text-align:center;">' +
+      '<div style="font-size:22px;margin-bottom:4px;">'+s.icon+'</div>' +
+      '<div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">'+s.label+'</div>' +
+      '<div style="font-size:36px;font-weight:700;color:'+g.color+';">'+g.grade+'</div>' +
+      '<div style="font-size:12px;color:#64748b;margin:4px 0;">'+s.score+'/100</div>' +
+      '<div style="background:#1e293b;border-radius:4px;height:6px;overflow:hidden;margin-top:6px;">' +
+        '<div style="width:'+s.score+'%;height:100%;background:'+g.color+';transition:width 0.5s;border-radius:4px;"></div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  var html = '<div id="scorecard-modal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding-top:30px;backdrop-filter:blur(4px);">' +
+    '<div style="background:#0f172a;border:1px solid #334155;border-radius:16px;width:92%;max-width:860px;max-height:90vh;overflow-y:auto;box-shadow:0 25px 80px rgba(0,0,0,0.6);">' +
+      '<div style="background:linear-gradient(135deg,rgba(245,158,11,0.12),rgba(15,23,42,0));padding:18px 24px 12px;border-bottom:1px solid #1e293b;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+          '<div><h2 style="margin:0 0 2px 0;font-size:18px;color:#e2e8f0;">🏆 Project Scorecard</h2>' +
+          '<p style="margin:0;font-size:12px;color:#64748b;">Auto-graded across 6 dimensions — Session #96</p></div>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button onclick="printScorecard();" style="background:rgba(245,158,11,0.2);color:#f59e0b;border:1px solid rgba(245,158,11,0.4);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">🖨️ Print Report</button>' +
+            '<button onclick="document.getElementById(\'scorecard-modal\').remove();" style="background:rgba(100,116,139,0.2);color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;">✕ Close</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="padding:20px 24px;">' +
+        '<div style="background:'+overall.bg+';border:2px solid '+overall.color+';border-radius:14px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:20px;">' +
+          '<div style="text-align:center;min-width:80px;">' +
+            '<div style="font-size:56px;font-weight:800;color:'+overall.color+';line-height:1;">'+overall.grade+'</div>' +
+            '<div style="font-size:12px;color:'+overall.color+';">OVERALL</div>' +
+          '</div>' +
+          '<div style="flex:1;">' +
+            '<div style="font-size:18px;font-weight:600;color:#e2e8f0;margin-bottom:4px;">'+proj+' — Project Health Score: '+totalScore+'/100</div>' +
+            '<div style="font-size:13px;color:#94a3b8;">Based on live data from AR, CTC, Inspections, QC Log, Safety Log, Lien Tracker, and Risk Register.</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">'+cardsHtml+'</div>' +
+        '<div style="background:rgba(30,41,59,0.4);border:1px solid #334155;border-radius:10px;padding:14px;">' +
+          '<div style="font-size:13px;color:#94a3b8;margin-bottom:8px;">📝 Scorecard Notes (saved with project)</div>' +
+          '<textarea id="scorecard-notes" rows="3" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px;color:#e2e8f0;font-size:13px;box-sizing:border-box;resize:vertical;">'+((data.notes||''))+'</textarea>' +
+          '<button onclick="(function(){var d=getScoreData();d.notes=document.getElementById(\'scorecard-notes\').value;saveScoreData(d);})();" style="margin-top:8px;background:rgba(245,158,11,0.2);color:#f59e0b;border:1px solid rgba(245,158,11,0.4);border-radius:6px;padding:6px 16px;cursor:pointer;font-size:12px;">💾 Save Notes</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  var existing = document.getElementById('scorecard-modal');
+  if (existing) existing.remove();
+  document.body.insertAdjacentHTML('beforeend', html);
+  document.getElementById('scorecard-modal').addEventListener('click', function(e){ if(e.target===this) this.remove(); });
+}
+
+function openScorecardModal() {
+  var m = document.getElementById('scorecard-modal');
+  if (m) { m.remove(); return; }
+  buildScorecardModal();
+}
+
+function printScorecard() {
+  var scores = computeProjectScores();
+  var keys = ['financial','schedule','quality','safety','legal','risk'];
+  var totalScore = Math.round(keys.reduce(function(s,k){return s+(scores[k]?scores[k].score:0);},0)/keys.length);
+  var overall = gradeFromScore(totalScore);
+  var proj = (window._lastProject) || '';
+  var co = typeof getCompanyInfo === 'function' ? getCompanyInfo() : {};
+  var date = new Date().toLocaleDateString();
+
+  var rows = keys.map(function(k) {
+    var s = scores[k]; var g = gradeFromScore(s.score);
+    return '<tr><td>'+s.icon+' '+s.label+'</td><td style="text-align:center;font-weight:700;color:'+g.color+';">'+g.grade+'</td><td style="text-align:center;">'+s.score+'/100</td></tr>';
+  }).join('');
+
+  var html = '<html><head><title>Project Scorecard</title><style>' +
+    'body{font-family:Arial,sans-serif;font-size:12pt;margin:0.75in;color:#111;}' +
+    'h1{font-size:18pt;margin-bottom:4px;}' +
+    '.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:10px;border-bottom:2px solid #333;}' +
+    '.overall-box{background:#f0fdf4;border:2px solid #16a34a;border-radius:8px;padding:12px 20px;text-align:center;margin-bottom:20px;}' +
+    '.overall-grade{font-size:48pt;font-weight:800;color:#16a34a;line-height:1;}' +
+    'table{width:100%;border-collapse:collapse;margin-top:10px;}' +
+    'th{background:#1e293b;color:#fff;padding:8px 10px;font-size:10pt;}' +
+    'td{padding:8px 10px;border-bottom:1px solid #e2e8f0;font-size:11pt;}' +
+    '.confidential{color:#888;font-size:9pt;text-align:center;margin-top:20px;border-top:1px solid #ccc;padding-top:8px;}' +
+    '@media print{body{margin:0.5in;}}' +
+    '</style></head><body>' +
+    '<div class="header"><div><h1>🏆 Project Scorecard</h1><div>'+(co.name||'Oncor Construction')+'</div><div>'+(co.phone||'')+'</div></div>' +
+    '<div style="text-align:right;"><div style="font-weight:600;">Project: '+(proj||'N/A')+'</div><div>Date: '+date+'</div></div></div>' +
+    '<div class="overall-box"><div style="font-size:13pt;margin-bottom:4px;">Overall Project Health Score: '+totalScore+'/100</div><div class="overall-grade">'+overall.grade+'</div></div>' +
+    '<table><thead><tr><th>Dimension</th><th>Grade</th><th>Score</th></tr></thead><tbody>'+rows+'</tbody></table>' +
+    '<div style="margin-top:20px;padding:10px;background:#fef9c3;border:1px solid #d97706;border-radius:6px;font-size:10pt;">' +
+    '<strong>Note:</strong> Scores are auto-calculated from live project data. A grades indicate no significant issues. F indicates immediate attention required.</div>' +
+    '<div class="confidential">CONFIDENTIAL — INTERNAL USE ONLY | Generated by Oncor Takeoff Tool | '+date+'</div>' +
+    '<script>window.onload=function(){window.print();};<\/script></body></html>';
+  var w = window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+}
+
+window._getScorecardData = function() {
+  var scores = computeProjectScores();
+  var keys = ['financial','schedule','quality','safety','legal','risk'];
+  var total = Math.round(keys.reduce(function(s,k){return s+(scores[k]?scores[k].score:0);},0)/keys.length);
+  return { scores: scores, overallScore: total, grade: gradeFromScore(total).grade };
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn = document.createElement('button');
+    btn.id = 'oncor-scorecard-btn';
+    btn.textContent = '🏆 Project Scorecard';
+    btn.title = 'Project Scorecard (Ctrl+Alt+M)';
+    btn.onclick = openScorecardModal;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(245,158,11,0.25)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(245,158,11,0.12)'; };
+    // Insert after Sub Performance button
+    var subBtn = document.getElementById('oncor-subperf-btn');
+    if (subBtn && subBtn.parentNode) {
+      subBtn.parentNode.insertBefore(btn, subBtn.nextSibling);
+    } else {
+      var aciBtn = document.getElementById('oncor-aci-btn');
+      if (aciBtn && aciBtn.parentNode) {
+        aciBtn.parentNode.insertBefore(btn, aciBtn);
+      } else {
+        btn.style.cssText += 'position:fixed;bottom:230px;right:20px;z-index:9000;width:auto;';
+        document.body.appendChild(btn);
+      }
+    }
+  }, 11500);
+});
+// ==================== END PROJECT SCORECARD ====================
+
+
+// ==================== DAILY BRIEF GENERATOR (Ctrl+Alt+N) ====================
+function buildDailyBrief() {
+  var proj = (window._lastProject) || 'N/A';
+  var today = new Date();
+  var dateStr = today.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  var co = typeof getCompanyInfo === 'function' ? getCompanyInfo() : {};
+
+  // Pull data from various modules
+  var overdueAR = 0, totalOutstanding = 0;
+  var arRaw = localStorage.getItem('oncor_ar_v1_' + proj); var arData = [];
+  try { arData = JSON.parse(arRaw) || []; } catch(e){}
+  arData.forEach(function(i) {
+    if (['Unpaid','Partial'].includes(i.status)) {
+      var bal = parseFloat(i.amount||0) - parseFloat(i.amtPaid||0);
+      totalOutstanding += bal;
+      if (i.dueDate && new Date(i.dueDate) < today) overdueAR++;
+    }
+  });
+
+  // Open RFIs
+  var rfiData = []; try { rfiData = JSON.parse(localStorage.getItem('oncor_rfi_log_v1'))||[]; } catch(e){}
+  var openRFIs = rfiData.filter(function(r){return r.status==='Open';}).length;
+  var overdueRFIs = rfiData.filter(function(r){return r.status==='Open'&&r.responseDate&&new Date(r.responseDate)<today;}).length;
+
+  // Pending Submittals
+  var subData = []; try { subData = JSON.parse(localStorage.getItem('oncor_submittal_log_v1'))||[]; } catch(e){}
+  var pendingSubs = subData.filter(function(s){return ['Pending','Submitted','Under Review'].includes(s.status);}).length;
+  var r2rSubs = subData.filter(function(s){return s.status==='Revise & Resubmit';}).length;
+
+  // Open COs
+  var coData = []; try { coData = JSON.parse(localStorage.getItem('oncor_change_orders_v1'))||[]; } catch(e){}
+  var pendingCOs = coData.filter(function(c){return c.status==='Pending';}).length;
+  var pendingCOVal = coData.filter(function(c){return c.status==='Pending';}).reduce(function(s,c){return s+parseFloat(c.total||0);},0);
+
+  // Open punch items
+  var punchData = []; try { punchData = JSON.parse(localStorage.getItem('oncor_punch_list_v1_'+proj))||[]; } catch(e){}
+  var openPunch = punchData.filter(function(p){return ['Open','In Progress'].includes(p.status);}).length;
+
+  // Upcoming inspections (next 7 days)
+  var inspData = []; try { inspData = JSON.parse(localStorage.getItem('oncor_inspections_v1_'+proj))||[]; } catch(e){}
+  var nextWeek = new Date(today.getTime() + 7*86400000);
+  var upcomingInsp = inspData.filter(function(i){return ['Scheduled','Pending'].includes(i.status)&&i.date&&new Date(i.date)>=today&&new Date(i.date)<=nextWeek;});
+  var failedInsp = inspData.filter(function(i){return ['Failed','Re-Inspection Required'].includes(i.status);}).length;
+
+  // Risk alerts
+  var rrData = []; try { rrData = JSON.parse(localStorage.getItem('oncor_rr_v1_'+proj))||[]; } catch(e){}
+  var critRisks = rrData.filter(function(r){return r.score>=20&&['Open','Monitoring'].includes(r.status);}).length;
+
+  // Meeting action items overdue
+  var meetData = []; try { meetData = JSON.parse(localStorage.getItem('oncor_meetings_v1_'+proj))||[]; } catch(e){}
+  var overdueActions = 0;
+  meetData.forEach(function(m) { (m.actions||[]).forEach(function(a){ if(['Open','In Progress'].includes(a.status)&&a.dueDate&&new Date(a.dueDate)<today)overdueActions++; }); });
+
+  // Build HTML report
+  function alertLine(emoji, label, val, color, detail) {
+    return '<tr style="border-bottom:1px solid #e2e8f0;">' +
+      '<td style="padding:7px 10px;font-size:11pt;">'+emoji+' '+label+'</td>' +
+      '<td style="padding:7px 10px;font-weight:700;color:'+(color||'#111')+';font-size:11pt;">'+val+'</td>' +
+      '<td style="padding:7px 10px;font-size:10pt;color:#555;">'+detail+'</td>' +
+    '</tr>';
+  }
+
+  var finColor = overdueAR > 0 ? '#dc2626' : (totalOutstanding > 0 ? '#d97706' : '#16a34a');
+  var inspColor = failedInsp > 0 ? '#dc2626' : '#16a34a';
+  var rfiColor = overdueRFIs > 0 ? '#dc2626' : (openRFIs > 0 ? '#d97706' : '#16a34a');
+  var coColor = pendingCOs > 0 ? '#d97706' : '#16a34a';
+  var punchColor = openPunch > 0 ? '#d97706' : '#16a34a';
+  var riskColor = critRisks > 0 ? '#dc2626' : '#16a34a';
+  var actColor = overdueActions > 0 ? '#dc2626' : '#16a34a';
+
+  var upcomingInspHtml = upcomingInsp.length > 0
+    ? upcomingInsp.map(function(i){return i.type+' on '+i.date;}).join(', ')
+    : 'None scheduled';
+
+  var html = '<html><head><title>Daily Brief — '+dateStr+'</title><style>' +
+    'body{font-family:Arial,sans-serif;font-size:12pt;margin:0.75in;color:#111;}' +
+    '.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:12px;border-bottom:3px solid #1e40af;}' +
+    'h1{font-size:20pt;margin-bottom:2px;color:#1e40af;}' +
+    'h2{font-size:13pt;color:#334155;margin:18px 0 6px 0;border-bottom:1px solid #e2e8f0;padding-bottom:4px;}' +
+    'table{width:100%;border-collapse:collapse;}' +
+    'th{background:#1e293b;color:#fff;padding:7px 10px;font-size:10pt;text-align:left;}' +
+    '.summary-card{display:inline-block;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 16px;margin:0 8px 8px 0;text-align:center;}' +
+    '.urgent-box{background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:10px 14px;margin-bottom:14px;}' +
+    '.ok-box{background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 14px;margin-bottom:14px;}' +
+    '.confidential{color:#888;font-size:9pt;text-align:center;margin-top:20px;border-top:1px solid #ccc;padding-top:8px;}' +
+    '@media print{body{margin:0.5in;}}' +
+    '</style></head><body>' +
+    '<div class="header">' +
+      '<div><h1>⚡ Daily Project Brief</h1><div style="font-size:12pt;color:#555;">'+(co.name||'Oncor Construction')+'</div></div>' +
+      '<div style="text-align:right;"><div style="font-weight:600;font-size:13pt;">Project: '+proj+'</div><div style="color:#555;">'+dateStr+'</div></div>' +
+    '</div>' +
+    (critRisks > 0 || overdueAR > 0 || failedInsp > 0 || overdueRFIs > 0 || overdueActions > 0
+      ? '<div class="urgent-box">🔴 <strong>Urgent items require attention today</strong></div>'
+      : '<div class="ok-box">✅ <strong>No critical alerts today — project is tracking well</strong></div>') +
+    '<h2>📊 Project Status Snapshot</h2>' +
+    '<table><thead><tr><th>Category</th><th>Status</th><th>Detail</th></tr></thead><tbody>' +
+      alertLine('💵','AR / Outstanding','$'+totalOutstanding.toLocaleString(), finColor, overdueAR+' invoice(s) overdue') +
+      alertLine('❓','Open RFIs', openRFIs+' open', rfiColor, overdueRFIs+' overdue responses') +
+      alertLine('📋','Submittals', pendingSubs+' pending', r2rSubs>0?'#d97706':'#16a34a', r2rSubs+' Revise & Resubmit') +
+      alertLine('📝','Change Orders', pendingCOs+' pending', coColor, pendingCOVal>0?'$'+pendingCOVal.toLocaleString()+' unsigned':'All signed') +
+      alertLine('✔️','Punch List', openPunch+' open items', punchColor, openPunch===0?'Clear for retainage':'Resolve before invoicing retainage') +
+      alertLine('🏗️','Inspections', failedInsp+' failed', inspColor, 'Upcoming 7d: '+upcomingInspHtml) +
+      alertLine('⚠️','Critical Risks', critRisks+' critical', riskColor, 'Check Risk Register') +
+      alertLine('📅','Overdue Actions', overdueActions+' overdue', actColor, 'Meeting action items past due') +
+    '</tbody></table>' +
+    '<h2>📅 Upcoming Inspections (Next 7 Days)</h2>' +
+    (upcomingInsp.length > 0
+      ? '<table><thead><tr><th>Type</th><th>Date</th><th>Area</th></tr></thead><tbody>' +
+        upcomingInsp.map(function(i){return '<tr><td>'+i.type+'</td><td>'+i.date+'</td><td>'+(i.area||'—')+'</td></tr>';}).join('') +
+        '</tbody></table>'
+      : '<p style="color:#555;">No inspections scheduled in the next 7 days.</p>') +
+    '<div class="confidential">CONFIDENTIAL — INTERNAL USE ONLY | Generated: '+new Date().toLocaleString()+'</div>' +
+    '<script>window.onload=function(){window.print();};<\/script></body></html>';
+
+  var w = window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+}
+
+function openDailyBriefModal() {
+  // Build a quick preview modal, then offer to print/export
+  var proj = (window._lastProject) || 'N/A';
+  var today = new Date().toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+
+  // Quick stats for modal display
+  var overdueAR = 0;
+  var arData = []; try { arData = JSON.parse(localStorage.getItem('oncor_ar_v1_'+proj))||[]; } catch(e){}
+  arData.forEach(function(i) { if(['Unpaid','Partial'].includes(i.status)&&i.dueDate&&new Date(i.dueDate)<new Date()) overdueAR++; });
+  var openRFIs = 0; try { openRFIs = (JSON.parse(localStorage.getItem('oncor_rfi_log_v1'))||[]).filter(function(r){return r.status==='Open';}).length; } catch(e){}
+  var openPunch = 0; try { openPunch = (JSON.parse(localStorage.getItem('oncor_punch_list_v1_'+proj))||[]).filter(function(p){return ['Open','In Progress'].includes(p.status);}).length; } catch(e){}
+  var critRisks = 0; try { critRisks = (JSON.parse(localStorage.getItem('oncor_rr_v1_'+proj))||[]).filter(function(r){return r.score>=20&&['Open','Monitoring'].includes(r.status);}).length; } catch(e){}
+  var pendingCOs = 0; try { pendingCOs = (JSON.parse(localStorage.getItem('oncor_change_orders_v1'))||[]).filter(function(c){return c.status==='Pending';}).length; } catch(e){}
+
+  var alerts = [];
+  if (overdueAR > 0) alerts.push('<span style="color:#ef4444;">🔴 '+overdueAR+' overdue AR invoice(s)</span>');
+  if (critRisks > 0) alerts.push('<span style="color:#ef4444;">🔴 '+critRisks+' critical risk(s)</span>');
+  if (pendingCOs > 0) alerts.push('<span style="color:#f59e0b;">⚠️ '+pendingCOs+' unsigned CO(s)</span>');
+  if (openRFIs > 0) alerts.push('<span style="color:#f59e0b;">⚠️ '+openRFIs+' open RFI(s)</span>');
+  if (openPunch > 0) alerts.push('<span style="color:#64748b;">📋 '+openPunch+' open punch items</span>');
+  if (alerts.length === 0) alerts.push('<span style="color:#10b981;">✅ No alerts — project tracking well</span>');
+
+  var html = '<div id="dailybrief-modal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);">' +
+    '<div style="background:#0f172a;border:1px solid #1e40af;border-radius:14px;width:480px;max-width:95%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">' +
+        '<h2 style="margin:0;font-size:17px;color:#e2e8f0;">⚡ Daily Brief</h2>' +
+        '<button onclick="document.getElementById(\'dailybrief-modal\').remove();" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:18px;">✕</button>' +
+      '</div>' +
+      '<div style="font-size:12px;color:#64748b;margin-bottom:14px;">'+today+' · Project: '+proj+'</div>' +
+      '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px;">' +
+        alerts.join('') +
+      '</div>' +
+      '<div style="display:flex;gap:8px;justify-content:center;">' +
+        '<button onclick="buildDailyBrief();" style="background:rgba(30,64,175,0.3);color:#60a5fa;border:1px solid rgba(30,64,175,0.5);border-radius:6px;padding:10px 20px;cursor:pointer;font-size:13px;font-weight:600;">🖨️ Print Full Brief</button>' +
+        '<button onclick="document.getElementById(\'dailybrief-modal\').remove();" style="background:rgba(100,116,139,0.2);color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:10px 20px;cursor:pointer;font-size:13px;">Close</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  var existing = document.getElementById('dailybrief-modal');
+  if (existing) { existing.remove(); return; }
+  document.body.insertAdjacentHTML('beforeend', html);
+  document.getElementById('dailybrief-modal').addEventListener('click', function(e){ if(e.target===this) this.remove(); });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn = document.createElement('button');
+    btn.id = 'oncor-dailybrief-btn';
+    btn.textContent = '⚡ Daily Brief';
+    btn.title = 'Daily Brief Generator (Ctrl+Alt+N)';
+    btn.onclick = openDailyBriefModal;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(30,64,175,0.12);color:#60a5fa;border:1px solid rgba(30,64,175,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(30,64,175,0.25)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(30,64,175,0.12)'; };
+    var scBtn = document.getElementById('oncor-scorecard-btn');
+    if (scBtn && scBtn.parentNode) {
+      scBtn.parentNode.insertBefore(btn, scBtn.nextSibling);
+    } else {
+      btn.style.cssText += 'position:fixed;bottom:270px;right:20px;z-index:9000;width:auto;';
+      document.body.appendChild(btn);
+    }
+  }, 12000);
+});
+// ==================== END DAILY BRIEF GENERATOR ====================
+
+
+// ==================== SUBCONTRACT REVIEW CHECKLIST (Ctrl+Alt+O) ====================
+var SRC_ITEMS = [
+  { id:'src01', cat:'📋 Scope & Parties', text:'Parties clearly identified (contractor, sub, project owner)', critical:true },
+  { id:'src02', cat:'📋 Scope & Parties', text:'Scope of work clearly defined — no ambiguous "all concrete work"', critical:true },
+  { id:'src03', cat:'📋 Scope & Parties', text:'Contract amount specified (lump sum, unit price, or T&M)', critical:true },
+  { id:'src04', cat:'📋 Scope & Parties', text:'Drawings and specs incorporated by reference (list of documents)', critical:false },
+  { id:'src05', cat:'📋 Scope & Parties', text:'Exclusions explicitly listed (no ambiguity on what is NOT included)', critical:false },
+  { id:'src06', cat:'💰 Payment Terms', text:'Payment terms stated (Net 30, upon receipt, milestone)', critical:true },
+  { id:'src07', cat:'💰 Payment Terms', text:'Retainage % specified (5% or 10% is standard)', critical:true },
+  { id:'src08', cat:'💰 Payment Terms', text:'Pay-when-paid / pay-if-paid clause reviewed — "pay-if-paid" can eliminate GC\'s obligation', critical:true },
+  { id:'src09', cat:'💰 Payment Terms', text:'Progress billing procedure defined (pay app dates, supporting docs required)', critical:false },
+  { id:'src10', cat:'💰 Payment Terms', text:'Final payment conditions clear (punch list, lien release, test reports)', critical:false },
+  { id:'src11', cat:'📅 Schedule', text:'Start date and completion date specified', critical:true },
+  { id:'src12', cat:'📅 Schedule', text:'Liquidated damages (LD) clause reviewed — amount per day if late', critical:true },
+  { id:'src13', cat:'📅 Schedule', text:'Time extension process defined (force majeure, weather, owner delays)', critical:false },
+  { id:'src14', cat:'📅 Schedule', text:'Notice requirements for delays stated (how many days, written vs verbal)', critical:false },
+  { id:'src15', cat:'⚖️ Changes & Claims', text:'Change order process defined (written CO required before additional work)', critical:true },
+  { id:'src16', cat:'⚖️ Changes & Claims', text:'Differing site condition clause — who bears risk of unknown conditions', critical:true },
+  { id:'src17', cat:'⚖️ Changes & Claims', text:'Notice of claim requirements — must give written notice within X days', critical:true },
+  { id:'src18', cat:'⚖️ Changes & Claims', text:'No-damages-for-delay clause — may eliminate delay claims entirely', critical:true },
+  { id:'src19', cat:'⚖️ Changes & Claims', text:'Scope creep protection — "substantial completion" definition clear', critical:false },
+  { id:'src20', cat:'🛡️ Insurance & Bonds', text:'Insurance requirements specified (GL, WC, Auto amounts)', critical:true },
+  { id:'src21', cat:'🛡️ Insurance & Bonds', text:'Additional insured endorsement required — adds cost, confirm amount', critical:false },
+  { id:'src22', cat:'🛡️ Insurance & Bonds', text:'Performance bond or payment bond required — confirm bonding capacity', critical:false },
+  { id:'src23', cat:'🛡️ Insurance & Bonds', text:'Indemnification clause — how broad? "broad form" indemnity may be unenforceable in TX', critical:true },
+  { id:'src24', cat:'🛡️ Insurance & Bonds', text:'Waiver of subrogation required — check with insurance agent', critical:false },
+  { id:'src25', cat:'⚖️ Dispute Resolution', text:'Dispute resolution method specified (litigation, mediation, arbitration)', critical:false },
+  { id:'src26', cat:'⚖️ Dispute Resolution', text:'Venue / governing law — TX? El Paso County? Favorable?', critical:false },
+  { id:'src27', cat:'⚖️ Dispute Resolution', text:'Attorney fees provision — who pays if disputed?', critical:false },
+  { id:'src28', cat:'⚖️ Dispute Resolution', text:'Notice requirements for disputes — deadline to file claim', critical:true },
+  { id:'src29', cat:'📜 Lien Rights (TX)', text:'TX Property Code Ch. 53 compliance — lien rights preserved or waived?', critical:true },
+  { id:'src30', cat:'📜 Lien Rights (TX)', text:'Notice to Owner (NTO) requirement — is lien law compliant?', critical:true },
+  { id:'src31', cat:'📜 Lien Rights (TX)', text:'Joint check agreement — if subs get checks jointly with us', critical:false },
+  { id:'src32', cat:'📜 Lien Rights (TX)', text:'Lien waiver requirements — conditional vs unconditional at each draw', critical:false },
+  { id:'src33', cat:'✅ Quality & Warranty', text:'Quality standards referenced (ACI, ASTM, TX DOT specs)', critical:false },
+  { id:'src34', cat:'✅ Quality & Warranty', text:'Warranty period and scope defined (standard: 1 year)', critical:false },
+  { id:'src35', cat:'✅ Quality & Warranty', text:'Testing and inspection responsibilities clear (who pays?)', critical:false },
+  { id:'src36', cat:'✅ Quality & Warranty', text:'Defective work correction process and timeline defined', critical:false },
+  { id:'src37', cat:'🦺 Safety', text:'Safety compliance requirements (OSHA 1926, site-specific plan)', critical:false },
+  { id:'src38', cat:'🦺 Safety', text:'Toolbox talk / safety meeting attendance required — documented?', critical:false },
+  { id:'src39', cat:'🦺 Safety', text:'Safety violation penalties defined (backcharge process)', critical:false },
+  { id:'src40', cat:'🔐 Termination', text:'Termination for convenience clause — GC can cancel at will?', critical:true },
+  { id:'src41', cat:'🔐 Termination', text:'Termination for cause conditions — are they reasonable?', critical:true },
+  { id:'src42', cat:'🔐 Termination', text:'Payment upon termination — what is owed for work completed?', critical:true },
+  { id:'src43', cat:'🔐 Termination', text:'Right to cure before termination — do we get notice + time to fix?', critical:false },
+  { id:'src44', cat:'📋 Flow-Down', text:'Flow-down provisions — GC passes all prime contract obligations to us?', critical:true },
+  { id:'src45', cat:'📋 Flow-Down', text:'Dispute with owner / architect flow-down — we get pulled into their disputes?', critical:false },
+  { id:'src46', cat:'📋 Flow-Down', text:'Escalation clause for materials — concrete/steel price increase protection?', critical:false },
+  { id:'src47', cat:'🔍 Final Review', text:'Entire document read (not just summary pages)', critical:true },
+  { id:'src48', cat:'🔍 Final Review', text:'All blanks filled in (no TBD or empty fields in final version)', critical:true },
+  { id:'src49', cat:'🔍 Final Review', text:'All referenced exhibits attached (drawings, specs, insurance certificates)', critical:false },
+  { id:'src50', cat:'🔍 Final Review', text:'Reviewed by attorney for contracts over $100K', critical:false }
+];
+
+function getSRCData() {
+  var proj = (window._lastProject) || 'global';
+  var raw = localStorage.getItem('oncor_src_v1_' + proj);
+  if (raw) { try { return JSON.parse(raw); } catch(e){} }
+  return { items: {}, contractName: '', contractValue: '', gcName: '', reviewDate: '', notes: '', lastUpdated: '' };
+}
+function saveSRCData(data) {
+  var proj = (window._lastProject) || 'global';
+  data.lastUpdated = new Date().toISOString();
+  localStorage.setItem('oncor_src_v1_' + proj, JSON.stringify(data));
+}
+
+function buildSRCModal() {
+  var data = getSRCData();
+  var cats = [];
+  SRC_ITEMS.forEach(function(item) { if (!cats.includes(item.cat)) cats.push(item.cat); });
+
+  var itemsHtml = cats.map(function(cat) {
+    var catItems = SRC_ITEMS.filter(function(i){return i.cat===cat;});
+    var rows = catItems.map(function(item) {
+      var status = (data.items && data.items[item.id]) || 'unchecked';
+      var checked = status === 'ok';
+      var na = status === 'na';
+      var concern = status === 'concern';
+      return '<tr id="src-row-'+item.id+'" style="border-bottom:1px solid rgba(51,65,85,0.3);">' +
+        '<td style="padding:7px 6px 7px 10px;">' +
+          (item.critical ? '<span style="color:#ef4444;font-size:10px;">★</span> ' : '') +
+          '<span style="font-size:12px;color:#e2e8f0;">'+item.text+'</span>' +
+        '</td>' +
+        '<td style="padding:7px 6px;text-align:center;white-space:nowrap;">' +
+          '<button onclick="setSRCItem(\''+item.id+'\', \'ok\')" style="background:'+(checked?'rgba(16,185,129,0.3)':'rgba(51,65,85,0.3)')+';color:'+(checked?'#34d399':'#64748b')+';border:1px solid '+(checked?'rgba(16,185,129,0.5)':'#334155')+';border-radius:4px;padding:3px 8px;cursor:pointer;font-size:11px;margin-right:3px;">✓ OK</button>' +
+          '<button onclick="setSRCItem(\''+item.id+'\', \'concern\')" style="background:'+(concern?'rgba(239,68,68,0.3)':'rgba(51,65,85,0.3)')+';color:'+(concern?'#f87171':'#64748b')+';border:1px solid '+(concern?'rgba(239,68,68,0.5)':'#334155')+';border-radius:4px;padding:3px 8px;cursor:pointer;font-size:11px;margin-right:3px;">⚠️ Flag</button>' +
+          '<button onclick="setSRCItem(\''+item.id+'\', \'na\')" style="background:'+(na?'rgba(100,116,139,0.3)':'rgba(51,65,85,0.3)')+';color:'+(na?'#94a3b8':'#64748b')+';border:1px solid '+(na?'#475569':'#334155')+';border-radius:4px;padding:3px 8px;cursor:pointer;font-size:11px;">N/A</button>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+    return '<tr style="background:rgba(51,65,85,0.2);"><td colspan="2" style="padding:8px 10px;font-size:12px;font-weight:600;color:#94a3b8;">'+cat+'</td></tr>' + rows;
+  }).join('');
+
+  var done = Object.values(data.items||{}).filter(function(v){return v==='ok'||v==='na';}).length;
+  var flagged = Object.values(data.items||{}).filter(function(v){return v==='concern';}).length;
+  var pct = Math.round((done / SRC_ITEMS.length) * 100);
+  var barColor = flagged > 0 ? '#ef4444' : (pct === 100 ? '#10b981' : '#3b82f6');
+
+  var html = '<div id="src-modal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding-top:20px;backdrop-filter:blur(4px);">' +
+    '<div style="background:#0f172a;border:1px solid #334155;border-radius:16px;width:92%;max-width:880px;max-height:92vh;overflow-y:auto;box-shadow:0 25px 80px rgba(0,0,0,0.6);display:flex;flex-direction:column;">' +
+      '<div style="background:linear-gradient(135deg,rgba(37,99,235,0.12),rgba(15,23,42,0));padding:16px 22px 10px;border-bottom:1px solid #1e293b;flex-shrink:0;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+          '<div><h2 style="margin:0 0 2px 0;font-size:17px;color:#e2e8f0;">📝 Subcontract Review Checklist</h2>' +
+          '<p style="margin:0;font-size:11px;color:#64748b;">50-point review before signing · ★ = critical items · Session #96</p></div>' +
+          '<div style="display:flex;gap:6px;">' +
+            '<button onclick="printSRC();" style="background:rgba(37,99,235,0.2);color:#60a5fa;border:1px solid rgba(37,99,235,0.4);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:11px;">🖨️ Print Review</button>' +
+            '<button onclick="document.getElementById(\'src-modal\').remove();" style="background:rgba(100,116,139,0.2);color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:11px;">✕ Close</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="padding:14px 22px;background:rgba(15,23,42,0.5);border-bottom:1px solid #1e293b;flex-shrink:0;">' +
+        '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">' +
+          '<div><label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px;">Contract / GC Name</label><input id="src-gcname" value="'+(data.gcName||'')+'" placeholder="GC Company" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:5px;padding:5px 8px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"></div>' +
+          '<div><label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px;">Contract Name / Project</label><input id="src-contname" value="'+(data.contractName||'')+'" placeholder="e.g. XYZ Building" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:5px;padding:5px 8px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"></div>' +
+          '<div><label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px;">Contract Value</label><input id="src-value" value="'+(data.contractValue||'')+'" placeholder="$0.00" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:5px;padding:5px 8px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"></div>' +
+          '<div><label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px;">Review Date</label><input type="date" id="src-date" value="'+(data.reviewDate||new Date().toISOString().slice(0,10))+'" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:5px;padding:5px 8px;color:#e2e8f0;font-size:12px;box-sizing:border-box;"></div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:14px;">' +
+          '<div style="flex:1;background:#1e293b;border-radius:6px;height:8px;overflow:hidden;">' +
+            '<div style="width:'+pct+'%;height:100%;background:'+barColor+';border-radius:6px;transition:width 0.4s;"></div>' +
+          '</div>' +
+          '<div style="font-size:12px;color:#94a3b8;white-space:nowrap;">'+done+'/'+SRC_ITEMS.length+' items reviewed · '+pct+'%' + (flagged>0?' · <span style="color:#ef4444;">'+flagged+' flagged</span>':'')+'</div>' +
+          '<button onclick="saveSRCMeta();" style="background:rgba(37,99,235,0.2);color:#60a5fa;border:1px solid rgba(37,99,235,0.4);border-radius:5px;padding:4px 10px;cursor:pointer;font-size:11px;">💾 Save</button>' +
+        '</div>' +
+      '</div>' +
+      '<div style="flex:1;overflow-y:auto;padding:10px 22px 16px;">' +
+        (flagged > 0 ? '<div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.4);border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px;color:#fca5a5;">⚠️ <strong>'+flagged+' item(s) flagged for concern</strong> — review before signing</div>' : '') +
+        '<table style="width:100%;border-collapse:collapse;">'+itemsHtml+'</table>' +
+        '<div style="margin-top:14px;">' +
+          '<label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px;">📝 Review Notes / Negotiation Points</label>' +
+          '<textarea id="src-notes" rows="3" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:12px;box-sizing:border-box;resize:vertical;">'+(data.notes||'')+'</textarea>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  var existing = document.getElementById('src-modal');
+  if (existing) existing.remove();
+  document.body.insertAdjacentHTML('beforeend', html);
+  document.getElementById('src-modal').addEventListener('click', function(e){ if(e.target===this) this.remove(); });
+}
+
+window.setSRCItem = function(id, status) {
+  var data = getSRCData();
+  if (!data.items) data.items = {};
+  data.items[id] = status;
+  data.gcName = (document.getElementById('src-gcname')||{}).value || data.gcName;
+  data.contractName = (document.getElementById('src-contname')||{}).value || data.contractName;
+  data.contractValue = (document.getElementById('src-value')||{}).value || data.contractValue;
+  data.reviewDate = (document.getElementById('src-date')||{}).value || data.reviewDate;
+  data.notes = (document.getElementById('src-notes')||{}).value || data.notes;
+  saveSRCData(data);
+  buildSRCModal(); // re-render
+};
+
+window.saveSRCMeta = function() {
+  var data = getSRCData();
+  data.gcName = document.getElementById('src-gcname').value;
+  data.contractName = document.getElementById('src-contname').value;
+  data.contractValue = document.getElementById('src-value').value;
+  data.reviewDate = document.getElementById('src-date').value;
+  data.notes = document.getElementById('src-notes').value;
+  saveSRCData(data);
+  var btn = event.target; btn.textContent = '✅ Saved'; setTimeout(function(){btn.textContent='💾 Save';},1500);
+};
+
+function openSRCModal() {
+  var m = document.getElementById('src-modal');
+  if (m) { m.remove(); return; }
+  buildSRCModal();
+}
+
+function printSRC() {
+  var data = getSRCData();
+  var co = typeof getCompanyInfo === 'function' ? getCompanyInfo() : {};
+  var cats = [];
+  SRC_ITEMS.forEach(function(item) { if (!cats.includes(item.cat)) cats.push(item.cat); });
+  var done = Object.values(data.items||{}).filter(function(v){return v==='ok'||v==='na';}).length;
+  var flagged = Object.values(data.items||{}).filter(function(v){return v==='concern';}).length;
+  var pct = Math.round((done/SRC_ITEMS.length)*100);
+
+  var sectionsHtml = cats.map(function(cat) {
+    var items = SRC_ITEMS.filter(function(i){return i.cat===cat;});
+    var rows = items.map(function(item) {
+      var status = (data.items||{})[item.id] || 'unchecked';
+      var icon = status==='ok'?'✅':status==='concern'?'⚠️':status==='na'?'N/A':'☐';
+      var rowStyle = status==='concern'?'background:#fef2f2;':'';
+      return '<tr style="'+rowStyle+'border-bottom:1px solid #e2e8f0;">' +
+        '<td style="padding:5px 8px;font-size:10pt;">'+(item.critical?'★ ':'')+item.text+'</td>' +
+        '<td style="padding:5px 8px;text-align:center;font-weight:600;font-size:10pt;">'+icon+'</td>' +
+      '</tr>';
+    }).join('');
+    return '<tr style="background:#f1f5f9;"><td colspan="2" style="padding:6px 8px;font-size:10pt;font-weight:700;color:#1e40af;">'+cat+'</td></tr>'+rows;
+  }).join('');
+
+  var html = '<html><head><title>Subcontract Review — '+(data.contractName||'')+'</title><style>' +
+    'body{font-family:Arial,sans-serif;font-size:10pt;margin:0.6in;color:#111;}' +
+    'h1{font-size:16pt;margin-bottom:4px;}' +
+    '.header{display:flex;justify-content:space-between;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #1e40af;}' +
+    'table{width:100%;border-collapse:collapse;margin-top:10px;}' +
+    'th{background:#1e293b;color:#fff;padding:6px 8px;font-size:9pt;}' +
+    '.meta-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;}' +
+    '.meta-item label{font-size:8pt;color:#64748b;display:block;}' +
+    '.meta-item div{font-size:10pt;font-weight:600;}' +
+    '.flag-box{background:#fef2f2;border:1px solid #fca5a5;border-radius:4px;padding:8px 12px;margin-bottom:12px;}' +
+    '.sig-block{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:24px;padding-top:12px;border-top:1px solid #ccc;}' +
+    '.sig-line{border-top:1px solid #333;margin-top:30px;padding-top:4px;font-size:8pt;color:#555;}' +
+    '.confidential{color:#888;font-size:8pt;text-align:center;margin-top:16px;border-top:1px solid #ccc;padding-top:6px;}' +
+    '@media print{body{margin:0.4in;}}' +
+    '</style></head><body>' +
+    '<div class="header"><div><h1>📝 Subcontract Review Checklist</h1><div>'+(co.name||'Oncor Construction')+'</div></div>' +
+    '<div style="text-align:right;"><div style="font-weight:600;">GC/Contractor: '+(data.gcName||'—')+'</div><div>Contract: '+(data.contractName||'—')+'</div><div>Review Date: '+(data.reviewDate||'—')+'</div></div></div>' +
+    '<div class="meta-grid">' +
+      '<div class="meta-item"><label>Contract Value</label><div>'+(data.contractValue||'—')+'</div></div>' +
+      '<div class="meta-item"><label>Items Reviewed</label><div>'+done+' / '+SRC_ITEMS.length+'</div></div>' +
+      '<div class="meta-item"><label>Completion</label><div>'+pct+'%</div></div>' +
+      '<div class="meta-item"><label>Items Flagged</label><div style="color:'+(flagged>0?'#dc2626':'#16a34a')+';">'+flagged+(flagged>0?' ⚠️':' ✅')+'</div></div>' +
+    '</div>' +
+    (flagged > 0 ? '<div class="flag-box">⚠️ <strong>'+flagged+' item(s) flagged for concern — DO NOT SIGN until resolved</strong></div>' : '') +
+    (data.notes ? '<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:4px;padding:8px 12px;margin-bottom:12px;font-size:10pt;"><strong>Review Notes:</strong><br>'+data.notes+'</div>' : '') +
+    '<table><thead><tr><th>Checklist Item (★ = Critical)</th><th style="width:60px;text-align:center;">Status</th></tr></thead><tbody>'+sectionsHtml+'</tbody></table>' +
+    '<div class="sig-block"><div><div style="font-weight:600;font-size:10pt;">Reviewed By</div><div class="sig-line">Signature</div><div class="sig-line">Printed Name</div><div class="sig-line">Title / Date</div></div>' +
+    '<div><div style="font-weight:600;font-size:10pt;">Approved By (Principal)</div><div class="sig-line">Signature</div><div class="sig-line">Printed Name</div><div class="sig-line">Title / Date</div></div></div>' +
+    '<p style="font-size:8pt;color:#555;margin-top:12px;">This checklist is an internal review tool only and does not constitute legal advice. Consult a licensed TX attorney for contracts over $100K or with unusual provisions.</p>' +
+    '<div class="confidential">CONFIDENTIAL — INTERNAL USE ONLY | Generated by Oncor Takeoff Tool | '+new Date().toLocaleDateString()+'</div>' +
+    '<script>window.onload=function(){window.print();};<\/script></body></html>';
+  var w = window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+}
+
+window._getSRCStats = function() {
+  var data = getSRCData();
+  var done = Object.values(data.items||{}).filter(function(v){return v==='ok'||v==='na';}).length;
+  var flagged = Object.values(data.items||{}).filter(function(v){return v==='concern';}).length;
+  return { total: SRC_ITEMS.length, done: done, flagged: flagged, pct: Math.round(done/SRC_ITEMS.length*100) };
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn = document.createElement('button');
+    btn.id = 'oncor-src-btn';
+    btn.textContent = '📝 Subcontract Review';
+    btn.title = 'Subcontract Review Checklist (Ctrl+Alt+O)';
+    btn.onclick = openSRCModal;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(37,99,235,0.12);color:#93c5fd;border:1px solid rgba(37,99,235,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(37,99,235,0.25)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(37,99,235,0.12)'; };
+    var dbBtn = document.getElementById('oncor-dailybrief-btn');
+    if (dbBtn && dbBtn.parentNode) {
+      dbBtn.parentNode.insertBefore(btn, dbBtn.nextSibling);
+    } else {
+      btn.style.cssText += 'position:fixed;bottom:310px;right:20px;z-index:9000;width:auto;';
+      document.body.appendChild(btn);
+    }
+  }, 12500);
+});
+// ==================== END SUBCONTRACT REVIEW CHECKLIST ====================
+
+
+// ==================== KEYBOARD SHORTCUTS — Session #96 ====================
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.altKey) {
+    if (e.key === 'm' || e.key === 'M') { e.preventDefault(); openScorecardModal(); }
+    if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openDailyBriefModal(); }
+    if (e.key === 'o' || e.key === 'O') { e.preventDefault(); openSRCModal(); }
+  }
+});
+// ==================== END KEYBOARD SHORTCUTS ====================
+
+})();
+// ==================== END SESSION #96 — Zeus ⚡ Project Scorecard (Ctrl+Alt+M) + Daily Brief Generator (Ctrl+Alt+N) + Subcontract Review Checklist (Ctrl+Alt+O) ====================
 </script>
