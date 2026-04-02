@@ -162357,3 +162357,560 @@ document.addEventListener('DOMContentLoaded', function(){
 })();
 // ==================== END UNIT PRICE REFERENCE — Zeus ⚡ Session #86 ====================
 </script>
+
+<!-- ==================== PROJECT RISK REGISTER — Zeus ⚡ Session #87 ==================== -->
+<script>
+(function(){
+'use strict';
+
+var RR_ID = 'oncorRiskRegister';
+
+// ── Risk categories and types
+var RR_CATEGORIES = [
+  'Scope & Design','Concrete & Materials','Labor & Crew','Schedule','Financial',
+  'Safety & OSHA','Weather & Environmental','Subcontractor','Owner / GC',
+  'Legal & Contract','Equipment','Site Conditions','Quality / QC','Other'
+];
+
+var RR_LIKELIHOODS = [
+  {label:'Rare',val:1,color:'#22c55e'},
+  {label:'Unlikely',val:2,color:'#86efac'},
+  {label:'Possible',val:3,color:'#fbbf24'},
+  {label:'Likely',val:4,color:'#f97316'},
+  {label:'Almost Certain',val:5,color:'#ef4444'}
+];
+
+var RR_IMPACTS = [
+  {label:'Negligible',val:1,color:'#22c55e'},
+  {label:'Minor',val:2,color:'#86efac'},
+  {label:'Moderate',val:3,color:'#fbbf24'},
+  {label:'Major',val:4,color:'#f97316'},
+  {label:'Catastrophic',val:5,color:'#ef4444'}
+];
+
+var RR_STATUSES = ['Open','Monitoring','Mitigated','Accepted','Closed','Realized'];
+
+// ── Preloaded risk templates for concrete subs
+var RR_TEMPLATES = [
+  {title:'Concrete price escalation',cat:'Concrete & Materials',likelihood:3,impact:3,response:'Monitor',mitigation:'Lock in batch plant pricing 30 days before pour; include escalation clause in contract.',owner:'Estimator'},
+  {title:'Hot weather pour — ACI 305R risk',cat:'Weather & Environmental',likelihood:4,impact:3,response:'Mitigate',mitigation:'Schedule pours before 9 AM. Pre-chill water, ice available. Monitor concrete temp per ASTM C1064.',owner:'Foreman'},
+  {title:'Batch plant short load / delivery delay',cat:'Concrete & Materials',likelihood:3,impact:4,response:'Mitigate',mitigation:'Confirm plant 48hr prior. Have backup plant contact. 45-min delivery window maximum.',owner:'PM'},
+  {title:'Rebar not delivered on time',cat:'Concrete & Materials',likelihood:3,impact:4,response:'Mitigate',mitigation:'Order rebar 2 weeks ahead. Get written confirmation. Backup supplier identified.',owner:'PM'},
+  {title:'Pump truck unavailable / breakdown',cat:'Equipment',likelihood:2,impact:4,response:'Mitigate',mitigation:'Confirm pump 48hr prior. Backup pump company on standby for critical pours.',owner:'Foreman'},
+  {title:'Labor no-shows on pour day',cat:'Labor & Crew',likelihood:3,impact:4,response:'Mitigate',mitigation:'Confirm crew 2 days before. Have on-call finishers. Know minimum crew size to proceed.',owner:'Foreman'},
+  {title:'Failed 28-day cylinder break',cat:'Quality / QC',likelihood:2,impact:5,response:'Mitigate',mitigation:'Use approved mix design. Document field tests per ASTM C172. No water additions on site.',owner:'Foreman'},
+  {title:'GC delays causing crew standby cost',cat:'Owner / GC',likelihood:4,impact:3,response:'Transfer',mitigation:'Document all standby time with Alt+D. Submit T&M work order same day. Notify in writing.',owner:'PM'},
+  {title:'Lien deadline missed',cat:'Legal & Contract',likelihood:2,impact:5,response:'Mitigate',mitigation:'Log all jobs in Lien Tracker. Set calendar reminders 15 days before NTO and lien affidavit deadlines.',owner:'PM'},
+  {title:'Subcontractor COI expired',cat:'Subcontractor',likelihood:3,impact:3,response:'Mitigate',mitigation:'Track all sub COIs in Sub Management. Alert 30 days before expiry. Require renewal before mobilization.',owner:'PM'},
+  {title:'Form blowout during pour',cat:'Scope & Design',likelihood:2,impact:5,response:'Mitigate',mitigation:'Inspect forming before pour. Check all kickers, ties, and bracing. Have extra form materials on-site.',owner:'Foreman'},
+  {title:'Rejected concrete load (over slump / hot)',cat:'Quality / QC',likelihood:2,impact:3,response:'Mitigate',mitigation:'Test every load per ASTM C172. No site water additions. Pre-authorize rejection authority to foreman.',owner:'Foreman'},
+  {title:'Rain during pour / curing period',cat:'Weather & Environmental',likelihood:3,impact:4,response:'Mitigate',mitigation:'Check weather 3 days out. Have poly sheeting/tarps on site. Monitor forecast day-of.',owner:'Foreman'},
+  {title:'Scope creep without CO',cat:'Financial',likelihood:4,impact:3,response:'Transfer',mitigation:'Require written CO before performing extra work. Use T&M Work Order for day-to-day extras.',owner:'PM'},
+  {title:'Retainage withheld beyond completion',cat:'Financial',likelihood:3,impact:3,response:'Monitor',mitigation:'Submit punch list 100% complete documentation. Use Lien Tracker — file lien affidavit if retainage unpaid 30d after final.',owner:'PM'},
+  {title:'OSHA inspection / citation',cat:'Safety & OSHA',likelihood:2,impact:4,response:'Mitigate',mitigation:'Weekly toolbox talks documented. PPE enforced. OSHA 300 log current. Safety log up to date.',owner:'Foreman'},
+  {title:'Differing site conditions (underground)',cat:'Site Conditions',likelihood:2,impact:4,response:'Transfer',mitigation:'811 utility locate before excavation. Document any discovered conflicts in writing. File CO immediately.',owner:'PM'},
+  {title:'Drawing conflict / design error',cat:'Scope & Design',likelihood:3,impact:3,response:'Mitigate',mitigation:'Pre-construction drawing review. File RFI for all conflicts before mobilizing. Never assume.',owner:'PM'}
+];
+
+// ── Storage helpers
+function rrKey(){
+  try{
+    var pn = (window.currentProjectName||'').trim()||'default';
+    return 'oncor_rr_v1_'+pn.toLowerCase().replace(/[^a-z0-9]/g,'_');
+  }catch(e){return 'oncor_rr_v1_default';}
+}
+
+function rrLoad(){
+  try{return JSON.parse(localStorage.getItem(rrKey())||'[]');}catch(e){return [];}
+}
+
+function rrSave(risks){
+  try{localStorage.setItem(rrKey(), JSON.stringify(risks));}catch(e){}
+}
+
+// ── Risk score helpers
+function rrScore(l,i){return (l||1)*(i||1);}
+function rrScoreLabel(s){
+  if(s>=20) return {label:'CRITICAL',color:'#ef4444'};
+  if(s>=12) return {label:'HIGH',color:'#f97316'};
+  if(s>=6)  return {label:'MEDIUM',color:'#fbbf24'};
+  return {label:'LOW',color:'#22c55e'};
+}
+
+function rrScoreBadge(l,i){
+  var s = rrScore(l,i);
+  var info = rrScoreLabel(s);
+  return '<span style="background:'+info.color+'22;border:1px solid '+info.color+'55;color:'+info.color+';padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:700;">'+info.label+' ('+s+')</span>';
+}
+
+function rrLikeLabel(v){var f=RR_LIKELIHOODS.find(function(x){return x.val===v;});return f?f.label:'?';}
+function rrImpLabel(v){var f=RR_IMPACTS.find(function(x){return x.val===v;});return f?f.label:'?';}
+
+function rrStatusColor(s){
+  var map={'Open':'#ef4444','Monitoring':'#fbbf24','Mitigated':'#22c55e','Accepted':'#64748b','Closed':'#475569','Realized':'#dc2626'};
+  return map[s]||'#64748b';
+}
+
+function rrSafe(t){return String(t||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function rrId(){return 'RR-'+(Date.now().toString(36).toUpperCase());}
+
+// ── Build modal HTML
+function buildRRModal(){
+  if(document.getElementById(RR_ID)) return;
+
+  var catOptions = RR_CATEGORIES.map(function(c){return '<option>'+c+'</option>';}).join('');
+  var statusOptions = RR_STATUSES.map(function(s){return '<option>'+s+'</option>';}).join('');
+  var likeOptions = RR_LIKELIHOODS.map(function(l){return '<option value="'+l.val+'">'+l.val+' – '+l.label+'</option>';}).join('');
+  var impOptions = RR_IMPACTS.map(function(i){return '<option value="'+i.val+'">'+i.val+' – '+i.label+'</option>';}).join('');
+
+  var m = document.createElement('div');
+  m.id = RR_ID;
+  m.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100200;overflow-y:auto;padding:20px;';
+  m.innerHTML = [
+    '<div style="max-width:1100px;margin:0 auto;background:#0f172a;border:1px solid rgba(255,255,255,0.1);border-radius:12px;overflow:hidden;">',
+    // Header
+    '<div style="padding:20px 24px;background:rgba(239,68,68,0.08);border-bottom:1px solid rgba(239,68,68,0.15);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">',
+      '<span style="font-size:1.5rem;">⚠️</span>',
+      '<div style="flex:1;min-width:200px;">',
+        '<h2 style="margin:0;color:#fca5a5;font-size:1.15rem;">Project Risk Register</h2>',
+        '<p style="margin:2px 0 0;color:#64748b;font-size:0.8rem;">Identify, score, and track project risks with mitigation plans — Alt+G</p>',
+      '</div>',
+      '<div id="rrStatsBar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"></div>',
+      '<button onclick="closeRRModal()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#94a3b8;padding:6px 14px;cursor:pointer;font-size:0.85rem;">✕ Close</button>',
+    '</div>',
+    // Toolbar
+    '<div style="padding:12px 24px;background:rgba(0,0,0,0.2);border-bottom:1px solid rgba(255,255,255,0.05);display:flex;gap:8px;flex-wrap:wrap;align-items:center;">',
+      '<button onclick="rrOpenForm(null)" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:#fca5a5;padding:6px 14px;cursor:pointer;font-size:0.85rem;font-weight:600;">+ Add Risk</button>',
+      '<button onclick="rrLoadTemplates()" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:6px;color:#a5b4fc;padding:6px 14px;cursor:pointer;font-size:0.85rem;">📋 Load Concrete Templates</button>',
+      '<button onclick="rrPrintReport()" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:#94a3b8;padding:6px 14px;cursor:pointer;font-size:0.85rem;">🖨 Print Report</button>',
+      '<select id="rrFilterCat" onchange="rrRenderList()" style="background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e2e8f0;padding:5px 10px;font-size:0.82rem;">',
+        '<option value="">All Categories</option>',
+        RR_CATEGORIES.map(function(c){return '<option value="'+c+'">'+c+'</option>';}).join(''),
+      '</select>',
+      '<select id="rrFilterStatus" onchange="rrRenderList()" style="background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e2e8f0;padding:5px 10px;font-size:0.82rem;">',
+        '<option value="">All Statuses</option>',
+        RR_STATUSES.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join(''),
+      '</select>',
+      '<label style="display:flex;align-items:center;gap:6px;color:#94a3b8;font-size:0.82rem;cursor:pointer;"><input type="checkbox" id="rrFilterOpen" onchange="rrRenderList()" style="cursor:pointer;"> Open / High only</label>',
+      '<input type="text" id="rrSearch" oninput="rrRenderList()" placeholder="Search risks..." style="background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e2e8f0;padding:5px 10px;font-size:0.82rem;flex:1;min-width:120px;">',
+    '</div>',
+    // Risk matrix legend
+    '<div style="padding:10px 24px;background:rgba(0,0,0,0.15);border-bottom:1px solid rgba(255,255,255,0.04);display:flex;gap:16px;flex-wrap:wrap;align-items:center;">',
+      '<span style="color:#64748b;font-size:0.72rem;font-weight:700;">RISK SCORE = Likelihood × Impact:</span>',
+      '<span style="color:#ef4444;font-size:0.72rem;font-weight:600;">🔴 CRITICAL 20-25</span>',
+      '<span style="color:#f97316;font-size:0.72rem;font-weight:600;">🟠 HIGH 12-16</span>',
+      '<span style="color:#fbbf24;font-size:0.72rem;font-weight:600;">🟡 MEDIUM 6-9</span>',
+      '<span style="color:#22c55e;font-size:0.72rem;font-weight:600;">🟢 LOW 1-4</span>',
+    '</div>',
+    // List
+    '<div id="rrList" style="padding:16px 24px;min-height:200px;"></div>',
+    // Form (hidden by default)
+    '<div id="rrFormWrap" style="display:none;padding:20px 24px;background:rgba(239,68,68,0.04);border-top:1px solid rgba(239,68,68,0.1);">',
+      '<h3 id="rrFormTitle" style="margin:0 0 16px;color:#fca5a5;font-size:1rem;">Add Risk</h3>',
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">',
+        '<div><label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:4px;">Risk Title *</label>',
+        '<input id="rrFTitle" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e2e8f0;padding:7px 10px;font-size:0.85rem;" placeholder="Describe the risk event"></div>',
+        '<div><label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:4px;">Category</label>',
+        '<select id="rrFCat" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e2e8f0;padding:7px 10px;font-size:0.85rem;">'+catOptions+'</select></div>',
+        '<div><label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:4px;">Likelihood (1-5)</label>',
+        '<select id="rrFLike" onchange="rrUpdateScorePreview()" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e2e8f0;padding:7px 10px;font-size:0.85rem;">'+likeOptions+'</select></div>',
+        '<div><label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:4px;">Impact (1-5)</label>',
+        '<select id="rrFImp" onchange="rrUpdateScorePreview()" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e2e8f0;padding:7px 10px;font-size:0.85rem;">'+impOptions+'</select></div>',
+        '<div><label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:4px;">Risk Score Preview</label>',
+        '<div id="rrScorePreview" style="padding:8px 10px;background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:#e2e8f0;font-size:0.85rem;">Score: 1</div></div>',
+        '<div><label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:4px;">Status</label>',
+        '<select id="rrFStatus" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e2e8f0;padding:7px 10px;font-size:0.85rem;">'+statusOptions+'</select></div>',
+        '<div><label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:4px;">Response Type</label>',
+        '<select id="rrFResponse" style="width:100%;background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e2e8f0;padding:7px 10px;font-size:0.85rem;"><option>Mitigate</option><option>Transfer</option><option>Accept</option><option>Avoid</option><option>Monitor</option></select></div>',
+        '<div><label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:4px;">Risk Owner</label>',
+        '<input id="rrFOwner" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e2e8f0;padding:7px 10px;font-size:0.85rem;" placeholder="PM / Foreman / Estimator"></div>',
+        '<div><label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:4px;">Review Date</label>',
+        '<input type="date" id="rrFDate" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e2e8f0;padding:7px 10px;font-size:0.85rem;"></div>',
+        '<div><label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:4px;">Cost Exposure ($)</label>',
+        '<input type="number" id="rrFCost" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e2e8f0;padding:7px 10px;font-size:0.85rem;" placeholder="0" min="0"></div>',
+      '</div>',
+      '<div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">',
+        '<div><label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:4px;">Mitigation Plan / Controls</label>',
+        '<textarea id="rrFMit" rows="3" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e2e8f0;padding:7px 10px;font-size:0.85rem;resize:vertical;" placeholder="What actions will reduce this risk?"></textarea></div>',
+        '<div><label style="color:#64748b;font-size:0.75rem;display:block;margin-bottom:4px;">Notes / Trigger Events</label>',
+        '<textarea id="rrFNotes" rows="3" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e2e8f0;padding:7px 10px;font-size:0.85rem;resize:vertical;" placeholder="Early warning signs, trigger conditions..."></textarea></div>',
+      '</div>',
+      '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">',
+        '<button onclick="rrSaveForm()" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);border-radius:6px;color:#fca5a5;padding:8px 20px;cursor:pointer;font-size:0.85rem;font-weight:600;">💾 Save Risk</button>',
+        '<button onclick="rrCloseForm()" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#94a3b8;padding:8px 16px;cursor:pointer;font-size:0.85rem;">Cancel</button>',
+        '<input type="hidden" id="rrFEditId">',
+      '</div>',
+    '</div>',
+    '</div>'
+  ].join('');
+  document.body.appendChild(m);
+
+  // Close on backdrop
+  m.addEventListener('click', function(e){if(e.target===m) closeRRModal();});
+}
+
+// ── Stats bar
+function rrUpdateStats(){
+  var bar = document.getElementById('rrStatsBar');
+  if(!bar) return;
+  var risks = rrLoad();
+  var open = risks.filter(function(r){return r.status==='Open'||r.status==='Monitoring';}).length;
+  var critical = risks.filter(function(r){return rrScore(r.likelihood,r.impact)>=20;}).length;
+  var high = risks.filter(function(r){var s=rrScore(r.likelihood,r.impact);return s>=12&&s<20;}).length;
+  var realized = risks.filter(function(r){return r.status==='Realized';}).length;
+  var totalCost = risks.reduce(function(a,r){return a+(parseFloat(r.costExposure)||0);},0);
+
+  var cards=[
+    {label:'Total Risks',val:risks.length,c:'#94a3b8'},
+    {label:'Open',val:open,c:open?'#ef4444':'#22c55e'},
+    {label:'Critical',val:critical,c:critical?'#ef4444':'#22c55e'},
+    {label:'High',val:high,c:high?'#f97316':'#22c55e'},
+    {label:'Realized',val:realized,c:realized?'#fbbf24':'#22c55e'},
+    {label:'Cost Exposure',val:'$'+rrFmtNum(totalCost),c:'#fbbf24'}
+  ];
+  bar.innerHTML = cards.map(function(c){
+    return '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:6px;padding:4px 12px;text-align:center;">'+
+      '<div style="color:'+c.c+';font-size:0.95rem;font-weight:700;">'+c.val+'</div>'+
+      '<div style="color:#64748b;font-size:0.65rem;">'+c.label+'</div></div>';
+  }).join('');
+}
+
+function rrFmtNum(n){
+  if(!n) return '0';
+  if(n>=1000000) return (n/1000000).toFixed(1)+'M';
+  if(n>=1000) return (n/1000).toFixed(0)+'k';
+  return n.toFixed(0);
+}
+
+// ── Render risk list
+function rrRenderList(){
+  rrUpdateStats();
+  var el = document.getElementById('rrList');
+  if(!el) return;
+
+  var risks = rrLoad();
+  var catF = (document.getElementById('rrFilterCat')||{}).value||'';
+  var statF = (document.getElementById('rrFilterStatus')||{}).value||'';
+  var openF = (document.getElementById('rrFilterOpen')||{}).checked||false;
+  var search = ((document.getElementById('rrSearch')||{}).value||'').toLowerCase();
+
+  var filtered = risks.filter(function(r){
+    if(catF && r.category!==catF) return false;
+    if(statF && r.status!==statF) return false;
+    if(openF){
+      var s=rrScore(r.likelihood,r.impact);
+      if(r.status!=='Open'&&r.status!=='Monitoring'&&s<12) return false;
+    }
+    if(search){
+      var hay=(r.title+' '+r.category+' '+r.mitigation+' '+r.notes+' '+r.owner).toLowerCase();
+      if(hay.indexOf(search)<0) return false;
+    }
+    return true;
+  });
+
+  // Sort: open + critical first, then by score desc
+  filtered.sort(function(a,b){
+    var openA = a.status==='Open'||a.status==='Monitoring'?0:1;
+    var openB = b.status==='Open'||b.status==='Monitoring'?0:1;
+    if(openA!==openB) return openA-openB;
+    return rrScore(b.likelihood,b.impact)-rrScore(a.likelihood,a.impact);
+  });
+
+  if(!filtered.length){
+    el.innerHTML = '<div style="text-align:center;color:#475569;padding:40px 0;font-size:0.9rem;">'+
+      (risks.length?'No risks match filters.':'No risks logged yet. Click "+ Add Risk" or load concrete templates.')+'</div>';
+    return;
+  }
+
+  el.innerHTML = filtered.map(function(r){
+    var score = rrScore(r.likelihood,r.impact);
+    var scoreInfo = rrScoreLabel(score);
+    var statusColor = rrStatusColor(r.status);
+    var borderColor = score>=20?'rgba(239,68,68,0.5)':score>=12?'rgba(249,115,22,0.35)':score>=6?'rgba(251,191,36,0.25)':'rgba(34,197,94,0.2)';
+
+    return '<div style="background:#1e293b;border:1px solid '+borderColor+';border-radius:8px;padding:14px 16px;margin-bottom:10px;">'+
+      '<div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;">'+
+        '<div style="flex:1;min-width:200px;">'+
+          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'+
+            '<span style="color:#fca5a5;font-weight:700;font-size:0.92rem;">'+rrSafe(r.title)+'</span>'+
+            rrScoreBadge(r.likelihood,r.impact)+
+            '<span style="background:'+statusColor+'22;border:1px solid '+statusColor+'55;color:'+statusColor+';padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:700;">'+r.status+'</span>'+
+            (r.status==='Realized'?'<span style="background:#dc262622;border:1px solid #dc262655;color:#dc2626;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:700;">⚡ REALIZED</span>':'')+
+          '</div>'+
+          '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;">'+
+            '<span style="color:#64748b;font-size:0.75rem;">📁 '+rrSafe(r.category)+'</span>'+
+            '<span style="color:#64748b;font-size:0.75rem;">🎯 '+rrLikeLabel(r.likelihood)+' × '+rrImpLabel(r.impact)+'</span>'+
+            '<span style="color:#64748b;font-size:0.75rem;">Response: <span style="color:#94a3b8;">'+rrSafe(r.response||'')+'</span></span>'+
+            '<span style="color:#64748b;font-size:0.75rem;">Owner: <span style="color:#94a3b8;">'+rrSafe(r.owner||'—')+'</span></span>'+
+            (r.costExposure?'<span style="color:#fbbf24;font-size:0.75rem;">💰 $'+Number(r.costExposure).toLocaleString()+'</span>':'')+
+            (r.reviewDate?'<span style="color:#64748b;font-size:0.75rem;">📅 Review: '+r.reviewDate+'</span>':'')+
+          '</div>'+
+          (r.mitigation?'<div style="background:rgba(34,197,94,0.05);border-left:2px solid rgba(34,197,94,0.3);padding:6px 10px;margin-bottom:5px;border-radius:0 4px 4px 0;"><span style="color:#64748b;font-size:0.72rem;font-weight:700;">MITIGATION: </span><span style="color:#94a3b8;font-size:0.8rem;">'+rrSafe(r.mitigation)+'</span></div>':'')+
+          (r.notes?'<div style="color:#64748b;font-size:0.78rem;font-style:italic;">'+rrSafe(r.notes)+'</div>':'')+
+        '</div>'+
+        '<div style="display:flex;flex-direction:column;gap:4px;min-width:80px;align-items:flex-end;">'+
+          '<button onclick="rrOpenForm(\''+r.id+'\')" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:5px;color:#a5b4fc;padding:4px 10px;cursor:pointer;font-size:0.75rem;">✏️ Edit</button>'+
+          '<button onclick="rrDeleteRisk(\''+r.id+'\')" style="background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.15);border-radius:5px;color:#f87171;padding:4px 10px;cursor:pointer;font-size:0.75rem;">🗑 Del</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+// ── Form open/close
+function rrOpenForm(id){
+  var wrap = document.getElementById('rrFormWrap');
+  var title = document.getElementById('rrFormTitle');
+  if(!wrap) return;
+  wrap.style.display = 'block';
+
+  if(id){
+    var risks = rrLoad();
+    var r = risks.find(function(x){return x.id===id;});
+    if(!r) return;
+    document.getElementById('rrFormTitle').textContent = 'Edit Risk';
+    document.getElementById('rrFEditId').value = id;
+    document.getElementById('rrFTitle').value = r.title||'';
+    document.getElementById('rrFCat').value = r.category||RR_CATEGORIES[0];
+    document.getElementById('rrFLike').value = r.likelihood||3;
+    document.getElementById('rrFImp').value = r.impact||3;
+    document.getElementById('rrFStatus').value = r.status||'Open';
+    document.getElementById('rrFResponse').value = r.response||'Mitigate';
+    document.getElementById('rrFOwner').value = r.owner||'';
+    document.getElementById('rrFDate').value = r.reviewDate||'';
+    document.getElementById('rrFCost').value = r.costExposure||'';
+    document.getElementById('rrFMit').value = r.mitigation||'';
+    document.getElementById('rrFNotes').value = r.notes||'';
+  } else {
+    document.getElementById('rrFormTitle').textContent = 'Add Risk';
+    document.getElementById('rrFEditId').value = '';
+    document.getElementById('rrFTitle').value = '';
+    document.getElementById('rrFLike').value = '3';
+    document.getElementById('rrFImp').value = '3';
+    document.getElementById('rrFStatus').value = 'Open';
+    document.getElementById('rrFResponse').value = 'Mitigate';
+    document.getElementById('rrFOwner').value = '';
+    document.getElementById('rrFDate').value = '';
+    document.getElementById('rrFCost').value = '';
+    document.getElementById('rrFMit').value = '';
+    document.getElementById('rrFNotes').value = '';
+  }
+  rrUpdateScorePreview();
+  wrap.scrollIntoView({behavior:'smooth'});
+}
+
+function rrCloseForm(){
+  var wrap = document.getElementById('rrFormWrap');
+  if(wrap) wrap.style.display='none';
+}
+
+function rrUpdateScorePreview(){
+  var l = parseInt((document.getElementById('rrFLike')||{}).value||3);
+  var i = parseInt((document.getElementById('rrFImp')||{}).value||3);
+  var s = rrScore(l,i);
+  var info = rrScoreLabel(s);
+  var el = document.getElementById('rrScorePreview');
+  if(el) el.innerHTML = '<span style="color:'+info.color+';font-weight:700;font-size:1.1rem;">'+s+'</span> <span style="color:'+info.color+';font-weight:700;">'+info.label+'</span><span style="color:#64748b;font-size:0.75rem;"> ('+rrLikeLabel(l)+' × '+rrImpLabel(i)+')</span>';
+}
+
+// ── Save form
+function rrSaveForm(){
+  var title = (document.getElementById('rrFTitle')||{}).value||'';
+  if(!title.trim()){alert('Risk title is required.');return;}
+  var risks = rrLoad();
+  var editId = (document.getElementById('rrFEditId')||{}).value||'';
+  var r = {
+    id: editId||rrId(),
+    title: title.trim(),
+    category: (document.getElementById('rrFCat')||{}).value||RR_CATEGORIES[0],
+    likelihood: parseInt((document.getElementById('rrFLike')||{}).value||3),
+    impact: parseInt((document.getElementById('rrFImp')||{}).value||3),
+    status: (document.getElementById('rrFStatus')||{}).value||'Open',
+    response: (document.getElementById('rrFResponse')||{}).value||'Mitigate',
+    owner: (document.getElementById('rrFOwner')||{}).value||'',
+    reviewDate: (document.getElementById('rrFDate')||{}).value||'',
+    costExposure: parseFloat((document.getElementById('rrFCost')||{}).value||0)||0,
+    mitigation: (document.getElementById('rrFMit')||{}).value||'',
+    notes: (document.getElementById('rrFNotes')||{}).value||'',
+    created: editId?(risks.find(function(x){return x.id===editId;})||{}).created||new Date().toISOString():new Date().toISOString(),
+    updated: new Date().toISOString()
+  };
+  if(editId){
+    var idx = risks.findIndex(function(x){return x.id===editId;});
+    if(idx>=0) risks[idx]=r; else risks.push(r);
+  } else {
+    risks.push(r);
+  }
+  rrSave(risks);
+  rrCloseForm();
+  rrRenderList();
+}
+
+// ── Delete
+function rrDeleteRisk(id){
+  if(!confirm('Delete this risk?')) return;
+  var risks = rrLoad().filter(function(r){return r.id!==id;});
+  rrSave(risks);
+  rrRenderList();
+}
+
+// ── Load templates
+function rrLoadTemplates(){
+  var existing = rrLoad();
+  if(existing.length && !confirm('Load '+RR_TEMPLATES.length+' concrete sub risk templates? Existing risks will be kept.')){return;}
+  var risks = existing.slice();
+  RR_TEMPLATES.forEach(function(t){
+    risks.push({
+      id: rrId()+'_t',
+      title: t.title,
+      category: t.cat,
+      likelihood: t.likelihood,
+      impact: t.impact,
+      status: 'Open',
+      response: t.response,
+      owner: t.owner||'PM',
+      reviewDate: '',
+      costExposure: 0,
+      mitigation: t.mitigation,
+      notes: '',
+      created: new Date().toISOString(),
+      updated: new Date().toISOString()
+    });
+  });
+  rrSave(risks);
+  rrRenderList();
+}
+
+// ── Print report
+function rrPrintReport(){
+  var risks = rrLoad();
+  if(!risks.length){alert('No risks to print.');return;}
+  var pn = (window.currentProjectName||'[Project]').trim();
+  var cn = '';
+  try{cn=(document.getElementById('companyName')||{}).value||'Oncor';}catch(e){cn='Oncor';}
+  var phone='';try{phone=(document.getElementById('companyPhone')||{}).value||'';}catch(e){}
+
+  var total = risks.length;
+  var open = risks.filter(function(r){return r.status==='Open'||r.status==='Monitoring';}).length;
+  var critical = risks.filter(function(r){return rrScore(r.likelihood,r.impact)>=20;}).length;
+  var high = risks.filter(function(r){var s=rrScore(r.likelihood,r.impact);return s>=12&&s<20;}).length;
+  var totalCost = risks.reduce(function(a,r){return a+(parseFloat(r.costExposure)||0);},0);
+
+  var sorted = risks.slice().sort(function(a,b){return rrScore(b.likelihood,b.impact)-rrScore(a.likelihood,a.impact);});
+
+  var rows = sorted.map(function(r,i){
+    var s = rrScore(r.likelihood,r.impact);
+    var si = rrScoreLabel(s);
+    var bgRow = i%2===0?'#fff':'#f8fafc';
+    return '<tr style="background:'+bgRow+';">'+
+      '<td style="padding:7px 10px;font-size:0.82rem;font-weight:600;">'+(i+1)+'</td>'+
+      '<td style="padding:7px 10px;font-size:0.82rem;">'+(r.title||'')+'</td>'+
+      '<td style="padding:7px 10px;font-size:0.75rem;">'+(r.category||'')+'</td>'+
+      '<td style="padding:7px 10px;text-align:center;font-size:0.82rem;">'+rrLikeLabel(r.likelihood)+' ('+r.likelihood+')</td>'+
+      '<td style="padding:7px 10px;text-align:center;font-size:0.82rem;">'+rrImpLabel(r.impact)+' ('+r.impact+')</td>'+
+      '<td style="padding:7px 10px;text-align:center;font-weight:700;color:'+si.color+';">'+s+' – '+si.label+'</td>'+
+      '<td style="padding:7px 10px;font-size:0.75rem;">'+(r.response||'')+'</td>'+
+      '<td style="padding:7px 10px;font-size:0.75rem;">'+(r.status||'')+'</td>'+
+      '<td style="padding:7px 10px;font-size:0.75rem;">'+(r.owner||'')+'</td>'+
+      '<td style="padding:7px 10px;font-size:0.75rem;">'+(r.mitigation||'')+'</td>'+
+    '</tr>';
+  }).join('');
+
+  var html = '<!DOCTYPE html><html><head><title>Risk Register — '+pn+'</title>'+
+    '<style>body{font-family:Arial,sans-serif;font-size:13px;color:#1a1a2e;margin:0;padding:20px;}'+
+    'h1{margin:0;font-size:1.3rem;}h2{font-size:1rem;margin:0;}'+
+    '.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #dc2626;padding-bottom:12px;margin-bottom:16px;}'+
+    '.badge{display:inline-block;padding:2px 10px;border-radius:4px;font-size:0.72rem;font-weight:700;}'+
+    '.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px;}'+
+    '.stat{border:1px solid #e2e8f0;border-radius:6px;padding:8px;text-align:center;}'+
+    '.stat-val{font-size:1.2rem;font-weight:700;}.stat-lbl{font-size:0.65rem;color:#64748b;}'+
+    'table{width:100%;border-collapse:collapse;font-size:0.8rem;}'+
+    'th{background:#7f1d1d;color:#fff;padding:7px 10px;text-align:left;font-size:0.72rem;}'+
+    'tr:nth-child(even){background:#fef2f2;}'+
+    '.foot{margin-top:20px;font-size:0.7rem;color:#9ca3af;text-align:center;}'+
+    '@media print{button{display:none!important}}'+
+    '</style></head><body>'+
+    '<div class="header"><div><h1>⚠️ PROJECT RISK REGISTER</h1><h2>'+pn+'</h2></div>'+
+    '<div style="text-align:right;"><div style="font-size:0.9rem;font-weight:700;">'+cn+'</div>'+
+    (phone?'<div style="font-size:0.8rem;color:#64748b;">'+phone+'</div>':'')+
+    '<div style="font-size:0.7rem;color:#9ca3af;">Generated: '+new Date().toLocaleString()+'</div></div></div>'+
+    '<div class="stats">'+
+      '<div class="stat"><div class="stat-val">'+total+'</div><div class="stat-lbl">Total Risks</div></div>'+
+      '<div class="stat"><div class="stat-val" style="color:'+( open?'#ef4444':'#22c55e')+'">'+open+'</div><div class="stat-lbl">Open / Monitoring</div></div>'+
+      '<div class="stat"><div class="stat-val" style="color:'+(critical?'#ef4444':'#22c55e')+'">'+critical+'</div><div class="stat-lbl">Critical (Score ≥20)</div></div>'+
+      '<div class="stat"><div class="stat-val" style="color:'+(high?'#f97316':'#22c55e')+'">'+high+'</div><div class="stat-lbl">High (Score 12-16)</div></div>'+
+      '<div class="stat"><div class="stat-val" style="color:#f59e0b;">$'+(totalCost?totalCost.toLocaleString(undefined,{maximumFractionDigits:0}):'0')+'</div><div class="stat-lbl">Total Cost Exposure</div></div>'+
+    '</div>'+
+    '<table><thead><tr><th>#</th><th>Risk</th><th>Category</th><th>Likelihood</th><th>Impact</th><th>Score</th><th>Response</th><th>Status</th><th>Owner</th><th>Mitigation Plan</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<div style="margin-top:24px;border-top:1px solid #e2e8f0;padding-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:40px;">'+
+      '<div><div style="font-size:0.72rem;color:#9ca3af;margin-bottom:6px;">PREPARED BY / PROJECT MANAGER</div><div style="border-bottom:1px solid #000;margin-bottom:4px;padding-top:30px;"></div><div style="font-size:0.7rem;color:#9ca3af;">Name / Signature / Date</div></div>'+
+      '<div><div style="font-size:0.72rem;color:#9ca3af;margin-bottom:6px;">REVIEWED BY / PRINCIPAL</div><div style="border-bottom:1px solid #000;margin-bottom:4px;padding-top:30px;"></div><div style="font-size:0.7rem;color:#9ca3af;">Name / Signature / Date</div></div>'+
+    '</div>'+
+    '<div class="foot">CONFIDENTIAL — INTERNAL USE ONLY | Risk scoring per ISO 31000 | 5×5 likelihood-impact matrix | Retain for project file</div>'+
+    '<div style="text-align:center;margin-top:8px;"><button onclick="window.print()" style="background:#dc2626;color:#fff;border:none;padding:8px 24px;border-radius:6px;cursor:pointer;font-size:0.85rem;">🖨 Print / Save PDF</button></div>'+
+    '</body></html>';
+
+  var w = window.open('','_blank');
+  if(w){w.document.write(html);w.document.close();}
+}
+
+// ── Show/close modal
+function showRRModal(){
+  buildRRModal();
+  var m = document.getElementById(RR_ID);
+  if(m){m.style.display='block';}
+  rrRenderList();
+}
+
+function closeRRModal(){
+  var m = document.getElementById(RR_ID);
+  if(m) m.style.display='none';
+}
+
+// ── Expose stats for Project Status Card
+window._getRRStats = function(){
+  var risks = rrLoad();
+  var open = risks.filter(function(r){return r.status==='Open'||r.status==='Monitoring';}).length;
+  var critical = risks.filter(function(r){return rrScore(r.likelihood,r.impact)>=20;}).length;
+  var totalCost = risks.reduce(function(a,r){return a+(parseFloat(r.costExposure)||0);},0);
+  return {total:risks.length, open:open, critical:critical, totalCostExposure:totalCost};
+};
+
+window.showRRModal = showRRModal;
+window.closeRRModal = closeRRModal;
+window.rrOpenForm = rrOpenForm;
+window.rrCloseForm = rrCloseForm;
+window.rrSaveForm = rrSaveForm;
+window.rrDeleteRisk = rrDeleteRisk;
+window.rrLoadTemplates = rrLoadTemplates;
+window.rrPrintReport = rrPrintReport;
+window.rrUpdateScorePreview = rrUpdateScorePreview;
+window.rrRenderList = rrRenderList;
+
+// ── Alt+G keyboard shortcut
+document.addEventListener('keydown', function(e){
+  if(e.altKey && e.key.toLowerCase()==='g'){
+    e.preventDefault();
+    var m = document.getElementById(RR_ID);
+    if(m && m.style.display!=='none') closeRRModal();
+    else showRRModal();
+  }
+});
+
+// ── Inject sidebar button after Unit Prices
+document.addEventListener('DOMContentLoaded', function(){
+  setTimeout(function(){
+    var uprBtn = document.querySelector('button[onclick*="showUPRModal"]');
+    if(!uprBtn) return;
+    var parentRow = uprBtn.closest('div');
+    if(!parentRow||!parentRow.parentNode) return;
+    var newRow = document.createElement('div');
+    newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+    newRow.innerHTML = '<button class="action-btn secondary" onclick="showRRModal()" title="Project Risk Register — identify, score, and track project risks with mitigation plans (Alt+G)" style="background:rgba(239,68,68,0.08);border-color:rgba(239,68,68,0.3);color:#fca5a5;">⚠️ Risk Register</button>';
+    parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+  }, 6500);
+});
+
+})();
+// ==================== END PROJECT RISK REGISTER — Zeus ⚡ Session #87 ====================
+</script>
