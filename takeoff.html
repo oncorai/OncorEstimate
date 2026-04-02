@@ -164039,4 +164039,509 @@ document.addEventListener('DOMContentLoaded', function(){
 
 })();
 // ==================== END QUICK ESTIMATE TEMPLATES LIBRARY — Zeus ⚡ Session #89 ====================
+
+// ==================== BID COMPARISON & COMPETITOR ANALYSIS — Zeus ⚡ Session #89 ====================
+// Purpose: Track competitor bids, analyze win/loss patterns, build competitive intelligence database
+// Alt+2 keyboard shortcut
+(function(){
+'use strict';
+
+var BCA_ID = 'oncor-bca-modal';
+var BCA_STORAGE = 'oncor_bid_comparison_v1';
+
+// ── Get/save data
+function getBCAData(){
+  try {
+    var d = localStorage.getItem(BCA_STORAGE);
+    return d ? JSON.parse(d) : { comparisons: [], competitors: [] };
+  } catch(e){ return { comparisons: [], competitors: [] }; }
+}
+function saveBCAData(data){
+  localStorage.setItem(BCA_STORAGE, JSON.stringify(data));
+}
+
+// ── Build modal
+function buildBCAModal(){
+  if(document.getElementById(BCA_ID)) return;
+  var m = document.createElement('div');
+  m.id = BCA_ID;
+  m.style.cssText = 'display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:10000;overflow:auto;';
+  m.innerHTML = '<div style="background:#1e293b;max-width:950px;margin:30px auto;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.4);max-height:90vh;overflow:hidden;display:flex;flex-direction:column;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.1);background:linear-gradient(135deg,#dc2626 0%,#b91c1c 100%);">'+
+      '<div style="display:flex;align-items:center;gap:10px;"><span style="font-size:1.5rem;">🎯</span><span style="font-size:1.1rem;font-weight:700;color:#fff;">Bid Comparison & Competitor Analysis</span></div>'+
+      '<button onclick="closeBCAModal()" style="background:rgba(255,255,255,0.2);border:none;color:#fff;width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:1rem;">✕</button>'+
+    '</div>'+
+    '<div id="bca-stats" style="padding:12px 16px;background:rgba(220,38,38,0.1);border-bottom:1px solid rgba(255,255,255,0.05);"></div>'+
+    '<div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;gap:8px;flex-wrap:wrap;">'+
+      '<button id="bca-tab-comps" onclick="bcaSwitchTab(\'comps\')" style="padding:6px 14px;border-radius:6px;border:none;cursor:pointer;font-size:0.85rem;background:#dc2626;color:#fff;">📊 Bid Comparisons</button>'+
+      '<button id="bca-tab-compet" onclick="bcaSwitchTab(\'compet\')" style="padding:6px 14px;border-radius:6px;border:1px solid rgba(255,255,255,0.2);cursor:pointer;font-size:0.85rem;background:transparent;color:#94a3b8;">🏢 Competitor Directory</button>'+
+      '<button id="bca-tab-insights" onclick="bcaSwitchTab(\'insights\')" style="padding:6px 14px;border-radius:6px;border:1px solid rgba(255,255,255,0.2);cursor:pointer;font-size:0.85rem;background:transparent;color:#94a3b8;">💡 Win/Loss Insights</button>'+
+      '<div style="flex:1;"></div>'+
+      '<button onclick="bcaPrint()" style="padding:6px 14px;border-radius:6px;border:1px solid rgba(255,255,255,0.2);cursor:pointer;font-size:0.85rem;background:transparent;color:#94a3b8;">🖨 Print Report</button>'+
+    '</div>'+
+    '<div id="bca-content" style="flex:1;overflow:auto;padding:16px;"></div>'+
+  '</div>';
+  m.onclick = function(e){ if(e.target===m) closeBCAModal(); };
+  document.body.appendChild(m);
+}
+
+var bcaTab = 'comps';
+var bcaEditIdx = -1;
+
+function bcaSwitchTab(tab){
+  bcaTab = tab;
+  var tabs = ['comps','compet','insights'];
+  tabs.forEach(function(t){
+    var btn = document.getElementById('bca-tab-'+t);
+    if(!btn) return;
+    if(t===tab){
+      btn.style.background='#dc2626'; btn.style.color='#fff'; btn.style.border='none';
+    } else {
+      btn.style.background='transparent'; btn.style.color='#94a3b8'; btn.style.border='1px solid rgba(255,255,255,0.2)';
+    }
+  });
+  bcaRender();
+}
+
+function bcaRender(){
+  bcaRenderStats();
+  var c = document.getElementById('bca-content');
+  if(!c) return;
+  if(bcaTab==='comps') bcaRenderComparisons(c);
+  else if(bcaTab==='compet') bcaRenderCompetitors(c);
+  else if(bcaTab==='insights') bcaRenderInsights(c);
+}
+
+function bcaRenderStats(){
+  var s = document.getElementById('bca-stats');
+  if(!s) return;
+  var data = getBCAData();
+  var total = data.comparisons.length;
+  var won = data.comparisons.filter(function(c){ return c.outcome==='Won'; }).length;
+  var lost = data.comparisons.filter(function(c){ return c.outcome==='Lost'; }).length;
+  var winRate = (won+lost)>0 ? Math.round(won/(won+lost)*100) : 0;
+  var totalValue = data.comparisons.reduce(function(a,c){ return a + (parseFloat(c.ourBid)||0); }, 0);
+  var wonValue = data.comparisons.filter(function(c){ return c.outcome==='Won'; }).reduce(function(a,c){ return a + (parseFloat(c.ourBid)||0); }, 0);
+  var competitors = data.competitors.length;
+  var wrColor = winRate>=50?'#10b981':winRate>=30?'#f59e0b':'#ef4444';
+  s.innerHTML = '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;">'+
+    '<div style="text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:#f1f5f9;">'+total+'</div><div style="font-size:0.7rem;color:#64748b;">Comparisons</div></div>'+
+    '<div style="text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:#10b981;">'+won+'</div><div style="font-size:0.7rem;color:#64748b;">Won</div></div>'+
+    '<div style="text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:#ef4444;">'+lost+'</div><div style="font-size:0.7rem;color:#64748b;">Lost</div></div>'+
+    '<div style="text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:'+wrColor+';">'+winRate+'%</div><div style="font-size:0.7rem;color:#64748b;">Win Rate</div></div>'+
+    '<div style="text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:#14b8a6;">$'+fmtK(wonValue)+'</div><div style="font-size:0.7rem;color:#64748b;">Won Value</div></div>'+
+    '<div style="text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:#a78bfa;">'+competitors+'</div><div style="font-size:0.7rem;color:#64748b;">Competitors</div></div>'+
+  '</div>';
+}
+
+function fmtK(n){
+  if(n>=1000000) return (n/1000000).toFixed(1)+'M';
+  if(n>=1000) return (n/1000).toFixed(0)+'k';
+  return n.toFixed(0);
+}
+
+function bcaRenderComparisons(c){
+  var data = getBCAData();
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+    '<div style="font-size:1rem;font-weight:600;color:#f1f5f9;">Bid Comparisons</div>'+
+    '<button onclick="bcaShowForm(-1)" style="background:#dc2626;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.85rem;">+ New Comparison</button>'+
+  '</div>';
+  if(!data.comparisons.length){
+    html += '<div style="text-align:center;padding:40px;color:#64748b;">'+
+      '<div style="font-size:2.5rem;margin-bottom:12px;">📊</div>'+
+      '<div>No bid comparisons logged yet.</div>'+
+      '<div style="font-size:0.85rem;margin-top:8px;">Log bid results to track competitors and build intelligence.</div>'+
+    '</div>';
+  } else {
+    html += '<div style="display:flex;flex-direction:column;gap:12px;">';
+    data.comparisons.slice().reverse().forEach(function(comp, idx){
+      var realIdx = data.comparisons.length - 1 - idx;
+      var outcomeColor = comp.outcome==='Won'?'#10b981':comp.outcome==='Lost'?'#ef4444':comp.outcome==='Pending'?'#f59e0b':'#64748b';
+      var outcomeBg = comp.outcome==='Won'?'rgba(16,185,129,0.15)':comp.outcome==='Lost'?'rgba(239,68,68,0.15)':'rgba(245,158,11,0.15)';
+      var diff = comp.winningBid && comp.ourBid ? parseFloat(comp.winningBid) - parseFloat(comp.ourBid) : null;
+      var diffPct = diff!==null && comp.ourBid ? (diff / parseFloat(comp.ourBid) * 100) : null;
+      html += '<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:10px;border-left:4px solid '+outcomeColor+';padding:14px 16px;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">'+
+          '<div style="flex:1;">'+
+            '<div style="font-weight:600;color:#f1f5f9;font-size:0.95rem;">'+escHtml(comp.project||'Unnamed Project')+'</div>'+
+            '<div style="color:#94a3b8;font-size:0.8rem;margin-top:4px;">'+escHtml(comp.client||'')+(comp.bidDate?' • '+comp.bidDate:'')+'</div>'+
+          '</div>'+
+          '<span style="background:'+outcomeBg+';color:'+outcomeColor+';padding:4px 10px;border-radius:4px;font-size:0.75rem;font-weight:600;">'+escHtml(comp.outcome||'Unknown')+'</span>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px;">'+
+          '<div><div style="font-size:0.7rem;color:#64748b;">Our Bid</div><div style="font-size:1rem;font-weight:600;color:#14b8a6;">$'+fmtK(parseFloat(comp.ourBid)||0)+'</div></div>'+
+          '<div><div style="font-size:0.7rem;color:#64748b;">Winning Bid</div><div style="font-size:1rem;font-weight:600;color:'+(comp.outcome==='Won'?'#10b981':'#f1f5f9')+';">'+(comp.winningBid?'$'+fmtK(parseFloat(comp.winningBid)):'—')+'</div></div>'+
+          '<div><div style="font-size:0.7rem;color:#64748b;">Winner</div><div style="font-size:0.9rem;color:#f1f5f9;">'+(comp.outcome==='Won'?'Us 🏆':escHtml(comp.winner||'—'))+'</div></div>'+
+          '<div><div style="font-size:0.7rem;color:#64748b;">Diff</div><div style="font-size:0.9rem;color:'+(diff>0?'#ef4444':diff<0?'#10b981':'#64748b')+';">'+(diff!==null?(diff>0?'+':'')+fmtK(diff)+' ('+(diffPct>0?'+':'')+diffPct.toFixed(1)+'%)':'—')+'</div></div>'+
+        '</div>'+
+        (comp.bidders && comp.bidders.length ? '<div style="margin-top:10px;"><div style="font-size:0.7rem;color:#64748b;margin-bottom:4px;">Other Bidders:</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+comp.bidders.map(function(b){ return '<span style="background:rgba(255,255,255,0.05);padding:3px 8px;border-radius:4px;font-size:0.75rem;color:#94a3b8;">'+escHtml(b.name)+(b.bid?' $'+fmtK(parseFloat(b.bid)):'')+'</span>'; }).join('')+'</div></div>' : '')+
+        (comp.notes?'<div style="margin-top:10px;background:rgba(255,255,255,0.03);padding:8px 10px;border-radius:6px;font-size:0.8rem;color:#94a3b8;">'+escHtml(comp.notes)+'</div>':'')+
+        '<div style="display:flex;gap:8px;margin-top:12px;">'+
+          '<button onclick="bcaShowForm('+realIdx+')" style="background:rgba(255,255,255,0.05);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.75rem;">✏️ Edit</button>'+
+          '<button onclick="bcaDelete('+realIdx+')" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.2);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.75rem;">🗑 Delete</button>'+
+        '</div>'+
+      '</div>';
+    });
+    html += '</div>';
+  }
+  c.innerHTML = html;
+}
+
+function bcaShowForm(idx){
+  bcaEditIdx = idx;
+  var data = getBCAData();
+  var comp = idx>=0 && data.comparisons[idx] ? data.comparisons[idx] : {};
+  var c = document.getElementById('bca-content');
+  if(!c) return;
+  var html = '<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:20px;">'+
+    '<div style="font-size:1rem;font-weight:600;color:#f1f5f9;margin-bottom:16px;">'+(idx>=0?'Edit':'New')+' Bid Comparison</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+
+      '<div><label style="font-size:0.75rem;color:#64748b;">Project Name *</label><input id="bca-project" type="text" value="'+escHtml(comp.project||'')+'" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.9rem;margin-top:4px;"></div>'+
+      '<div><label style="font-size:0.75rem;color:#64748b;">Client / GC</label><input id="bca-client" type="text" value="'+escHtml(comp.client||'')+'" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.9rem;margin-top:4px;"></div>'+
+      '<div><label style="font-size:0.75rem;color:#64748b;">Bid Date</label><input id="bca-date" type="date" value="'+(comp.bidDate||'')+'" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.9rem;margin-top:4px;"></div>'+
+      '<div><label style="font-size:0.75rem;color:#64748b;">Outcome</label><select id="bca-outcome" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.9rem;margin-top:4px;">'+
+        '<option value="Pending"'+(comp.outcome==='Pending'?' selected':'')+'>Pending</option>'+
+        '<option value="Won"'+(comp.outcome==='Won'?' selected':'')+'>Won</option>'+
+        '<option value="Lost"'+(comp.outcome==='Lost'?' selected':'')+'>Lost</option>'+
+        '<option value="No Bid"'+(comp.outcome==='No Bid'?' selected':'')+'>No Bid</option>'+
+        '<option value="Withdrawn"'+(comp.outcome==='Withdrawn'?' selected':'')+'>Withdrawn</option>'+
+      '</select></div>'+
+      '<div><label style="font-size:0.75rem;color:#64748b;">Our Bid ($)</label><input id="bca-ourbid" type="number" value="'+(comp.ourBid||'')+'" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.9rem;margin-top:4px;"></div>'+
+      '<div><label style="font-size:0.75rem;color:#64748b;">Winning Bid ($)</label><input id="bca-winbid" type="number" value="'+(comp.winningBid||'')+'" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.9rem;margin-top:4px;"></div>'+
+      '<div><label style="font-size:0.75rem;color:#64748b;">Winner (if not us)</label><input id="bca-winner" type="text" value="'+escHtml(comp.winner||'')+'" placeholder="Competitor name" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.9rem;margin-top:4px;"></div>'+
+      '<div><label style="font-size:0.75rem;color:#64748b;">Project Type</label><select id="bca-type" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.9rem;margin-top:4px;">'+
+        '<option value="">—</option>'+
+        '<option value="Commercial"'+(comp.projectType==='Commercial'?' selected':'')+'>Commercial</option>'+
+        '<option value="Industrial"'+(comp.projectType==='Industrial'?' selected':'')+'>Industrial</option>'+
+        '<option value="Residential"'+(comp.projectType==='Residential'?' selected':'')+'>Residential</option>'+
+        '<option value="Municipal"'+(comp.projectType==='Municipal'?' selected':'')+'>Municipal</option>'+
+        '<option value="Infrastructure"'+(comp.projectType==='Infrastructure'?' selected':'')+'>Infrastructure</option>'+
+      '</select></div>'+
+    '</div>'+
+    '<div style="margin-top:12px;"><label style="font-size:0.75rem;color:#64748b;">Other Bidders (name, bid — one per line)</label><textarea id="bca-bidders" rows="3" placeholder="ABC Concrete, 42000\nXYZ Concrete, 45500" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.85rem;margin-top:4px;resize:vertical;">'+(comp.bidders?comp.bidders.map(function(b){return b.name+(b.bid?', '+b.bid:'');}).join('\n'):'')+'</textarea></div>'+
+    '<div style="margin-top:12px;"><label style="font-size:0.75rem;color:#64748b;">Notes / Why Won or Lost</label><textarea id="bca-notes" rows="2" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.2);color:#f1f5f9;font-size:0.85rem;margin-top:4px;resize:vertical;">'+escHtml(comp.notes||'')+'</textarea></div>'+
+    '<div style="display:flex;gap:8px;margin-top:16px;">'+
+      '<button onclick="bcaSave()" style="background:#dc2626;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:0.9rem;">💾 Save</button>'+
+      '<button onclick="bcaRender()" style="background:rgba(255,255,255,0.1);color:#94a3b8;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:0.9rem;">Cancel</button>'+
+    '</div>'+
+  '</div>';
+  c.innerHTML = html;
+}
+
+function bcaSave(){
+  var project = document.getElementById('bca-project')?.value.trim();
+  if(!project){ alert('Project name is required.'); return; }
+  var biddersRaw = document.getElementById('bca-bidders')?.value.trim();
+  var bidders = [];
+  if(biddersRaw){
+    biddersRaw.split('\n').forEach(function(line){
+      var parts = line.split(',');
+      if(parts[0] && parts[0].trim()){
+        bidders.push({ name: parts[0].trim(), bid: parts[1]?parts[1].trim():'' });
+      }
+    });
+  }
+  var comp = {
+    project: project,
+    client: document.getElementById('bca-client')?.value.trim(),
+    bidDate: document.getElementById('bca-date')?.value,
+    outcome: document.getElementById('bca-outcome')?.value,
+    ourBid: document.getElementById('bca-ourbid')?.value,
+    winningBid: document.getElementById('bca-winbid')?.value,
+    winner: document.getElementById('bca-winner')?.value.trim(),
+    projectType: document.getElementById('bca-type')?.value,
+    bidders: bidders,
+    notes: document.getElementById('bca-notes')?.value.trim()
+  };
+  var data = getBCAData();
+  // Add winner to competitors if new and we lost
+  if(comp.outcome==='Lost' && comp.winner){
+    var exists = data.competitors.find(function(c){ return c.name.toLowerCase()===comp.winner.toLowerCase(); });
+    if(!exists){
+      data.competitors.push({ name: comp.winner, notes: '', wins: 1 });
+    } else {
+      exists.wins = (exists.wins||0) + 1;
+    }
+  }
+  // Add other bidders to competitors
+  bidders.forEach(function(b){
+    var exists = data.competitors.find(function(c){ return c.name.toLowerCase()===b.name.toLowerCase(); });
+    if(!exists){
+      data.competitors.push({ name: b.name, notes: '', wins: 0 });
+    }
+  });
+  if(bcaEditIdx>=0){
+    data.comparisons[bcaEditIdx] = comp;
+  } else {
+    data.comparisons.push(comp);
+  }
+  saveBCAData(data);
+  bcaEditIdx = -1;
+  bcaRender();
+}
+
+function bcaDelete(idx){
+  if(!confirm('Delete this bid comparison?')) return;
+  var data = getBCAData();
+  data.comparisons.splice(idx,1);
+  saveBCAData(data);
+  bcaRender();
+}
+
+function bcaRenderCompetitors(c){
+  var data = getBCAData();
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+    '<div style="font-size:1rem;font-weight:600;color:#f1f5f9;">Competitor Directory</div>'+
+    '<button onclick="bcaAddCompetitor()" style="background:#dc2626;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.85rem;">+ Add Competitor</button>'+
+  '</div>';
+  if(!data.competitors.length){
+    html += '<div style="text-align:center;padding:40px;color:#64748b;">'+
+      '<div style="font-size:2.5rem;margin-bottom:12px;">🏢</div>'+
+      '<div>No competitors tracked yet.</div>'+
+      '<div style="font-size:0.85rem;margin-top:8px;">Competitors are auto-added when you log bid comparisons.</div>'+
+    '</div>';
+  } else {
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;">';
+    data.competitors.forEach(function(comp, idx){
+      // Count appearances
+      var appeared = data.comparisons.filter(function(c){
+        if(c.winner && c.winner.toLowerCase()===comp.name.toLowerCase()) return true;
+        if(c.bidders && c.bidders.find(function(b){ return b.name.toLowerCase()===comp.name.toLowerCase(); })) return true;
+        return false;
+      }).length;
+      var wins = data.comparisons.filter(function(c){ return c.winner && c.winner.toLowerCase()===comp.name.toLowerCase(); }).length;
+      html += '<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:14px;">'+
+        '<div style="font-weight:600;color:#f1f5f9;font-size:0.95rem;">'+escHtml(comp.name)+'</div>'+
+        '<div style="display:flex;gap:12px;margin-top:10px;">'+
+          '<div><div style="font-size:1.1rem;font-weight:600;color:#a78bfa;">'+appeared+'</div><div style="font-size:0.7rem;color:#64748b;">Bids</div></div>'+
+          '<div><div style="font-size:1.1rem;font-weight:600;color:#ef4444;">'+wins+'</div><div style="font-size:0.7rem;color:#64748b;">Wins vs Us</div></div>'+
+        '</div>'+
+        (comp.notes?'<div style="margin-top:8px;font-size:0.8rem;color:#94a3b8;">'+escHtml(comp.notes)+'</div>':'')+
+        '<div style="display:flex;gap:6px;margin-top:10px;">'+
+          '<button onclick="bcaEditCompetitor('+idx+')" style="background:rgba(255,255,255,0.05);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);padding:5px 10px;border-radius:4px;cursor:pointer;font-size:0.7rem;">✏️</button>'+
+          '<button onclick="bcaDeleteCompetitor('+idx+')" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.2);padding:5px 10px;border-radius:4px;cursor:pointer;font-size:0.7rem;">🗑</button>'+
+        '</div>'+
+      '</div>';
+    });
+    html += '</div>';
+  }
+  c.innerHTML = html;
+}
+
+function bcaAddCompetitor(){
+  var name = prompt('Competitor company name:');
+  if(!name) return;
+  var notes = prompt('Notes about this competitor (optional):','');
+  var data = getBCAData();
+  data.competitors.push({ name: name.trim(), notes: notes||'', wins: 0 });
+  saveBCAData(data);
+  bcaRender();
+}
+
+function bcaEditCompetitor(idx){
+  var data = getBCAData();
+  if(!data.competitors[idx]) return;
+  var notes = prompt('Notes about '+data.competitors[idx].name+':', data.competitors[idx].notes||'');
+  if(notes===null) return;
+  data.competitors[idx].notes = notes;
+  saveBCAData(data);
+  bcaRender();
+}
+
+function bcaDeleteCompetitor(idx){
+  if(!confirm('Delete this competitor?')) return;
+  var data = getBCAData();
+  data.competitors.splice(idx,1);
+  saveBCAData(data);
+  bcaRender();
+}
+
+function bcaRenderInsights(c){
+  var data = getBCAData();
+  var comps = data.comparisons;
+  if(!comps.length){
+    c.innerHTML = '<div style="text-align:center;padding:60px;color:#64748b;">'+
+      '<div style="font-size:2.5rem;margin-bottom:12px;">💡</div>'+
+      '<div>No data for insights yet.</div>'+
+      '<div style="font-size:0.85rem;margin-top:8px;">Log bid comparisons to generate win/loss insights.</div>'+
+    '</div>';
+    return;
+  }
+  var won = comps.filter(function(c){ return c.outcome==='Won'; });
+  var lost = comps.filter(function(c){ return c.outcome==='Lost'; });
+  // Avg our bid
+  var avgOur = comps.reduce(function(a,c){ return a + (parseFloat(c.ourBid)||0); },0) / comps.length;
+  // Avg winning bid for losses
+  var avgWinningOnLoss = lost.length ? lost.reduce(function(a,c){ return a + (parseFloat(c.winningBid)||0); },0) / lost.length : 0;
+  // How much lower were we on wins?
+  var lowerOnWins = won.filter(function(c){ return c.winningBid && c.ourBid; }).map(function(c){ return parseFloat(c.ourBid) - parseFloat(c.winningBid); });
+  var avgLowerOnWins = lowerOnWins.length ? lowerOnWins.reduce(function(a,v){ return a+v; },0)/lowerOnWins.length : 0;
+  // How much higher were we on losses?
+  var higherOnLosses = lost.filter(function(c){ return c.winningBid && c.ourBid; }).map(function(c){ return parseFloat(c.ourBid) - parseFloat(c.winningBid); });
+  var avgHigherOnLosses = higherOnLosses.length ? higherOnLosses.reduce(function(a,v){ return a+v; },0)/higherOnLosses.length : 0;
+  // Top competitors (most wins against us)
+  var compWins = {};
+  lost.forEach(function(c){ if(c.winner){ compWins[c.winner] = (compWins[c.winner]||0)+1; } });
+  var topComps = Object.keys(compWins).sort(function(a,b){ return compWins[b]-compWins[a]; }).slice(0,5);
+  // By project type
+  var byType = {};
+  comps.forEach(function(c){
+    var t = c.projectType || 'Unknown';
+    if(!byType[t]) byType[t] = { won: 0, lost: 0 };
+    if(c.outcome==='Won') byType[t].won++;
+    else if(c.outcome==='Lost') byType[t].lost++;
+  });
+  var html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">';
+  // Pricing insights
+  html += '<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:16px;">'+
+    '<div style="font-size:0.9rem;font-weight:600;color:#f1f5f9;margin-bottom:12px;">📊 Pricing Insights</div>'+
+    '<div style="font-size:0.8rem;color:#94a3b8;line-height:1.6;">'+
+      '<div style="margin-bottom:8px;">• Avg bid: <span style="color:#14b8a6;font-weight:600;">$'+fmtK(avgOur)+'</span></div>'+
+      (lost.length ? '<div style="margin-bottom:8px;">• Avg winning bid (when we lost): <span style="color:#ef4444;font-weight:600;">$'+fmtK(avgWinningOnLoss)+'</span></div>' : '')+
+      (avgHigherOnLosses ? '<div style="margin-bottom:8px;">• We were <span style="color:#ef4444;font-weight:600;">$'+fmtK(Math.abs(avgHigherOnLosses))+'</span> higher on avg when we lost</div>' : '')+
+      (avgLowerOnWins ? '<div style="margin-bottom:8px;">• We were <span style="color:#10b981;font-weight:600;">$'+fmtK(Math.abs(avgLowerOnWins))+'</span> lower on avg when we won</div>' : '')+
+    '</div>'+
+  '</div>';
+  // Top competitors
+  html += '<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:16px;">'+
+    '<div style="font-size:0.9rem;font-weight:600;color:#f1f5f9;margin-bottom:12px;">🏢 Top Competitors (Beat Us Most)</div>'+
+    (topComps.length ? '<div style="font-size:0.8rem;color:#94a3b8;line-height:1.6;">'+topComps.map(function(n,i){ return '<div style="margin-bottom:6px;">'+(i+1)+'. <span style="color:#f1f5f9;">'+escHtml(n)+'</span> — '+compWins[n]+' wins</div>'; }).join('')+'</div>' : '<div style="color:#64748b;font-size:0.8rem;">No losses recorded yet.</div>')+
+  '</div>';
+  // Win rate by type
+  html += '<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:16px;">'+
+    '<div style="font-size:0.9rem;font-weight:600;color:#f1f5f9;margin-bottom:12px;">📈 Win Rate by Project Type</div>'+
+    '<div style="font-size:0.8rem;color:#94a3b8;">';
+  Object.keys(byType).forEach(function(t){
+    var d = byType[t];
+    var rate = (d.won+d.lost)>0 ? Math.round(d.won/(d.won+d.lost)*100) : 0;
+    var col = rate>=50?'#10b981':rate>=30?'#f59e0b':'#ef4444';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'+
+      '<span>'+escHtml(t)+'</span>'+
+      '<span style="color:'+col+';font-weight:600;">'+rate+'% ('+d.won+'W / '+d.lost+'L)</span>'+
+    '</div>';
+  });
+  html += '</div></div>';
+  // Strategic recommendations
+  html += '<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:16px;">'+
+    '<div style="font-size:0.9rem;font-weight:600;color:#f1f5f9;margin-bottom:12px;">💡 Strategic Recommendations</div>'+
+    '<div style="font-size:0.8rem;color:#94a3b8;line-height:1.6;">';
+  if(avgHigherOnLosses > 5000){
+    html += '<div style="margin-bottom:8px;padding:8px;background:rgba(239,68,68,0.1);border-radius:6px;">⚠️ Consider tightening margins by <span style="color:#ef4444;">~$'+fmtK(avgHigherOnLosses/2)+'</span> on competitive bids.</div>';
+  }
+  if(topComps.length){
+    html += '<div style="margin-bottom:8px;padding:8px;background:rgba(245,158,11,0.1);border-radius:6px;">👀 Watch <span style="color:#f59e0b;">'+escHtml(topComps[0])+'</span> — they\'ve beat you '+compWins[topComps[0]]+' times.</div>';
+  }
+  var bestType = Object.keys(byType).sort(function(a,b){ 
+    var rA = (byType[a].won+byType[a].lost)>0 ? byType[a].won/(byType[a].won+byType[a].lost) : 0;
+    var rB = (byType[b].won+byType[b].lost)>0 ? byType[b].won/(byType[b].won+byType[b].lost) : 0;
+    return rB - rA;
+  })[0];
+  if(bestType && byType[bestType].won>0){
+    html += '<div style="margin-bottom:8px;padding:8px;background:rgba(16,185,129,0.1);border-radius:6px;">✅ Your best segment is <span style="color:#10b981;">'+escHtml(bestType)+'</span> — focus marketing here.</div>';
+  }
+  html += '</div></div>';
+  html += '</div>';
+  c.innerHTML = html;
+}
+
+function bcaPrint(){
+  var data = getBCAData();
+  var won = data.comparisons.filter(function(c){ return c.outcome==='Won'; }).length;
+  var lost = data.comparisons.filter(function(c){ return c.outcome==='Lost'; }).length;
+  var winRate = (won+lost)>0 ? Math.round(won/(won+lost)*100) : 0;
+  var html = '<!DOCTYPE html><html><head><title>Bid Comparison Report</title>'+
+    '<style>body{font-family:system-ui,sans-serif;padding:30px;max-width:900px;margin:0 auto;} '+
+    'h1{font-size:1.3rem;border-bottom:2px solid #dc2626;padding-bottom:8px;} '+
+    'table{width:100%;border-collapse:collapse;margin:16px 0;font-size:0.85rem;} '+
+    'th,td{border:1px solid #ddd;padding:8px;text-align:left;} '+
+    'th{background:#f1f5f9;} '+
+    '.won{background:#dcfce7;} .lost{background:#fee2e2;} '+
+    '@media print{button{display:none;}}</style>'+
+    '</head><body>'+
+    '<h1>🎯 Bid Comparison & Competitor Analysis</h1>'+
+    '<p style="color:#666;">Generated: '+new Date().toLocaleDateString()+'</p>'+
+    '<div style="display:flex;gap:20px;margin:20px 0;">'+
+      '<div><strong>Total Bids:</strong> '+data.comparisons.length+'</div>'+
+      '<div><strong>Won:</strong> '+won+'</div>'+
+      '<div><strong>Lost:</strong> '+lost+'</div>'+
+      '<div><strong>Win Rate:</strong> '+winRate+'%</div>'+
+    '</div>'+
+    '<table><thead><tr><th>Project</th><th>Client</th><th>Date</th><th>Our Bid</th><th>Winner</th><th>Winning Bid</th><th>Outcome</th></tr></thead><tbody>';
+  data.comparisons.forEach(function(c){
+    var cls = c.outcome==='Won'?'won':c.outcome==='Lost'?'lost':'';
+    html += '<tr class="'+cls+'"><td>'+escHtml(c.project)+'</td><td>'+escHtml(c.client||'')+'</td><td>'+(c.bidDate||'')+'</td><td>$'+(c.ourBid?fmtK(parseFloat(c.ourBid)):'—')+'</td><td>'+(c.outcome==='Won'?'Us':escHtml(c.winner||'—'))+'</td><td>$'+(c.winningBid?fmtK(parseFloat(c.winningBid)):'—')+'</td><td>'+escHtml(c.outcome||'')+'</td></tr>';
+  });
+  html += '</tbody></table>'+
+    '<h2 style="font-size:1.1rem;margin-top:24px;">🏢 Competitor Directory</h2>'+
+    '<table><thead><tr><th>Competitor</th><th>Appearances</th><th>Wins vs Us</th><th>Notes</th></tr></thead><tbody>';
+  data.competitors.forEach(function(comp){
+    var appeared = data.comparisons.filter(function(c){
+      if(c.winner && c.winner.toLowerCase()===comp.name.toLowerCase()) return true;
+      if(c.bidders && c.bidders.find(function(b){ return b.name.toLowerCase()===comp.name.toLowerCase(); })) return true;
+      return false;
+    }).length;
+    var wins = data.comparisons.filter(function(c){ return c.winner && c.winner.toLowerCase()===comp.name.toLowerCase(); }).length;
+    html += '<tr><td>'+escHtml(comp.name)+'</td><td>'+appeared+'</td><td>'+wins+'</td><td>'+escHtml(comp.notes||'')+'</td></tr>';
+  });
+  html += '</tbody></table>'+
+    '<p style="color:#999;font-size:0.8rem;margin-top:24px;">CONFIDENTIAL — INTERNAL USE ONLY</p>'+
+    '<button onclick="window.print()" style="margin-top:16px;padding:10px 24px;background:#dc2626;color:#fff;border:none;border-radius:6px;cursor:pointer;">🖨 Print</button>'+
+    '</body></html>';
+  var w = window.open('','_blank');
+  if(w){ w.document.write(html); w.document.close(); }
+}
+
+function escHtml(s){
+  if(!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showBCAModal(){
+  buildBCAModal();
+  var m = document.getElementById(BCA_ID);
+  if(m){ m.style.display='block'; bcaRender(); }
+}
+function closeBCAModal(){
+  var m = document.getElementById(BCA_ID);
+  if(m) m.style.display='none';
+}
+
+// Expose
+window.showBCAModal = showBCAModal;
+window.closeBCAModal = closeBCAModal;
+window.bcaSwitchTab = bcaSwitchTab;
+window.bcaShowForm = bcaShowForm;
+window.bcaSave = bcaSave;
+window.bcaDelete = bcaDelete;
+window.bcaAddCompetitor = bcaAddCompetitor;
+window.bcaEditCompetitor = bcaEditCompetitor;
+window.bcaDeleteCompetitor = bcaDeleteCompetitor;
+window.bcaPrint = bcaPrint;
+
+// Alt+2 keyboard shortcut
+document.addEventListener('keydown', function(e){
+  if(e.altKey && e.key==='2'){
+    e.preventDefault();
+    var m = document.getElementById(BCA_ID);
+    if(m && m.style.display!=='none') closeBCAModal();
+    else showBCAModal();
+  }
+});
+
+// Inject sidebar button after Estimate Templates
+document.addEventListener('DOMContentLoaded', function(){
+  setTimeout(function(){
+    var qetBtn = document.querySelector('button[onclick*="showQETModal"]');
+    if(!qetBtn) return;
+    var parentRow = qetBtn.closest('div');
+    if(!parentRow||!parentRow.parentNode) return;
+    var newRow = document.createElement('div');
+    newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+    newRow.innerHTML = '<button class="action-btn secondary" onclick="showBCAModal()" title="Bid Comparison & Competitor Analysis — track competitors, win/loss patterns, pricing intelligence (Alt+2)" style="background:rgba(220,38,38,0.08);border-color:rgba(220,38,38,0.3);color:#fca5a5;">🎯 Competitor Analysis</button>';
+    parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+  }, 6800);
+});
+
+})();
+// ==================== END BID COMPARISON & COMPETITOR ANALYSIS — Zeus ⚡ Session #89 ====================
 </script>
