@@ -160701,3 +160701,534 @@ document.addEventListener('DOMContentLoaded', function(){
 })();
 // ==================== END SUB BID LEVELING SHEET — Zeus ⚡ Session #82 ====================
 </script>
+
+<script>
+// ==================== CONCRETE TESTING SCHEDULE & BREAK REPORT — Zeus ⚡ Session #83 ====================
+(function(){
+'use strict';
+
+var CTS_ID = 'oncorCTSModal';
+var CTS_STORE_KEY = 'oncor_cts_v1';
+
+function getCTSProjectKey(){
+  var n = (typeof getCurrentProjectName === 'function') ? getCurrentProjectName() : '';
+  return CTS_STORE_KEY + (n ? '_' + n.replace(/[^a-z0-9]/gi,'_').toLowerCase() : '');
+}
+
+function loadCTSData(){
+  try { return JSON.parse(localStorage.getItem(getCTSProjectKey()) || '[]'); } catch(e){ return []; }
+}
+
+function saveCTSData(d){ localStorage.setItem(getCTSProjectKey(), JSON.stringify(d)); }
+
+var CTS_BREAK_AGES = [1,3,7,14,28,56,90]; // Days
+
+function ctsGenId(){ return 'cyl' + Date.now() + Math.floor(Math.random()*9000+1000); }
+
+function ctsFmtDate(d){
+  if(!d) return '—';
+  var dt = new Date(d);
+  return isNaN(dt.getTime()) ? d : dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+
+function ctsDaysDiff(from, to){
+  if(!from || !to) return null;
+  var a = new Date(from), b = new Date(to);
+  return Math.round((b - a) / (1000*60*60*24));
+}
+
+function ctsAddDays(d, n){
+  var dt = new Date(d);
+  dt.setDate(dt.getDate() + n);
+  return dt.toISOString().slice(0,10);
+}
+
+function ctsToday(){ return new Date().toISOString().slice(0,10); }
+
+// ── Build Modal ──────────────────────────────────────────────────────────────
+function buildCTSModal(){
+  if(document.getElementById(CTS_ID)) return;
+  var m = document.createElement('div');
+  m.id = CTS_ID;
+  m.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10400;overflow-y:auto;padding:20px;box-sizing:border-box;';
+  m.innerHTML = [
+    '<div style="max-width:1050px;margin:0 auto;background:#0f172a;border:1px solid rgba(34,197,94,0.3);border-radius:12px;padding:0;overflow:hidden;">',
+      // Header
+      '<div style="background:linear-gradient(135deg,rgba(34,197,94,0.15),rgba(20,184,166,0.12));padding:20px 24px;border-bottom:1px solid rgba(34,197,94,0.2);display:flex;align-items:center;gap:12px;">',
+        '<span style="font-size:24px;">🧫</span>',
+        '<div style="flex:1;">',
+          '<h2 style="color:#4ade80;margin:0;font-size:1.2rem;">Concrete Testing Schedule & Break Report</h2>',
+          '<p style="color:#64748b;margin:0;font-size:0.8rem;">Track cylinder sets • 7/28-day break schedules • ASTM C39 / C31 / ACI 318-19 compliance</p>',
+        '</div>',
+        '<button onclick="closeCTSModal()" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#f87171;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;">✕ Close</button>',
+      '</div>',
+      // Stats
+      '<div id="ctsStatsBar" style="display:flex;gap:12px;flex-wrap:wrap;padding:12px 24px;background:rgba(0,0,0,0.2);border-bottom:1px solid rgba(255,255,255,0.05);"></div>',
+      // Upcoming breaks alert
+      '<div id="ctsUpcomingAlert" style="display:none;padding:10px 24px;background:rgba(251,191,36,0.08);border-bottom:1px solid rgba(251,191,36,0.15);"></div>',
+      // Content
+      '<div style="padding:20px 24px;">',
+        // Add form
+        '<div style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:14px 18px;margin-bottom:18px;">',
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">',
+            '<span style="color:#4ade80;font-size:0.85rem;font-weight:600;">➕ LOG NEW CYLINDER SET</span>',
+          '</div>',
+          '<div id="ctsAddForm" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;"></div>',
+        '</div>',
+        // List
+        '<div id="ctsListContainer" style=""></div>',
+      '</div>',
+      // Footer
+      '<div style="padding:14px 24px;border-top:1px solid rgba(255,255,255,0.07);display:flex;gap:8px;flex-wrap:wrap;align-items:center;">',
+        '<button onclick="ctsPrintSchedule()" style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);color:#4ade80;padding:7px 14px;border-radius:6px;cursor:pointer;font-size:0.8rem;">🖨️ Print Break Schedule</button>',
+        '<button onclick="ctsPrintReport()" style="background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;padding:7px 14px;border-radius:6px;cursor:pointer;font-size:0.8rem;">📊 Print Full Report</button>',
+        '<span style="color:#475569;font-size:0.75rem;margin-left:auto;">Alt+U to toggle • ASTM C39 / C31 / ACI 318-19 §26.12</span>',
+      '</div>',
+    '</div>'
+  ].join('');
+  document.body.appendChild(m);
+}
+
+// ── Stats Bar ─────────────────────────────────────────────────────────────────
+function ctsRenderStats(){
+  var bar = document.getElementById('ctsStatsBar');
+  if(!bar) return;
+  var data = loadCTSData();
+  var today = ctsToday();
+  var total = data.length;
+  var pending = 0, pass = 0, fail = 0, upcoming = 0, overdue = 0;
+  data.forEach(function(c){
+    var hasFinal = c.breaks && c.breaks.some(function(b){ return b.age >= 28 && b.result; });
+    if(hasFinal){
+      var final = c.breaks.filter(function(b){ return b.age >= 28 && b.result; });
+      var passAny = final.some(function(b){ return b.result === 'Pass'; });
+      var failAny = final.some(function(b){ return b.result === 'Fail'; });
+      if(failAny) fail++; else if(passAny) pass++; else pending++;
+    } else {
+      pending++;
+    }
+    // Upcoming/overdue breaks
+    if(c.castDate && c.breaks){
+      c.breaks.forEach(function(b){
+        if(b.result) return;
+        var due = ctsAddDays(c.castDate, b.age);
+        var diff = ctsDaysDiff(today, due);
+        if(diff !== null){
+          if(diff < 0) overdue++;
+          else if(diff <= 7) upcoming++;
+        }
+      });
+    }
+  });
+  var stats = [
+    ['🧫 Cylinder Sets', total, '#4ade80'],
+    ['⏳ Pending Final', pending, '#fbbf24'],
+    ['✅ Pass (28d+)', pass, '#22d3ee'],
+    ['❌ Fail (28d+)', fail, '#f87171'],
+    ['📅 Upcoming ≤7d', upcoming, '#a5b4fc'],
+    ['⚠️ Overdue Breaks', overdue, overdue > 0 ? '#f87171' : '#64748b'],
+  ];
+  bar.innerHTML = stats.map(function(s){
+    return '<div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px 12px;min-width:95px;">' +
+      '<div style="color:'+s[2]+';font-size:1.1rem;font-weight:700;">'+s[1]+'</div>' +
+      '<div style="color:#64748b;font-size:0.7rem;">'+s[0]+'</div></div>';
+  }).join('');
+}
+
+// ── Upcoming Alert ────────────────────────────────────────────────────────────
+function ctsRenderUpcoming(){
+  var alert = document.getElementById('ctsUpcomingAlert');
+  if(!alert) return;
+  var data = loadCTSData();
+  var today = ctsToday();
+  var items = [];
+  data.forEach(function(c){
+    if(!c.castDate || !c.breaks) return;
+    c.breaks.forEach(function(b){
+      if(b.result) return;
+      var due = ctsAddDays(c.castDate, b.age);
+      var diff = ctsDaysDiff(today, due);
+      if(diff !== null && diff <= 7 && diff >= 0){
+        items.push({ setId: c.setId, age: b.age, due: due, diff: diff, pour: c.pourName });
+      }
+    });
+  });
+  if(!items.length){ alert.style.display = 'none'; return; }
+  alert.style.display = 'block';
+  items.sort(function(a,b){ return a.diff - b.diff; });
+  alert.innerHTML = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+    '<span style="color:#fbbf24;font-weight:600;font-size:0.85rem;">📅 BREAKS DUE SOON:</span>' +
+    items.slice(0,6).map(function(i){
+      return '<span style="background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.25);padding:3px 8px;border-radius:4px;font-size:0.78rem;color:#fbbf24;">'+i.setId+' ('+i.age+'d) — '+(i.diff===0?'TODAY':i.diff+'d')+'</span>';
+    }).join('') +
+    (items.length>6?'<span style="color:#64748b;font-size:0.75rem;">+'+(items.length-6)+' more</span>':'') +
+  '</div>';
+}
+
+// ── Add Form ──────────────────────────────────────────────────────────────────
+function ctsRenderForm(){
+  var form = document.getElementById('ctsAddForm');
+  if(!form) return;
+  form.innerHTML = [
+    '<div style="flex:1;min-width:100px;">',
+      '<label style="color:#64748b;font-size:0.72rem;display:block;margin-bottom:2px;">Set ID</label>',
+      '<input type="text" id="ctsSetId" placeholder="CYL-001" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(34,197,94,0.3);color:#4ade80;padding:5px 8px;border-radius:5px;font-size:0.85rem;">',
+    '</div>',
+    '<div style="flex:1;min-width:100px;">',
+      '<label style="color:#64748b;font-size:0.72rem;display:block;margin-bottom:2px;">Cast Date</label>',
+      '<input type="date" id="ctsCastDate" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;padding:5px 8px;border-radius:5px;font-size:0.85rem;">',
+    '</div>',
+    '<div style="flex:1;min-width:100px;">',
+      '<label style="color:#64748b;font-size:0.72rem;display:block;margin-bottom:2px;">Spec f\'c (PSI)</label>',
+      '<select id="ctsPSI" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;padding:5px;border-radius:5px;font-size:0.85rem;">',
+        ['2500','3000','3500','4000','4500','5000','6000','Other'].map(function(p){ return '<option value="'+p+'"'+(p==='4000'?' selected':'')+'>'+p+'</option>'; }).join(''),
+      '</select>',
+    '</div>',
+    '<div style="flex:1.5;min-width:140px;">',
+      '<label style="color:#64748b;font-size:0.72rem;display:block;margin-bottom:2px;">Pour / Area</label>',
+      '<input type="text" id="ctsPour" placeholder="Slab A / Footings" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;padding:5px 8px;border-radius:5px;font-size:0.85rem;">',
+    '</div>',
+    '<div style="flex:1;min-width:100px;">',
+      '<label style="color:#64748b;font-size:0.72rem;display:block;margin-bottom:2px;">Testing Lab</label>',
+      '<input type="text" id="ctsLab" placeholder="Terracon" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;padding:5px 8px;border-radius:5px;font-size:0.85rem;">',
+    '</div>',
+    '<div style="flex:1;min-width:80px;">',
+      '<label style="color:#64748b;font-size:0.72rem;display:block;margin-bottom:2px;">Cylinders</label>',
+      '<input type="number" id="ctsCylCount" value="4" min="1" max="12" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;padding:5px 8px;border-radius:5px;font-size:0.85rem;">',
+    '</div>',
+    '<div style="flex:1;min-width:120px;">',
+      '<label style="color:#64748b;font-size:0.72rem;display:block;margin-bottom:2px;">Break Schedule</label>',
+      '<select id="ctsBreakSched" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);color:#e2e8f0;padding:5px;border-radius:5px;font-size:0.8rem;">',
+        '<option value="7,28">7d + 28d (standard)</option>',
+        '<option value="7,14,28">7d + 14d + 28d</option>',
+        '<option value="3,7,28">3d + 7d + 28d</option>',
+        '<option value="1,7,28">1d + 7d + 28d</option>',
+        '<option value="7,28,56">7d + 28d + 56d</option>',
+        '<option value="28">28d only</option>',
+      '</select>',
+    '</div>',
+    '<div>',
+      '<button onclick="ctsAddSet()" style="background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3);color:#4ade80;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;margin-top:16px;">+ Add Set</button>',
+    '</div>',
+  ].join('');
+  // Set default cast date to today
+  var castInput = document.getElementById('ctsCastDate');
+  if(castInput && !castInput.value) castInput.value = ctsToday();
+}
+
+function ctsAddSet(){
+  var setId = document.getElementById('ctsSetId').value.trim() || 'CYL-' + (loadCTSData().length+1).toString().padStart(3,'0');
+  var castDate = document.getElementById('ctsCastDate').value;
+  var psi = document.getElementById('ctsPSI').value;
+  var pour = document.getElementById('ctsPour').value.trim();
+  var lab = document.getElementById('ctsLab').value.trim();
+  var cylCount = parseInt(document.getElementById('ctsCylCount').value)||4;
+  var schedStr = document.getElementById('ctsBreakSched').value;
+  if(!castDate){ alert('Cast date is required.'); return; }
+  var ages = schedStr.split(',').map(function(a){ return parseInt(a); });
+  var breaks = ages.map(function(age){
+    return { age: age, dueDate: ctsAddDays(castDate, age), psi: '', result: '', notes: '' };
+  });
+  var entry = {
+    id: ctsGenId(),
+    setId: setId,
+    castDate: castDate,
+    specPSI: psi,
+    pourName: pour,
+    lab: lab,
+    cylCount: cylCount,
+    breaks: breaks,
+    notes: ''
+  };
+  var data = loadCTSData();
+  data.push(entry);
+  saveCTSData(data);
+  // Reset form
+  document.getElementById('ctsSetId').value = '';
+  document.getElementById('ctsPour').value = '';
+  ctsRender();
+}
+
+// ── List ──────────────────────────────────────────────────────────────────────
+function ctsRenderList(){
+  var cont = document.getElementById('ctsListContainer');
+  if(!cont) return;
+  var data = loadCTSData();
+  if(!data.length){
+    cont.innerHTML = '<div style="color:#475569;text-align:center;padding:30px;font-size:0.85rem;">No cylinder sets logged yet. Add one above.</div>';
+    return;
+  }
+  // Sort by cast date descending
+  data.sort(function(a,b){ return (b.castDate||'').localeCompare(a.castDate||''); });
+  var today = ctsToday();
+  var html = data.map(function(c, idx){
+    var hasFinal = c.breaks && c.breaks.some(function(b){ return b.age >= 28 && b.result; });
+    var passFinal = c.breaks && c.breaks.some(function(b){ return b.age >= 28 && b.result === 'Pass'; });
+    var failFinal = c.breaks && c.breaks.some(function(b){ return b.age >= 28 && b.result === 'Fail'; });
+    var status = hasFinal ? (failFinal ? 'FAIL' : (passFinal ? 'PASS' : 'PENDING')) : 'PENDING';
+    var statusColor = status === 'PASS' ? '#4ade80' : status === 'FAIL' ? '#f87171' : '#fbbf24';
+    var breakRows = c.breaks ? c.breaks.map(function(b, bi){
+      var diff = ctsDaysDiff(today, b.dueDate);
+      var overdue = diff !== null && diff < 0 && !b.result;
+      var dueSoon = diff !== null && diff >= 0 && diff <= 3 && !b.result;
+      var badge = overdue ? '<span style="color:#f87171;font-size:0.7rem;margin-left:4px;">OVERDUE</span>' :
+                  dueSoon ? '<span style="color:#fbbf24;font-size:0.7rem;margin-left:4px;">'+diff+'d</span>' : '';
+      return '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">' +
+        '<td style="padding:5px 6px;color:#94a3b8;font-size:0.8rem;font-weight:600;">'+b.age+'-day</td>' +
+        '<td style="padding:5px 6px;color:#64748b;font-size:0.78rem;">'+ctsFmtDate(b.dueDate)+badge+'</td>' +
+        '<td style="padding:5px 6px;"><input type="number" value="'+(b.psi||'')+'" placeholder="—" onchange="ctsUpdateBreak(\''+c.id+'\','+bi+',\'psi\',this.value)" style="width:65px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;padding:2px 5px;border-radius:4px;font-size:0.8rem;text-align:right;"></td>' +
+        '<td style="padding:5px 6px;">' +
+          '<select onchange="ctsUpdateBreak(\''+c.id+'\','+bi+',\'result\',this.value)" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:'+(b.result==='Pass'?'#4ade80':b.result==='Fail'?'#f87171':'#94a3b8')+';padding:2px 4px;border-radius:4px;font-size:0.78rem;">' +
+            '<option value="">—</option><option value="Pass"'+(b.result==='Pass'?' selected':'')+'>✅ Pass</option><option value="Fail"'+(b.result==='Fail'?' selected':'')+'>❌ Fail</option>' +
+          '</select>' +
+        '</td>' +
+        '<td style="padding:5px 6px;"><input type="text" value="'+(b.notes||'')+'" placeholder="notes" onchange="ctsUpdateBreak(\''+c.id+'\','+bi+',\'notes\',this.value)" style="width:90px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);color:#64748b;padding:2px 5px;border-radius:4px;font-size:0.75rem;"></td>' +
+      '</tr>';
+    }).join('') : '';
+    return [
+      '<div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px 16px;margin-bottom:10px;">',
+        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">',
+          '<span style="font-family:monospace;background:rgba(34,197,94,0.12);color:#4ade80;padding:2px 8px;border-radius:4px;font-size:0.85rem;font-weight:700;">'+(c.setId||'CYL-?')+'</span>',
+          '<span style="color:#94a3b8;font-size:0.8rem;">Cast: <strong style="color:#e2e8f0;">'+ctsFmtDate(c.castDate)+'</strong></span>',
+          '<span style="background:rgba(99,102,241,0.1);color:#a5b4fc;padding:2px 6px;border-radius:3px;font-size:0.75rem;">'+(c.specPSI||'—')+' PSI</span>',
+          '<span style="background:rgba('+(statusColor==='#4ade80'?'34,197,94':statusColor==='#f87171'?'239,68,68':'251,191,36')+',0.12);color:'+statusColor+';padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:600;">'+status+'</span>',
+          '<span style="color:#64748b;font-size:0.78rem;margin-left:auto;">'+(c.pourName||'')+(c.lab?' • '+c.lab:'')+'</span>',
+          '<button onclick="ctsDeleteSet(\''+c.id+'\')" style="background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.2);color:#f87171;padding:2px 6px;border-radius:4px;cursor:pointer;font-size:0.7rem;">🗑</button>',
+        '</div>',
+        '<table style="width:100%;border-collapse:collapse;">',
+          '<thead><tr style="border-bottom:1px solid rgba(99,102,241,0.2);">',
+            '<th style="padding:4px 6px;text-align:left;color:#64748b;font-size:0.7rem;">BREAK</th>',
+            '<th style="padding:4px 6px;text-align:left;color:#64748b;font-size:0.7rem;">DUE</th>',
+            '<th style="padding:4px 6px;text-align:left;color:#64748b;font-size:0.7rem;">PSI</th>',
+            '<th style="padding:4px 6px;text-align:left;color:#64748b;font-size:0.7rem;">RESULT</th>',
+            '<th style="padding:4px 6px;text-align:left;color:#64748b;font-size:0.7rem;">NOTES</th>',
+          '</tr></thead>',
+          '<tbody>',breakRows,'</tbody>',
+        '</table>',
+      '</div>'
+    ].join('');
+  }).join('');
+  cont.innerHTML = html;
+}
+
+function ctsDeleteSet(id){
+  if(!confirm('Delete this cylinder set?')) return;
+  var data = loadCTSData().filter(function(c){ return c.id !== id; });
+  saveCTSData(data);
+  ctsRender();
+}
+
+function ctsUpdateBreak(setId, breakIdx, field, val){
+  var data = loadCTSData();
+  var c = data.find(function(x){ return x.id === setId; });
+  if(!c || !c.breaks || !c.breaks[breakIdx]) return;
+  c.breaks[breakIdx][field] = val;
+  saveCTSData(data);
+  ctsRender();
+}
+
+// ── Print ─────────────────────────────────────────────────────────────────────
+function ctsBuildScheduleHTML(){
+  var co = (typeof window.companyName !== 'undefined' ? window.companyName : '') ||
+           (document.getElementById('companyName')?document.getElementById('companyName').value:'') || 'Oncor';
+  var proj = (typeof getCurrentProjectName === 'function') ? getCurrentProjectName() : '';
+  var data = loadCTSData();
+  var today = ctsToday();
+  // Build upcoming breaks list
+  var upcoming = [];
+  data.forEach(function(c){
+    if(!c.breaks) return;
+    c.breaks.forEach(function(b){
+      if(b.result) return;
+      upcoming.push({ setId: c.setId, castDate: c.castDate, age: b.age, dueDate: b.dueDate, psi: c.specPSI, pour: c.pourName, lab: c.lab });
+    });
+  });
+  upcoming.sort(function(a,b){ return (a.dueDate||'').localeCompare(b.dueDate||''); });
+  var rows = upcoming.map(function(u, i){
+    var diff = ctsDaysDiff(today, u.dueDate);
+    var overdue = diff !== null && diff < 0;
+    return '<tr style="background:'+(overdue?'#fef2f2':i%2===1?'#f9fafb':'white')+';">' +
+      '<td style="border:1px solid #d1d5db;padding:5px 8px;">'+(u.setId||'—')+'</td>' +
+      '<td style="border:1px solid #d1d5db;padding:5px 8px;">'+ctsFmtDate(u.castDate)+'</td>' +
+      '<td style="border:1px solid #d1d5db;padding:5px 8px;text-align:center;font-weight:600;">'+u.age+'d</td>' +
+      '<td style="border:1px solid #d1d5db;padding:5px 8px;font-weight:700;color:'+(overdue?'#dc2626':'#111827')+';">'+ctsFmtDate(u.dueDate)+(overdue?' ⚠️':'')+'</td>' +
+      '<td style="border:1px solid #d1d5db;padding:5px 8px;text-align:right;">'+(u.psi||'—')+'</td>' +
+      '<td style="border:1px solid #d1d5db;padding:5px 8px;color:#4b5563;">'+(u.pour||'')+'</td>' +
+      '<td style="border:1px solid #d1d5db;padding:5px 8px;color:#6b7280;">'+(u.lab||'')+'</td>' +
+    '</tr>';
+  }).join('');
+  var todayFmt = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  return '<!DOCTYPE html><html><head><title>Concrete Break Schedule</title>' +
+    '<style>body{font-family:Arial,sans-serif;font-size:12px;color:#111827;margin:0;padding:20px;}' +
+    '@media print{body{margin:0;padding:12px;}}table{border-collapse:collapse;width:100%;}' +
+    '.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #166534;padding-bottom:12px;margin-bottom:16px;}' +
+    '.badge{display:inline-block;background:#166534;color:white;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;}' +
+    '</style></head><body>' +
+    '<div class="header"><div><h1 style="font-size:18px;color:#166534;">'+co+'</h1>' +
+    '<p style="color:#6b7280;font-size:11px;margin:2px 0;">CONCRETE CYLINDER BREAK SCHEDULE</p>' +
+    (proj?'<p style="margin:2px 0;font-size:11px;color:#4b5563;">Project: <strong>'+proj+'</strong></p>':'') +
+    '</div><div style="text-align:right;"><span class="badge">🧫 BREAK SCHEDULE</span>' +
+    '<br><p style="color:#6b7280;font-size:11px;margin:4px 0;">Report Date: '+todayFmt+'</p>' +
+    '<p style="color:#6b7280;font-size:11px;margin:2px 0;">'+upcoming.length+' Pending Break'+(upcoming.length!==1?'s':'')+'</p>' +
+    '</div></div>' +
+    (upcoming.length ? '<table><thead><tr style="background:#f3f4f6;">' +
+      '<th style="border:1px solid #d1d5db;padding:5px 8px;text-align:left;">Set ID</th>' +
+      '<th style="border:1px solid #d1d5db;padding:5px 8px;text-align:left;">Cast Date</th>' +
+      '<th style="border:1px solid #d1d5db;padding:5px 8px;text-align:center;">Age</th>' +
+      '<th style="border:1px solid #d1d5db;padding:5px 8px;text-align:left;">Break Due</th>' +
+      '<th style="border:1px solid #d1d5db;padding:5px 8px;text-align:right;">Spec f\'c</th>' +
+      '<th style="border:1px solid #d1d5db;padding:5px 8px;">Pour / Area</th>' +
+      '<th style="border:1px solid #d1d5db;padding:5px 8px;">Lab</th>' +
+    '</tr></thead><tbody>'+rows+'</tbody></table>' : '<p style="color:#6b7280;">No pending breaks.</p>') +
+    '<div style="margin-top:16px;padding:10px;background:#fefce8;border:1px solid #fef08a;border-radius:6px;font-size:10px;color:#854d0e;">' +
+    '📋 Cylinder breaks per ASTM C39 (compressive strength) and ASTM C31 (making & curing). Acceptance criteria per ACI 318-19 §26.12.3: average of any 3 consecutive tests ≥ f\'c, and no individual test < f\'c − 500 psi. Notify testing lab 24-48 hours before break date.' +
+    '</div>' +
+    '<div style="margin-top:16px;padding-top:10px;border-top:1px solid #d1d5db;text-align:right;"><p style="font-size:9px;color:#9ca3af;">CONFIDENTIAL — INTERNAL USE ONLY</p></div>' +
+    '</body></html>';
+}
+
+function ctsBuildReportHTML(){
+  var co = (typeof window.companyName !== 'undefined' ? window.companyName : '') ||
+           (document.getElementById('companyName')?document.getElementById('companyName').value:'') || 'Oncor';
+  var proj = (typeof getCurrentProjectName === 'function') ? getCurrentProjectName() : '';
+  var data = loadCTSData();
+  data.sort(function(a,b){ return (a.castDate||'').localeCompare(b.castDate||''); });
+  var rows = data.map(function(c, i){
+    var breakCells = c.breaks ? c.breaks.map(function(b){
+      var color = b.result === 'Pass' ? '#166534' : b.result === 'Fail' ? '#dc2626' : '#6b7280';
+      return '<span style="display:inline-block;margin:1px 3px;padding:2px 5px;background:'+(b.result==='Pass'?'#f0fdf4':b.result==='Fail'?'#fef2f2':'#f9fafb')+';border:1px solid '+(b.result==='Pass'?'#86efac':b.result==='Fail'?'#fca5a5':'#d1d5db')+';border-radius:3px;font-size:10px;color:'+color+';font-weight:600;">'+b.age+'d: '+(b.psi||'—')+' psi '+(b.result==='Pass'?'✅':b.result==='Fail'?'❌':'⏳')+'</span>';
+    }).join('') : '—';
+    var hasFinal = c.breaks && c.breaks.some(function(b){ return b.age >= 28 && b.result; });
+    var passFinal = c.breaks && c.breaks.some(function(b){ return b.age >= 28 && b.result === 'Pass'; });
+    var failFinal = c.breaks && c.breaks.some(function(b){ return b.age >= 28 && b.result === 'Fail'; });
+    var status = hasFinal ? (failFinal ? '❌ FAIL' : (passFinal ? '✅ PASS' : '⏳')) : '⏳';
+    return '<tr style="background:'+(i%2===1?'#f9fafb':'white')+';">' +
+      '<td style="border:1px solid #d1d5db;padding:5px 8px;font-family:monospace;font-weight:600;">'+(c.setId||'—')+'</td>' +
+      '<td style="border:1px solid #d1d5db;padding:5px 8px;">'+ctsFmtDate(c.castDate)+'</td>' +
+      '<td style="border:1px solid #d1d5db;padding:5px 8px;text-align:right;">'+(c.specPSI||'—')+'</td>' +
+      '<td style="border:1px solid #d1d5db;padding:5px 8px;color:#4b5563;">'+(c.pourName||'')+'</td>' +
+      '<td style="border:1px solid #d1d5db;padding:5px 8px;color:#6b7280;">'+(c.lab||'')+'</td>' +
+      '<td style="border:1px solid #d1d5db;padding:5px 8px;">'+breakCells+'</td>' +
+      '<td style="border:1px solid #d1d5db;padding:5px 8px;text-align:center;font-weight:600;">'+status+'</td>' +
+    '</tr>';
+  }).join('');
+  var todayFmt = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  var total = data.length;
+  var pass = data.filter(function(c){ return c.breaks && c.breaks.some(function(b){ return b.age>=28 && b.result==='Pass'; }); }).length;
+  var fail = data.filter(function(c){ return c.breaks && c.breaks.some(function(b){ return b.age>=28 && b.result==='Fail'; }); }).length;
+  return '<!DOCTYPE html><html><head><title>Concrete Testing Report</title>' +
+    '<style>body{font-family:Arial,sans-serif;font-size:12px;color:#111827;margin:0;padding:20px;}' +
+    '@media print{body{margin:0;padding:12px;}}table{border-collapse:collapse;width:100%;}' +
+    '.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #166534;padding-bottom:12px;margin-bottom:16px;}' +
+    '.badge{display:inline-block;background:#166534;color:white;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;}' +
+    '.stat{display:inline-block;background:#f3f4f6;border-radius:6px;padding:8px 14px;margin:4px;text-align:center;}' +
+    '.stat-val{font-size:18px;font-weight:700;}.stat-lbl{font-size:10px;color:#6b7280;}' +
+    '</style></head><body>' +
+    '<div class="header"><div><h1 style="font-size:18px;color:#166534;">'+co+'</h1>' +
+    '<p style="color:#6b7280;font-size:11px;margin:2px 0;">CONCRETE TESTING & BREAK REPORT</p>' +
+    (proj?'<p style="margin:2px 0;font-size:11px;color:#4b5563;">Project: <strong>'+proj+'</strong></p>':'') +
+    '</div><div style="text-align:right;"><span class="badge">📊 TESTING REPORT</span>' +
+    '<br><p style="color:#6b7280;font-size:11px;margin:4px 0;">Report Date: '+todayFmt+'</p>' +
+    '</div></div>' +
+    '<div style="margin-bottom:16px;">' +
+    '<div class="stat"><div class="stat-val">'+total+'</div><div class="stat-lbl">Cylinder Sets</div></div>' +
+    '<div class="stat" style="color:#166534;"><div class="stat-val">'+pass+'</div><div class="stat-lbl">Pass (28d+)</div></div>' +
+    '<div class="stat" style="color:#dc2626;"><div class="stat-val">'+fail+'</div><div class="stat-lbl">Fail (28d+)</div></div>' +
+    '<div class="stat"><div class="stat-val">'+(total-pass-fail)+'</div><div class="stat-lbl">Pending</div></div>' +
+    '</div>' +
+    (data.length ? '<table><thead><tr style="background:#f3f4f6;">' +
+      '<th style="border:1px solid #d1d5db;padding:5px 8px;text-align:left;">Set ID</th>' +
+      '<th style="border:1px solid #d1d5db;padding:5px 8px;text-align:left;">Cast</th>' +
+      '<th style="border:1px solid #d1d5db;padding:5px 8px;text-align:right;">Spec f\'c</th>' +
+      '<th style="border:1px solid #d1d5db;padding:5px 8px;">Pour / Area</th>' +
+      '<th style="border:1px solid #d1d5db;padding:5px 8px;">Lab</th>' +
+      '<th style="border:1px solid #d1d5db;padding:5px 8px;">Breaks</th>' +
+      '<th style="border:1px solid #d1d5db;padding:5px 8px;text-align:center;">Status</th>' +
+    '</tr></thead><tbody>'+rows+'</tbody></table>' : '<p style="color:#6b7280;">No cylinder sets logged.</p>') +
+    '<div style="margin-top:16px;padding:10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;font-size:10px;color:#1e40af;">' +
+    '📋 <strong>ACI 318-19 §26.12.3 Acceptance:</strong> Strength level is satisfactory if (1) average of any 3 consecutive tests ≥ f\'c, AND (2) no individual test result < f\'c − 500 psi. Cylinders tested per ASTM C39 at specified ages. Cylinders made and cured per ASTM C31.' +
+    '</div>' +
+    '<div style="margin-top:16px;padding-top:10px;border-top:1px solid #d1d5db;display:flex;gap:40px;">' +
+    '<div><p style="font-size:10px;color:#6b7280;margin:0 0 4px;">Reviewed By (QC Manager)</p><div style="border-bottom:1px solid #9ca3af;width:180px;margin-top:18px;"></div></div>' +
+    '<div><p style="font-size:10px;color:#6b7280;margin:0 0 4px;">Approved By (Project Engineer)</p><div style="border-bottom:1px solid #9ca3af;width:180px;margin-top:18px;"></div></div>' +
+    '<div style="margin-left:auto;text-align:right;"><p style="font-size:9px;color:#9ca3af;font-style:italic;">CONFIDENTIAL — INTERNAL USE ONLY</p></div>' +
+    '</div>' +
+    '</body></html>';
+}
+
+function ctsPrintSchedule(){
+  var w = window.open('','_blank');
+  w.document.write(ctsBuildScheduleHTML());
+  w.document.close(); w.focus(); setTimeout(function(){ w.print(); }, 400);
+}
+
+function ctsPrintReport(){
+  var w = window.open('','_blank');
+  w.document.write(ctsBuildReportHTML());
+  w.document.close(); w.focus(); setTimeout(function(){ w.print(); }, 400);
+}
+
+// ── Render All ────────────────────────────────────────────────────────────────
+function ctsRender(){
+  ctsRenderStats();
+  ctsRenderUpcoming();
+  ctsRenderForm();
+  ctsRenderList();
+}
+
+function showCTSModal(){
+  buildCTSModal();
+  var m = document.getElementById(CTS_ID);
+  if(!m) return;
+  m.style.display = 'block';
+  ctsRender();
+}
+
+function closeCTSModal(){
+  var m = document.getElementById(CTS_ID);
+  if(m) m.style.display = 'none';
+}
+
+window.showCTSModal = showCTSModal;
+window.closeCTSModal = closeCTSModal;
+window.ctsAddSet = ctsAddSet;
+window.ctsDeleteSet = ctsDeleteSet;
+window.ctsUpdateBreak = ctsUpdateBreak;
+window.ctsPrintSchedule = ctsPrintSchedule;
+window.ctsPrintReport = ctsPrintReport;
+
+// Stats hook for Project Status Card
+window._getCTSStats = function(){
+  var data = loadCTSData();
+  var pass = data.filter(function(c){ return c.breaks && c.breaks.some(function(b){ return b.age>=28 && b.result==='Pass'; }); }).length;
+  var fail = data.filter(function(c){ return c.breaks && c.breaks.some(function(b){ return b.age>=28 && b.result==='Fail'; }); }).length;
+  return { total: data.length, pass: pass, fail: fail, pending: data.length - pass - fail };
+};
+
+// Alt+U keyboard shortcut
+document.addEventListener('keydown', function(e){
+  if(e.altKey && e.key.toLowerCase()==='u'){
+    e.preventDefault();
+    var m = document.getElementById(CTS_ID);
+    if(m && m.style.display!=='none') closeCTSModal();
+    else showCTSModal();
+  }
+});
+
+// Inject sidebar button after Sub Bid Leveling
+document.addEventListener('DOMContentLoaded', function(){
+  setTimeout(function(){
+    var sblBtn = document.querySelector('button[onclick*="showSBLModal"]');
+    if(!sblBtn) return;
+    var parentRow = sblBtn.closest('div');
+    if(!parentRow||!parentRow.parentNode) return;
+    var newRow = document.createElement('div');
+    newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+    newRow.innerHTML = '<button class="action-btn secondary" onclick="showCTSModal()" title="Concrete Testing Schedule & Break Report — track cylinder sets, 7/28-day break schedules, ASTM C39/C31 compliance (Alt+U)" style="background:rgba(34,197,94,0.1);border-color:rgba(34,197,94,0.3);color:#4ade80;">🧫 Testing Schedule</button>';
+    parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+  }, 5700);
+});
+
+})();
+// ==================== END CONCRETE TESTING SCHEDULE — Zeus ⚡ Session #83 ====================
+</script>
