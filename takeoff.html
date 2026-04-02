@@ -170419,4 +170419,796 @@ document.addEventListener('keydown', function(e) {
 
 })();
 // ==================== END SESSION #96 — Zeus ⚡ Project Scorecard (Ctrl+Alt+M) + Daily Brief Generator (Ctrl+Alt+N) + Subcontract Review Checklist (Ctrl+Alt+O) ====================
+
+// ==================== SESSION #97 — Zeus ⚡ Crew Cert Tracker (Ctrl+Alt+P) + Soil & Compaction Log (Ctrl+Alt+Q) + Weekly Progress Report (Ctrl+Alt+R) ====================
+(function() {
+'use strict';
+
+// ==================== 👷 CREW CERTIFICATION TRACKER (Ctrl+Alt+P) ====================
+var CCT_KEY_PREFIX = 'oncor_crew_certs_v1_';
+function getCCTKey() {
+  var proj = (typeof currentProjectName !== 'undefined' && currentProjectName) ? currentProjectName : 'default';
+  return CCT_KEY_PREFIX + proj;
+}
+function getCCTData() {
+  try { return JSON.parse(localStorage.getItem(getCCTKey()) || '[]'); } catch(e) { return []; }
+}
+function saveCCTData(data) { localStorage.setItem(getCCTKey(), JSON.stringify(data)); }
+
+var CCT_CERT_TYPES = [
+  'ACI Field Testing Technician — Grade I',
+  'ACI Concrete Flatwork Finisher',
+  'ACI Concrete Construction Inspector',
+  'OSHA 10-Hour Construction',
+  'OSHA 30-Hour Construction',
+  'First Aid / CPR (Red Cross)',
+  'Flagger / Traffic Control',
+  'Forklift Operator',
+  'Aerial Work Platform (AWP)',
+  'Boom Lift / Scissor Lift',
+  'Crane Signal Person (ASME B30.5)',
+  'Rigger (ASME B30.26)',
+  'Confined Space Entry',
+  'Hazcom / GHS (SDS)',
+  'Silica Dust (OSHA 1926.1153)',
+  'Fall Protection (OSHA 1926.503)',
+  'Excavation Competent Person',
+  'Concrete Pump Operator (ACPA)',
+  'TX Driver License (CDL A)',
+  'TX Driver License (CDL B)',
+  'Other'
+];
+
+var CCT_TRADE_TYPES = [
+  'Foreman','Concrete Finisher','Laborer','Pump Operator','Saw Cutter',
+  'Rebar Placer','Form Setter','Equipment Operator','Ironworker','Carpenter','Helper','Other'
+];
+
+function openCCTModal() {
+  var existing = document.getElementById('oncor-cct-modal');
+  if (existing) { existing.remove(); return; }
+  var data = getCCTData();
+
+  // Stats
+  var today = new Date(); today.setHours(0,0,0,0);
+  var allCerts = [];
+  data.forEach(function(worker) { (worker.certs||[]).forEach(function(c) { allCerts.push({worker:worker.name, cert:c}); }); });
+  var totalWorkers = data.length;
+  var totalCerts = allCerts.length;
+  var expiredCerts = allCerts.filter(function(c){ if(!c.cert.expiry) return false; var d=new Date(c.cert.expiry); return d < today; }).length;
+  var expiringSoon = allCerts.filter(function(c){ if(!c.cert.expiry) return false; var d=new Date(c.cert.expiry); var diff=Math.ceil((d-today)/(1000*86400)); return diff>=0&&diff<=60; }).length;
+  var noExpiry = allCerts.filter(function(c){ return !c.cert.expiry; }).length;
+
+  var statsHtml = '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;">' +
+    '<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#38bdf8;">'+totalWorkers+'</div><div style="font-size:11px;color:#94a3b8;">Workers</div></div>' +
+    '<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#a78bfa;">'+totalCerts+'</div><div style="font-size:11px;color:#94a3b8;">Total Certs</div></div>' +
+    '<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:'+(expiredCerts>0?'#f87171':'#4ade80')+';">'+expiredCerts+'</div><div style="font-size:11px;color:#94a3b8;">Expired 🚫</div></div>' +
+    '<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:'+(expiringSoon>0?'#fbbf24':'#4ade80')+';">'+expiringSoon+'</div><div style="font-size:11px;color:#94a3b8;">Exp ≤60d ⚠️</div></div>' +
+    '<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#94a3b8;">'+noExpiry+'</div><div style="font-size:11px;color:#94a3b8;">No Expiry</div></div>' +
+  '</div>';
+
+  // Worker list
+  var workersHtml = data.length === 0 ? '<div style="text-align:center;color:#64748b;padding:30px;">No workers logged yet. Add a worker below.</div>' :
+    data.map(function(worker, wi) {
+      var certsHtml = (worker.certs||[]).length === 0 ? '<div style="color:#64748b;font-size:12px;margin-top:6px;">No certifications logged.</div>' :
+        (worker.certs||[]).map(function(cert, ci) {
+          var expStatus = '';
+          var expColor = '#94a3b8';
+          if (cert.expiry) {
+            var d = new Date(cert.expiry); d.setHours(0,0,0,0);
+            var diff = Math.ceil((d - today) / (1000*86400));
+            if (diff < 0) { expStatus = ' <span style="background:#7f1d1d;color:#fca5a5;font-size:10px;padding:2px 6px;border-radius:4px;">EXPIRED '+Math.abs(diff)+'d ago</span>'; expColor='#f87171'; }
+            else if (diff <= 60) { expStatus = ' <span style="background:#78350f;color:#fcd34d;font-size:10px;padding:2px 6px;border-radius:4px;">Exp in '+diff+'d</span>'; expColor='#fbbf24'; }
+            else { expStatus = ' <span style="background:#14532d;color:#86efac;font-size:10px;padding:2px 6px;border-radius:4px;">OK</span>'; expColor='#4ade80'; }
+          }
+          return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #1e293b;">' +
+            '<div style="flex:1;font-size:12px;color:#e2e8f0;">'+cert.type+'</div>' +
+            '<div style="font-size:11px;color:#94a3b8;">'+(cert.certNum||'')+'</div>' +
+            '<div style="font-size:11px;color:'+expColor+';">'+(cert.expiry||'No expiry')+expStatus+'</div>' +
+            '<button onclick="deleteCCTCert('+wi+','+ci+')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:12px;padding:2px 6px;">🗑</button>' +
+          '</div>';
+        }).join('');
+      return '<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:10px;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
+          '<div><span style="font-weight:600;color:#e2e8f0;">'+worker.name+'</span>' +
+          ' <span style="background:#0f172a;color:#60a5fa;font-size:11px;padding:2px 8px;border-radius:4px;margin-left:8px;">'+worker.trade+'</span>' +
+          (worker.phone ? '<span style="color:#64748b;font-size:11px;margin-left:8px;">📞 '+worker.phone+'</span>' : '') +
+          (worker.certNeeds ? '<span style="color:#94a3b8;font-size:11px;margin-left:8px;">'+worker.certNeeds+'</span>' : '') +
+          '</div>' +
+          '<button onclick="deleteCCTWorker('+wi+')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:12px;">🗑 Remove</button>' +
+        '</div>' +
+        certsHtml +
+        '<button onclick="showAddCCTCertForm('+wi+')" style="margin-top:8px;background:rgba(37,99,235,0.15);color:#60a5fa;border:1px solid rgba(37,99,235,0.3);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;">+ Add Cert</button>' +
+      '</div>';
+    }).join('');
+
+  var modal = document.createElement('div');
+  modal.id = 'oncor-cct-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10010;display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;width:100%;max-width:800px;max-height:90vh;overflow-y:auto;padding:24px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
+      '<h2 style="color:#e2e8f0;margin:0;font-size:18px;">👷 Crew Certification Tracker</h2>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button onclick="printCCTReport()" style="background:#1e40af;color:#fff;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨️ Print Report</button>' +
+        '<button onclick="document.getElementById(\'oncor-cct-modal\').remove()" style="background:#334155;color:#94a3b8;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">✕ Close</button>' +
+      '</div>' +
+    '</div>' +
+    statsHtml +
+    '<div id="cct-worker-list">'+workersHtml+'</div>' +
+    '<div id="cct-cert-form-container"></div>' +
+    '<div style="background:#1e293b;border-radius:8px;padding:14px;margin-top:12px;">' +
+      '<div style="font-weight:600;color:#e2e8f0;margin-bottom:10px;font-size:13px;">➕ Add New Worker</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Worker Name *</label><input id="cct-new-name" placeholder="e.g. John Martinez" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Trade</label><select id="cct-new-trade" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;">' +
+          CCT_TRADE_TYPES.map(function(t){return '<option>'+t+'</option>';}).join('') +
+        '</select></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Phone</label><input id="cct-new-phone" placeholder="(915) 555-1234" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Required Certs Note</label><input id="cct-new-needs" placeholder="e.g. Needs ACI Grade I" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+      '</div>' +
+      '<button onclick="addCCTWorker()" style="margin-top:10px;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:13px;">+ Add Worker</button>' +
+    '</div>' +
+  '</div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e){ if(e.target===modal) modal.remove(); });
+}
+
+window.addCCTWorker = function() {
+  var name = (document.getElementById('cct-new-name')||{}).value||'';
+  if (!name.trim()) { alert('Worker name required'); return; }
+  var data = getCCTData();
+  data.push({
+    name: name.trim(),
+    trade: (document.getElementById('cct-new-trade')||{}).value||'Laborer',
+    phone: (document.getElementById('cct-new-phone')||{}).value||'',
+    certNeeds: (document.getElementById('cct-new-needs')||{}).value||'',
+    certs: []
+  });
+  saveCCTData(data);
+  document.getElementById('oncor-cct-modal').remove();
+  openCCTModal();
+};
+
+window.deleteCCTWorker = function(wi) {
+  if (!confirm('Remove this worker and all their certifications?')) return;
+  var data = getCCTData();
+  data.splice(wi, 1);
+  saveCCTData(data);
+  document.getElementById('oncor-cct-modal').remove();
+  openCCTModal();
+};
+
+window.showAddCCTCertForm = function(wi) {
+  var container = document.getElementById('cct-cert-form-container');
+  if (!container) return;
+  container.innerHTML = '<div style="background:#1e3a5f;border:1px solid #2563eb;border-radius:8px;padding:14px;margin:10px 0;">' +
+    '<div style="font-weight:600;color:#93c5fd;margin-bottom:10px;font-size:13px;">Add Certification for Worker #'+(wi+1)+'</div>' +
+    '<div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;">' +
+      '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Certification Type *</label><select id="cct-cert-type" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;">' +
+        CCT_CERT_TYPES.map(function(t){return '<option>'+t+'</option>';}).join('') +
+      '</select></div>' +
+      '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Certificate #</label><input id="cct-cert-num" placeholder="e.g. ACI-123456" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+      '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Expiry Date</label><input type="date" id="cct-cert-expiry" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">' +
+      '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Issued Date</label><input type="date" id="cct-cert-issued" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+      '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Issuing Body</label><input id="cct-cert-issuer" placeholder="e.g. ACI, OSHA, Red Cross" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+    '</div>' +
+    '<div style="margin-top:8px;display:flex;gap:8px;">' +
+      '<button onclick="saveCCTCert('+wi+')" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:7px 16px;cursor:pointer;font-size:12px;">✓ Save Cert</button>' +
+      '<button onclick="document.getElementById(\'cct-cert-form-container\').innerHTML=\'\'" style="background:#334155;color:#94a3b8;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">Cancel</button>' +
+    '</div>' +
+  '</div>';
+};
+
+window.saveCCTCert = function(wi) {
+  var certType = (document.getElementById('cct-cert-type')||{}).value||'';
+  if (!certType) { alert('Certification type required'); return; }
+  var data = getCCTData();
+  if (!data[wi]) return;
+  data[wi].certs = data[wi].certs || [];
+  data[wi].certs.push({
+    type: certType,
+    certNum: (document.getElementById('cct-cert-num')||{}).value||'',
+    expiry: (document.getElementById('cct-cert-expiry')||{}).value||'',
+    issued: (document.getElementById('cct-cert-issued')||{}).value||'',
+    issuer: (document.getElementById('cct-cert-issuer')||{}).value||''
+  });
+  saveCCTData(data);
+  document.getElementById('oncor-cct-modal').remove();
+  openCCTModal();
+};
+
+window.deleteCCTCert = function(wi, ci) {
+  if (!confirm('Remove this certification?')) return;
+  var data = getCCTData();
+  if (data[wi] && data[wi].certs) { data[wi].certs.splice(ci, 1); }
+  saveCCTData(data);
+  document.getElementById('oncor-cct-modal').remove();
+  openCCTModal();
+};
+
+window.printCCTReport = function() {
+  var data = getCCTData();
+  var today = new Date(); today.setHours(0,0,0,0);
+  var co = (typeof getCompanyInfo === 'function') ? getCompanyInfo() : {};
+  var proj = (typeof currentProjectName !== 'undefined' && currentProjectName) ? currentProjectName : 'Current Project';
+  var allCerts = [];
+  data.forEach(function(w){ (w.certs||[]).forEach(function(c){ allCerts.push({worker:w.name,cert:c}); }); });
+  var expired = allCerts.filter(function(c){ if(!c.cert.expiry) return false; var d=new Date(c.cert.expiry); return d<today; }).length;
+  var expiring = allCerts.filter(function(c){ if(!c.cert.expiry) return false; var d=new Date(c.cert.expiry); var diff=Math.ceil((d-today)/(1000*86400)); return diff>=0&&diff<=60; }).length;
+
+  var rows = data.map(function(worker) {
+    if (!worker.certs || worker.certs.length === 0) {
+      return '<tr><td style="padding:6px 8px;">'+worker.name+'</td><td>'+worker.trade+'</td><td colspan="4" style="color:#94a3b8;font-style:italic;">No certifications logged</td></tr>';
+    }
+    return worker.certs.map(function(cert, ci) {
+      var expStatus = 'No expiry'; var expColor = '#555';
+      if (cert.expiry) {
+        var d = new Date(cert.expiry); d.setHours(0,0,0,0);
+        var diff = Math.ceil((d - today) / (1000*86400));
+        if (diff < 0) { expStatus = 'EXPIRED '+Math.abs(diff)+'d ago'; expColor='#dc2626'; }
+        else if (diff <= 60) { expStatus = 'Exp in '+diff+'d'; expColor='#d97706'; }
+        else { expStatus = cert.expiry + ' ✓'; expColor='#16a34a'; }
+      }
+      return '<tr style="border-bottom:1px solid #e2e8f0;">' +
+        (ci===0 ? '<td style="padding:6px 8px;vertical-align:top;font-weight:600;" rowspan="'+worker.certs.length+'">'+worker.name+'</td><td style="padding:6px 8px;vertical-align:top;" rowspan="'+worker.certs.length+'">'+worker.trade+'</td>' : '') +
+        '<td style="padding:6px 8px;">'+cert.type+'</td>' +
+        '<td style="padding:6px 8px;">'+( cert.certNum||'—')+'</td>' +
+        '<td style="padding:6px 8px;">'+(cert.issued||'—')+'</td>' +
+        '<td style="padding:6px 8px;color:'+expColor+';font-weight:600;">'+expStatus+'</td>' +
+      '</tr>';
+    }).join('');
+  }).join('');
+
+  var html = '<html><head><title>Crew Certification Report</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:0.6in;}h1{font-size:16pt;margin-bottom:4px;}.header{display:flex;justify-content:space-between;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #1e40af;}table{width:100%;border-collapse:collapse;}th{background:#1e293b;color:#fff;padding:6px 8px;font-size:9pt;text-align:left;}.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px;}.stat{background:#f1f5f9;border-radius:6px;padding:8px;text-align:center;}.stat-val{font-size:18pt;font-weight:700;}.stat-lbl{font-size:8pt;color:#555;}</style></head><body>' +
+    '<div class="header"><div><h1>👷 Crew Certification Tracker</h1><div>'+(co.name||'Oncor Construction')+'</div><div>Project: '+proj+'</div></div><div style="text-align:right;font-size:10pt;color:#555;">Generated: '+new Date().toLocaleDateString()+'</div></div>' +
+    '<div class="stats"><div class="stat"><div class="stat-val" style="color:#1e40af;">'+data.length+'</div><div class="stat-lbl">Workers</div></div><div class="stat"><div class="stat-val" style="color:#6d28d9;">'+allCerts.length+'</div><div class="stat-lbl">Total Certs</div></div><div class="stat"><div class="stat-val" style="color:'+(expired>0?'#dc2626':'#16a34a')+';">'+expired+'</div><div class="stat-lbl">Expired 🚫</div></div><div class="stat"><div class="stat-val" style="color:'+(expiring>0?'#d97706':'#16a34a')+';">'+expiring+'</div><div class="stat-lbl">Expiring ≤60d</div></div><div class="stat"><div class="stat-val">'+data.length+'</div><div class="stat-lbl">Crew Members</div></div></div>' +
+    '<table><thead><tr><th>Worker</th><th>Trade</th><th>Certification</th><th>Cert #</th><th>Date Issued</th><th>Expiry / Status</th></tr></thead><tbody>'+rows+'</tbody></table>' +
+    (expired > 0 ? '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:4px;padding:8px 12px;margin-top:12px;"><strong>⚠️ '+expired+' certification(s) EXPIRED — workers may not perform certified tasks until renewed.</strong></div>' : '') +
+    '<div style="margin-top:20px;font-size:8pt;color:#555;">ACI certifications: www.concrete.org/certification | OSHA training: outreach.iacet.org | TX workers must maintain current certs per OSHA 29 CFR 1926 and applicable ACI standards.</div>' +
+    '<div style="margin-top:10px;font-size:8pt;color:#888;text-align:center;border-top:1px solid #ccc;padding-top:6px;">CONFIDENTIAL — INTERNAL USE ONLY | Oncor Takeoff Tool | '+new Date().toLocaleDateString()+'</div>' +
+    '<script>window.onload=function(){window.print();};<\/script></body></html>';
+  var w = window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+window._getCCTStats = function() {
+  var data = getCCTData();
+  var today = new Date(); today.setHours(0,0,0,0);
+  var allCerts = [];
+  data.forEach(function(w){ (w.certs||[]).forEach(function(c){ allCerts.push(c); }); });
+  var expired = allCerts.filter(function(c){ if(!c.expiry) return false; return new Date(c.expiry)<today; }).length;
+  var expiring = allCerts.filter(function(c){ if(!c.expiry) return false; var d=new Date(c.expiry); var diff=Math.ceil((d-today)/(1000*86400)); return diff>=0&&diff<=60; }).length;
+  return { workers: data.length, totalCerts: allCerts.length, expired: expired, expiringSoon: expiring };
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn = document.createElement('button');
+    btn.id = 'oncor-cct-btn';
+    btn.textContent = '👷 Crew Certifications';
+    btn.title = 'Crew Certification Tracker (Ctrl+Alt+P)';
+    btn.onclick = openCCTModal;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(37,99,235,0.12);color:#93c5fd;border:1px solid rgba(37,99,235,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(37,99,235,0.25)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(37,99,235,0.12)'; };
+    var srcBtn = document.getElementById('oncor-src-btn');
+    if (srcBtn && srcBtn.parentNode) {
+      srcBtn.parentNode.insertBefore(btn, srcBtn.nextSibling);
+    } else {
+      btn.style.cssText += 'position:fixed;bottom:350px;right:20px;z-index:9000;width:auto;';
+      document.body.appendChild(btn);
+    }
+  }, 13000);
+});
+// ==================== END CREW CERTIFICATION TRACKER ====================
+
+// ==================== 🔬 SOIL & COMPACTION TEST LOG (Ctrl+Alt+Q) ====================
+var SCL_KEY_PREFIX = 'oncor_soil_compaction_v1_';
+function getSCLKey() {
+  var proj = (typeof currentProjectName !== 'undefined' && currentProjectName) ? currentProjectName : 'default';
+  return SCL_KEY_PREFIX + proj;
+}
+function getSCLData() {
+  try { return JSON.parse(localStorage.getItem(getSCLKey()) || '{}'); } catch(e) { return {}; }
+}
+function saveSCLData(data) { localStorage.setItem(getSCLKey(), JSON.stringify(data)); }
+
+var SCL_MATERIAL_TYPES = [
+  'Flex Base (Caliche) — TxDOT Item 247',
+  'Crushed Limestone Base',
+  'Select Fill — Type A/B',
+  'Engineered Fill',
+  'Native Soil (On-Site)',
+  'Sand Subbase',
+  'Stabilized Subgrade (Lime)',
+  'Stabilized Subgrade (Cement)',
+  'Recycled Base (HMAC Millings)',
+  'Granular Backfill',
+  'Other'
+];
+
+var SCL_TEST_METHODS = [
+  'Nuclear Gauge (ASTM D6938)',
+  'Sand Cone (ASTM D1556)',
+  'Rubber Balloon (ASTM D2167)',
+  'Drive Cylinder (ASTM D2937)',
+  'Clegg Impact (ASTM)',
+  'DCP (Dynamic Cone Penetrometer)',
+  'Other'
+];
+
+function openSCLModal() {
+  var existing = document.getElementById('oncor-scl-modal');
+  if (existing) { existing.remove(); return; }
+  var data = getSCLData();
+  var tests = data.tests || [];
+  var proctor = data.proctor || {};
+
+  var totalTests = tests.length;
+  var passed = tests.filter(function(t){ return t.result === 'Pass'; }).length;
+  var failed = tests.filter(function(t){ return t.result === 'Fail'; }).length;
+  var pending = tests.filter(function(t){ return t.result === 'Pending'; }).length;
+  var passRate = totalTests > 0 ? Math.round((passed/totalTests)*100) : 0;
+
+  var statsHtml = '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;">' +
+    '<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#38bdf8;">'+totalTests+'</div><div style="font-size:11px;color:#94a3b8;">Total Tests</div></div>' +
+    '<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#4ade80;">'+passed+'</div><div style="font-size:11px;color:#94a3b8;">Pass ✅</div></div>' +
+    '<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:'+(failed>0?'#f87171':'#4ade80')+';">'+failed+'</div><div style="font-size:11px;color:#94a3b8;">Fail ❌</div></div>' +
+    '<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#fbbf24;">'+pending+'</div><div style="font-size:11px;color:#94a3b8;">Pending</div></div>' +
+    '<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:'+(passRate>=95?'#4ade80':passRate>=80?'#fbbf24':'#f87171')+';">'+passRate+'%</div><div style="font-size:11px;color:#94a3b8;">Pass Rate</div></div>' +
+  '</div>';
+
+  var proctorHtml = '<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:14px;">' +
+    '<div style="font-weight:600;color:#e2e8f0;margin-bottom:10px;font-size:13px;">📐 Proctor / Max Density Reference (ASTM D698 / D1557)</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">' +
+      '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Material Type</label>' +
+        '<select id="scl-proctor-material" onchange="saveSCLProctor()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;">' +
+          SCL_MATERIAL_TYPES.map(function(m){ return '<option '+(proctor.material===m?'selected':'')+'>'+m+'</option>'; }).join('') +
+        '</select></div>' +
+      '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Max Dry Density (pcf)</label><input id="scl-proctor-mdd" type="number" placeholder="e.g. 127.5" value="'+(proctor.mdd||'')+'" onchange="saveSCLProctor()" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+      '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Optimum Moisture (%)</label><input id="scl-proctor-omc" type="number" step="0.1" placeholder="e.g. 11.2" value="'+(proctor.omc||'')+'" onchange="saveSCLProctor()" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+      '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Required Compaction (%)</label><input id="scl-proctor-req" type="number" placeholder="e.g. 95" value="'+(proctor.required||'95')+'" onchange="saveSCLProctor()" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+    '</div>' +
+    (proctor.mdd ? '<div style="margin-top:8px;background:#0f172a;border-radius:6px;padding:8px;font-size:11px;color:#94a3b8;">Pass threshold: '+(Math.round(((proctor.required||95)/100)*proctor.mdd*10)/10)+' pcf ≥ required ('+((proctor.required)||95)+'% × '+proctor.mdd+' pcf max dry density)</div>' : '') +
+  '</div>';
+
+  var testsHtml = tests.length === 0 ? '<div style="text-align:center;color:#64748b;padding:20px;">No tests logged yet.</div>' :
+    '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+    '<thead><tr style="background:#1e293b;">' +
+      '<th style="padding:7px 8px;text-align:left;color:#94a3b8;">Test #</th>' +
+      '<th style="padding:7px 8px;text-align:left;color:#94a3b8;">Date</th>' +
+      '<th style="padding:7px 8px;text-align:left;color:#94a3b8;">Location / Area</th>' +
+      '<th style="padding:7px 8px;text-align:left;color:#94a3b8;">Material</th>' +
+      '<th style="padding:7px 8px;text-align:center;color:#94a3b8;">Dry Density (pcf)</th>' +
+      '<th style="padding:7px 8px;text-align:center;color:#94a3b8;">Moisture (%)</th>' +
+      '<th style="padding:7px 8px;text-align:center;color:#94a3b8;">Compaction %</th>' +
+      '<th style="padding:7px 8px;text-align:center;color:#94a3b8;">Result</th>' +
+      '<th style="padding:7px 8px;text-align:center;color:#94a3b8;">Del</th>' +
+    '</tr></thead><tbody>' +
+    tests.map(function(t, i) {
+      var compPct = (proctor.mdd && t.dryDensity) ? (Math.round((t.dryDensity/proctor.mdd)*1000)/10) : (t.compactionPct||'—');
+      var req = proctor.required || 95;
+      var autoResult = (proctor.mdd && t.dryDensity) ? (parseFloat(compPct) >= req ? 'Pass' : 'Fail') : t.result;
+      var resBg = autoResult==='Pass'?'#14532d':autoResult==='Fail'?'#7f1d1d':'#1e3a5f';
+      var resColor = autoResult==='Pass'?'#4ade80':autoResult==='Fail'?'#f87171':'#60a5fa';
+      return '<tr style="border-bottom:1px solid #1e293b;">' +
+        '<td style="padding:6px 8px;color:#94a3b8;">'+(i+1)+'</td>' +
+        '<td style="padding:6px 8px;color:#e2e8f0;">'+(t.date||'—')+'</td>' +
+        '<td style="padding:6px 8px;color:#e2e8f0;">'+(t.location||'—')+'<br><span style="font-size:10px;color:#64748b;">'+(t.notes||'')+'</span></td>' +
+        '<td style="padding:6px 8px;color:#94a3b8;font-size:11px;">'+(t.material||'—')+'</td>' +
+        '<td style="padding:6px 8px;text-align:center;color:#38bdf8;">'+(t.dryDensity||'—')+'</td>' +
+        '<td style="padding:6px 8px;text-align:center;color:#94a3b8;">'+(t.moisture||'—')+'</td>' +
+        '<td style="padding:6px 8px;text-align:center;color:'+(parseFloat(compPct)>=(proctor.required||95)?'#4ade80':'#f87171')+';font-weight:600;">'+(proctor.mdd&&t.dryDensity ? compPct+'%' : (t.compactionPct?t.compactionPct+'%':'—'))+'</td>' +
+        '<td style="padding:6px 8px;text-align:center;"><span style="background:'+resBg+';color:'+resColor+';padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">'+autoResult+'</span></td>' +
+        '<td style="padding:6px 8px;text-align:center;"><button onclick="deleteSCLTest('+i+')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:12px;">🗑</button></td>' +
+      '</tr>';
+    }).join('') +
+    '</tbody></table>';
+
+  var modal = document.createElement('div');
+  modal.id = 'oncor-scl-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10010;display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;width:100%;max-width:950px;max-height:90vh;overflow-y:auto;padding:24px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
+      '<h2 style="color:#e2e8f0;margin:0;font-size:18px;">🔬 Soil & Compaction Test Log</h2>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button onclick="printSCLReport()" style="background:#1e40af;color:#fff;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨️ Print Report</button>' +
+        '<button onclick="document.getElementById(\'oncor-scl-modal\').remove()" style="background:#334155;color:#94a3b8;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">✕ Close</button>' +
+      '</div>' +
+    '</div>' +
+    statsHtml +
+    proctorHtml +
+    '<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:14px;">' +
+      '<div style="font-weight:600;color:#e2e8f0;margin-bottom:10px;font-size:13px;">➕ Log New Test</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 2fr 1fr;gap:8px;">' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Test Date *</label><input type="date" id="scl-date" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Test Method</label><select id="scl-method" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;">' +
+          SCL_TEST_METHODS.map(function(m){return '<option>'+m+'</option>';}).join('') +
+        '</select></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Location / Area *</label><input id="scl-location" placeholder="e.g. Grid B3, Station 1+50, Footing Line A" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Material</label><select id="scl-mat" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;">' +
+          SCL_MATERIAL_TYPES.map(function(m){return '<option>'+m+'</option>';}).join('') +
+        '</select></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:8px;margin-top:8px;">' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Dry Density (pcf)</label><input id="scl-dd" type="number" step="0.1" placeholder="e.g. 121.4" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Moisture (%)</label><input id="scl-moist" type="number" step="0.1" placeholder="e.g. 10.5" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Compaction % (manual)</label><input id="scl-comp" type="number" step="0.1" placeholder="Auto-calc if MDD set" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Lift # / Depth</label><input id="scl-lift" placeholder="e.g. Lift 2, 0-12in" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Result (if no Proctor)</label><select id="scl-result" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"><option>Pass</option><option>Fail</option><option>Pending</option></select></div>' +
+      '</div>' +
+      '<div style="margin-top:8px;"><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Notes (corrective action, recompact required, etc.)</label><input id="scl-notes" placeholder="e.g. Failed — re-compact and re-test, additional water needed" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+      '<button onclick="addSCLTest()" style="margin-top:10px;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:13px;">+ Log Test</button>' +
+    '</div>' +
+    '<div style="font-size:12px;color:#94a3b8;margin-bottom:8px;">Test Results ('+tests.length+' total):</div>' +
+    '<div id="scl-test-list">'+testsHtml+'</div>' +
+  '</div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e){ if(e.target===modal) modal.remove(); });
+}
+
+window.saveSCLProctor = function() {
+  var data = getSCLData();
+  data.proctor = {
+    material: (document.getElementById('scl-proctor-material')||{}).value||'',
+    mdd: parseFloat((document.getElementById('scl-proctor-mdd')||{}).value)||0,
+    omc: parseFloat((document.getElementById('scl-proctor-omc')||{}).value)||0,
+    required: parseFloat((document.getElementById('scl-proctor-req')||{}).value)||95
+  };
+  saveSCLData(data);
+};
+
+window.addSCLTest = function() {
+  var date = (document.getElementById('scl-date')||{}).value||'';
+  var location = ((document.getElementById('scl-location')||{}).value||'').trim();
+  if (!date || !location) { alert('Test date and location required'); return; }
+  var data = getSCLData();
+  data.tests = data.tests || [];
+  data.tests.push({
+    date: date,
+    method: (document.getElementById('scl-method')||{}).value||'',
+    location: location,
+    material: (document.getElementById('scl-mat')||{}).value||'',
+    dryDensity: parseFloat((document.getElementById('scl-dd')||{}).value)||0,
+    moisture: parseFloat((document.getElementById('scl-moist')||{}).value)||0,
+    compactionPct: parseFloat((document.getElementById('scl-comp')||{}).value)||0,
+    lift: (document.getElementById('scl-lift')||{}).value||'',
+    result: (document.getElementById('scl-result')||{}).value||'Pass',
+    notes: (document.getElementById('scl-notes')||{}).value||''
+  });
+  saveSCLData(data);
+  document.getElementById('oncor-scl-modal').remove();
+  openSCLModal();
+};
+
+window.deleteSCLTest = function(i) {
+  if (!confirm('Delete this test?')) return;
+  var data = getSCLData();
+  data.tests.splice(i, 1);
+  saveSCLData(data);
+  document.getElementById('oncor-scl-modal').remove();
+  openSCLModal();
+};
+
+window.printSCLReport = function() {
+  var data = getSCLData();
+  var tests = data.tests || [];
+  var proctor = data.proctor || {};
+  var co = (typeof getCompanyInfo === 'function') ? getCompanyInfo() : {};
+  var proj = (typeof currentProjectName !== 'undefined' && currentProjectName) ? currentProjectName : 'Current Project';
+  var passed = tests.filter(function(t){ if(proctor.mdd&&t.dryDensity){ return (t.dryDensity/proctor.mdd*100) >= (proctor.required||95); } return t.result==='Pass'; }).length;
+  var failed = tests.filter(function(t){ if(proctor.mdd&&t.dryDensity){ return (t.dryDensity/proctor.mdd*100) < (proctor.required||95); } return t.result==='Fail'; }).length;
+
+  var rows = tests.map(function(t, i) {
+    var compPct = (proctor.mdd && t.dryDensity) ? (Math.round((t.dryDensity/proctor.mdd)*1000)/10) : (t.compactionPct||null);
+    var req = proctor.required || 95;
+    var autoResult = (proctor.mdd && t.dryDensity) ? (parseFloat(compPct) >= req ? 'Pass' : 'Fail') : t.result;
+    var resBg = autoResult==='Pass'?'#dcfce7':autoResult==='Fail'?'#fee2e2':'#eff6ff';
+    var resColor = autoResult==='Pass'?'#16a34a':autoResult==='Fail'?'#dc2626':'#1e40af';
+    return '<tr style="border-bottom:1px solid #e2e8f0;background:'+(autoResult==='Fail'?'#fff5f5':'#fff')+';">' +
+      '<td style="padding:5px 8px;">'+(i+1)+'</td>' +
+      '<td style="padding:5px 8px;">'+(t.date||'—')+'</td>' +
+      '<td style="padding:5px 8px;">'+(t.location||'—')+'</td>' +
+      '<td style="padding:5px 8px;font-size:9pt;">'+(t.material||'—')+'</td>' +
+      '<td style="padding:5px 8px;text-align:center;">'+(t.dryDensity||'—')+'</td>' +
+      '<td style="padding:5px 8px;text-align:center;">'+(t.moisture||'—')+'</td>' +
+      '<td style="padding:5px 8px;text-align:center;font-weight:700;color:'+resColor+';">'+(compPct?compPct+'%':t.compactionPct?t.compactionPct+'%':'—')+'</td>' +
+      '<td style="padding:5px 8px;text-align:center;font-weight:700;"><span style="background:'+resBg+';color:'+resColor+';padding:2px 7px;border-radius:4px;">'+autoResult+'</span></td>' +
+      '<td style="padding:5px 8px;font-size:9pt;">'+(t.notes||'')+'</td>' +
+    '</tr>';
+  }).join('');
+
+  var html = '<html><head><title>Soil & Compaction Report</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:0.6in;}h1{font-size:15pt;margin-bottom:4px;}.header{display:flex;justify-content:space-between;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #1e40af;}table{width:100%;border-collapse:collapse;}th{background:#1e293b;color:#fff;padding:6px 8px;font-size:9pt;text-align:left;}.proctor{background:#f1f5f9;border:1px solid #cbd5e1;border-radius:6px;padding:10px;margin-bottom:12px;}.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px;}.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px;text-align:center;}</style></head><body>' +
+    '<div class="header"><div><h1>🔬 Soil & Compaction Test Log</h1><div>'+(co.name||'Oncor Construction')+'</div><div>Project: '+proj+'</div></div><div style="text-align:right;font-size:10pt;color:#555;">Generated: '+new Date().toLocaleDateString()+'</div></div>' +
+    '<div class="stats"><div class="stat"><div style="font-size:18pt;font-weight:700;color:#1e40af;">'+tests.length+'</div><div style="font-size:8pt;">Total Tests</div></div><div class="stat"><div style="font-size:18pt;font-weight:700;color:#16a34a;">'+passed+'</div><div style="font-size:8pt;">Pass ✅</div></div><div class="stat"><div style="font-size:18pt;font-weight:700;color:'+(failed>0?'#dc2626':'#16a34a')+';">'+failed+'</div><div style="font-size:8pt;">Fail ❌</div></div><div class="stat"><div style="font-size:18pt;font-weight:700;color:'+(tests.length>0?((passed/tests.length*100)>=95?'#16a34a':'#d97706'):'#555')+';">'+(tests.length>0?Math.round(passed/tests.length*100)+'%':'—')+'</div><div style="font-size:8pt;">Pass Rate</div></div><div class="stat"><div style="font-size:18pt;font-weight:700;">'+(proctor.required||95)+'%</div><div style="font-size:8pt;">Required</div></div></div>' +
+    (proctor.mdd ? '<div class="proctor"><strong>Proctor Data:</strong> Material: '+(proctor.material||'—')+' | Max Dry Density: '+proctor.mdd+' pcf | Optimum Moisture: '+proctor.omc+'% | Required Compaction: '+proctor.required+'% | Pass Threshold: '+Math.round((proctor.required/100)*proctor.mdd*10)/10+' pcf (ASTM D698/D1557)</div>' : '') +
+    '<table><thead><tr><th>#</th><th>Date</th><th>Location</th><th>Material</th><th>Dry Density (pcf)</th><th>Moisture (%)</th><th>Compaction %</th><th>Result</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table>' +
+    (failed > 0 ? '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:4px;padding:8px 12px;margin-top:12px;"><strong>⚠️ '+failed+' test(s) FAILED — areas require recompaction and retest before concrete placement.</strong></div>' : '') +
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:24px;padding-top:12px;border-top:1px solid #ccc;">' +
+      '<div><div style="font-size:9pt;font-weight:600;">Testing Technician</div><div style="border-top:1px solid #333;margin-top:24px;padding-top:4px;font-size:8pt;">Signature / Name / Cert #</div></div>' +
+      '<div><div style="font-size:9pt;font-weight:600;">Contractor / PM</div><div style="border-top:1px solid #333;margin-top:24px;padding-top:4px;font-size:8pt;">Signature / Name / Date</div></div>' +
+      '<div><div style="font-size:9pt;font-weight:600;">GC / Owner Review</div><div style="border-top:1px solid #333;margin-top:24px;padding-top:4px;font-size:8pt;">Signature / Name / Date</div></div>' +
+    '</div>' +
+    '<div style="margin-top:12px;font-size:8pt;color:#555;">Standards: ASTM D698 (Standard Proctor) / ASTM D1557 (Modified Proctor) / ASTM D6938 (Nuclear Gauge) / ASTM D1556 (Sand Cone) / TxDOT Item 247 / IBC 2021 §1803</div>' +
+    '<div style="margin-top:6px;font-size:8pt;color:#888;text-align:center;border-top:1px solid #ccc;padding-top:6px;">CONFIDENTIAL — INTERNAL USE ONLY | Oncor Takeoff Tool | '+new Date().toLocaleDateString()+'</div>' +
+    '<script>window.onload=function(){window.print();};<\/script></body></html>';
+  var w = window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+window._getSCLStats = function() {
+  var data = getSCLData();
+  var tests = data.tests || [];
+  var proctor = data.proctor || {};
+  var passed = tests.filter(function(t){ if(proctor.mdd&&t.dryDensity){ return (t.dryDensity/proctor.mdd*100)>=(proctor.required||95); } return t.result==='Pass'; }).length;
+  var failed = tests.filter(function(t){ if(proctor.mdd&&t.dryDensity){ return (t.dryDensity/proctor.mdd*100)<(proctor.required||95); } return t.result==='Fail'; }).length;
+  return { total: tests.length, passed: passed, failed: failed };
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn = document.createElement('button');
+    btn.id = 'oncor-scl-btn';
+    btn.textContent = '🔬 Soil & Compaction Log';
+    btn.title = 'Soil & Compaction Test Log (Ctrl+Alt+Q)';
+    btn.onclick = openSCLModal;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(37,99,235,0.12);color:#93c5fd;border:1px solid rgba(37,99,235,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(37,99,235,0.25)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(37,99,235,0.12)'; };
+    var cctBtn = document.getElementById('oncor-cct-btn');
+    if (cctBtn && cctBtn.parentNode) {
+      cctBtn.parentNode.insertBefore(btn, cctBtn.nextSibling);
+    } else {
+      btn.style.cssText += 'position:fixed;bottom:390px;right:20px;z-index:9000;width:auto;';
+      document.body.appendChild(btn);
+    }
+  }, 13500);
+});
+// ==================== END SOIL & COMPACTION TEST LOG ====================
+
+// ==================== 📊 WEEKLY PROGRESS REPORT GENERATOR (Ctrl+Alt+R) ====================
+function openWPRModal() {
+  var existing = document.getElementById('oncor-wpr-modal');
+  if (existing) { existing.remove(); return; }
+
+  // Gather week range — default to current week Mon-Sun
+  var now = new Date();
+  var dayOfWeek = now.getDay(); // 0=Sun
+  var monday = new Date(now);
+  monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+  var sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  var fmt = function(d) { return d.toISOString().slice(0,10); };
+
+  var modal = document.createElement('div');
+  modal.id = 'oncor-wpr-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10010;display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;width:100%;max-width:700px;max-height:90vh;overflow-y:auto;padding:24px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
+      '<h2 style="color:#e2e8f0;margin:0;font-size:18px;">📊 Weekly Progress Report Generator</h2>' +
+      '<button onclick="document.getElementById(\'oncor-wpr-modal\').remove()" style="background:#334155;color:#94a3b8;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">✕ Close</button>' +
+    '</div>' +
+    '<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:14px;">' +
+      '<div style="font-weight:600;color:#e2e8f0;margin-bottom:10px;font-size:13px;">Report Parameters</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Week Start (Mon)</label><input type="date" id="wpr-start" value="'+fmt(monday)+'" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Week End (Sun)</label><input type="date" id="wpr-end" value="'+fmt(sunday)+'" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Report Week #</label><input type="number" id="wpr-weeknum" placeholder="e.g. 4" min="1" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:14px;">' +
+      '<div style="font-weight:600;color:#e2e8f0;margin-bottom:10px;font-size:13px;">This Week\'s Summary (manual fields)</div>' +
+      '<div style="margin-bottom:8px;"><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Work Accomplished (bullet points)</label><textarea id="wpr-accomplished" rows="3" placeholder="• Completed slab pour at Grid A-D (185 yd³)&#10;• Stripped forms at footings Line 1-6&#10;• Rebar inspection passed" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;resize:vertical;"></textarea></div>' +
+      '<div style="margin-bottom:8px;"><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Next Week\'s Plan</label><textarea id="wpr-nextweek" rows="3" placeholder="• Pour footings Line 7-12 on Thursday&#10;• Set forms for grade beams&#10;• ACI inspection for rebar prior to pour" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;resize:vertical;"></textarea></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Issues / Delays This Week</label><textarea id="wpr-issues" rows="2" placeholder="• GC delay on Monday — formwork access blocked (4 hrs)" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;resize:vertical;"></textarea></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Safety / QC Notes</label><textarea id="wpr-safety" rows="2" placeholder="• Toolbox talk: heat illness prevention (Mon)&#10;• No incidents this week" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;resize:vertical;"></textarea></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Overall % Complete (this week)</label><input type="number" id="wpr-pct" min="0" max="100" placeholder="e.g. 45" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px;">Schedule Status</label><select id="wpr-schedule" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:7px;font-size:12px;"><option>On Schedule</option><option>Slightly Behind (≤1 week)</option><option>Behind Schedule (1-2 weeks)</option><option>Significantly Behind (>2 weeks)</option><option>Ahead of Schedule</option></select></div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:14px;">' +
+      '<div style="font-weight:600;color:#e2e8f0;margin-bottom:8px;font-size:13px;">Auto-Data Pull (from your modules)</div>' +
+      '<div style="font-size:12px;color:#64748b;">The printed report will automatically pull live data from: Field Log (pours this week), Labor (hours/cost), Change Orders (pending), RFIs (open), Safety (talks this week), AR (outstanding invoices), Equipment (currently on rent). No manual entry needed for these sections.</div>' +
+    '</div>' +
+    '<button onclick="generateWPR()" style="width:100%;background:#1e40af;color:#fff;border:none;border-radius:8px;padding:12px;cursor:pointer;font-size:14px;font-weight:600;">📄 Generate & Print Weekly Progress Report</button>' +
+  '</div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e){ if(e.target===modal) modal.remove(); });
+}
+
+window.generateWPR = function() {
+  var start = (document.getElementById('wpr-start')||{}).value||'';
+  var end = (document.getElementById('wpr-end')||{}).value||'';
+  var weekNum = (document.getElementById('wpr-weeknum')||{}).value||'';
+  var accomplished = ((document.getElementById('wpr-accomplished')||{}).value||'').trim();
+  var nextWeek = ((document.getElementById('wpr-nextweek')||{}).value||'').trim();
+  var issues = ((document.getElementById('wpr-issues')||{}).value||'').trim();
+  var safety = ((document.getElementById('wpr-safety')||{}).value||'').trim();
+  var pct = (document.getElementById('wpr-pct')||{}).value||'';
+  var scheduleStatus = (document.getElementById('wpr-schedule')||{}).value||'On Schedule';
+  var co = (typeof getCompanyInfo === 'function') ? getCompanyInfo() : {};
+  var proj = (typeof currentProjectName !== 'undefined' && currentProjectName) ? currentProjectName : 'Current Project';
+
+  // Pull auto data from modules
+  // Field Log — pours this week
+  var fieldKey = 'oncor_field_log_v1'+(proj!=='default'?'_'+proj:'');
+  var fieldLogs = [];
+  try { fieldLogs = JSON.parse(localStorage.getItem(fieldKey)||'[]'); } catch(e){}
+  var weekPours = fieldLogs.filter(function(l){ return l.date >= start && l.date <= end; });
+  var weekYds = weekPours.reduce(function(s,l){ return s+(parseFloat(l.actualYds)||0); },0);
+  var weekTrucks = weekPours.reduce(function(s,l){ return s+(parseInt(l.trucks)||0); },0);
+
+  // Crew time cards — this week
+  var tcKey = 'oncor_timecards_v1_'+proj;
+  var tcData = [];
+  try { tcData = JSON.parse(localStorage.getItem(tcKey)||'[]'); } catch(e){}
+  var weekTC = tcData.filter(function(t){ return t.date >= start && t.date <= end; });
+  var weekHours = weekTC.reduce(function(s,t){ return s+(parseFloat(t.regHours)||0)+(parseFloat(t.otHours)||0); },0);
+  var weekLaborCost = weekTC.reduce(function(s,t){ var r=parseFloat(t.rate)||0; var reg=parseFloat(t.regHours)||0; var ot=parseFloat(t.otHours)||0; return s+(reg*r)+(ot*r*1.5); },0);
+
+  // Change orders — pending
+  var coKey = 'oncor_change_orders_v1_'+proj;
+  var coData = [];
+  try { coData = JSON.parse(localStorage.getItem(coKey)||'[]'); } catch(e){}
+  var pendingCOs = coData.filter(function(c){ return c.status==='Pending'; });
+  var pendingCOVal = pendingCOs.reduce(function(s,c){ return s+(parseFloat(c.total)||0); },0);
+
+  // RFIs — open
+  var rfiKey = 'oncor_rfi_log_v1';
+  var rfiData = [];
+  try { rfiData = JSON.parse(localStorage.getItem(rfiKey)||'[]'); } catch(e){}
+  var openRFIs = rfiData.filter(function(r){ return r.status==='Open'||r.status==='Under Review'; });
+
+  // Safety — talks this week
+  var safetyKey = 'oncor_safety_v1_'+proj;
+  var safetyData = {};
+  try { safetyData = JSON.parse(localStorage.getItem(safetyKey)||'{}'); } catch(e){}
+  var weekTalks = (safetyData.talks||[]).filter(function(t){ return t.date >= start && t.date <= end; });
+  var weekIncidents = (safetyData.incidents||[]).filter(function(t){ return t.date >= start && t.date <= end; });
+
+  // AR — outstanding
+  var arKey = 'oncor_ar_v1_'+proj;
+  var arData = [];
+  try { arData = JSON.parse(localStorage.getItem(arKey)||'[]'); } catch(e){}
+  var arOutstanding = arData.filter(function(i){ return i.status==='Unpaid'||i.status==='Partial'; });
+  var arOutAmt = arOutstanding.reduce(function(s,i){ return s+(parseFloat(i.amount)||0)-(parseFloat(i.amtPaid)||0); },0);
+
+  // Equipment on rent
+  var equipKey = 'oncor_rental_v1_'+proj;
+  var equipData = [];
+  try { equipData = JSON.parse(localStorage.getItem(equipKey)||'[]'); } catch(e){}
+  var onRent = equipData.filter(function(e){ return e.status==='On Rent'; });
+
+  // Schedule color
+  var schedColor = scheduleStatus.includes('On Schedule')||scheduleStatus.includes('Ahead') ? '#16a34a' : scheduleStatus.includes('Slightly') ? '#d97706' : '#dc2626';
+
+  // Accomplished bullets
+  var toBullets = function(text) {
+    if (!text) return '<li style="color:#888;">None recorded</li>';
+    return text.split('\n').filter(function(l){return l.trim();}).map(function(l){
+      return '<li>'+l.replace(/^[•\-\*]\s*/,'')+'</li>';
+    }).join('');
+  };
+
+  var html = '<html><head><title>Weekly Progress Report — Week '+weekNum+'</title><style>' +
+    'body{font-family:Arial,sans-serif;font-size:10pt;margin:0.6in;color:#111;}' +
+    'h1{font-size:16pt;margin-bottom:4px;}' +
+    '.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #1e40af;}' +
+    '.kpi-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px;}' +
+    '.kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px;text-align:center;}' +
+    '.kpi-val{font-size:16pt;font-weight:700;color:#1e40af;}' +
+    '.kpi-lbl{font-size:8pt;color:#555;}' +
+    '.section{margin-bottom:14px;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;}' +
+    '.section h3{font-size:11pt;margin:0 0 8px 0;color:#1e40af;}' +
+    '.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}' +
+    'ul{margin:4px 0;padding-left:18px;}' +
+    'li{margin-bottom:3px;}' +
+    '.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:9pt;font-weight:600;}' +
+    '.sig-block{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:24px;padding-top:10px;border-top:1px solid #ccc;}' +
+    '.sig-line{border-top:1px solid #333;margin-top:28px;padding-top:3px;font-size:8pt;color:#555;}' +
+    '.confidential{color:#888;font-size:8pt;text-align:center;margin-top:12px;border-top:1px solid #ccc;padding-top:6px;}' +
+    '@media print{body{margin:0.4in;}}' +
+    '</style></head><body>' +
+
+    '<div class="header">' +
+      '<div><h1>📊 Weekly Progress Report — Week '+(weekNum||'—')+'</h1>' +
+        '<div style="color:#555;">Project: <strong>'+proj+'</strong></div>' +
+        '<div style="color:#555;">Prepared By: '+(co.name||'Oncor Construction')+'</div>' +
+        '<div style="color:#555;">Report Period: '+start+' through '+end+'</div>' +
+      '</div>' +
+      '<div style="text-align:right;">' +
+        '<div style="font-size:10pt;color:#555;">Generated: '+new Date().toLocaleDateString()+'</div>' +
+        (pct ? '<div style="margin-top:8px;font-size:24pt;font-weight:700;color:#1e40af;">'+pct+'%</div><div style="font-size:9pt;color:#555;">Overall Complete</div>' : '') +
+        '<div style="margin-top:6px;"><span class="badge" style="background:'+(schedColor==='#16a34a'?'#dcfce7':'schedColor==#d97706'?'#fffbeb':'#fee2e2')+';color:'+schedColor+';">'+scheduleStatus+'</span></div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="kpi-grid">' +
+      '<div class="kpi"><div class="kpi-val">'+Math.round(weekYds*10)/10+'</div><div class="kpi-lbl">yd³ Placed</div></div>' +
+      '<div class="kpi"><div class="kpi-val">'+weekPours.length+'</div><div class="kpi-lbl">Pour Days</div></div>' +
+      '<div class="kpi"><div class="kpi-val">'+Math.round(weekHours)+'</div><div class="kpi-lbl">Labor Hrs</div></div>' +
+      '<div class="kpi"><div class="kpi-val" style="color:'+(pendingCOs.length>0?'#d97706':'#16a34a')+';">'+pendingCOs.length+'</div><div class="kpi-lbl">Pending COs</div></div>' +
+      '<div class="kpi"><div class="kpi-val" style="color:'+(openRFIs.length>0?'#d97706':'#16a34a')+';">'+openRFIs.length+'</div><div class="kpi-lbl">Open RFIs</div></div>' +
+      '<div class="kpi"><div class="kpi-val" style="color:'+(weekIncidents.length>0?'#dc2626':'#16a34a')+';">'+weekIncidents.length+'</div><div class="kpi-lbl">Incidents</div></div>' +
+    '</div>' +
+
+    '<div class="two-col">' +
+      '<div class="section"><h3>✅ Work Accomplished This Week</h3><ul>'+toBullets(accomplished)+'</ul></div>' +
+      '<div class="section"><h3>📅 Next Week\'s Plan</h3><ul>'+toBullets(nextWeek)+'</ul></div>' +
+    '</div>' +
+
+    '<div class="two-col">' +
+      '<div class="section"><h3>⚠️ Issues / Delays / RFIs</h3>' +
+        (issues ? '<ul>'+toBullets(issues)+'</ul>' : '<p style="color:#888;">None reported.</p>') +
+        (openRFIs.length > 0 ? '<p style="color:#d97706;font-weight:600;">Open RFIs: '+openRFIs.length+' awaiting response</p>' : '') +
+        (pendingCOs.length > 0 ? '<p style="color:#d97706;font-weight:600;">Pending COs: '+pendingCOs.length+' ($'+(Math.round(pendingCOVal)).toLocaleString()+' pending signature)</p>' : '') +
+      '</div>' +
+      '<div class="section"><h3>🦺 Safety & Quality</h3>' +
+        '<p>Toolbox Talks This Week: <strong>'+weekTalks.length+'</strong></p>' +
+        '<p>Incidents/Near-Misses: <strong style="color:'+(weekIncidents.length>0?'#dc2626':'#16a34a')+';">'+weekIncidents.length+'</strong></p>' +
+        (safety ? '<ul>'+toBullets(safety)+'</ul>' : '') +
+      '</div>' +
+    '</div>' +
+
+    '<div class="section">' +
+      '<h3>💰 Financial Snapshot</h3>' +
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">' +
+        '<div><strong>Labor Cost This Week</strong><br>$'+(Math.round(weekLaborCost)).toLocaleString()+'</div>' +
+        '<div><strong>AR Outstanding</strong><br style="color:'+(arOutstanding.length>0?'#d97706':'#16a34a')+'">${'+(Math.round(arOutAmt)).toLocaleString()+'</div>' +
+        '<div><strong>Equipment on Rent</strong><br>'+onRent.length+' item(s)</div>' +
+        '<div><strong>Open COs Value</strong><br>$'+(Math.round(pendingCOVal)).toLocaleString()+'</div>' +
+      '</div>' +
+    '</div>' +
+
+    (weekPours.length > 0 ? '<div class="section"><h3>🚚 Concrete Pours This Week</h3><table style="width:100%;border-collapse:collapse;font-size:9pt;"><thead><tr style="background:#e2e8f0;"><th style="padding:4px 6px;text-align:left;">Date</th><th style="padding:4px 6px;text-align:left;">Pour / Area</th><th style="padding:4px 6px;text-align:center;">Act. yd³</th><th style="padding:4px 6px;text-align:center;">Trucks</th><th style="padding:4px 6px;text-align:left;">Notes</th></tr></thead><tbody>' +
+      weekPours.map(function(p){ return '<tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:4px 6px;">'+p.date+'</td><td style="padding:4px 6px;">'+(p.elements||p.pourName||'Pour')+'</td><td style="padding:4px 6px;text-align:center;">'+(p.actualYds||'—')+'</td><td style="padding:4px 6px;text-align:center;">'+(p.trucks||'—')+'</td><td style="padding:4px 6px;font-size:8pt;">'+(p.notes||'')+'</td></tr>'; }).join('') +
+      '<tr style="background:#f1f5f9;font-weight:700;"><td colspan="2" style="padding:4px 6px;">WEEK TOTAL</td><td style="padding:4px 6px;text-align:center;">'+Math.round(weekYds*10)/10+' yd³</td><td style="padding:4px 6px;text-align:center;">'+weekTrucks+'</td><td></td></tr>' +
+    '</tbody></table></div>' : '') +
+
+    '<div class="sig-block">' +
+      '<div><div style="font-size:9pt;font-weight:600;">Prepared By (Superintendent / PM)</div><div class="sig-line">Signature</div><div class="sig-line">Printed Name / Date</div></div>' +
+      '<div><div style="font-size:9pt;font-weight:600;">Reviewed By (GC)</div><div class="sig-line">Signature</div><div class="sig-line">Printed Name / Date</div></div>' +
+      '<div><div style="font-size:9pt;font-weight:600;">Owner / Developer</div><div class="sig-line">Signature</div><div class="sig-line">Printed Name / Date</div></div>' +
+    '</div>' +
+    '<div class="confidential">CONFIDENTIAL — INTERNAL USE ONLY | Oncor Construction | Weekly Progress Report — Week '+(weekNum||'—')+' | '+new Date().toLocaleDateString()+'</div>' +
+    '<script>window.onload=function(){window.print();};<\/script></body></html>';
+  var w = window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn = document.createElement('button');
+    btn.id = 'oncor-wpr-btn';
+    btn.textContent = '📊 Weekly Progress Report';
+    btn.title = 'Weekly Progress Report Generator (Ctrl+Alt+R)';
+    btn.onclick = openWPRModal;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(37,99,235,0.12);color:#93c5fd;border:1px solid rgba(37,99,235,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(37,99,235,0.25)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(37,99,235,0.12)'; };
+    var sclBtn = document.getElementById('oncor-scl-btn');
+    if (sclBtn && sclBtn.parentNode) {
+      sclBtn.parentNode.insertBefore(btn, sclBtn.nextSibling);
+    } else {
+      btn.style.cssText += 'position:fixed;bottom:430px;right:20px;z-index:9000;width:auto;';
+      document.body.appendChild(btn);
+    }
+  }, 14000);
+});
+// ==================== END WEEKLY PROGRESS REPORT GENERATOR ====================
+
+// ==================== KEYBOARD SHORTCUTS — Session #97 ====================
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.altKey) {
+    if (e.key === 'p' || e.key === 'P') { e.preventDefault(); openCCTModal(); }
+    if (e.key === 'q' || e.key === 'Q') { e.preventDefault(); openSCLModal(); }
+    if (e.key === 'r' || e.key === 'R') { e.preventDefault(); openWPRModal(); }
+  }
+});
+// ==================== END KEYBOARD SHORTCUTS ====================
+
+})();
+// ==================== END SESSION #97 — Zeus ⚡ Crew Cert Tracker (Ctrl+Alt+P) + Soil & Compaction Log (Ctrl+Alt+Q) + Weekly Progress Report (Ctrl+Alt+R) ====================
 </script>
