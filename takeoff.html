@@ -173560,3 +173560,493 @@ document.addEventListener('keydown', function(e) {
 })();
 // ==================== END SESSION #101 — Zeus ⚡ Multi-Project P&L Snapshot (Ctrl+Alt+3) + Document Links & Files (Ctrl+Alt+4) + Quick Notes & Field Journal (Ctrl+Alt+5) ====================
 </script>
+
+<script>
+// ==================== SESSION #102 — Zeus ⚡ Calendar & Milestone Sync (Ctrl+Alt+6) + Inspection Scheduler (Ctrl+Alt+7) + Daily Manpower Report (Ctrl+Alt+8) ====================
+(function() {
+'use strict';
+
+// =====================================================================
+// SHARED HELPERS
+// =====================================================================
+function _escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _fmt$(n){ return '$'+(parseFloat(n)||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+function _fmtDate(d){ if(!d) return '—'; var dt=new Date(d); return isNaN(dt)?d:dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+function _fmtDateISO(d){ var dt=new Date(d); var y=dt.getFullYear(),m=String(dt.getMonth()+1).padStart(2,'0'),dy=String(dt.getDate()).padStart(2,'0'); return y+'-'+m+'-'+dy; }
+function _todayISO(){ return _fmtDateISO(new Date()); }
+
+// =====================================================================
+// FEATURE 1: Calendar & Milestone Sync (Ctrl+Alt+6) — ~210 lines
+// =====================================================================
+function _getCalKey(){
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'__global__';
+  return 'oncor_calendar_v1_'+proj.replace(/\s+/g,'_');
+}
+function _loadCal(){ return JSON.parse(localStorage.getItem(_getCalKey())||'[]'); }
+function _saveCal(arr){ localStorage.setItem(_getCalKey(),JSON.stringify(arr)); }
+
+window.openCalendarSyncModal = function(){
+  var existing=document.getElementById('oncor-calendar-modal');
+  if(existing){ existing.style.display=existing.style.display==='none'?'flex':'none'; _renderCal(); return; }
+  var overlay=document.createElement('div');
+  overlay.id='oncor-calendar-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:11000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+  overlay.innerHTML='<div style="background:#1e293b;border-radius:12px;width:100%;max-width:920px;padding:24px;color:#e2e8f0;position:relative;">'+
+    '<button onclick="this.closest(\'#oncor-calendar-modal\').style.display=\'none\'" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+      '<div><div style="font-size:16pt;font-weight:700;color:#60a5fa;">📆 Calendar &amp; Milestones</div>'+
+      '<div style="font-size:10pt;color:#94a3b8;">All project dates in one view — pours, inspections, deadlines, meetings. Export to .ics for calendar sync.</div></div>'+
+      '<div style="display:flex;gap:8px;">'+
+        '<button onclick="window.exportCalendarICS()" style="background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);border-radius:6px;padding:7px 12px;cursor:pointer;font-size:11px;">📥 Export .ics</button>'+
+        '<button onclick="window.printCalendarReport()" style="background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);border-radius:6px;padding:7px 12px;cursor:pointer;font-size:11px;">🖨️ Print</button>'+
+      '</div>'+
+    '</div>'+
+    '<div id="oncor-cal-form" style="background:rgba(255,255,255,0.04);border-radius:8px;padding:14px;margin-bottom:16px;">'+
+      '<div style="font-size:11pt;font-weight:600;color:#60a5fa;margin-bottom:10px;">+ Add Event / Milestone</div>'+
+      '<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px;align-items:end;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Event Title *</label>'+
+        '<input id="cal-title" placeholder="e.g. Slab A-D Pour" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Type</label>'+
+        '<select id="cal-type" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;">'+
+          '<option>Concrete Pour</option><option>Inspection</option><option>Meeting</option><option>Deadline</option><option>Delivery</option><option>Milestone</option><option>Permit</option><option>Walkthrough</option><option>Other</option>'+
+        '</select></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Date *</label>'+
+        '<input type="date" id="cal-date" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Time (opt)</label>'+
+        '<input type="time" id="cal-time" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<button onclick="window._calAdd()" style="background:rgba(96,165,250,0.2);color:#60a5fa;border:1px solid rgba(96,165,250,0.4);border-radius:6px;padding:9px 16px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Add</button>'+
+      '</div>'+
+      '<div style="margin-top:10px;"><label style="font-size:9pt;color:#94a3b8;">Notes</label>'+
+      '<input id="cal-notes" placeholder="Optional notes, attendees, location..." style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;margin-top:3px;"></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:12px;">'+
+      '<select id="cal-filter" onchange="window._renderCal()" style="background:#0f172a;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:11pt;">'+
+        '<option value="">All Types</option><option>Concrete Pour</option><option>Inspection</option><option>Meeting</option><option>Deadline</option><option>Delivery</option><option>Milestone</option><option>Permit</option><option>Walkthrough</option><option>Other</option>'+
+      '</select>'+
+      '<select id="cal-range" onchange="window._renderCal()" style="background:#0f172a;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:11pt;">'+
+        '<option value="30">Next 30 Days</option><option value="7">Next 7 Days</option><option value="14">Next 14 Days</option><option value="60">Next 60 Days</option><option value="90">Next 90 Days</option><option value="all">All Events</option><option value="past">Past Events</option>'+
+      '</select>'+
+    '</div>'+
+    '<div id="oncor-cal-list"></div>'+
+  '</div>';
+  overlay.addEventListener('click',function(e){ if(e.target===overlay) overlay.style.display='none'; });
+  document.body.appendChild(overlay);
+  var dEl=document.getElementById('cal-date'); if(dEl) dEl.value=_todayISO();
+  _renderCal();
+};
+
+window._calAdd = function(){
+  var title=(document.getElementById('cal-title')||{}).value||'';
+  var dateVal=(document.getElementById('cal-date')||{}).value||'';
+  if(!title.trim()||!dateVal){ alert('Title and date are required.'); return; }
+  var arr=_loadCal();
+  arr.push({ id:Date.now(), title:title.trim(), type:(document.getElementById('cal-type')||{}).value||'Other', date:dateVal, time:(document.getElementById('cal-time')||{}).value||'', notes:(document.getElementById('cal-notes')||{}).value||'', done:false, added:Date.now() });
+  _saveCal(arr);
+  ['cal-title','cal-notes'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  _renderCal();
+};
+
+window._calToggle = function(id){
+  var arr=_loadCal().map(function(e){ if(e.id===id) e.done=!e.done; return e; });
+  _saveCal(arr); _renderCal();
+};
+
+window._calDelete = function(id){
+  if(!confirm('Delete this event?')) return;
+  _saveCal(_loadCal().filter(function(e){ return e.id!==id; }));
+  _renderCal();
+};
+
+var _calTypeColors={'Concrete Pour':'#f59e0b','Inspection':'#ef4444','Meeting':'#3b82f6','Deadline':'#e11d48','Delivery':'#22c55e','Milestone':'#8b5cf6','Permit':'#f97316','Walkthrough':'#14b8a6','Other':'#64748b'};
+
+window._renderCal = function(){
+  var list=document.getElementById('oncor-cal-list');
+  if(!list) return;
+  var arr=_loadCal();
+  var filterType=((document.getElementById('cal-filter')||{}).value||'');
+  var range=((document.getElementById('cal-range')||{}).value||'30');
+  var today=new Date(); today.setHours(0,0,0,0);
+  if(filterType) arr=arr.filter(function(e){ return e.type===filterType; });
+  if(range==='past'){ arr=arr.filter(function(e){ return new Date(e.date)<today; }); }
+  else if(range!=='all'){
+    var days=parseInt(range)||30;
+    var end=new Date(today.getTime()+days*24*60*60*1000);
+    arr=arr.filter(function(e){ var d=new Date(e.date); return d>=today&&d<=end; });
+  }
+  arr.sort(function(a,b){ return new Date(a.date)-new Date(b.date); });
+  if(!arr.length){ list.innerHTML='<div style="text-align:center;padding:30px;color:#64748b;">No events found. Add pours, inspections, deadlines above.</div>'; return; }
+  var total=_loadCal().length;
+  var html='<div style="font-size:10pt;color:#64748b;margin-bottom:10px;">'+total+' total event'+(total!==1?'s':'')+(arr.length!==total?' (showing '+arr.length+')':'')+'</div>';
+  arr.forEach(function(e){
+    var color=_calTypeColors[e.type]||'#64748b';
+    var dt=new Date(e.date); var isPast=dt<today; var isToday=dt.toDateString()===today.toDateString();
+    var dayLabel=isToday?'TODAY':isPast?'Past':_fmtDate(e.date);
+    html+='<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-left:3px solid '+color+';border-radius:6px;padding:10px 12px;margin-bottom:8px;opacity:'+(e.done?'0.5':'1')+';display:flex;justify-content:space-between;align-items:center;">'+
+      '<div style="flex:1;">'+
+        '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">'+
+          '<span style="background:'+color+'22;color:'+color+';border:1px solid '+color+'44;border-radius:4px;padding:2px 7px;font-size:9pt;font-weight:600;">'+_escH(e.type)+'</span>'+
+          '<span style="font-size:10pt;font-weight:600;color:'+(isToday?'#f59e0b':(isPast?'#64748b':'#e2e8f0'))+';">'+dayLabel+(e.time?' '+e.time:'')+'</span>'+
+          (e.done?'<span style="background:#22c55e33;color:#22c55e;border-radius:4px;padding:1px 6px;font-size:8pt;">✓ DONE</span>':'')+
+        '</div>'+
+        '<div style="font-size:12pt;font-weight:600;color:#e2e8f0;'+(e.done?'text-decoration:line-through;':'')+'">'+_escH(e.title)+'</div>'+
+        (e.notes?'<div style="font-size:10pt;color:#94a3b8;margin-top:3px;">'+_escH(e.notes)+'</div>':'')+
+      '</div>'+
+      '<div style="display:flex;gap:6px;margin-left:10px;">'+
+        '<button onclick="window._calToggle('+e.id+')" style="background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid rgba(34,197,94,0.2);border-radius:4px;padding:5px 10px;cursor:pointer;font-size:11px;">'+(e.done?'↩':'✓')+'</button>'+
+        '<button onclick="window._calDelete('+e.id+')" style="background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);border-radius:4px;padding:5px 10px;cursor:pointer;font-size:11px;">✕</button>'+
+      '</div>'+
+    '</div>';
+  });
+  list.innerHTML=html;
+};
+
+window.exportCalendarICS = function(){
+  var arr=_loadCal();
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Oncor Project';
+  var ics='BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Oncor//Takeoff Calendar//EN\nCALSCALE:GREGORIAN\n';
+  arr.forEach(function(e){
+    var d=e.date.replace(/-/g,'');
+    var uid=e.id+'@oncor.local';
+    ics+='BEGIN:VEVENT\nUID:'+uid+'\nDTSTAMP:'+d+'T000000Z\nDTSTART;VALUE=DATE:'+d+'\nSUMMARY:'+e.title.replace(/[,;\\]/g,' ')+' ['+e.type+']\nDESCRIPTION:'+_escH(e.notes||'').replace(/\n/g,'\\n')+'\nEND:VEVENT\n';
+  });
+  ics+='END:VCALENDAR';
+  var blob=new Blob([ics],{type:'text/calendar'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a'); a.href=url; a.download=proj.replace(/\s+/g,'_')+'_calendar.ics';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+};
+
+window.printCalendarReport = function(){
+  var arr=_loadCal().sort(function(a,b){ return new Date(a.date)-new Date(b.date); });
+  var comp=(document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var rows=arr.map(function(e){ return '<tr style="'+(e.done?'opacity:0.5;':'')+'"><td style="padding:5px 8px;">'+_fmtDate(e.date)+(e.time?' '+e.time:'')+'</td><td style="padding:5px 8px;font-weight:600;">'+_escH(e.type)+'</td><td style="padding:5px 8px;">'+_escH(e.title)+'</td><td style="padding:5px 8px;font-size:9pt;color:#555;">'+_escH(e.notes)+'</td><td style="padding:5px 8px;">'+(e.done?'✓':'')+'</td></tr>'; }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Project Calendar</title><style>body{font-family:Arial;font-size:10pt;padding:20px;}table{width:100%;border-collapse:collapse;}th{background:#1e40af;color:#fff;padding:6px 8px;text-align:left;font-size:9pt;}td{border-bottom:1px solid #e5e7eb;} @media print{button{display:none;}}</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;border-bottom:2px solid #1e40af;padding-bottom:10px;margin-bottom:14px;"><div><strong style="font-size:14pt;">'+_escH(comp)+'</strong><br><span>PROJECT CALENDAR — '+_escH(proj)+'</span></div><div style="text-align:right;font-size:9pt;color:#555;">'+arr.length+' Events<br>'+new Date().toLocaleDateString()+'</div></div>'+
+    '<table><tr><th>Date/Time</th><th>Type</th><th>Event</th><th>Notes</th><th>Done</th></tr>'+rows+'</table>'+
+    '<div style="margin-top:16px;text-align:center;font-size:8pt;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px;">CONFIDENTIAL — INTERNAL USE ONLY</div>'+
+    '<br><button onclick="window.print()">🖨️ Print / Save PDF</button></body></html>';
+  var w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// FEATURE 2: Inspection Scheduler (Ctrl+Alt+7) — ~200 lines
+// =====================================================================
+function _getInspKey(){
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'__global__';
+  return 'oncor_inspections_v1_'+proj.replace(/\s+/g,'_');
+}
+function _loadInsp(){ return JSON.parse(localStorage.getItem(_getInspKey())||'[]'); }
+function _saveInsp(arr){ localStorage.setItem(_getInspKey(),JSON.stringify(arr)); }
+
+window.openInspectionModal = function(){
+  var existing=document.getElementById('oncor-inspection-modal');
+  if(existing){ existing.style.display=existing.style.display==='none'?'flex':'none'; _renderInsp(); return; }
+  var overlay=document.createElement('div');
+  overlay.id='oncor-inspection-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:11000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+  overlay.innerHTML='<div style="background:#1e293b;border-radius:12px;width:100%;max-width:920px;padding:24px;color:#e2e8f0;position:relative;">'+
+    '<button onclick="this.closest(\'#oncor-inspection-modal\').style.display=\'none\'" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+      '<div><div style="font-size:16pt;font-weight:700;color:#ef4444;">🔍 Inspection Scheduler</div>'+
+      '<div style="font-size:10pt;color:#94a3b8;">Schedule and track all required inspections — pre-pour, rebar, special, city, final. Never miss a required hold point.</div></div>'+
+      '<button onclick="window.printInspectionReport()" style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨️ Print</button>'+
+    '</div>'+
+    '<div id="oncor-insp-form" style="background:rgba(255,255,255,0.04);border-radius:8px;padding:14px;margin-bottom:16px;">'+
+      '<div style="font-size:11pt;font-weight:600;color:#ef4444;margin-bottom:10px;">+ Schedule Inspection</div>'+
+      '<div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr auto;gap:10px;align-items:end;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Inspection Type *</label>'+
+        '<select id="insp-type" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;">'+
+          '<option>Pre-Pour (Rebar/Forms)</option><option>Special Inspector — Rebar</option><option>Special Inspector — Concrete</option><option>City/County — Foundation</option><option>City/County — Slab</option><option>City/County — Final</option><option>Compaction Test</option><option>Punch Walk</option><option>Final Walkthrough</option><option>Owner Inspection</option><option>QC/QA Internal</option><option>Other</option>'+
+        '</select></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Date *</label>'+
+        '<input type="date" id="insp-date" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Time</label>'+
+        '<input type="time" id="insp-time" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Inspector</label>'+
+        '<input id="insp-inspector" placeholder="Name / Company" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<button onclick="window._inspAdd()" style="background:rgba(239,68,68,0.2);color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:9px 16px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Add</button>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Area / Location</label>'+
+        '<input id="insp-area" placeholder="e.g. Slab A-D, Footing Grid 3-7" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Notes</label>'+
+        '<input id="insp-notes" placeholder="Special requirements, documents needed..." style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+      '</div>'+
+    '</div>'+
+    '<div id="oncor-insp-stats" style="margin-bottom:12px;"></div>'+
+    '<div id="oncor-insp-list"></div>'+
+  '</div>';
+  overlay.addEventListener('click',function(e){ if(e.target===overlay) overlay.style.display='none'; });
+  document.body.appendChild(overlay);
+  var dEl=document.getElementById('insp-date'); if(dEl) dEl.value=_todayISO();
+  _renderInsp();
+};
+
+window._inspAdd = function(){
+  var type=(document.getElementById('insp-type')||{}).value||'';
+  var dateVal=(document.getElementById('insp-date')||{}).value||'';
+  if(!dateVal){ alert('Date is required.'); return; }
+  var arr=_loadInsp();
+  arr.push({ id:Date.now(), type:type, date:dateVal, time:(document.getElementById('insp-time')||{}).value||'', inspector:(document.getElementById('insp-inspector')||{}).value||'', area:(document.getElementById('insp-area')||{}).value||'', notes:(document.getElementById('insp-notes')||{}).value||'', status:'Scheduled', result:'', added:Date.now() });
+  _saveInsp(arr);
+  ['insp-inspector','insp-area','insp-notes'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  _renderInsp();
+};
+
+window._inspSetStatus = function(id,status,result){
+  var arr=_loadInsp().map(function(i){ if(i.id===id){ i.status=status; i.result=result||''; } return i; });
+  _saveInsp(arr); _renderInsp();
+};
+
+window._inspDelete = function(id){
+  if(!confirm('Delete this inspection?')) return;
+  _saveInsp(_loadInsp().filter(function(i){ return i.id!==id; }));
+  _renderInsp();
+};
+
+window._renderInsp = function(){
+  var list=document.getElementById('oncor-insp-list');
+  var statsEl=document.getElementById('oncor-insp-stats');
+  if(!list) return;
+  var arr=_loadInsp();
+  var scheduled=arr.filter(function(i){ return i.status==='Scheduled'; }).length;
+  var passed=arr.filter(function(i){ return i.status==='Pass'; }).length;
+  var failed=arr.filter(function(i){ return i.status==='Fail'; }).length;
+  var today=new Date(); today.setHours(0,0,0,0);
+  var upcoming=arr.filter(function(i){ var d=new Date(i.date); return i.status==='Scheduled'&&d>=today&&d<=new Date(today.getTime()+7*24*60*60*1000); }).length;
+  if(statsEl){
+    statsEl.innerHTML='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;"><div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#94a3b8;">Total</div><div style="font-size:14pt;font-weight:700;color:#e2e8f0;">'+arr.length+'</div></div><div style="background:rgba(234,179,8,0.1);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#eab308;">Scheduled</div><div style="font-size:14pt;font-weight:700;color:#eab308;">'+scheduled+'</div></div><div style="background:rgba(34,197,94,0.1);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#22c55e;">Passed</div><div style="font-size:14pt;font-weight:700;color:#22c55e;">'+passed+'</div></div><div style="background:rgba(239,68,68,0.1);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#ef4444;">Failed</div><div style="font-size:14pt;font-weight:700;color:#ef4444;">'+failed+'</div></div></div>'+(upcoming>0?'<div style="background:rgba(251,146,60,0.15);color:#fb923c;border:1px solid rgba(251,146,60,0.3);border-radius:6px;padding:8px 12px;margin-top:10px;font-size:11pt;">⚠️ '+upcoming+' inspection'+(upcoming!==1?'s':'')+' scheduled in the next 7 days</div>':'');
+  }
+  arr.sort(function(a,b){ return new Date(a.date)-new Date(b.date); });
+  if(!arr.length){ list.innerHTML='<div style="text-align:center;padding:30px;color:#64748b;">No inspections scheduled. Add pre-pour, special inspector, city inspections above.</div>'; return; }
+  var html='';
+  arr.forEach(function(i){
+    var d=new Date(i.date); var isPast=d<today; var isToday=d.toDateString()===today.toDateString();
+    var statusColor=i.status==='Pass'?'#22c55e':(i.status==='Fail'?'#ef4444':(i.status==='Cancelled'?'#64748b':'#eab308'));
+    html+='<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-left:3px solid '+statusColor+';border-radius:6px;padding:10px 12px;margin-bottom:8px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+        '<div style="flex:1;">'+
+          '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">'+
+            '<span style="background:'+statusColor+'22;color:'+statusColor+';border:1px solid '+statusColor+'44;border-radius:4px;padding:2px 7px;font-size:9pt;font-weight:600;">'+_escH(i.status)+'</span>'+
+            '<span style="font-size:10pt;font-weight:600;color:'+(isToday?'#f59e0b':(isPast?'#64748b':'#e2e8f0'))+';">'+_fmtDate(i.date)+(i.time?' '+i.time:'')+'</span>'+
+          '</div>'+
+          '<div style="font-size:12pt;font-weight:600;color:#e2e8f0;">'+_escH(i.type)+'</div>'+
+          '<div style="font-size:10pt;color:#94a3b8;margin-top:2px;">'+(i.area?'📍 '+_escH(i.area)+' | ':'')+(i.inspector?'👤 '+_escH(i.inspector):'')+'</div>'+
+          (i.notes?'<div style="font-size:9pt;color:#64748b;margin-top:2px;">'+_escH(i.notes)+'</div>':'')+
+          (i.result?'<div style="font-size:10pt;color:'+(i.status==='Fail'?'#ef4444':'#22c55e')+';margin-top:4px;font-style:italic;">Result: '+_escH(i.result)+'</div>':'')+
+        '</div>'+
+        '<div style="display:flex;flex-direction:column;gap:4px;margin-left:10px;">'+
+          (i.status==='Scheduled'?'<button onclick="window._inspSetStatus('+i.id+\',\\\'Pass\\\',prompt(\\\'Pass notes (optional):\\\'))" style="background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.3);border-radius:4px;padding:4px 10px;cursor:pointer;font-size:10px;">✓ Pass</button><button onclick="window._inspSetStatus('+i.id+\',\\\'Fail\\\',prompt(\\\'Failure reason:\\\'))" style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);border-radius:4px;padding:4px 10px;cursor:pointer;font-size:10px;">✕ Fail</button><button onclick="window._inspSetStatus('+i.id+',\\\'Cancelled\\\',\\\'\\\')" style="background:rgba(100,116,139,0.15);color:#64748b;border:1px solid rgba(100,116,139,0.3);border-radius:4px;padding:4px 10px;cursor:pointer;font-size:10px;">Cancel</button>':'')+
+          '<button onclick="window._inspDelete('+i.id+')" style="background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);border-radius:4px;padding:4px 10px;cursor:pointer;font-size:10px;">🗑</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  });
+  list.innerHTML=html;
+};
+
+window.printInspectionReport = function(){
+  var arr=_loadInsp().sort(function(a,b){ return new Date(a.date)-new Date(b.date); });
+  var comp=(document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var rows=arr.map(function(i){
+    var statusColor=i.status==='Pass'?'green':(i.status==='Fail'?'red':(i.status==='Cancelled'?'#888':'#b45309'));
+    return '<tr><td style="padding:5px 8px;">'+_fmtDate(i.date)+(i.time?' '+i.time:'')+'</td><td style="padding:5px 8px;">'+_escH(i.type)+'</td><td style="padding:5px 8px;">'+_escH(i.area)+'</td><td style="padding:5px 8px;">'+_escH(i.inspector)+'</td><td style="padding:5px 8px;font-weight:600;color:'+statusColor+';">'+_escH(i.status)+'</td><td style="padding:5px 8px;font-size:9pt;">'+_escH(i.result||i.notes)+'</td></tr>';
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Inspection Report</title><style>body{font-family:Arial;font-size:10pt;padding:20px;}table{width:100%;border-collapse:collapse;}th{background:#dc2626;color:#fff;padding:6px 8px;text-align:left;font-size:9pt;}td{border-bottom:1px solid #e5e7eb;} @media print{button{display:none;}}</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;border-bottom:2px solid #dc2626;padding-bottom:10px;margin-bottom:14px;"><div><strong style="font-size:14pt;">'+_escH(comp)+'</strong><br><span>INSPECTION LOG — '+_escH(proj)+'</span></div><div style="text-align:right;font-size:9pt;color:#555;">'+arr.length+' Inspections<br>'+new Date().toLocaleDateString()+'</div></div>'+
+    '<table><tr><th>Date/Time</th><th>Type</th><th>Area</th><th>Inspector</th><th>Status</th><th>Notes/Result</th></tr>'+rows+'</table>'+
+    '<div style="margin-top:16px;text-align:center;font-size:8pt;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px;">CONFIDENTIAL — INTERNAL USE ONLY</div>'+
+    '<br><button onclick="window.print()">🖨️ Print / Save PDF</button></body></html>';
+  var w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// FEATURE 3: Daily Manpower Report (Ctrl+Alt+8) — ~175 lines
+// =====================================================================
+function _getDMPKey(){
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'__global__';
+  return 'oncor_manpower_v1_'+proj.replace(/\s+/g,'_');
+}
+function _loadDMP(){ return JSON.parse(localStorage.getItem(_getDMPKey())||'[]'); }
+function _saveDMP(arr){ localStorage.setItem(_getDMPKey(),JSON.stringify(arr)); }
+
+window.openManpowerModal = function(){
+  var existing=document.getElementById('oncor-manpower-modal');
+  if(existing){ existing.style.display=existing.style.display==='none'?'flex':'none'; _renderDMP(); return; }
+  var overlay=document.createElement('div');
+  overlay.id='oncor-manpower-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:11000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+  overlay.innerHTML='<div style="background:#1e293b;border-radius:12px;width:100%;max-width:860px;padding:24px;color:#e2e8f0;position:relative;">'+
+    '<button onclick="this.closest(\'#oncor-manpower-modal\').style.display=\'none\'" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+      '<div><div style="font-size:16pt;font-weight:700;color:#a855f7;">👷 Daily Manpower Report</div>'+
+      '<div style="font-size:10pt;color:#94a3b8;">Log daily crew counts by trade — track total man-hours and crew availability over time</div></div>'+
+      '<button onclick="window.printManpowerReport()" style="background:rgba(168,85,247,0.15);color:#a855f7;border:1px solid rgba(168,85,247,0.3);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨️ Print</button>'+
+    '</div>'+
+    '<div id="oncor-dmp-form" style="background:rgba(255,255,255,0.04);border-radius:8px;padding:14px;margin-bottom:16px;">'+
+      '<div style="font-size:11pt;font-weight:600;color:#a855f7;margin-bottom:10px;">+ Log Today\'s Crew</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Date *</label>'+
+        '<input type="date" id="dmp-date" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Weather</label>'+
+        '<select id="dmp-weather" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;">'+
+          '<option>Clear / Sunny</option><option>Partly Cloudy</option><option>Overcast</option><option>Rain</option><option>Hot (>100°F)</option><option>Cold (<40°F)</option><option>Windy</option>'+
+        '</select></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Hours Worked</label>'+
+        '<input type="number" id="dmp-hours" value="8" min="0" max="16" step="0.5" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+      '</div>'+
+      '<div style="font-size:10pt;color:#94a3b8;margin-bottom:6px;">Crew Count by Trade:</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">'+
+        ['Foreman','Finishers','Laborers','Rod Busters','Form Carpenters','Pump Operator','Saw Cutter','Helper'].map(function(t,i){ return '<div><label style="font-size:9pt;color:#94a3b8;">'+t+'</label><input type="number" id="dmp-crew-'+i+'" value="0" min="0" max="50" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:6px;color:#e2e8f0;font-size:11pt;margin-top:2px;"></div>'; }).join('')+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;">Notes / Work Performed</label>'+
+        '<input id="dmp-notes" placeholder="e.g. Poured Slab A-D, 52 yd³" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;margin-top:3px;"></div>'+
+        '<button onclick="window._dmpAdd()" style="background:rgba(168,85,247,0.2);color:#a855f7;border:1px solid rgba(168,85,247,0.4);border-radius:6px;padding:9px 16px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Log Day</button>'+
+      '</div>'+
+    '</div>'+
+    '<div id="oncor-dmp-stats" style="margin-bottom:12px;"></div>'+
+    '<div id="oncor-dmp-list"></div>'+
+  '</div>';
+  overlay.addEventListener('click',function(e){ if(e.target===overlay) overlay.style.display='none'; });
+  document.body.appendChild(overlay);
+  var dEl=document.getElementById('dmp-date'); if(dEl) dEl.value=_todayISO();
+  _renderDMP();
+};
+
+var _dmpTrades=['Foreman','Finishers','Laborers','Rod Busters','Form Carpenters','Pump Operator','Saw Cutter','Helper'];
+
+window._dmpAdd = function(){
+  var dateVal=(document.getElementById('dmp-date')||{}).value||'';
+  if(!dateVal){ alert('Date is required.'); return; }
+  var crew={};
+  _dmpTrades.forEach(function(t,i){ crew[t]=parseInt((document.getElementById('dmp-crew-'+i)||{}).value)||0; });
+  var totalCrew=Object.values(crew).reduce(function(s,v){ return s+v; },0);
+  var hours=parseFloat((document.getElementById('dmp-hours')||{}).value)||8;
+  var arr=_loadDMP();
+  arr.push({ id:Date.now(), date:dateVal, weather:(document.getElementById('dmp-weather')||{}).value||'Clear', hours:hours, crew:crew, totalCrew:totalCrew, manHours:totalCrew*hours, notes:(document.getElementById('dmp-notes')||{}).value||'', added:Date.now() });
+  _saveDMP(arr);
+  _dmpTrades.forEach(function(t,i){ var el=document.getElementById('dmp-crew-'+i); if(el) el.value='0'; });
+  (document.getElementById('dmp-notes')||{}).value='';
+  _renderDMP();
+};
+
+window._dmpDelete = function(id){
+  if(!confirm('Delete this manpower entry?')) return;
+  _saveDMP(_loadDMP().filter(function(d){ return d.id!==id; }));
+  _renderDMP();
+};
+
+window._renderDMP = function(){
+  var list=document.getElementById('oncor-dmp-list');
+  var statsEl=document.getElementById('oncor-dmp-stats');
+  if(!list) return;
+  var arr=_loadDMP();
+  var totalDays=arr.length;
+  var totalManHours=arr.reduce(function(s,d){ return s+(d.manHours||0); },0);
+  var avgCrew=totalDays>0?(arr.reduce(function(s,d){ return s+(d.totalCrew||0); },0)/totalDays):0;
+  if(statsEl){
+    statsEl.innerHTML='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;"><div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#94a3b8;">Days Logged</div><div style="font-size:14pt;font-weight:700;color:#a855f7;">'+totalDays+'</div></div><div style="background:rgba(168,85,247,0.1);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#a855f7;">Total Man-Hours</div><div style="font-size:14pt;font-weight:700;color:#a855f7;">'+totalManHours.toLocaleString()+'</div></div><div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#94a3b8;">Avg Crew Size</div><div style="font-size:14pt;font-weight:700;color:#e2e8f0;">'+avgCrew.toFixed(1)+'</div></div></div>';
+  }
+  arr.sort(function(a,b){ return new Date(b.date)-new Date(a.date); });
+  if(!arr.length){ list.innerHTML='<div style="text-align:center;padding:30px;color:#64748b;">No manpower logs yet. Log today\'s crew count above.</div>'; return; }
+  var html='';
+  arr.forEach(function(d){
+    var crewList=_dmpTrades.filter(function(t){ return d.crew[t]>0; }).map(function(t){ return d.crew[t]+' '+t; }).join(', ');
+    html+='<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-left:3px solid #a855f7;border-radius:6px;padding:10px 12px;margin-bottom:8px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+        '<div style="flex:1;">'+
+          '<div style="display:flex;gap:10px;align-items:center;margin-bottom:4px;">'+
+            '<span style="font-size:11pt;font-weight:700;color:#e2e8f0;">'+_fmtDate(d.date)+'</span>'+
+            '<span style="background:rgba(255,255,255,0.08);border-radius:4px;padding:2px 8px;font-size:9pt;color:#94a3b8;">'+_escH(d.weather)+'</span>'+
+            '<span style="font-size:10pt;color:#a855f7;font-weight:600;">'+d.totalCrew+' workers × '+d.hours+' hrs = '+d.manHours+' man-hrs</span>'+
+          '</div>'+
+          '<div style="font-size:10pt;color:#94a3b8;">'+_escH(crewList)+'</div>'+
+          (d.notes?'<div style="font-size:10pt;color:#64748b;margin-top:3px;">'+_escH(d.notes)+'</div>':'')+
+        '</div>'+
+        '<button onclick="window._dmpDelete('+d.id+')" style="margin-left:10px;background:none;border:none;color:#475569;cursor:pointer;font-size:14px;">🗑</button>'+
+      '</div>'+
+    '</div>';
+  });
+  list.innerHTML=html;
+};
+
+window.printManpowerReport = function(){
+  var arr=_loadDMP().sort(function(a,b){ return new Date(a.date)-new Date(b.date); });
+  var comp=(document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var totalManHours=arr.reduce(function(s,d){ return s+(d.manHours||0); },0);
+  var rows=arr.map(function(d){
+    var crewList=_dmpTrades.filter(function(t){ return d.crew[t]>0; }).map(function(t){ return d.crew[t]+' '+t; }).join(', ');
+    return '<tr><td style="padding:5px 8px;">'+_fmtDate(d.date)+'</td><td style="padding:5px 8px;">'+_escH(d.weather)+'</td><td style="padding:5px 8px;">'+d.totalCrew+'</td><td style="padding:5px 8px;">'+d.hours+'</td><td style="padding:5px 8px;font-weight:600;">'+d.manHours+'</td><td style="padding:5px 8px;font-size:9pt;">'+_escH(crewList)+'</td><td style="padding:5px 8px;font-size:9pt;">'+_escH(d.notes)+'</td></tr>';
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Manpower Report</title><style>body{font-family:Arial;font-size:10pt;padding:20px;}table{width:100%;border-collapse:collapse;}th{background:#7c3aed;color:#fff;padding:6px 8px;text-align:left;font-size:9pt;}td{border-bottom:1px solid #e5e7eb;} @media print{button{display:none;}}</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;border-bottom:2px solid #7c3aed;padding-bottom:10px;margin-bottom:14px;"><div><strong style="font-size:14pt;">'+_escH(comp)+'</strong><br><span>DAILY MANPOWER REPORT — '+_escH(proj)+'</span></div><div style="text-align:right;font-size:9pt;color:#555;">'+arr.length+' Days<br>'+totalManHours.toLocaleString()+' Total Man-Hours</div></div>'+
+    '<table><tr><th>Date</th><th>Weather</th><th>Crew</th><th>Hours</th><th>Man-Hrs</th><th>Breakdown</th><th>Notes</th></tr>'+rows+'</table>'+
+    '<div style="margin-top:16px;text-align:center;font-size:8pt;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px;">CONFIDENTIAL — INTERNAL USE ONLY</div>'+
+    '<br><button onclick="window.print()">🖨️ Print / Save PDF</button></body></html>';
+  var w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// INJECT SIDEBAR BUTTONS
+// =====================================================================
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn6 = document.createElement('button');
+    btn6.id = 'oncor-calendar-btn';
+    btn6.innerHTML = '📆 Calendar & Milestones';
+    btn6.title = 'Ctrl+Alt+6 — Calendar & Milestone Sync';
+    btn6.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(96,165,250,0.10);color:#60a5fa;border:1px solid rgba(96,165,250,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btn6.onclick = window.openCalendarSyncModal;
+    btn6.onmouseover = function(){ this.style.background='rgba(96,165,250,0.20)'; };
+    btn6.onmouseout = function(){ this.style.background='rgba(96,165,250,0.10)'; };
+
+    var btn7 = document.createElement('button');
+    btn7.id = 'oncor-inspection-btn';
+    btn7.innerHTML = '🔍 Inspection Scheduler';
+    btn7.title = 'Ctrl+Alt+7 — Inspection Scheduler';
+    btn7.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(239,68,68,0.10);color:#ef4444;border:1px solid rgba(239,68,68,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btn7.onclick = window.openInspectionModal;
+    btn7.onmouseover = function(){ this.style.background='rgba(239,68,68,0.20)'; };
+    btn7.onmouseout = function(){ this.style.background='rgba(239,68,68,0.10)'; };
+
+    var btn8 = document.createElement('button');
+    btn8.id = 'oncor-manpower-btn';
+    btn8.innerHTML = '👷 Daily Manpower';
+    btn8.title = 'Ctrl+Alt+8 — Daily Manpower Report';
+    btn8.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(168,85,247,0.10);color:#a855f7;border:1px solid rgba(168,85,247,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btn8.onclick = window.openManpowerModal;
+    btn8.onmouseover = function(){ this.style.background='rgba(168,85,247,0.20)'; };
+    btn8.onmouseout = function(){ this.style.background='rgba(168,85,247,0.10)'; };
+
+    var anchor = document.getElementById('oncor-quicknotes-btn');
+    if (anchor && anchor.parentNode) {
+      anchor.parentNode.insertBefore(btn6, anchor.nextSibling);
+      btn6.parentNode.insertBefore(btn7, btn6.nextSibling);
+      btn7.parentNode.insertBefore(btn8, btn7.nextSibling);
+    } else {
+      [[btn6,670],[btn7,620],[btn8,570]].forEach(function(pair){
+        pair[0].style.cssText += ';position:fixed;bottom:'+pair[1]+'px;right:20px;z-index:9000;width:auto;';
+        document.body.appendChild(pair[0]);
+      });
+    }
+  }, 16200);
+});
+
+// =====================================================================
+// KEYBOARD SHORTCUTS — Session #102
+// =====================================================================
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.altKey) {
+    if (e.key === '6') { e.preventDefault(); window.openCalendarSyncModal(); }
+    if (e.key === '7') { e.preventDefault(); window.openInspectionModal(); }
+    if (e.key === '8') { e.preventDefault(); window.openManpowerModal(); }
+  }
+});
+
+})();
+// ==================== END SESSION #102 — Zeus ⚡ Calendar & Milestones (Ctrl+Alt+6) + Inspection Scheduler (Ctrl+Alt+7) + Daily Manpower (Ctrl+Alt+8) ====================
+</script>
