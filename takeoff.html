@@ -175233,4 +175233,691 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ==================== END SESSION #105 — Zeus ⚡ Productivity Analytics (Ctrl+Alt+G) + Supplier Scorecard (Ctrl+Alt+H) + Material Inventory (Ctrl+Alt+I) ====================
+
+// ==================== SESSION #106 — Zeus ⚡ Concrete Placement Log (Ctrl+Alt+0) + VE Ideas Log + Project Quick Contacts ====================
+(function(){
+'use strict';
+
+// ==================== CONCRETE PLACEMENT LOG (Ctrl+Alt+0) ====================
+// Track every concrete pour event: element, yd³ placed, crew, duration, delivery method
+// Running cumulative total vs estimated quantity — the pour-by-pour progress record
+
+(function(){
+  var storageKey = function(){ return 'oncor_plac_log_v1_' + (window.lastEstimate && window.lastEstimate.project ? window.lastEstimate.project.replace(/\s+/g,'_') : 'global'); };
+  function load(){ try{ return JSON.parse(localStorage.getItem(storageKey()))||[]; }catch(e){ return []; } }
+  function save(d){ try{ localStorage.setItem(storageKey(), JSON.stringify(d)); }catch(e){} }
+
+  function getEstYds(){
+    if (window.lastEstimate && window.lastEstimate.totalYds) return parseFloat(window.lastEstimate.totalYds)||0;
+    if (window.measurements && window.measurements.length){
+      return window.measurements.filter(m=>m.included!==false).reduce(function(s,m){ return s+(parseFloat(m.yds)||0); }, 0);
+    }
+    return 0;
+  }
+
+  function fmt$(n){ return '$'+(parseFloat(n)||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+  function fmtN(n,d){ return (parseFloat(n)||0).toFixed(d||1); }
+
+  function buildModal(){
+    if (document.getElementById('plac-log-modal')) return;
+    var modal = document.createElement('div');
+    modal.id = 'plac-log-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,0.7);display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+    modal.innerHTML = `
+<div style="background:#0f172a;color:#e5e7eb;border-radius:12px;width:100%;max-width:1100px;padding:28px;position:relative;margin:auto;">
+  <button onclick="document.getElementById('plac-log-modal').remove()" style="position:absolute;top:14px;right:18px;background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer">✕</button>
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+    <span style="font-size:28px">📋</span>
+    <div><h2 style="margin:0;color:#38bdf8;font-size:1.4rem">Concrete Placement Log</h2>
+    <p style="margin:2px 0 0;color:#64748b;font-size:0.8rem">Pour-by-pour record: element, yd³ placed, crew, duration, delivery method — Ctrl+Alt+0</p></div>
+  </div>
+  <div id="plac-stats" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px;"></div>
+  <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+    <button onclick="window._oncorPlac.openForm()" style="padding:8px 18px;background:#0ea5e9;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600">+ Add Pour</button>
+    <button onclick="window._oncorPlac.print()" style="padding:8px 14px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;cursor:pointer">🖨 Print Log</button>
+  </div>
+  <div id="plac-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+  <div id="plac-form-area" style="display:none;margin-top:18px;background:#1e293b;border-radius:10px;padding:20px;border:1px solid #334155;"></div>
+</div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function(e){ if(e.target===modal) modal.remove(); });
+    renderAll();
+  }
+
+  function renderStats(){
+    var data = load();
+    var estYds = getEstYds();
+    var totalPlaced = data.reduce(function(s,d){ return s+(parseFloat(d.yds)||0); },0);
+    var totalPours = data.length;
+    var pct = estYds>0 ? Math.min(100,(totalPlaced/estYds*100)).toFixed(1) : '—';
+    var remaining = estYds>0 ? Math.max(0, estYds-totalPlaced) : null;
+    var avgCrew = data.length>0 ? (data.reduce(function(s,d){return s+(parseInt(d.crew)||0);},0)/data.length).toFixed(1) : '—';
+    var cards=[
+      {label:'Pour Days',val:totalPours,color:'#38bdf8'},
+      {label:'yd³ Placed',val:fmtN(totalPlaced,1),color:'#22c55e'},
+      {label:'Est yd³',val:estYds>0?fmtN(estYds,1):'—',color:'#a78bfa'},
+      {label:'% Complete',val:pct+(pct!=='—'?'%':''),color: pct!=='—'&&parseFloat(pct)>=95?'#22c55e':parseFloat(pct)>=70?'#f59e0b':'#f87171'},
+      {label:'Remaining yd³',val:remaining!==null?fmtN(remaining,1):'—',color:'#94a3b8'}
+    ];
+    var el = document.getElementById('plac-stats');
+    if(!el) return;
+    el.innerHTML = cards.map(function(c){
+      return '<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;border:1px solid #334155">'+
+        '<div style="color:'+c.color+';font-size:1.4rem;font-weight:700">'+c.val+'</div>'+
+        '<div style="color:#64748b;font-size:0.75rem;margin-top:4px">'+c.label+'</div></div>';
+    }).join('');
+  }
+
+  function renderList(){
+    var data = load();
+    var el = document.getElementById('plac-list');
+    if(!el) return;
+    if(!data.length){ el.innerHTML='<div style="color:#64748b;text-align:center;padding:40px">No pour days logged yet. Click + Add Pour to start.</div>'; return; }
+    // Sort by date descending
+    var sorted = data.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+    var estYds = getEstYds();
+    var cumYds = 0;
+    // rebuild cumulative forward
+    var fwd = data.slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+    var cumMap = {};
+    fwd.forEach(function(d){ cumYds+=(parseFloat(d.yds)||0); cumMap[d.id]=cumYds; });
+
+    var statusColor={'Pump':'#0ea5e9','Chute':'#f59e0b','Buggy':'#a78bfa','Conveyor':'#22c55e','Other':'#94a3b8'};
+    el.innerHTML = sorted.map(function(d){
+      var pct = estYds>0 ? (cumMap[d.id]/estYds*100).toFixed(1)+'%' : '—';
+      var dm = d.delivery||'—';
+      var clr = statusColor[dm]||'#94a3b8';
+      var issues = d.issues ? '<div style="margin-top:6px;padding:6px 8px;background:rgba(239,68,68,0.08);border-left:3px solid #ef4444;border-radius:4px;color:#fca5a5;font-size:0.8rem">⚠️ '+_esc(d.issues)+'</div>':'' ;
+      return '<div style="background:#1e293b;border-radius:8px;padding:14px;border:1px solid #334155">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">'+
+          '<div>'+
+            '<span style="font-weight:700;color:#e2e8f0;font-size:1rem">'+_esc(d.element||'Pour')+'</span>'+
+            '<span style="margin-left:10px;background:rgba('+clr.replace('#','')+',0.12);color:'+clr+';padding:2px 8px;border-radius:4px;font-size:0.75rem">'+dm+'</span>'+
+          '</div>'+
+          '<div style="display:flex;gap:8px;align-items:center">'+
+            '<button onclick="window._oncorPlac.openForm(\''+d.id+'\')" style="padding:4px 10px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#94a3b8;cursor:pointer;font-size:11px">✏️</button>'+
+            '<button onclick="window._oncorPlac.del(\''+d.id+'\')" style="padding:4px 10px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#94a3b8;cursor:pointer;font-size:11px">🗑</button>'+
+          '</div>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:10px;font-size:0.82rem;color:#94a3b8">'+
+          '<span>📅 '+_esc(d.date)+'</span>'+
+          '<span style="color:#22c55e;font-weight:700">'+fmtN(d.yds,1)+' yd³ placed</span>'+
+          (d.ordered?'<span style="color:#a78bfa">'+fmtN(d.ordered,1)+' yd³ ordered</span>':'')+
+          (d.crew?'<span>👷 '+d.crew+' crew</span>':'')+
+          (d.duration?'<span>⏱ '+_esc(d.duration)+' hrs</span>':'')+
+          (d.psi?'<span>🧪 '+d.psi+' PSI</span>':'')+
+          (d.plant?'<span>🏭 '+_esc(d.plant)+'</span>':'')+
+          '<span style="color:#38bdf8">📈 '+pct+' cumulative</span>'+
+        '</div>'+
+        (d.notes?'<div style="margin-top:6px;color:#94a3b8;font-size:0.8rem;border-top:1px solid #334155;padding-top:6px">'+_esc(d.notes)+'</div>':'')+
+        issues+
+      '</div>';
+    }).join('');
+  }
+
+  function renderAll(){ renderStats(); renderList(); }
+
+  function openForm(id){
+    var data = load();
+    var rec = id ? data.find(function(d){return d.id===id;}) : null;
+    var fa = document.getElementById('plac-form-area');
+    if(!fa) return;
+    fa.style.display='block';
+    var elements = ['Slab-on-Grade','Foundation Slab','Footing','Grade Beam','Pier','Pile Cap','Wall','Column','Curb & Gutter','Sidewalk','Parking Lot','Other'];
+    var psiOpts = ['2500','3000','3500','4000','4500','5000','6000'];
+    var delivMethods = ['Pump','Chute','Buggy','Conveyor','Other'];
+    fa.innerHTML = `<h3 style="margin:0 0 16px;color:#38bdf8">${rec?'Edit':'New'} Pour Day</h3>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px">
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Date *</label>
+    <input id="plac-f-date" type="date" value="${rec?rec.date:new Date().toISOString().slice(0,10)}" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0"></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Element / Area *</label>
+    <select id="plac-f-element" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0">
+      ${elements.map(function(e){return '<option value="'+e+'"'+(rec&&rec.element===e?' selected':'')+'>'+e+'</option>';}).join('')}
+    </select></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Custom Area Name</label>
+    <input id="plac-f-elemcustom" type="text" value="${rec&&rec.elemcustom?_esc(rec.elemcustom):''}" placeholder="Grid A-D, Bldg A Slab..." style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0"></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">yd³ Placed *</label>
+    <input id="plac-f-yds" type="number" step="0.5" value="${rec?rec.yds:''}" placeholder="e.g. 45.5" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0"></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">yd³ Ordered</label>
+    <input id="plac-f-ordered" type="number" step="0.5" value="${rec?rec.ordered||'':''}" placeholder="from batch plant ticket" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0"></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Mix PSI</label>
+    <select id="plac-f-psi" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0">
+      <option value="">—</option>
+      ${psiOpts.map(function(p){return '<option value="'+p+'"'+(rec&&rec.psi===p?' selected':'')+'>'+p+'</option>';}).join('')}
+    </select></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Delivery Method</label>
+    <select id="plac-f-delivery" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0">
+      <option value="">—</option>
+      ${delivMethods.map(function(m){return '<option value="'+m+'"'+(rec&&rec.delivery===m?' selected':'')+'>'+m+'</option>';}).join('')}
+    </select></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Crew Size</label>
+    <input id="plac-f-crew" type="number" value="${rec?rec.crew||'':''}" placeholder="# of workers" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0"></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Duration (hrs)</label>
+    <input id="plac-f-duration" type="number" step="0.5" value="${rec?rec.duration||'':''}" placeholder="e.g. 6.5" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0"></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Batch Plant</label>
+    <input id="plac-f-plant" type="text" value="${rec&&rec.plant?_esc(rec.plant):''}" placeholder="Plant name / supplier" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0"></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">First Truck Time</label>
+    <input id="plac-f-starttime" type="time" value="${rec?rec.starttime||'':''}" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0"></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Truck Count</label>
+    <input id="plac-f-trucks" type="number" value="${rec?rec.trucks||'':''}" placeholder="# of loads" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0"></div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Notes / QC Observations</label>
+    <textarea id="plac-f-notes" rows="3" placeholder="Cylinder sets cast, slump/temp readings, finishing notes..." style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;resize:vertical">${rec&&rec.notes?_esc(rec.notes):''}</textarea></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px;color:#fca5a5">Issues / Delays</label>
+    <textarea id="plac-f-issues" rows="3" placeholder="Late trucks, pump breakdown, rejected load, standby time..." style="width:100%;padding:8px;background:#0f172a;border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:#e2e8f0;resize:vertical">${rec&&rec.issues?_esc(rec.issues):''}</textarea></div>
+</div>
+<div style="display:flex;gap:10px">
+  <button onclick="window._oncorPlac.saveForm('${rec?rec.id:''}')" style="padding:8px 20px;background:#0ea5e9;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600">💾 Save</button>
+  <button onclick="document.getElementById('plac-form-area').style.display='none'" style="padding:8px 14px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;cursor:pointer">Cancel</button>
+</div>`;
+  }
+
+  function saveForm(id){
+    var date = document.getElementById('plac-f-date').value;
+    var element = document.getElementById('plac-f-element').value;
+    var elemcustom = document.getElementById('plac-f-elemcustom').value.trim();
+    var yds = parseFloat(document.getElementById('plac-f-yds').value)||0;
+    if (!date||!yds){ alert('Date and yd³ Placed are required.'); return; }
+    var rec = {
+      id: id||Date.now().toString(),
+      date: date,
+      element: elemcustom||element,
+      elemcustom: elemcustom,
+      yds: yds,
+      ordered: parseFloat(document.getElementById('plac-f-ordered').value)||0,
+      psi: document.getElementById('plac-f-psi').value,
+      delivery: document.getElementById('plac-f-delivery').value,
+      crew: parseInt(document.getElementById('plac-f-crew').value)||0,
+      duration: parseFloat(document.getElementById('plac-f-duration').value)||0,
+      plant: document.getElementById('plac-f-plant').value.trim(),
+      starttime: document.getElementById('plac-f-starttime').value,
+      trucks: parseInt(document.getElementById('plac-f-trucks').value)||0,
+      notes: document.getElementById('plac-f-notes').value.trim(),
+      issues: document.getElementById('plac-f-issues').value.trim()
+    };
+    var data = load();
+    if (id){ var idx=data.findIndex(function(d){return d.id===id;}); if(idx>=0)data[idx]=rec; else data.push(rec); }
+    else data.push(rec);
+    save(data);
+    document.getElementById('plac-form-area').style.display='none';
+    renderAll();
+  }
+
+  function del(id){
+    if(!confirm('Delete this pour record?')) return;
+    save(load().filter(function(d){return d.id!==id;}));
+    renderAll();
+  }
+
+  function printLog(){
+    var data = load().slice().sort(function(a,b){return a.date.localeCompare(b.date);});
+    var estYds = getEstYds();
+    var proj = (window.lastEstimate&&window.lastEstimate.project)||'Project';
+    var co = (window.companyInfo&&window.companyInfo.name)||'Oncor Construction';
+    var cumYds=0;
+    var rows = data.map(function(d,i){
+      cumYds+=(parseFloat(d.yds)||0);
+      var pct = estYds>0?(cumYds/estYds*100).toFixed(1)+'%':'—';
+      var waste = d.ordered&&d.yds?(parseFloat(d.ordered)-parseFloat(d.yds)).toFixed(1):'—';
+      return '<tr style="border-bottom:1px solid #e2e8f0">'+
+        '<td style="padding:6px 8px">'+(i+1)+'</td>'+
+        '<td style="padding:6px 8px">'+d.date+'</td>'+
+        '<td style="padding:6px 8px">'+_esc(d.element||'')+'</td>'+
+        '<td style="padding:6px 8px;text-align:right;font-weight:700;color:#0369a1">'+fmtN(d.yds,1)+'</td>'+
+        '<td style="padding:6px 8px;text-align:right">'+(d.ordered?fmtN(d.ordered,1):'—')+'</td>'+
+        '<td style="padding:6px 8px;text-align:right;color:'+(waste!=='—'&&parseFloat(waste)>0?'#dc2626':'#16a34a')+'">'+(waste!=='—'?waste:'—')+'</td>'+
+        '<td style="padding:6px 8px;text-align:center">'+(d.trucks||'—')+'</td>'+
+        '<td style="padding:6px 8px;text-align:center">'+(d.crew||'—')+'</td>'+
+        '<td style="padding:6px 8px;text-align:center">'+(d.psi||'—')+'</td>'+
+        '<td style="padding:6px 8px;text-align:center">'+(d.delivery||'—')+'</td>'+
+        '<td style="padding:6px 8px;text-align:right;color:#7c3aed">'+pct+'</td>'+
+        '<td style="padding:6px 8px;font-size:0.75rem;color:#64748b">'+_esc(d.notes||'')+'</td>'+
+      '</tr>';
+    }).join('');
+    var totalYds = data.reduce(function(s,d){return s+(parseFloat(d.yds)||0);},0);
+    var totalOrdered = data.reduce(function(s,d){return s+(parseFloat(d.ordered)||0);},0);
+    var totalWaste = totalOrdered>0 ? (totalOrdered-totalYds).toFixed(1) : '—';
+    var wasteP = totalOrdered>0 ? ((totalOrdered-totalYds)/totalOrdered*100).toFixed(1)+'%' : '—';
+    var win = window.open('','_blank','width=1200,height=800');
+    win.document.write(`<!DOCTYPE html><html><head><title>Concrete Placement Log</title>
+<style>body{font-family:Arial,sans-serif;margin:0;padding:20px;color:#1e293b}h1{color:#0369a1;margin:0}h2{color:#1e293b;margin:0 0 4px}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0369a1;padding-bottom:12px;margin-bottom:20px}.stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}.stat-card{background:#f0f9ff;border-radius:8px;padding:12px;text-align:center;border:1px solid #bae6fd}.stat-val{font-size:1.4rem;font-weight:700;color:#0369a1}.stat-lbl{font-size:0.75rem;color:#64748b;margin-top:2px}table{width:100%;border-collapse:collapse;font-size:0.82rem}th{background:#0369a1;color:#fff;padding:7px 8px;text-align:left}tr:nth-child(even){background:#f8fafc}.footer{margin-top:20px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:0.75rem;color:#64748b;text-align:center}@media print{.no-print{display:none}}</style></head><body>
+<div class="header"><div><h1>CONCRETE PLACEMENT LOG</h1><h2>${_esc(proj)}</h2><p style="color:#64748b;margin:2px 0 0">${co}</p></div><div style="text-align:right;color:#64748b;font-size:0.85rem">Generated: ${new Date().toLocaleDateString()}<br>CONFIDENTIAL — INTERNAL USE ONLY</div></div>
+<div class="stats-grid">
+  <div class="stat-card"><div class="stat-val">${data.length}</div><div class="stat-lbl">Pour Days</div></div>
+  <div class="stat-card"><div class="stat-val">${fmtN(totalYds,1)}</div><div class="stat-lbl">yd³ Placed</div></div>
+  <div class="stat-card"><div class="stat-val">${totalOrdered>0?fmtN(totalOrdered,1):'—'}</div><div class="stat-lbl">yd³ Ordered</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:${parseFloat(wasteP)>8?'#dc2626':parseFloat(wasteP)>4?'#d97706':'#16a34a'}">${totalWaste!='—'?totalWaste+' yd³':'—'}</div><div class="stat-lbl">Waste yd³ (${wasteP})</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#7c3aed">${estYds>0?fmtN(totalYds/estYds*100,1)+'%':'—'}</div><div class="stat-lbl">vs Est ${estYds>0?fmtN(estYds,1)+' yd³':''}</div></div>
+</div>
+<table><thead><tr><th>#</th><th>Date</th><th>Element / Area</th><th>yd³ Placed</th><th>Ordered</th><th>Waste yd³</th><th>Trucks</th><th>Crew</th><th>PSI</th><th>Method</th><th>Cumul %</th><th>Notes</th></tr></thead><tbody>${rows}</tbody>
+<tfoot><tr style="background:#e0f2fe;font-weight:700"><td colspan="3" style="padding:7px 8px">TOTALS</td><td style="padding:7px 8px;text-align:right">${fmtN(totalYds,1)}</td><td style="padding:7px 8px;text-align:right">${totalOrdered>0?fmtN(totalOrdered,1):'—'}</td><td style="padding:7px 8px;text-align:right">${totalWaste}</td><td colspan="6" style="padding:7px 8px">Waste Rate: ${wasteP} — ACI 304R acceptable: 3–8%</td></tr></tfoot>
+</table>
+<div class="footer">ACI 304R — Concrete Placement | ACI 305R Hot Weather | ACI 306R Cold Weather | CONFIDENTIAL — INTERNAL USE ONLY</div>
+<button class="no-print" onclick="window.print()" style="position:fixed;bottom:20px;right:20px;padding:10px 20px;background:#0369a1;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">🖨 Print / Save PDF</button>
+</body></html>`);
+    win.document.close();
+  }
+
+  function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  window._oncorPlac = {
+    toggle: function(){
+      var m = document.getElementById('plac-log-modal');
+      if(m){ m.remove(); return; }
+      buildModal();
+    },
+    openForm: openForm,
+    saveForm: saveForm,
+    del: del,
+    print: printLog
+  };
+})();
+
+// ==================== VE IDEAS LOG ====================
+// Track Value Engineering requests, ideas, analysis, savings, acceptance/rejection
+// Purpose: GCs request VE on every commercial job. Document what was asked, what was proposed,
+// estimated savings, structural/QC risk, and final decision. Protect margin, document trade-offs.
+
+(function(){
+  var storageKey = function(){ return 'oncor_ve_log_v1_' + (window.lastEstimate&&window.lastEstimate.project?window.lastEstimate.project.replace(/\s+/g,'_'):'global'); };
+  function load(){ try{ return JSON.parse(localStorage.getItem(storageKey()))||[]; }catch(e){ return []; } }
+  function save(d){ try{ localStorage.setItem(storageKey(), JSON.stringify(d)); }catch(e){} }
+  function fmt$(n){ return '$'+(parseFloat(n)||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+  function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function buildModal(){
+    if(document.getElementById('ve-log-modal')) return;
+    var modal = document.createElement('div');
+    modal.id = 've-log-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,0.7);display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+    modal.innerHTML=`
+<div style="background:#0f172a;color:#e5e7eb;border-radius:12px;width:100%;max-width:1000px;padding:28px;position:relative;margin:auto;">
+  <button onclick="document.getElementById('ve-log-modal').remove()" style="position:absolute;top:14px;right:18px;background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer">✕</button>
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+    <span style="font-size:28px">💡</span>
+    <div><h2 style="margin:0;color:#fbbf24;font-size:1.4rem">Value Engineering (VE) Ideas Log</h2>
+    <p style="margin:2px 0 0;color:#64748b;font-size:0.8rem">Track GC VE requests, proposed solutions, savings, risk, and decisions — protect margin, document trade-offs</p></div>
+  </div>
+  <div id="ve-stats" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px;"></div>
+  <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+    <button onclick="window._oncorVE.openForm()" style="padding:8px 18px;background:#d97706;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600">+ Add VE Item</button>
+    <button onclick="window._oncorVE.print()" style="padding:8px 14px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;cursor:pointer">🖨 Print VE Report</button>
+  </div>
+  <div id="ve-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+  <div id="ve-form-area" style="display:none;margin-top:18px;background:#1e293b;border-radius:10px;padding:20px;border:1px solid #334155;"></div>
+</div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click',function(e){if(e.target===modal)modal.remove();});
+    renderAll();
+  }
+
+  function renderStats(){
+    var data=load();
+    var total=data.length;
+    var accepted=data.filter(function(d){return d.status==='Accepted';}).length;
+    var rejected=data.filter(function(d){return d.status==='Rejected';}).length;
+    var pending=data.filter(function(d){return d.status==='Pending'||d.status==='Under Review';}).length;
+    var totalSavings=data.filter(function(d){return d.status==='Accepted';}).reduce(function(s,d){return s+(parseFloat(d.savings)||0);},0);
+    var cards=[
+      {label:'VE Items',val:total,color:'#fbbf24'},
+      {label:'Accepted',val:accepted,color:'#22c55e'},
+      {label:'Rejected',val:rejected,color:'#f87171'},
+      {label:'Pending',val:pending,color:'#f59e0b'},
+      {label:'Accepted Savings',val:totalSavings>0?fmt$(totalSavings):'$0',color:'#22c55e'}
+    ];
+    var el=document.getElementById('ve-stats');
+    if(!el) return;
+    el.innerHTML=cards.map(function(c){
+      return '<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;border:1px solid #334155">'+
+        '<div style="color:'+c.color+';font-size:1.3rem;font-weight:700">'+c.val+'</div>'+
+        '<div style="color:#64748b;font-size:0.75rem;margin-top:4px">'+c.label+'</div></div>';
+    }).join('');
+  }
+
+  var statusColors={'Pending':'#f59e0b','Under Review':'#38bdf8','Accepted':'#22c55e','Rejected':'#f87171','Withdrawn':'#94a3b8','On Hold':'#a78bfa'};
+  var riskColors={'Low':'#22c55e','Medium':'#f59e0b','High':'#f87171','N/A':'#94a3b8'};
+
+  function renderList(){
+    var data=load();
+    var el=document.getElementById('ve-list');
+    if(!el) return;
+    if(!data.length){el.innerHTML='<div style="color:#64748b;text-align:center;padding:40px">No VE items logged yet. Click + Add VE Item.</div>';return;}
+    el.innerHTML=data.slice().sort(function(a,b){return b.date.localeCompare(a.date);}).map(function(d){
+      var sc=statusColors[d.status]||'#94a3b8';
+      var rc=riskColors[d.riskLevel]||'#94a3b8';
+      return '<div style="background:#1e293b;border-radius:8px;padding:14px;border:1px solid #334155;border-left:4px solid '+sc+'">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">'+
+          '<div><span style="font-weight:700;color:#e2e8f0">'+_esc(d.title)+'</span>'+
+            '<span style="margin-left:10px;background:rgba(30,41,59,0.8);color:'+sc+';border:1px solid '+sc+';padding:2px 8px;border-radius:4px;font-size:0.75rem">'+_esc(d.status)+'</span>'+
+            '<span style="margin-left:6px;background:rgba(30,41,59,0.8);color:'+rc+';border:1px solid '+rc+';padding:2px 8px;border-radius:4px;font-size:0.75rem">Risk: '+_esc(d.riskLevel||'—')+'</span>'+
+          '</div>'+
+          '<div style="display:flex;gap:8px">'+
+            '<button onclick="window._oncorVE.openForm(\''+d.id+'\')" style="padding:4px 10px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#94a3b8;cursor:pointer;font-size:11px">✏️</button>'+
+            '<button onclick="window._oncorVE.del(\''+d.id+'\')" style="padding:4px 10px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#94a3b8;cursor:pointer;font-size:11px">🗑</button>'+
+          '</div>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin:10px 0;font-size:0.82rem;color:#94a3b8">'+
+          '<span>📅 '+_esc(d.date)+'</span>'+
+          '<span>📂 '+_esc(d.category||'—')+'</span>'+
+          (d.requestedBy?'<span>👤 Requested by: '+_esc(d.requestedBy)+'</span>':'')+
+          (d.savings?'<span style="color:#22c55e;font-weight:600">💰 Savings: '+fmt$(d.savings)+'</span>':'')+
+          (d.margImpact?'<span style="color:'+(parseFloat(d.margImpact)<0?'#f87171':'#22c55e')+'">📊 Margin impact: '+d.margImpact+'%</span>':'')+
+        '</div>'+
+        (d.description?'<div style="font-size:0.82rem;color:#94a3b8;border-top:1px solid #334155;padding-top:8px;margin-top:4px"><strong style="color:#cbd5e1">Description:</strong> '+_esc(d.description)+'</div>':'')+
+        (d.proposal?'<div style="font-size:0.82rem;color:#a7f3d0;background:rgba(34,197,94,0.07);border-left:3px solid #22c55e;padding:6px 8px;margin-top:6px;border-radius:3px"><strong>Proposed Solution:</strong> '+_esc(d.proposal)+'</div>':'')+
+        (d.concerns?'<div style="font-size:0.82rem;color:#fca5a5;background:rgba(239,68,68,0.07);border-left:3px solid #ef4444;padding:6px 8px;margin-top:4px;border-radius:3px"><strong>Structural/QC Concerns:</strong> '+_esc(d.concerns)+'</div>':'')+
+        (d.decision?'<div style="font-size:0.82rem;color:#fde68a;background:rgba(251,191,36,0.07);border-left:3px solid #fbbf24;padding:6px 8px;margin-top:4px;border-radius:3px"><strong>Decision:</strong> '+_esc(d.decision)+'</div>':'')+
+      '</div>';
+    }).join('');
+  }
+
+  function renderAll(){renderStats();renderList();}
+
+  var veCategories=['Concrete Mix Design','Concrete Thickness','Rebar Grade/Spacing','Wire Mesh Substitution','Formwork System','Finishing Spec','Curing Method','PSI Reduction','Fiber vs Rebar','Aggregate Type','Admixture Change','Pour Sequence','Joint Spacing','Subgrade Prep','Scope Reduction','Alternate Product','Other'];
+  var veStatuses=['Pending','Under Review','Accepted','Rejected','Withdrawn','On Hold'];
+  var riskLevels=['Low','Medium','High','N/A'];
+
+  function openForm(id){
+    var data=load();
+    var rec=id?data.find(function(d){return d.id===id;}):null;
+    var fa=document.getElementById('ve-form-area');
+    if(!fa) return;
+    fa.style.display='block';
+    fa.innerHTML=`<h3 style="margin:0 0 16px;color:#fbbf24">${rec?'Edit':'New'} VE Item</h3>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px">
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">VE Title *</label>
+    <input id="ve-f-title" type="text" value="${rec?_esc(rec.title):''}" placeholder="e.g. Reduce slab thickness 5\" to 4\"" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0"></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Date</label>
+    <input id="ve-f-date" type="date" value="${rec?rec.date:new Date().toISOString().slice(0,10)}" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0"></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Category</label>
+    <select id="ve-f-category" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0">
+      ${veCategories.map(function(c){return '<option value="'+c+'"'+(rec&&rec.category===c?' selected':'')+'>'+c+'</option>';}).join('')}
+    </select></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Requested By</label>
+    <input id="ve-f-requestedBy" type="text" value="${rec?_esc(rec.requestedBy||''):''}" placeholder="GC PM / Owner / Arch" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0"></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Status</label>
+    <select id="ve-f-status" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0">
+      ${veStatuses.map(function(s){return '<option value="'+s+'"'+(rec&&rec.status===s?' selected':'')+'>'+s+'</option>';}).join('')}
+    </select></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Structural/QC Risk Level</label>
+    <select id="ve-f-riskLevel" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0">
+      ${riskLevels.map(function(r){return '<option value="'+r+'"'+(rec&&rec.riskLevel===r?' selected':'')+'>'+r+'</option>';}).join('')}
+    </select></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Estimated Savings ($)</label>
+    <input id="ve-f-savings" type="number" value="${rec?rec.savings||'':''}" placeholder="If accepted" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0"></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Margin Impact (%)</label>
+    <input id="ve-f-margImpact" type="number" step="0.1" value="${rec?rec.margImpact||'':''}" placeholder="e.g. -2.5" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0"></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Spec / Drawing Ref</label>
+    <input id="ve-f-specRef" type="text" value="${rec?_esc(rec.specRef||''):''}" placeholder="S-201, Spec §03 30 00" style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0"></div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px">Original Specification / What They Want Changed</label>
+    <textarea id="ve-f-description" rows="3" placeholder="What the GC/Owner is asking to change..." style="width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;resize:vertical">${rec?_esc(rec.description||''):''}</textarea></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px;color:#a7f3d0">Proposed Solution</label>
+    <textarea id="ve-f-proposal" rows="3" placeholder="What we propose instead, with spec references..." style="width:100%;padding:8px;background:#0f172a;border:1px solid rgba(34,197,94,0.3);border-radius:6px;color:#e2e8f0;resize:vertical">${rec?_esc(rec.proposal||''):''}</textarea></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px;color:#fca5a5">Structural / QC Concerns</label>
+    <textarea id="ve-f-concerns" rows="3" placeholder="ACI/ASTM implications, warranty risk, EOR sign-off required..." style="width:100%;padding:8px;background:#0f172a;border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:#e2e8f0;resize:vertical">${rec?_esc(rec.concerns||''):''}</textarea></div>
+  <div><label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:4px;color:#fde68a">Final Decision / Outcome Notes</label>
+    <textarea id="ve-f-decision" rows="3" placeholder="Who decided, when, any conditions..." style="width:100%;padding:8px;background:#0f172a;border:1px solid rgba(251,191,36,0.3);border-radius:6px;color:#e2e8f0;resize:vertical">${rec?_esc(rec.decision||''):''}</textarea></div>
+</div>
+<div style="display:flex;gap:10px">
+  <button onclick="window._oncorVE.saveForm('${rec?rec.id:''}')" style="padding:8px 20px;background:#d97706;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600">💾 Save</button>
+  <button onclick="document.getElementById('ve-form-area').style.display='none'" style="padding:8px 14px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;cursor:pointer">Cancel</button>
+</div>`;
+  }
+
+  function saveForm(id){
+    var title=document.getElementById('ve-f-title').value.trim();
+    if(!title){alert('VE Title is required.');return;}
+    var rec={
+      id:id||Date.now().toString(),
+      title:title,
+      date:document.getElementById('ve-f-date').value,
+      category:document.getElementById('ve-f-category').value,
+      requestedBy:document.getElementById('ve-f-requestedBy').value.trim(),
+      status:document.getElementById('ve-f-status').value,
+      riskLevel:document.getElementById('ve-f-riskLevel').value,
+      savings:parseFloat(document.getElementById('ve-f-savings').value)||0,
+      margImpact:document.getElementById('ve-f-margImpact').value,
+      specRef:document.getElementById('ve-f-specRef').value.trim(),
+      description:document.getElementById('ve-f-description').value.trim(),
+      proposal:document.getElementById('ve-f-proposal').value.trim(),
+      concerns:document.getElementById('ve-f-concerns').value.trim(),
+      decision:document.getElementById('ve-f-decision').value.trim()
+    };
+    var data=load();
+    if(id){var idx=data.findIndex(function(d){return d.id===id;});if(idx>=0)data[idx]=rec;else data.push(rec);}
+    else data.push(rec);
+    save(data);
+    document.getElementById('ve-form-area').style.display='none';
+    renderAll();
+  }
+
+  function del(id){
+    if(!confirm('Delete this VE item?'))return;
+    save(load().filter(function(d){return d.id!==id;}));
+    renderAll();
+  }
+
+  function printVE(){
+    var data=load().slice().sort(function(a,b){return b.date.localeCompare(a.date);});
+    var proj=(window.lastEstimate&&window.lastEstimate.project)||'Project';
+    var co=(window.companyInfo&&window.companyInfo.name)||'Oncor Construction';
+    var accepted=data.filter(function(d){return d.status==='Accepted';});
+    var totalSavings=accepted.reduce(function(s,d){return s+(parseFloat(d.savings)||0);},0);
+    var statusBg={'Accepted':'#dcfce7','Rejected':'#fee2e2','Pending':'#fef3c7','Under Review':'#dbeafe','Withdrawn':'#f1f5f9','On Hold':'#f3e8ff'};
+    var statusClr={'Accepted':'#16a34a','Rejected':'#dc2626','Pending':'#d97706','Under Review':'#2563eb','Withdrawn':'#64748b','On Hold':'#7c3aed'};
+    var riskClr={'Low':'#16a34a','Medium':'#d97706','High':'#dc2626','N/A':'#64748b'};
+    var rows=data.map(function(d,i){
+      var sb=statusBg[d.status]||'#f1f5f9';
+      var sc=statusClr[d.status]||'#64748b';
+      var rc=riskClr[d.riskLevel]||'#64748b';
+      return '<tr style="border-bottom:1px solid #e2e8f0;vertical-align:top">'+
+        '<td style="padding:8px">'+_esc(d.date)+'</td>'+
+        '<td style="padding:8px;font-weight:600">'+_esc(d.title)+'</td>'+
+        '<td style="padding:8px">'+_esc(d.category||'')+'</td>'+
+        '<td style="padding:8px"><span style="background:'+sb+';color:'+sc+';padding:2px 8px;border-radius:4px;font-size:0.8rem;font-weight:600">'+_esc(d.status)+'</span></td>'+
+        '<td style="padding:8px"><span style="color:'+rc+';font-weight:600">'+_esc(d.riskLevel||'—')+'</span></td>'+
+        '<td style="padding:8px;text-align:right;font-weight:600;color:#16a34a">'+(d.savings&&d.status==='Accepted'?fmt$(d.savings):'—')+'</td>'+
+        '<td style="padding:8px;font-size:0.78rem;color:#374151">'+_esc(d.proposal||'').substring(0,80)+(d.proposal&&d.proposal.length>80?'...':'')+'</td>'+
+        '<td style="padding:8px;font-size:0.78rem;color:#dc2626">'+_esc(d.concerns||'').substring(0,60)+(d.concerns&&d.concerns.length>60?'...':'')+'</td>'+
+      '</tr>';
+    }).join('');
+    var win=window.open('','_blank','width=1200,height=800');
+    win.document.write(`<!DOCTYPE html><html><head><title>VE Ideas Log</title>
+<style>body{font-family:Arial,sans-serif;margin:0;padding:20px;color:#1e293b}h1{color:#d97706;margin:0}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #d97706;padding-bottom:12px;margin-bottom:20px}.stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}.stat-card{background:#fffbeb;border-radius:8px;padding:12px;text-align:center;border:1px solid #fde68a}.stat-val{font-size:1.4rem;font-weight:700;color:#d97706}.stat-lbl{font-size:0.75rem;color:#64748b;margin-top:2px}table{width:100%;border-collapse:collapse;font-size:0.82rem}th{background:#d97706;color:#fff;padding:7px 8px;text-align:left}tr:nth-child(even){background:#fffbeb}.footer{margin-top:20px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:0.75rem;color:#64748b;text-align:center}@media print{.no-print{display:none}}</style></head><body>
+<div class="header"><div><h1>VALUE ENGINEERING IDEAS LOG</h1><p style="margin:4px 0;font-weight:600;font-size:1.1rem">${_esc(proj)}</p><p style="color:#64748b;margin:2px 0 0">${_esc(co)}</p></div><div style="text-align:right;color:#64748b;font-size:0.85rem">Generated: ${new Date().toLocaleDateString()}<br>CONFIDENTIAL — INTERNAL USE ONLY</div></div>
+<div class="stats-grid">
+  <div class="stat-card"><div class="stat-val">${data.length}</div><div class="stat-lbl">VE Items</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#16a34a">${accepted.length}</div><div class="stat-lbl">Accepted</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#dc2626">${data.filter(function(d){return d.status==='Rejected';}).length}</div><div class="stat-lbl">Rejected</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#d97706">${data.filter(function(d){return d.status==='Pending'||d.status==='Under Review';}).length}</div><div class="stat-lbl">Pending</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#16a34a">${totalSavings>0?fmt$(totalSavings):'$0'}</div><div class="stat-lbl">Accepted Savings</div></div>
+</div>
+<table><thead><tr><th>Date</th><th>VE Item</th><th>Category</th><th>Status</th><th>Risk</th><th>Savings</th><th>Proposed Solution</th><th>QC Concerns</th></tr></thead><tbody>${rows}</tbody></table>
+<div class="footer">VE items accepted without written EOR approval may void structural warranty. Document all accepted VE changes in the project CO log. ACI 318-19 compliance must be maintained on all accepted items.<br>CONFIDENTIAL — INTERNAL USE ONLY</div>
+<button class="no-print" onclick="window.print()" style="position:fixed;bottom:20px;right:20px;padding:10px 20px;background:#d97706;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">🖨 Print / Save PDF</button>
+</body></html>`);
+    win.document.close();
+  }
+
+  window._oncorVE={
+    toggle:function(){var m=document.getElementById('ve-log-modal');if(m){m.remove();return;}buildModal();},
+    openForm:openForm,saveForm:saveForm,del:del,print:printVE
+  };
+})();
+
+// ==================== PROJECT QUICK CONTACTS ====================
+// Active project contact sheet: GC PM, Owner, Architect, EOR, Batch Plant, Pump Co, Testing Lab,
+// City Inspector, Utility Contacts, Emergency. Phone/email links, printable.
+// Purpose: One page pinned in the field trailer with all critical project contacts.
+
+(function(){
+  var storageKey=function(){return 'oncor_qcontacts_v1_'+(window.lastEstimate&&window.lastEstimate.project?window.lastEstimate.project.replace(/\s+/g,'_'):'global');};
+  function load(){try{return JSON.parse(localStorage.getItem(storageKey()))||{contacts:[]};}catch(e){return {contacts:[]};}};
+  function save(d){try{localStorage.setItem(storageKey(),JSON.stringify(d));}catch(e){}};
+  function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');};
+
+  var DEFAULT_CONTACTS = [
+    {id:'gc-pm',role:'GC Project Manager',emoji:'🏗️',name:'',company:'',phone:'',email:'',notes:''},
+    {id:'owner',role:'Owner / Developer Rep',emoji:'👔',name:'',company:'',phone:'',email:'',notes:''},
+    {id:'architect',role:'Architect',emoji:'📐',name:'',company:'',phone:'',email:'',notes:''},
+    {id:'eor',role:'Engineer of Record (EOR)',emoji:'🔬',name:'',company:'',phone:'',email:'',notes:''},
+    {id:'insp',role:'Special Inspector',emoji:'🔍',name:'',company:'',phone:'',email:'',notes:''},
+    {id:'city-insp',role:'City / County Inspector',emoji:'🏛️',name:'',company:'City of El Paso',phone:'',email:'',notes:''},
+    {id:'batch-plant',role:'Batch Plant / Supplier',emoji:'🚛',name:'',company:'',phone:'',email:'',notes:'Mix code, dispatch contact'},
+    {id:'pump',role:'Concrete Pump Company',emoji:'🚜',name:'',company:'',phone:'',email:'',notes:''},
+    {id:'testing-lab',role:'Testing Laboratory',emoji:'🧫',name:'',company:'',phone:'',email:'',notes:'Cylinder pickup, break reports'},
+    {id:'rebar',role:'Rebar Supplier',emoji:'🔩',name:'',company:'',phone:'',email:'',notes:''},
+    {id:'saw',role:'Saw Cutting Sub',emoji:'🔪',name:'',company:'',phone:'',email:'',notes:''},
+    {id:'foreman',role:'Job Foreman',emoji:'👷',name:'',company:'Oncor',phone:'',email:'',notes:'On-site lead'},
+    {id:'emergency',role:'Emergency / 911',emoji:'🚨',name:'911',company:'',phone:'911',email:'',notes:'Fire, Police, EMS'},
+    {id:'hospital',role:'Nearest Hospital / ER',emoji:'🏥',name:'',company:'UMC El Paso',phone:'(915) 521-7602',email:'',notes:'4815 Alameda Ave, El Paso TX'},
+    {id:'poison',role:'Poison Control',emoji:'☠️',name:'',company:'',phone:'1-800-222-1222',email:'',notes:'Concrete chemical burns'}
+  ];
+
+  function buildModal(){
+    if(document.getElementById('qcontacts-modal')) return;
+    var data=load();
+    // Seed defaults if empty
+    if(!data.contacts||!data.contacts.length){
+      data.contacts=DEFAULT_CONTACTS.map(function(c){return Object.assign({},c);});
+      save(data);
+    }
+    var modal=document.createElement('div');
+    modal.id='qcontacts-modal';
+    modal.style.cssText='position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,0.7);display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+    modal.innerHTML=`
+<div style="background:#0f172a;color:#e5e7eb;border-radius:12px;width:100%;max-width:1000px;padding:28px;position:relative;margin:auto;">
+  <button onclick="document.getElementById('qcontacts-modal').remove()" style="position:absolute;top:14px;right:18px;background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer">✕</button>
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+    <span style="font-size:28px">🗂️</span>
+    <div><h2 style="margin:0;color:#e2e8f0;font-size:1.4rem">Project Quick Contacts</h2>
+    <p style="margin:2px 0 0;color:#64748b;font-size:0.8rem">All critical project contacts in one place — print and post in field trailer</p></div>
+  </div>
+  <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+    <button onclick="window._oncorQC.print()" style="padding:8px 18px;background:#334155;color:#e2e8f0;border:1px solid #475569;border-radius:6px;cursor:pointer;font-weight:600">🖨 Print Contact Sheet</button>
+    <button onclick="window._oncorQC.addCustom()" style="padding:8px 14px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;cursor:pointer">+ Add Contact</button>
+    <span style="color:#64748b;font-size:0.8rem;align-self:center">Click any field to edit inline</span>
+  </div>
+  <div id="qcontacts-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+</div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click',function(e){if(e.target===modal)modal.remove();});
+    renderContacts();
+  }
+
+  function renderContacts(){
+    var data=load();
+    var el=document.getElementById('qcontacts-list');
+    if(!el) return;
+    if(!data.contacts||!data.contacts.length){el.innerHTML='<div style="color:#64748b;text-align:center;padding:40px">No contacts yet.</div>';return;}
+    el.innerHTML=data.contacts.map(function(c,i){
+      var hasData=c.phone||c.email||c.name;
+      var bdr=hasData?'border-color:#334155':'border-color:#1e293b';
+      return '<div style="background:#1e293b;border-radius:8px;padding:12px 16px;border:1px solid;'+bdr+';display:grid;grid-template-columns:200px 1fr 1fr 130px 120px;gap:10px;align-items:center;font-size:0.85rem">'+
+        '<div style="font-weight:600;color:'+(hasData?'#e2e8f0':'#475569')+'">'+(c.emoji||'📋')+' '+_esc(c.role)+'</div>'+
+        '<div><input data-qc-idx="'+i+'" data-qc-field="name" type="text" value="'+_esc(c.name||'')+'" placeholder="Name" onchange="window._oncorQC.updateField('+i+',\'name\',this.value)" style="width:100%;padding:5px 8px;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;font-size:0.82rem">'+
+          '<input data-qc-idx="'+i+'" data-qc-field="company" type="text" value="'+_esc(c.company||'')+'" placeholder="Company" onchange="window._oncorQC.updateField('+i+',\'company\',this.value)" style="width:100%;padding:5px 8px;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;font-size:0.8rem;margin-top:4px"></div>'+
+        '<div><input data-qc-idx="'+i+'" data-qc-field="phone" type="text" value="'+_esc(c.phone||'')+'" placeholder="Phone" onchange="window._oncorQC.updateField('+i+',\'phone\',this.value)" style="width:100%;padding:5px 8px;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;font-size:0.82rem">'+
+          '<input data-qc-idx="'+i+'" data-qc-field="email" type="email" value="'+_esc(c.email||'')+'" placeholder="Email" onchange="window._oncorQC.updateField('+i+',\'email\',this.value)" style="width:100%;padding:5px 8px;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;font-size:0.8rem;margin-top:4px"></div>'+
+        '<div><input data-qc-idx="'+i+'" data-qc-field="notes" type="text" value="'+_esc(c.notes||'')+'" placeholder="Notes" onchange="window._oncorQC.updateField('+i+',\'notes\',this.value)" style="width:100%;padding:5px 8px;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#94a3b8;font-size:0.78rem"></div>'+
+        '<div style="display:flex;gap:6px;justify-content:flex-end">'+
+          (c.phone?'<a href="tel:'+_esc(c.phone)+'" style="padding:4px 8px;background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid rgba(34,197,94,0.3);border-radius:4px;text-decoration:none;font-size:11px">📞 Call</a>':'')+
+          (c.email?'<a href="mailto:'+_esc(c.email)+'" style="padding:4px 8px;background:rgba(56,189,248,0.1);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);border-radius:4px;text-decoration:none;font-size:11px">✉️</a>':'')+
+          (i>=DEFAULT_CONTACTS.length?'<button onclick="window._oncorQC.removeContact('+i+')" style="padding:4px 7px;background:#1e293b;border:1px solid #475569;border-radius:4px;color:#94a3b8;cursor:pointer;font-size:11px">🗑</button>':'')+
+        '</div>'+
+      '</div>';
+    }).join('');
+  }
+
+  function updateField(idx,field,val){
+    var data=load();
+    if(data.contacts[idx]) data.contacts[idx][field]=val;
+    save(data);
+    // re-render call/email buttons only
+    renderContacts();
+  }
+
+  function addCustom(){
+    var data=load();
+    var role=prompt('Contact Role (e.g. MEP Contractor):','');
+    if(!role) return;
+    data.contacts.push({id:'custom-'+Date.now(),role:role,emoji:'📋',name:'',company:'',phone:'',email:'',notes:''});
+    save(data);
+    renderContacts();
+  }
+
+  function removeContact(idx){
+    if(!confirm('Remove this contact?')) return;
+    var data=load();
+    data.contacts.splice(idx,1);
+    save(data);
+    renderContacts();
+  }
+
+  function printContacts(){
+    var data=load();
+    var proj=(window.lastEstimate&&window.lastEstimate.project)||'Project';
+    var co=(window.companyInfo&&window.companyInfo.name)||'Oncor Construction';
+    var phone=(window.companyInfo&&window.companyInfo.phone)||'';
+    var rows=data.contacts.map(function(c){
+      var hasPhone=c.phone&&c.phone!=='—';
+      var hasEmail=c.email&&c.email!=='—';
+      var emergency=c.id==='emergency'||c.id==='hospital'||c.id==='poison';
+      var rowStyle=emergency?'background:#fff5f5':'';
+      return '<tr style="border-bottom:1px solid #e2e8f0;'+rowStyle+'">'+
+        '<td style="padding:8px;font-weight:600">'+(c.emoji||'📋')+' '+_esc(c.role)+'</td>'+
+        '<td style="padding:8px">'+_esc(c.name||'')+'</td>'+
+        '<td style="padding:8px;color:#64748b">'+_esc(c.company||'')+'</td>'+
+        '<td style="padding:8px;font-weight:'+(emergency?'700':'400')+';color:'+(emergency?'#dc2626':'#1e293b')+'">'+(hasPhone?_esc(c.phone):'—')+'</td>'+
+        '<td style="padding:8px;color:#2563eb">'+(hasEmail?_esc(c.email):'—')+'</td>'+
+        '<td style="padding:8px;color:#64748b;font-size:0.78rem">'+_esc(c.notes||'')+'</td>'+
+      '</tr>';
+    }).join('');
+    var win=window.open('','_blank','width=900,height=700');
+    win.document.write(`<!DOCTYPE html><html><head><title>Project Quick Contacts</title>
+<style>body{font-family:Arial,sans-serif;margin:0;padding:20px;color:#1e293b}h1{color:#1e293b;margin:0}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e293b;padding-bottom:12px;margin-bottom:20px}table{width:100%;border-collapse:collapse;font-size:0.88rem}th{background:#1e293b;color:#fff;padding:8px 10px;text-align:left}tr:nth-child(even){background:#f8fafc}.emergency{color:#dc2626;font-weight:700}.footer{margin-top:16px;padding-top:8px;border-top:1px solid #e2e8f0;font-size:0.75rem;color:#64748b;display:flex;justify-content:space-between}@media print{.no-print{display:none}}</style></head><body>
+<div class="header"><div><h1>📋 PROJECT QUICK CONTACTS</h1><p style="margin:4px 0;font-weight:700;font-size:1.1rem">${_esc(proj)}</p><p style="color:#64748b;margin:0">${_esc(co)}${phone?' — '+_esc(phone):''}</p></div><div style="text-align:right;color:#64748b;font-size:0.85rem">Printed: ${new Date().toLocaleDateString()}<br><strong style="color:#dc2626">POST IN FIELD TRAILER</strong></div></div>
+<table><thead><tr><th>Role</th><th>Name</th><th>Company</th><th>Phone</th><th>Email</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table>
+<div class="footer"><span>Oncor Construction | ${_esc(proj)}</span><span>POST IN FIELD TRAILER — Update contacts as team changes</span></div>
+<button class="no-print" onclick="window.print()" style="position:fixed;bottom:20px;right:20px;padding:10px 20px;background:#1e293b;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">🖨 Print / Save PDF</button>
+</body></html>`);
+    win.document.close();
+  }
+
+  window._oncorQC={
+    toggle:function(){var m=document.getElementById('qcontacts-modal');if(m){m.remove();return;}buildModal();},
+    updateField:updateField,
+    addCustom:addCustom,
+    removeContact:removeContact,
+    print:printContacts
+  };
+})();
+
+// ── INJECT SIDEBAR BUTTONS & KEYBOARD SHORTCUTS — Session #106 ──
+document.addEventListener('DOMContentLoaded', function() {
+  var sidebar = document.querySelector('.sidebar-actions') || document.querySelector('#sidebarActions') || (function(){ var s = document.querySelector('aside'); return s; })();
+  function injectBtn(id, emoji, label, shortcut, fn) {
+    if (document.getElementById(id)) return;
+    var btn = document.createElement('button');
+    btn.id = id; btn.textContent = emoji + ' ' + label;
+    btn.title = shortcut + ' — ' + label;
+    btn.style.cssText = 'display:block;width:100%;margin:2px 0;padding:6px 10px;background:#1e293b;color:#e5e7eb;border:1px solid #334155;border-radius:6px;cursor:pointer;text-align:left;font-size:12px';
+    btn.onclick = fn;
+    if (sidebar) sidebar.appendChild(btn);
+    else document.body.appendChild(btn);
+  }
+  injectBtn('btnPlacLog','📋','Placement Log','Ctrl+Alt+0',function(){window._oncorPlac.toggle();});
+  injectBtn('btnVELog','💡','VE Ideas Log','(button)',function(){window._oncorVE.toggle();});
+  injectBtn('btnQContacts','🗂️','Quick Contacts','(button)',function(){window._oncorQC.toggle();});
+});
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.altKey) {
+    if (e.key === '0') { e.preventDefault(); window._oncorPlac.toggle(); }
+  }
+});
+
+// ==================== END SESSION #106 — Zeus ⚡ Concrete Placement Log (Ctrl+Alt+0) + VE Ideas Log + Project Quick Contacts ====================
 })();
