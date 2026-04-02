@@ -1,5 +1,235 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 2, 2026 - 00:00 UTC (Overnight Cron #84)
+**Status:** ✅ PROJECT HANDOFF CHECKLIST added (+454 lines)
+
+### What Was Added:
+
+**🤝 Project Handoff Checklist (Alt+H):**
+- New `🤝 Handoff Checklist` button injected in sidebar below Testing Schedule
+- `Alt+H` keyboard shortcut opens/toggles the modal
+- **Purpose:** Ensure all items complete before mobilization — the transition document from estimating to field operations. Covers contracts, drawings, schedule, suppliers, crew, admin, and the formal handoff meeting.
+
+**7 Checklist Sections (42 items total):**
+1. 📜 **Contract & Scope** (8 items) — signed contract, scope defined, contract value, payment terms, CO process, insurance/bonds
+2. 📐 **Drawings & Specifications** (6 items) — IFC drawings, specs reviewed, drawing register, RFIs, submittals, mix design approval
+3. 📅 **Schedule & Coordination** (6 items) — schedule received, pour schedule, pre-con meeting, GC contact, site access, milestones
+4. 🚚 **Suppliers & Subs** (6 items) — batch plant, rebar supplier, pump company, testing lab, saw cutting, POs issued
+5. 👷 **Crew & Equipment** (5 items) — foreman assigned, crew availability, equipment needs, rentals, PPE
+6. 📋 **Administrative** (6 items) — project folder, job cost codes, Notice to Owner, permits, special inspection, emergency contacts
+7. 🤝 **Handoff Meeting** (6 items) — estimate reviewed, critical quantities explained, budget variance, spec/QC plan, safety, sign-off
+
+**Checklist Logic:**
+- Each item: ✓ Done / N/A toggle
+- Critical items marked with ★ (must complete before mobilization)
+- Completion % progress bar (red <80%, amber 80-99%, green 100%)
+- "Ready for Mobilization" badge when 100% complete
+- Per-item notes field
+
+**Handoff Metadata:**
+- Handoff Date
+- Handoff To (Foreman / PM name)
+- Handoff Notes / Special Instructions textarea
+
+**Printable Checklist:**
+- Company header
+- Project name + completion %
+- All 7 sections with ✅/➖/⬜ status per item
+- Handoff notes section
+- Dual signature block (Estimator + Field Superintendent)
+- Critical item legend
+
+**Integration:**
+- `window._getPHCStats()` exposed for Project Status Card
+- Returns: total, done, pending, pct
+- localStorage per project: `oncor_phc_v1_[projectname]`
+
+**Commits:**
+- afd07a6: 🤝 Project Handoff Checklist (Alt+H) (+454 lines) [Session #84]
+
+**Total Lines:** ~161,688 | **New Alt+ Shortcuts:** Alt+H (Handoff Checklist)
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 00:00 UTC (Overnight Cron #83)
+**Status:** ✅ CONCRETE TESTING SCHEDULE & BREAK REPORT added (+531 lines)
+
+### What Was Added:
+
+**🧫 Concrete Testing Schedule & Break Report (Alt+U):**
+- New `🧫 Testing Schedule` button injected in sidebar below Sub Bid Leveling
+- `Alt+U` keyboard shortcut opens/toggles the modal
+- **Purpose:** Track every cylinder set cast on the project — when 7-day and 28-day breaks are due, enter break results, get upcoming break alerts, and generate testing reports per ASTM C39/C31 and ACI 318-19 §26.12.
+
+**Stats Bar (live):**
+- 🧫 Cylinder Sets / ⏳ Pending Final / ✅ Pass (28d+) / ❌ Fail (28d+) / 📅 Upcoming ≤7d / ⚠️ Overdue Breaks
+
+**Upcoming Breaks Alert Banner:**
+- Shows breaks due within 7 days with countdown badges
+- Highlights overdue breaks in red
+
+**Add Cylinder Set Form:**
+- Set ID (auto-generated CYL-001, CYL-002...)
+- Cast Date
+- Spec f'c (PSI dropdown)
+- Pour / Area name
+- Testing Lab name
+- Cylinder count (default 4)
+- Break Schedule preset: 7+28d (standard), 7+14+28d, 3+7+28d, 1+7+28d, 7+28+56d, 28d only
+
+**Cylinder Set List View:**
+- Sorted by cast date (newest first)
+- Per-set card shows: Set ID badge, cast date, PSI, PASS/FAIL/PENDING status badge
+- Break results table inline: Age / Due Date / PSI achieved / Pass/Fail result / Notes
+- Overdue breaks flagged with red badge
+- Due-soon breaks flagged with amber countdown
+- Edit results inline / Delete set
+
+**Break Result Entry:**
+- PSI achieved (numeric input)
+- Result: Pass / Fail dropdown
+- Notes field per break
+
+**Printable Outputs:**
+- **Break Schedule** — all pending breaks sorted by due date, overdue highlighted, ACI 318-19 acceptance note
+- **Full Testing Report** — all cylinder sets with break results, PASS/FAIL status, 4-card stats header, ACI 318-19 §26.12.3 acceptance criteria reference, dual signature block
+
+**Integration:**
+- `window._getCTSStats()` exposed for Project Status Card
+- Returns: total, pass, fail, pending
+- localStorage per project: `oncor_cts_v1_[projectname]`
+
+**Commits:**
+- 950a77f: 🧫 Concrete Testing Schedule & Break Report (Alt+U) (+531 lines) [Session #83]
+
+**Total Lines:** ~161,234 | **New Alt+ Shortcuts:** Alt+U (Testing Schedule)
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 00:00 UTC (Overnight Cron #82)
+**Status:** ✅ SUB BID LEVELING SHEET added (+546 lines)
+
+### What Was Added:
+
+**⚖️ Sub Bid Leveling Sheet (Alt+S):**
+- New `⚖️ Sub Bid Leveling` button injected in sidebar below Mix Design Library
+- `Alt+S` keyboard shortcut opens/toggles the modal
+- **Purpose:** When JFS hires subs (saw cutters, pump companies, rebar placers), he needs to compare 2-4 bids head-to-head professionally. This tool levels bids by adjusting for scope gaps, tracks awards, and generates printable comparison sheets.
+
+**Stats Bar (live):**
+- 📦 Packages / 👷 Bidders / ✓ Awarded / 💰 Awarded Value
+
+**Two-Panel Layout:**
+- Left: Bid Package list with quick stats
+- Right: Active package detail view
+
+**Bid Package Management:**
+- Add packages by scope type (25 types: Saw Cutting, Pump, Rebar, Epoxy Flooring, etc.)
+- Package name, budget/estimate, bid due date, scope description
+- Delete packages with confirmation
+
+**Bidder Comparison Table (per package):**
+- Add unlimited bidders per package
+- Per bidder: Company name, Contact, Base Bid, Adjustment (+/- for scope leveling), Leveled Bid (auto-calculated)
+- vs Low column shows difference from lowest leveled bid
+- LOWEST badge on lowest bidder
+- Licensed/Bonded status (Yes/No/Unknown)
+- Exclusions/Notes field
+- One-click Award button
+
+**Award Tracking:**
+- Mark any bidder as Awarded
+- Award Reason dropdown (10 options: Lowest Bid, Best Value, Local Vendor, etc.)
+- Award Notes textarea
+- Awarded packages show ✓ badge in sidebar
+
+**Printable Bid Leveling Sheet:**
+- Company header
+- Per-package section: scope type, name, budget, due date, scope description
+- Bidder comparison table with leveled bids and vs-low calculations
+- Award section when awarded (bidder name, reason, notes)
+- Leveling methodology footer note
+- Dual signature block (Prepared By + Approved By)
+
+**Integration:**
+- `window._getSBLStats()` exposed for Project Status Card
+- Returns: totalPackages, awarded, totalAwarded
+- localStorage per project: `oncor_sbl_v1_[projectname]`
+
+**Commits:**
+- 07e44ad: ⚖️ Sub Bid Leveling Sheet (Alt+S) (+546 lines) [Session #82]
+
+**Total Lines:** ~160,703 | **New Alt+ Shortcuts:** Alt+S (Sub Bid Leveling)
+
+---
+
+## ✅ SESSION: Apr 1, 2026 - 22:54 UTC (Overnight Cron #81)
+**Status:** ✅ CONCRETE MIX DESIGN LIBRARY added (+374 lines)
+
+### What Was Added:
+
+**🧪 Concrete Mix Design Library (Alt+M):**
+- New `🧪 Mix Design Library` button injected in sidebar below Pre-Pour Checklist
+- `Alt+M` keyboard shortcut opens/toggles the modal
+- **Purpose:** Store, submit, and track every concrete mix design on a project — from initial proposal through engineer approval. Every commercial job requires submitted and approved mix designs on file before pouring. This tool manages the full lifecycle: propose → submit → track approval → print data sheet.
+
+**Stats Bar (live):**
+- Total Mix Designs / ✅ Approved / ⏳ Pending / ❌ Rejected / Batch Plants (unique count)
+
+**Mix Design Form (20 fields):**
+- **Mix ID** (auto-generated MIX-001, MIX-002 or custom)
+- **Batch Plant Mix Code** (e.g. "4K-F-3/4" — the code the plant uses for ordering)
+- **Design f'c** (2500 / 3000 / 3500 / 4000 / 4500 / 5000 / 6000 PSI / Custom)
+- **Target Slump** (inches, configurable)
+- **Max w/cm Ratio** (ACI 318-19 §19.3 durability requirement — 0.35–0.60)
+- **Cement Type** (Type I/II, Type I, II, III High Early, IP Blended, IS Slag Blend, IL Portland-Limestone, White)
+- **Coarse Aggregate** (3/4" Crushed Limestone, River Gravel, Pea Gravel, 1" Crushed, Caliche local, etc.)
+- **Air Content %** (when air-entrained)
+- **Fiber Type** (None / Synthetic Macro ASTM C1116 / Synthetic Micro / Steel Fiber / Blended)
+- **Fiber Dose** (lb/CY)
+- **Batch Plant / Supplier** (Martin Marietta, Cemex, etc.)
+- **Status** (Proposed / Submitted / Approved / Approved as Noted / Rejected / Superseded)
+- **Exposure Class** (ACI 318-19 §19.3 — F/W/S/C classes)
+- **Submittal Ref #** (links to Submittal Log — e.g. "SUB-003")
+- **Approved By** (EOR name/firm)
+- **Date Submitted** + **Date Approved**
+- **Use / Application** (SOG slabs, footings, walls, etc.)
+- **Admixtures** (multi-select checkboxes): HRWR/Superplasticizer, WR Normal Reducer, Retarder, Accelerator, Air Entraining, Corrosion Inhibitor, VMA, SRA, None
+- **Notes / Special Requirements** (cement content, SCM additions, fly ash %, slag %, unit weight, 56-day strength, special inspector requirements)
+
+**Mix Design List View:**
+- Color-coded border: green = Approved, red = Rejected, default = Proposed/Submitted/Superseded
+- Per-card: Mix ID (monospace blue badge) + batch plant code + status badge
+- Key specs grid: f'c / Slump / w/cm / Cement Type / Coarse Agg / Batch Plant
+- Admixture chips (blue pills for all selected admixtures)
+- Fiber badge (green) + Air-Entrained badge (purple)
+- Exposure class, submittal ref, approval date/approver
+- Notes excerpt
+- Edit (✏️), Print Data Sheet (🖨️), Delete (🗑️) per card
+
+**Filter Controls:**
+- Search by Mix ID, PSI, batch plant, mix code, submittal ref, notes
+- Status filter dropdown
+
+**Printable Outputs:**
+- **Individual Mix Design Data Sheet** — company header, Mix ID prominently displayed, 3-card KPI bar (f'c / Slump / w/cm), specifications table (code, batch plant, cement type, coarse agg, air content, exposure class, fiber type/dose, intended use), admixtures table (all selected), notes/special requirements table, submittal & approval record table (ref #, submitted date, status, approved date, approved by), **3-column signature block** (Contractor/Estimator + GC/Project Manager + Engineer of Record with License # line), standards footer (ACI 211.1, ACI 318-19 §19.3, ASTM C94, ASTM C1116, ASTM C494, ASTM C260)
+- **Full Mix Design Library Report** — company header, 4-card stats (total/approved/pending/other), full summary table (Mix ID, Code, f'c, Slump, w/cm, Cement, Batch Plant, Status, Approved Date), CONFIDENTIAL footer
+
+**Integration:**
+- `window._getMDLStats()` exposed for Project Status Card
+- Returns: total, approved
+- localStorage per project: `oncor_mixdesign_v1_[projectname]`
+- Links to Submittal Log via submittalRef field
+
+**Why this matters:** On every commercial concrete job, the GC or EOR requires submitted and approved mix designs before any concrete is placed. ACI 318-19 §19.3 mandates specific w/cm limits and exposure classifications for durability — the mix design must document compliance. Without this library, JFS is managing mix designs on scraps of paper or trying to find the right PDF in a folder. With this tool, every mix design is catalogued: "MIX-001 — 4000 PSI w/ synthetic fiber, submitted to EOR on 3/15, approved 3/22 by PE John Smith." When a GC calls and asks "do you have an approved mix design on file for the 5000 PSI footings?" JFS opens Alt+M and shows the record in 5 seconds. The printable data sheet is professional enough to fax/email the GC or attach to a submittal package.
+
+**Commits:**
+- 808ff69: 🧪 Concrete Mix Design Library (Alt+M) (+374 lines) [Session #81]
+
+**Total Lines:** ~160,157 | **New Alt+ Shortcuts:** Alt+M (Mix Design Library)
+
+---
+
 ## ✅ SESSION: Apr 1, 2026 - 21:45 UTC (Overnight Cron #80)
 **Status:** ✅ PRE-POUR INSPECTION & READINESS CHECKLIST added (+493 lines)
 
