@@ -162914,3 +162914,699 @@ document.addEventListener('DOMContentLoaded', function(){
 })();
 // ==================== END PROJECT RISK REGISTER — Zeus ⚡ Session #87 ====================
 </script>
+<script>
+// ==================== JOB FLASH REPORT & MORNING BRIEFING — Zeus ⚡ Session #88 ====================
+(function(){
+'use strict';
+
+var JFR_ID = 'oncor-jfr-modal';
+
+// ── Build the modal DOM
+function buildJFRModal(){
+  if(document.getElementById(JFR_ID)) return;
+
+  var modal = document.createElement('div');
+  modal.id = JFR_ID;
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:99999;display:none;overflow-y:auto;';
+
+  modal.innerHTML = [
+    '<div style="max-width:900px;margin:30px auto;background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:0;overflow:hidden;">',
+      // Header
+      '<div style="background:linear-gradient(135deg,#0c0a00,#1a0a00);border-bottom:2px solid #d97706;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;">',
+        '<div>',
+          '<h2 style="margin:0;color:#fcd34d;font-size:1.15rem;">⚡ Job Flash Report</h2>',
+          '<p style="margin:2px 0 0;color:#64748b;font-size:0.78rem;">Morning Briefing — all project modules at a glance — Alt+Z</p>',
+        '</div>',
+        '<div style="display:flex;gap:8px;align-items:center;">',
+          '<button onclick="jfrPrintReport()" style="padding:6px 14px;background:#d97706;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:600;">🖨️ Print Briefing</button>',
+          '<button onclick="closeJFRModal()" style="padding:6px 14px;background:rgba(255,255,255,0.07);color:#94a3b8;border:1px solid #334155;border-radius:6px;cursor:pointer;font-size:0.8rem;">✕ Close</button>',
+        '</div>',
+      '</div>',
+      // Body
+      '<div id="jfr-body" style="padding:20px;">',
+        '<div style="color:#64748b;text-align:center;padding:40px;">Loading briefing...</div>',
+      '</div>',
+    '</div>'
+  ].join('');
+
+  modal.addEventListener('click', function(e){ if(e.target===modal) closeJFRModal(); });
+  document.body.appendChild(modal);
+}
+
+// ── Helpers
+function jfrNow(){ return new Date(); }
+function jfrFmt(d){ if(!d) return '—'; try{ var dt=new Date(d); if(isNaN(dt)) return d; return dt.toLocaleDateString(); }catch(e){return d;} }
+function jfrDaysUntil(d){ if(!d) return null; var dt=new Date(d); if(isNaN(dt)) return null; var now=new Date(); now.setHours(0,0,0,0); var diff=Math.round((dt-now)/(86400000)); return diff; }
+function jfrDollars(n){ if(!n&&n!==0) return '$0'; return '$'+Math.round(n).toLocaleString(); }
+function jfrPct(n){ if(!n&&n!==0) return '0%'; return Math.round(n)+'%'; }
+
+// ── Get project name
+function jfrGetProject(){
+  try{
+    var el = document.getElementById('projectName');
+    return el ? el.value.trim() : '';
+  }catch(e){ return ''; }
+}
+function jfrGetCompany(){
+  try{
+    var el = document.getElementById('companyName');
+    return el ? el.value.trim() : 'Oncor';
+  }catch(e){ return 'Oncor'; }
+}
+
+// ── Key to localStorage
+function jfrKey(suffix){
+  var pn = jfrGetProject();
+  if(!pn) pn = 'default';
+  return suffix+'_'+pn.toLowerCase().replace(/[^a-z0-9]/g,'_');
+}
+function jfrLoad(suffix){
+  try{ return JSON.parse(localStorage.getItem(jfrKey(suffix))||'[]'); }catch(e){ return []; }
+}
+function jfrLoadObj(suffix){
+  try{ return JSON.parse(localStorage.getItem(jfrKey(suffix))||'{}'); }catch(e){ return {}; }
+}
+
+// ── Build briefing data from all modules
+function jfrCollect(){
+  var today = new Date(); today.setHours(0,0,0,0);
+  var soon7 = new Date(today.getTime()+7*86400000);
+  var soon30 = new Date(today.getTime()+30*86400000);
+
+  var data = {};
+
+  // ── AR / Invoices
+  try{
+    var ar = jfrLoad('oncor_ar_v1');
+    var arTotal=0, arCollected=0, arOutstanding=0, arRetainage=0, arOverdue=0, arOverdueDays=[];
+    ar.forEach(function(inv){
+      if(inv.status==='Voided') return;
+      var amt=parseFloat(inv.amount)||0;
+      var paid=parseFloat(inv.amtPaid)||0;
+      var ret=parseFloat(inv.retainage)||0;
+      arTotal+=amt; arCollected+=paid; arRetainage+=ret;
+      var balance=amt-paid;
+      arOutstanding+=balance;
+      if(balance>0 && inv.dueDate){
+        var d=new Date(inv.dueDate);
+        if(!isNaN(d) && d<today) { arOverdue++; arOverdueDays.push(Math.floor((today-d)/86400000)); }
+      }
+    });
+    data.ar = { total:arTotal, collected:arCollected, outstanding:arOutstanding, retainage:arRetainage, overdue:arOverdue, maxOverdueDays: arOverdueDays.length?Math.max.apply(null,arOverdueDays):0 };
+  }catch(e){ data.ar={total:0,collected:0,outstanding:0,retainage:0,overdue:0,maxOverdueDays:0}; }
+
+  // ── AP / Bills
+  try{
+    var ap = jfrLoad('oncor_ap_v1');
+    var apTotal=0, apPaid=0, apOutstanding=0, apOverdue=0, apDueSoon=0;
+    ap.forEach(function(b){
+      if(b.status==='Voided') return;
+      var amt=parseFloat(b.amount)||0; var paid=parseFloat(b.amtPaid)||0;
+      apTotal+=amt; apPaid+=paid; apOutstanding+=(amt-paid);
+      if(['Unpaid','Partial','Overdue','Due Soon'].indexOf(b.status)>=0){
+        if(b.dueDate){ var d=new Date(b.dueDate); if(!isNaN(d)&&d<today) apOverdue++;
+        else if(!isNaN(d)&&d<=soon7) apDueSoon++; }
+      }
+    });
+    data.ap = { outstanding:apOutstanding, overdue:apOverdue, dueSoon:apDueSoon };
+  }catch(e){ data.ap={outstanding:0,overdue:0,dueSoon:0}; }
+
+  // ── CTC Forecast
+  try{
+    var ctc = jfrLoadObj('oncor_ctc_v1');
+    var budget=parseFloat(ctc.budget)||0, spent=parseFloat(ctc.spent)||0;
+    var eac=parseFloat(ctc.eac)||0, contract=parseFloat(ctc.contract)||0, earned=parseFloat(ctc.earned)||0;
+    var burnPct = budget>0 ? Math.round(spent/budget*100) : 0;
+    data.ctc = { budget:budget, spent:spent, eac:eac, contract:contract, earned:earned, burnPct:burnPct, overBudget:(eac>budget&&budget>0) };
+  }catch(e){ data.ctc={}; }
+
+  // ── Inspections
+  try{
+    var inspList = jfrLoad('oncor_inspections_v1');
+    var inspFail=0, inspUpcoming=[];
+    inspList.forEach(function(i){
+      if(i.status==='Failed'||i.status==='Re-Inspection Required') inspFail++;
+      if((i.status==='Scheduled'||i.status==='Pending')&&i.date){
+        var d=new Date(i.date); if(!isNaN(d)&&d<=soon7) inspUpcoming.push({label:i.type+(i.area?' — '+i.area:''), date:i.date});
+      }
+    });
+    data.inspections = { fail:inspFail, upcoming:inspUpcoming };
+  }catch(e){ data.inspections={fail:0,upcoming:[]}; }
+
+  // ── Permits
+  try{
+    var permits = jfrLoad('oncor_permits_v1');
+    var permExpired=0, permExpiring=[];
+    permits.forEach(function(p){
+      if(p.status==='Active'&&p.expiryDate){
+        var d=new Date(p.expiryDate);
+        if(!isNaN(d)&&d<today) permExpired++;
+        else if(!isNaN(d)&&d<=soon30) permExpiring.push({label:p.type+(p.permitNum?' #'+p.permitNum:''),date:p.expiryDate});
+      }
+    });
+    data.permits = { expired:permExpired, expiring:permExpiring };
+  }catch(e){ data.permits={expired:0,expiring:[]}; }
+
+  // ── Lien Tracker
+  try{
+    var lien = jfrLoadObj('oncor_lien_notices_v1');
+    var lienUrgent=[], lienOverdue=[];
+    var deadlines=[
+      { label:'Notice to Owner (NTO)', date:lien.ntoDeadline },
+      { label:'Lien Affidavit Filing', date:lien.lienDeadline },
+      { label:'Bond Claim Notice', date:lien.bondDeadline }
+    ];
+    deadlines.forEach(function(dl){
+      if(!dl.date) return;
+      var d=new Date(dl.date); if(isNaN(d)) return;
+      if(d<today) lienOverdue.push(dl.label);
+      else if(d<=soon7) lienUrgent.push({label:dl.label, date:dl.date});
+    });
+    // Also check notice log entries with response due dates
+    var notices = jfrLoad('oncor_lien_notices_v1');
+    data.lien = { urgent:lienUrgent, overdue:lienOverdue };
+  }catch(e){ data.lien={urgent:[],overdue:[]}; }
+
+  // ── Risk Register
+  try{
+    var risks = jfrLoad('oncor_rr_v1');
+    var riskOpen=0, riskCritical=0, riskCost=0;
+    risks.forEach(function(r){
+      var score=(parseInt(r.likelihood)||1)*(parseInt(r.impact)||1);
+      if(r.status==='Open'||r.status==='Monitoring') riskOpen++;
+      if(score>=20) riskCritical++;
+      riskCost+=parseFloat(r.costExposure)||0;
+    });
+    data.risks = { open:riskOpen, critical:riskCritical, costExposure:riskCost };
+  }catch(e){ data.risks={open:0,critical:0,costExposure:0}; }
+
+  // ── Change Orders
+  try{
+    var cos = jfrLoad('oncor_change_orders_v1');
+    var coTotal=0, coPending=0, coSigned=0;
+    cos.forEach(function(c){
+      var amt=parseFloat(c.total)||0; coTotal+=amt;
+      if(c.status==='Pending'||c.status==='Draft') coPending++;
+      if(c.status==='Signed') coSigned++;
+    });
+    data.cos = { count:cos.length, total:coTotal, pending:coPending, signed:coSigned };
+  }catch(e){ data.cos={count:0,total:0,pending:0,signed:0}; }
+
+  // ── Punch List
+  try{
+    var punches = jfrLoad('oncor_punch_list_v1');
+    var punchOpen=0, punchDone=0, punchOverdue=0;
+    punches.forEach(function(p){
+      if(p.status==='Complete') punchDone++;
+      else { punchOpen++;
+        if(p.dueDate){ var d=new Date(p.dueDate); if(!isNaN(d)&&d<today) punchOverdue++; }
+      }
+    });
+    data.punch = { open:punchOpen, done:punchDone, overdue:punchOverdue, pct: punches.length?Math.round(punchDone/punches.length*100):0 };
+  }catch(e){ data.punch={open:0,done:0,overdue:0,pct:0}; }
+
+  // ── RFIs
+  try{
+    var rfis = jfrLoad('oncor_rfi_log_v1');
+    var rfiOpen=0, rfiOverdue=0;
+    rfis.forEach(function(r){
+      if(r.status==='Open'||r.status==='Under Review') {
+        rfiOpen++;
+        if(r.responseDue){ var d=new Date(r.responseDue); if(!isNaN(d)&&d<today) rfiOverdue++; }
+      }
+    });
+    data.rfi = { open:rfiOpen, overdue:rfiOverdue };
+  }catch(e){ data.rfi={open:0,overdue:0}; }
+
+  // ── Submittals
+  try{
+    var subs = jfrLoad('oncor_submittal_log_v1');
+    var subPending=0, subRnR=0;
+    subs.forEach(function(s){
+      if(s.status==='Pending'||s.status==='Under Review'||s.status==='Submitted') subPending++;
+      if(s.status==='Revise & Resubmit') subRnR++;
+    });
+    data.submittals = { pending:subPending, rnr:subRnR };
+  }catch(e){ data.submittals={pending:0,rnr:0}; }
+
+  // ── Safety
+  try{
+    var incidents = jfrLoad('oncor_safety_incidents_v1');
+    var incOpen=0, incOsha=0;
+    incidents.forEach(function(i){
+      if(i.status==='Open'||i.status==='In Progress') incOpen++;
+      if(i.oshaRecordable==='Yes') incOsha++;
+    });
+    // Days since last incident
+    var talks = jfrLoad('oncor_safety_talks_v1');
+    var lastTalk = talks.length ? talks.sort(function(a,b){return new Date(b.date)-new Date(a.date);})[0] : null;
+    var daysSince = lastTalk ? Math.floor((today-new Date(lastTalk.date))/86400000) : null;
+    data.safety = { openIncidents:incOpen, oshaRecordable:incOsha, daysSinceLastTalk:daysSince };
+  }catch(e){ data.safety={openIncidents:0,oshaRecordable:0,daysSinceLastTalk:null}; }
+
+  // ── Equipment Rentals
+  try{
+    var equip = jfrLoad('oncor_rental_v1');
+    var equipOverdue=0, equipDueSoon=0;
+    equip.forEach(function(e){
+      if(e.status==='On Rent'&&e.returnDate){
+        var d=new Date(e.returnDate); if(isNaN(d)) return;
+        if(d<today) equipOverdue++;
+        else if(d<=soon7) equipDueSoon++;
+      }
+    });
+    data.equip = { overdue:equipOverdue, dueSoon:equipDueSoon };
+  }catch(e){ data.equip={overdue:0,dueSoon:0}; }
+
+  // ── POs
+  try{
+    var pos = jfrLoad('oncor_po_v1');
+    var poOverdue=0, poPending=0;
+    pos.forEach(function(p){
+      var open=['Draft','Submitted','Confirmed','In Transit','Partially Delivered'].indexOf(p.status)>=0;
+      if(open){ poPending++;
+        if(p.needDate){ var d=new Date(p.needDate); if(!isNaN(d)&&d<today) poOverdue++; }
+      }
+    });
+    data.po = { pending:poPending, overdue:poOverdue };
+  }catch(e){ data.po={pending:0,overdue:0}; }
+
+  // ── Crew / Last Pour
+  try{
+    var timecards = jfrLoad('oncor_timecards_v1');
+    var tcTotal=timecards.length, tcCost=0, tcWorkers=new Set();
+    timecards.forEach(function(t){ tcCost+=(parseFloat(t.totalCost)||0); tcWorkers.add(t.worker); });
+    data.labor = { entries:tcTotal, totalCost:tcCost, workers:tcWorkers.size };
+  }catch(e){ data.labor={entries:0,totalCost:0,workers:0}; }
+
+  // ── Meeting Action Items
+  try{
+    var meetings = jfrLoad('oncor_meetings_v1');
+    var actOpen=0, actOverdue=0;
+    meetings.forEach(function(m){
+      (m.actions||[]).forEach(function(a){
+        if(a.status==='Open'||a.status==='In Progress'){
+          actOpen++;
+          if(a.due){ var d=new Date(a.due); if(!isNaN(d)&&d<today) actOverdue++; }
+        }
+      });
+    });
+    data.meetings = { openActions:actOpen, overdueActions:actOverdue };
+  }catch(e){ data.meetings={openActions:0,overdueActions:0}; }
+
+  // ── Subcontractors
+  try{
+    var subsT = jfrLoad('oncor_subs_v1');
+    var subExpiredCOI=0;
+    subsT.forEach(function(s){
+      var check=[s.glExpiry,s.wcExpiry,s.autoExpiry].filter(Boolean);
+      check.forEach(function(dt){ var d=new Date(dt); if(!isNaN(d)&&d<today) subExpiredCOI++; });
+    });
+    data.subs = { count:subsT.length, expiredCOI:subExpiredCOI };
+  }catch(e){ data.subs={count:0,expiredCOI:0}; }
+
+  // ── Delivery Tickets / last pour
+  try{
+    var tickets = jfrLoad('oncor_delivery_tickets_v1');
+    var ticketYds=0, ticketRejected=0;
+    tickets.forEach(function(t){ ticketYds+=parseFloat(t.yds)||0; if(t.status==='Rejected') ticketRejected++; });
+    data.delivery = { totalYds:ticketYds, rejected:ticketRejected };
+  }catch(e){ data.delivery={totalYds:0,rejected:0}; }
+
+  // ── Concrete Testing
+  try{
+    var cylSets = jfrLoad('oncor_cts_v1');
+    var ctsFail=0, ctsUpcoming=[];
+    cylSets.forEach(function(s){
+      var pass=true;
+      (s.breaks||[]).forEach(function(b){ if(b.result==='Fail') pass=false; });
+      if(!pass) ctsFail++;
+      (s.breaks||[]).forEach(function(b){
+        if(!b.psi&&b.dueDate){ var d=new Date(b.dueDate); if(!isNaN(d)&&d<=soon7) ctsUpcoming.push({label:s.setId+' '+b.age+'d break',date:b.dueDate}); }
+      });
+    });
+    data.testing = { fail:ctsFail, upcoming:ctsUpcoming };
+  }catch(e){ data.testing={fail:0,upcoming:[]}; }
+
+  // ── Warranty / Closeout
+  try{
+    var closeout = jfrLoadObj('oncor_warranty_closeout_v1');
+    var docs = closeout.docs||[];
+    var docsApproved=0;
+    docs.forEach(function(d){ if(d.status==='Approved'||d.status==='Received') docsApproved++; });
+    data.closeout = { docsApproved:docsApproved, docTotal:docs.length };
+  }catch(e){ data.closeout={docsApproved:0,docTotal:0}; }
+
+  return data;
+}
+
+// ── Build alert / badge HTML for a count
+function jfrBadge(n, color){ return '<span style="display:inline-block;background:'+color+';color:#fff;border-radius:10px;padding:0 7px;font-size:0.72rem;font-weight:700;margin-left:6px;">'+n+'</span>'; }
+function jfrOk(){ return '<span style="color:#22c55e;font-size:0.78rem;font-weight:600;">✅ OK</span>'; }
+function jfrWarn(msg){ return '<span style="color:#f59e0b;font-size:0.78rem;font-weight:600;">⚠️ '+msg+'</span>'; }
+function jfrAlert(msg){ return '<span style="color:#ef4444;font-size:0.78rem;font-weight:600;">🔴 '+msg+'</span>'; }
+
+// ── Section card
+function jfrCard(icon, title, statusHtml, items, borderColor){
+  borderColor = borderColor||'#1e293b';
+  return [
+    '<div style="background:#1e293b;border:1px solid '+borderColor+';border-left:3px solid '+borderColor+';border-radius:8px;padding:12px 14px;margin-bottom:10px;">',
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">',
+        '<span style="color:#94a3b8;font-size:0.85rem;font-weight:600;">'+icon+' '+title+'</span>',
+        statusHtml,
+      '</div>',
+      items.length ? '<div style="font-size:0.78rem;color:#64748b;">'+items.map(function(i){return '<div style="padding:1px 0;">'+i+'</div>';}).join('')+'</div>' : '',
+    '</div>'
+  ].join('');
+}
+
+// ── Render briefing
+function jfrRender(){
+  var data = jfrCollect();
+  var pn = jfrGetProject() || '(no project loaded)';
+  var today = new Date();
+  var dateStr = today.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  var html = [];
+
+  // Project + date header
+  html.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #1e293b;">');
+  html.push('<div><div style="font-size:1rem;color:#e2e8f0;font-weight:700;">'+pn+'</div><div style="font-size:0.78rem;color:#64748b;">'+dateStr+'</div></div>');
+  // Alert count
+  var totalAlerts = (data.ar.overdue||0)+(data.ap.overdue||0)+(data.lien.overdue||0).length+(data.lien.urgent||[]).length
+    +(data.inspections.fail||0)+(data.permits.expired||0)+(data.risks.critical||0)
+    +(data.rfi.overdue||0)+(data.submittals.rnr||0)+(data.punch.overdue||0)
+    +(data.equip.overdue||0)+(data.po.overdue||0)+(data.subs.expiredCOI||0)
+    +(data.testing.fail||0)+(data.meetings.overdueActions||0);
+  var alertColor = totalAlerts>5?'#ef4444':totalAlerts>0?'#f59e0b':'#22c55e';
+  html.push('<div style="text-align:right;"><div style="font-size:1.4rem;font-weight:800;color:'+alertColor+';">'+totalAlerts+'</div><div style="font-size:0.7rem;color:#64748b;">alerts today</div></div>');
+  html.push('</div>');
+
+  // ── FINANCIAL section
+  html.push('<div style="color:#fcd34d;font-size:0.72rem;font-weight:700;letter-spacing:0.08em;margin:14px 0 6px;text-transform:uppercase;">💰 Financial</div>');
+
+  // AR
+  var arStatus, arColor='#22c55e';
+  if(data.ar.overdue>0){ arColor='#ef4444'; arStatus=jfrAlert(data.ar.overdue+' invoice(s) overdue ('+data.ar.maxOverdueDays+'d max)'); }
+  else if(data.ar.outstanding>0){ arColor='#f59e0b'; arStatus=jfrWarn(jfrDollars(data.ar.outstanding)+' outstanding'); }
+  else if(data.ar.total>0){ arStatus=jfrOk(); }
+  else { arStatus='<span style="color:#475569;font-size:0.78rem;">No invoices logged</span>'; }
+  html.push(jfrCard('📄','Accounts Receivable',arStatus,[
+    'Invoiced: '+jfrDollars(data.ar.total)+' | Collected: '+jfrDollars(data.ar.collected)+' | Retainage: '+jfrDollars(data.ar.retainage)
+  ],arColor));
+
+  // AP
+  var apStatus, apColor='#22c55e';
+  if(data.ap.overdue>0){ apColor='#ef4444'; apStatus=jfrAlert(data.ap.overdue+' bill(s) overdue'); }
+  else if(data.ap.dueSoon>0){ apColor='#f59e0b'; apStatus=jfrWarn(data.ap.dueSoon+' due in 7 days'); }
+  else if(data.ap.outstanding>0){ apStatus=jfrOk(); }
+  else { apStatus='<span style="color:#475569;font-size:0.78rem;">No bills logged</span>'; }
+  html.push(jfrCard('💳','Accounts Payable',apStatus,[
+    'Outstanding: '+jfrDollars(data.ap.outstanding)
+  ],apColor));
+
+  // CTC
+  if(data.ctc && data.ctc.budget>0){
+    var ctcColor='#22c55e';
+    var ctcStatus;
+    if(data.ctc.overBudget){ ctcColor='#ef4444'; ctcStatus=jfrAlert('EAC over budget!'); }
+    else { ctcStatus=jfrOk(); }
+    html.push(jfrCard('📊','Cost-to-Complete',ctcStatus,[
+      'Budget: '+jfrDollars(data.ctc.budget)+' | Spent: '+jfrDollars(data.ctc.spent)+' ('+data.ctc.burnPct+'%) | EAC: '+jfrDollars(data.ctc.eac)
+    ],ctcColor));
+  }
+
+  // COs
+  if(data.cos.count>0){
+    var coColor='#64748b';
+    var coStatus;
+    if(data.cos.pending>0){ coColor='#f59e0b'; coStatus=jfrWarn(data.cos.pending+' CO(s) pending signature'); }
+    else { coColor='#22c55e'; coStatus=jfrOk(); }
+    html.push(jfrCard('📝','Change Orders',coStatus,[
+      'Total COs: '+data.cos.count+' | Total Value: '+jfrDollars(data.cos.total)+' | Signed: '+data.cos.signed
+    ],coColor));
+  }
+
+  // ── LEGAL / LIEN section
+  html.push('<div style="color:#fcd34d;font-size:0.72rem;font-weight:700;letter-spacing:0.08em;margin:14px 0 6px;text-transform:uppercase;">⚖️ Legal & Lien Rights</div>');
+
+  var lienColor='#22c55e', lienStatus, lienItems=[];
+  if(data.lien.overdue&&data.lien.overdue.length>0){
+    lienColor='#ef4444'; lienStatus=jfrAlert(data.lien.overdue.length+' deadline(s) MISSED!');
+    data.lien.overdue.forEach(function(l){ lienItems.push('🔴 OVERDUE: '+l); });
+  } else if(data.lien.urgent&&data.lien.urgent.length>0){
+    lienColor='#f59e0b'; lienStatus=jfrWarn(data.lien.urgent.length+' deadline(s) in 7 days!');
+    data.lien.urgent.forEach(function(l){ lienItems.push('⚠️ '+l.label+' — '+jfrFmt(l.date)); });
+  } else { lienStatus=jfrOk(); }
+  html.push(jfrCard('⚖️','TX Lien Deadlines',lienStatus,lienItems,lienColor));
+
+  // ── FIELD / QC section
+  html.push('<div style="color:#fcd34d;font-size:0.72rem;font-weight:700;letter-spacing:0.08em;margin:14px 0 6px;text-transform:uppercase;">🏗️ Field & QC</div>');
+
+  // Inspections
+  var inspColor='#22c55e', inspStatus, inspItems=[];
+  if(data.inspections.fail>0){ inspColor='#ef4444'; inspStatus=jfrAlert(data.inspections.fail+' inspection(s) failed!'); }
+  else if(data.inspections.upcoming.length>0){ inspColor='#f59e0b'; inspStatus=jfrWarn(data.inspections.upcoming.length+' scheduled in 7 days'); }
+  else { inspStatus=jfrOk(); }
+  data.inspections.upcoming.forEach(function(i){ inspItems.push('📅 '+jfrFmt(i.date)+' — '+i.label); });
+  html.push(jfrCard('🏗️','Inspections',inspStatus,inspItems,inspColor));
+
+  // Permits
+  var permColor='#22c55e', permStatus, permItems=[];
+  if(data.permits.expired>0){ permColor='#ef4444'; permStatus=jfrAlert(data.permits.expired+' permit(s) EXPIRED!'); }
+  else if(data.permits.expiring.length>0){ permColor='#f59e0b'; permStatus=jfrWarn(data.permits.expiring.length+' expiring in 30 days'); }
+  else { permStatus=jfrOk(); }
+  data.permits.expiring.forEach(function(p){ permItems.push('⚠️ '+p.label+' — expires '+jfrFmt(p.date)); });
+  html.push(jfrCard('📄','Permits',permStatus,permItems,permColor));
+
+  // Cylinder Breaks
+  var ctsColor='#22c55e', ctsStatus, ctsItems=[];
+  if(data.testing.fail>0){ ctsColor='#ef4444'; ctsStatus=jfrAlert(data.testing.fail+' cylinder set(s) FAILED!'); }
+  else if(data.testing.upcoming.length>0){ ctsColor='#f59e0b'; ctsStatus=jfrWarn(data.testing.upcoming.length+' break(s) due in 7 days'); }
+  else { ctsStatus=jfrOk(); }
+  data.testing.upcoming.forEach(function(b){ ctsItems.push('📅 '+jfrFmt(b.date)+' — '+b.label); });
+  html.push(jfrCard('🧫','Concrete Cylinder Breaks',ctsStatus,ctsItems,ctsColor));
+
+  // Delivery / Yardage
+  if(data.delivery.totalYds>0){
+    var delColor='#22c55e', delStatus;
+    if(data.delivery.rejected>0){ delColor='#ef4444'; delStatus=jfrAlert(data.delivery.rejected+' rejected load(s)!'); }
+    else { delStatus='<span style="color:#22c55e;font-size:0.78rem;font-weight:600;">✅ No rejections</span>'; }
+    html.push(jfrCard('🚚','Delivery Tickets',delStatus,[
+      'Total yd³ placed: '+Math.round(data.delivery.totalYds)
+    ],delColor));
+  }
+
+  // ── ADMIN / DOCS section
+  html.push('<div style="color:#fcd34d;font-size:0.72rem;font-weight:700;letter-spacing:0.08em;margin:14px 0 6px;text-transform:uppercase;">📋 Admin & Documentation</div>');
+
+  // RFIs
+  var rfiColor='#22c55e', rfiStatus;
+  if(data.rfi.overdue>0){ rfiColor='#ef4444'; rfiStatus=jfrAlert(data.rfi.overdue+' RFI(s) overdue!'); }
+  else if(data.rfi.open>0){ rfiColor='#f59e0b'; rfiStatus=jfrWarn(data.rfi.open+' RFI(s) open'); }
+  else { rfiStatus=jfrOk(); }
+  html.push(jfrCard('❓','RFIs',rfiStatus,[
+    'Open: '+data.rfi.open+' | Overdue responses: '+data.rfi.overdue
+  ],rfiColor));
+
+  // Submittals
+  var subColor='#22c55e', subStatus;
+  if(data.submittals.rnr>0){ subColor='#ef4444'; subStatus=jfrAlert(data.submittals.rnr+' Revise & Resubmit!'); }
+  else if(data.submittals.pending>0){ subColor='#f59e0b'; subStatus=jfrWarn(data.submittals.pending+' pending review'); }
+  else { subStatus=jfrOk(); }
+  html.push(jfrCard('📋','Submittals',subStatus,[
+    'Pending/Under Review: '+data.submittals.pending+' | R&R: '+data.submittals.rnr
+  ],subColor));
+
+  // Punch List
+  if(data.punch.open+data.punch.done>0){
+    var punColor='#22c55e', punStatus;
+    if(data.punch.overdue>0){ punColor='#ef4444'; punStatus=jfrAlert(data.punch.overdue+' items overdue!'); }
+    else if(data.punch.open>0){ punColor='#f59e0b'; punStatus=jfrWarn(data.punch.open+' open items'); }
+    else { punStatus=jfrOk(); }
+    html.push(jfrCard('✅','Punch List',punStatus,[
+      'Complete: '+data.punch.pct+'% ('+data.punch.done+' done, '+data.punch.open+' open)'
+    ],punColor));
+  }
+
+  // Meeting Actions
+  var mtgColor='#22c55e', mtgStatus;
+  if(data.meetings.overdueActions>0){ mtgColor='#ef4444'; mtgStatus=jfrAlert(data.meetings.overdueActions+' action item(s) overdue!'); }
+  else if(data.meetings.openActions>0){ mtgColor='#f59e0b'; mtgStatus=jfrWarn(data.meetings.openActions+' open action(s)'); }
+  else { mtgStatus=jfrOk(); }
+  html.push(jfrCard('📅','Meeting Action Items',mtgStatus,[
+    'Open: '+data.meetings.openActions+' | Overdue: '+data.meetings.overdueActions
+  ],mtgColor));
+
+  // ── RESOURCES / COMPLIANCE section
+  html.push('<div style="color:#fcd34d;font-size:0.72rem;font-weight:700;letter-spacing:0.08em;margin:14px 0 6px;text-transform:uppercase;">⚙️ Resources & Compliance</div>');
+
+  // Equipment Rentals
+  var eqColor='#22c55e', eqStatus;
+  if(data.equip.overdue>0){ eqColor='#ef4444'; eqStatus=jfrAlert(data.equip.overdue+' item(s) OVERDUE return!'); }
+  else if(data.equip.dueSoon>0){ eqColor='#f59e0b'; eqStatus=jfrWarn(data.equip.dueSoon+' return(s) in 7 days'); }
+  else { eqStatus=jfrOk(); }
+  html.push(jfrCard('🔧','Equipment Rentals',eqStatus,[
+    'Overdue returns: '+data.equip.overdue+' | Due in 7 days: '+data.equip.dueSoon
+  ],eqColor));
+
+  // POs
+  var poColor='#22c55e', poStatus;
+  if(data.po.overdue>0){ poColor='#ef4444'; poStatus=jfrAlert(data.po.overdue+' PO(s) past need date!'); }
+  else if(data.po.pending>0){ poColor='#f59e0b'; poStatus=jfrWarn(data.po.pending+' pending deliveries'); }
+  else { poStatus=jfrOk(); }
+  html.push(jfrCard('📦','Material Procurement',poStatus,[
+    'Open POs: '+data.po.pending+' | Overdue: '+data.po.overdue
+  ],poColor));
+
+  // Subs / COIs
+  var subCoiColor='#22c55e', subCoiStatus;
+  if(data.subs.expiredCOI>0){ subCoiColor='#ef4444'; subCoiStatus=jfrAlert(data.subs.expiredCOI+' expired COI(s)!'); }
+  else { subCoiStatus=jfrOk(); }
+  html.push(jfrCard('🤝','Subcontractor COIs',subCoiStatus,[
+    'Subs on job: '+data.subs.count+' | Expired insurance certs: '+data.subs.expiredCOI
+  ],subCoiColor));
+
+  // Safety
+  var safColor='#22c55e', safStatus;
+  if(data.safety.oshaRecordable>0){ safColor='#ef4444'; safStatus=jfrAlert(data.safety.oshaRecordable+' OSHA recordable!'); }
+  else if(data.safety.openIncidents>0){ safColor='#f59e0b'; safStatus=jfrWarn(data.safety.openIncidents+' open incident(s)'); }
+  else { safStatus=jfrOk(); }
+  html.push(jfrCard('🦺','Safety',safStatus,[
+    'Open incidents: '+data.safety.openIncidents+(data.safety.daysSinceLastTalk!==null?' | Last toolbox talk: '+data.safety.daysSinceLastTalk+'d ago':'')
+  ],safColor));
+
+  // Risk Register
+  var rrColor='#22c55e', rrStatus;
+  if(data.risks.critical>0){ rrColor='#ef4444'; rrStatus=jfrAlert(data.risks.critical+' CRITICAL risk(s)!'); }
+  else if(data.risks.open>0){ rrColor='#f59e0b'; rrStatus=jfrWarn(data.risks.open+' open risk(s)'); }
+  else { rrStatus=jfrOk(); }
+  html.push(jfrCard('⚠️','Risk Register',rrStatus,[
+    'Open: '+data.risks.open+' | Critical: '+data.risks.critical+' | Cost Exposure: '+jfrDollars(data.risks.costExposure)
+  ],rrColor));
+
+  // Footer
+  html.push('<div style="text-align:center;margin-top:18px;padding:10px;border-top:1px solid #1e293b;font-size:0.72rem;color:#475569;">');
+  html.push('⚡ Oncor Job Flash Report — generated '+today.toLocaleString()+' — CONFIDENTIAL');
+  html.push('</div>');
+
+  document.getElementById('jfr-body').innerHTML = html.join('');
+}
+
+// ── Print
+function jfrPrintReport(){
+  var data = jfrCollect();
+  var pn = jfrGetProject() || '(no project loaded)';
+  var cn = jfrGetCompany();
+  var today = new Date();
+  var dateStr = today.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+  // Collect all rows for print
+  var rows = [];
+  function addRow(icon, area, label, status, detail){
+    rows.push('<tr><td>'+icon+'</td><td style="color:#64748b;">'+area+'</td><td style="font-weight:600;">'+label+'</td><td>'+status+'</td><td style="color:#64748b;font-size:0.78rem;">'+detail+'</td></tr>');
+  }
+
+  // AR
+  var arS = data.ar.overdue>0?'🔴 '+data.ar.overdue+' invoice(s) overdue':data.ar.outstanding>0?'⚠️ Outstanding: '+jfrDollars(data.ar.outstanding):'✅ OK';
+  addRow('📄','Financial','AR / Invoices',arS,'Invoiced: '+jfrDollars(data.ar.total)+' | Collected: '+jfrDollars(data.ar.collected));
+  var apS = data.ap.overdue>0?'🔴 '+data.ap.overdue+' overdue':data.ap.dueSoon>0?'⚠️ '+data.ap.dueSoon+' due in 7d':'✅ OK';
+  addRow('💳','Financial','Accounts Payable',apS,'Outstanding: '+jfrDollars(data.ap.outstanding));
+  var coS = data.cos.pending>0?'⚠️ '+data.cos.pending+' pending signature':'✅ OK';
+  if(data.cos.count>0) addRow('📝','Financial','Change Orders',coS,'Total: '+data.cos.count+' | Value: '+jfrDollars(data.cos.total));
+  var lienS = data.lien.overdue&&data.lien.overdue.length?'🔴 MISSED: '+data.lien.overdue.join(', '):data.lien.urgent&&data.lien.urgent.length?'⚠️ '+data.lien.urgent.length+' due in 7d':'✅ OK';
+  addRow('⚖️','Legal','TX Lien Deadlines',lienS,'');
+  var inspS = data.inspections.fail>0?'🔴 '+data.inspections.fail+' failed':data.inspections.upcoming.length>0?'⚠️ '+data.inspections.upcoming.length+' scheduled':'✅ OK';
+  addRow('🏗️','Field','Inspections',inspS,'Upcoming: '+(data.inspections.upcoming.map(function(i){return jfrFmt(i.date)+' '+i.label;}).join(', ')||'none'));
+  var permS = data.permits.expired>0?'🔴 '+data.permits.expired+' EXPIRED':data.permits.expiring.length>0?'⚠️ '+data.permits.expiring.length+' expiring':'✅ OK';
+  addRow('📄','Field','Permits',permS,'');
+  var ctsS = data.testing.fail>0?'🔴 '+data.testing.fail+' FAILED':data.testing.upcoming.length>0?'⚠️ '+data.testing.upcoming.length+' breaks due':'✅ OK';
+  addRow('🧫','Field','Cylinder Breaks',ctsS,'Upcoming: '+(data.testing.upcoming.map(function(b){return jfrFmt(b.date)+' '+b.label;}).join(', ')||'none'));
+  addRow('❓','Docs','RFIs',data.rfi.overdue>0?'🔴 '+data.rfi.overdue+' overdue':data.rfi.open>0?'⚠️ '+data.rfi.open+' open':'✅ OK','');
+  addRow('📋','Docs','Submittals',data.submittals.rnr>0?'🔴 '+data.submittals.rnr+' R&R':data.submittals.pending>0?'⚠️ '+data.submittals.pending+' pending':'✅ OK','');
+  if(data.punch.open+data.punch.done>0) addRow('✅','Docs','Punch List',data.punch.overdue>0?'🔴 '+data.punch.overdue+' overdue':data.punch.open>0?'⚠️ '+data.punch.open+' open':'✅ 100% complete',data.punch.pct+'% done');
+  addRow('📅','Docs','Meeting Actions',data.meetings.overdueActions>0?'🔴 '+data.meetings.overdueActions+' overdue':data.meetings.openActions>0?'⚠️ '+data.meetings.openActions+' open':'✅ OK','');
+  addRow('🔧','Resources','Equipment Rentals',data.equip.overdue>0?'🔴 '+data.equip.overdue+' overdue return':data.equip.dueSoon>0?'⚠️ '+data.equip.dueSoon+' due in 7d':'✅ OK','');
+  addRow('📦','Resources','Procurement / POs',data.po.overdue>0?'🔴 '+data.po.overdue+' past need date':data.po.pending>0?'⚠️ '+data.po.pending+' pending':'✅ OK','');
+  addRow('🤝','Resources','Sub COIs',data.subs.expiredCOI>0?'🔴 '+data.subs.expiredCOI+' expired':'✅ OK','Subs: '+data.subs.count);
+  addRow('🦺','Safety','Safety / Incidents',data.safety.oshaRecordable>0?'🔴 OSHA Recordable!':data.safety.openIncidents>0?'⚠️ '+data.safety.openIncidents+' open':'✅ OK','');
+  addRow('⚠️','Risk','Risk Register',data.risks.critical>0?'🔴 '+data.risks.critical+' Critical':data.risks.open>0?'⚠️ '+data.risks.open+' open':'✅ OK','Exposure: '+jfrDollars(data.risks.costExposure));
+
+  var phone = (function(){ try{ var e=document.getElementById('companyPhone'); return e?e.value:''; }catch(x){return '';} })();
+  var totalAlerts = rows.filter(function(r){return r.indexOf('🔴')>=0;}).length + rows.filter(function(r){return r.indexOf('⚠️')>=0;}).length;
+
+  var html = '<!DOCTYPE html><html><head><title>Job Flash Report — '+pn+'</title>'+
+    '<style>body{font-family:Arial,sans-serif;font-size:12px;color:#1a1a2e;margin:0;padding:20px;}'+
+    'h1{margin:0;font-size:1.25rem;}h2{font-size:0.9rem;margin:0;color:#64748b;}'+
+    '.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #d97706;padding-bottom:12px;margin-bottom:16px;}'+
+    '.alerts-box{background:#fef3c7;border:1px solid #d97706;border-radius:6px;padding:10px 14px;margin-bottom:16px;font-size:0.82rem;}'+
+    'table{width:100%;border-collapse:collapse;font-size:0.78rem;margin-top:8px;}'+
+    'th{background:#1e293b;color:#fff;padding:7px 10px;text-align:left;font-size:0.72rem;}'+
+    'td{padding:6px 10px;border-bottom:1px solid #e2e8f0;vertical-align:top;}'+
+    '.red td{background:#fef2f2;} .warn td{background:#fffbeb;}'+
+    '.ok td{background:#f0fdf4;}'+
+    '.section-header{background:#f8fafc;font-weight:700;font-size:0.7rem;color:#64748b;letter-spacing:0.08em;}'+
+    '.foot{margin-top:20px;font-size:0.7rem;color:#9ca3af;text-align:center;}'+
+    '@media print{button{display:none!important}}'+
+    '</style></head><body>'+
+    '<div class="header"><div><h1>⚡ JOB FLASH REPORT — MORNING BRIEFING</h1><h2>'+pn+' — '+dateStr+'</h2></div>'+
+    '<div style="text-align:right;"><div style="font-size:0.85rem;font-weight:700;">'+cn+'</div>'+
+    (phone?'<div style="font-size:0.75rem;color:#64748b;">'+phone+'</div>':'')+
+    '</div></div>'+
+    '<div class="alerts-box">⚡ <strong>'+totalAlerts+' items need attention today.</strong> Red = immediate action required. Amber = monitor/follow up.</div>'+
+    '<table><thead><tr><th>⚡</th><th>Area</th><th>Module</th><th>Status</th><th>Detail</th></tr></thead><tbody>'+
+    rows.map(function(r){
+      var cl = r.indexOf('🔴')>=0?'red':r.indexOf('⚠️')>=0?'warn':'ok';
+      return '<tr class="'+cl+'">'+r.replace(/<tr>/,'').replace(/<\/tr>/,'')+'</tr>';
+    }).join('')+
+    '</tbody></table>'+
+    '<div class="foot">⚡ Oncor Job Flash Report | CONFIDENTIAL — INTERNAL USE ONLY | Generated: '+new Date().toLocaleString()+'</div>'+
+    '<div style="text-align:center;margin-top:10px;"><button onclick="window.print()" style="background:#d97706;color:#fff;border:none;padding:8px 24px;border-radius:6px;cursor:pointer;font-size:0.85rem;">🖨 Print / Save PDF</button></div>'+
+    '</body></html>';
+
+  var w = window.open('','_blank');
+  if(w){ w.document.write(html); w.document.close(); }
+}
+
+// ── Show / close
+function showJFRModal(){
+  buildJFRModal();
+  var m = document.getElementById(JFR_ID);
+  if(m){ m.style.display='block'; jfrRender(); }
+}
+function closeJFRModal(){
+  var m = document.getElementById(JFR_ID);
+  if(m) m.style.display='none';
+}
+
+// ── Expose
+window.showJFRModal = showJFRModal;
+window.closeJFRModal = closeJFRModal;
+window.jfrPrintReport = jfrPrintReport;
+
+// ── Alt+Z keyboard shortcut
+document.addEventListener('keydown', function(e){
+  if(e.altKey && e.key.toLowerCase()==='z'){
+    e.preventDefault();
+    var m = document.getElementById(JFR_ID);
+    if(m && m.style.display!=='none') closeJFRModal();
+    else showJFRModal();
+  }
+});
+
+// ── Inject sidebar button after Risk Register
+document.addEventListener('DOMContentLoaded', function(){
+  setTimeout(function(){
+    var rrBtn = document.querySelector('button[onclick*="showRRModal"]');
+    if(!rrBtn) return;
+    var parentRow = rrBtn.closest('div');
+    if(!parentRow||!parentRow.parentNode) return;
+    var newRow = document.createElement('div');
+    newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+    newRow.innerHTML = '<button class="action-btn secondary" onclick="showJFRModal()" title="Job Flash Report — morning briefing with all project modules at a glance (Alt+Z)" style="background:rgba(217,119,6,0.08);border-color:rgba(217,119,6,0.3);color:#fcd34d;">⚡ Job Flash Report</button>';
+    parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+  }, 6600);
+});
+
+})();
+// ==================== END JOB FLASH REPORT — Zeus ⚡ Session #88 ====================
+</script>
