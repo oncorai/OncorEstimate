@@ -166719,3 +166719,721 @@ document.addEventListener('DOMContentLoaded', function(){
 })();
 // ==================== END VENDOR CALL LOG — Zeus ⚡ Session #91 ====================
 </script>
+
+<script>
+// ==================== LOAN DRAW REQUEST TRACKER — Zeus ⚡ Session #92 ====================
+// Alt+0 — Track construction loan draw requests with schedule of values
+// Purpose: Manage lender draw requests, inspection requirements, and fund disbursements
+(function(){
+'use strict';
+
+var LDR_ID = 'ldr-modal-zs92';
+
+function getLDRData(){
+  var pk = ((document.getElementById('project-name')||{}).value||'').replace(/[^a-z0-9]/gi,'_').toLowerCase();
+  try{ return JSON.parse(localStorage.getItem('oncor_draws_v1_'+pk))||{draws:[],loanAmount:0,lenderName:'',inspectorName:'',retainagePct:10}; }
+  catch(e){ return {draws:[],loanAmount:0,lenderName:'',inspectorName:'',retainagePct:10}; }
+}
+function saveLDRData(d){
+  var pk = ((document.getElementById('project-name')||{}).value||'').replace(/[^a-z0-9]/gi,'_').toLowerCase();
+  localStorage.setItem('oncor_draws_v1_'+pk, JSON.stringify(d));
+}
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmt$(n){ return '$'+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+
+var DRAW_STATUSES = ['Draft','Submitted','Under Review','Inspection Scheduled','Inspection Complete','Approved','Funded','Denied','Revised'];
+var STATUS_COLORS = {'Draft':'#64748b','Submitted':'#3b82f6','Under Review':'#8b5cf6','Inspection Scheduled':'#f59e0b','Inspection Complete':'#14b8a6','Approved':'#10b981','Funded':'#059669','Denied':'#ef4444','Revised':'#f97316'};
+
+function showLDRModal(){
+  var existing = document.getElementById(LDR_ID);
+  if(existing){ existing.style.display='flex'; renderLDR(); return; }
+  var modal = document.createElement('div');
+  modal.id = LDR_ID;
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9700;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;backdrop-filter:blur(4px);';
+  modal.innerHTML = '<div style="background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:14px;width:100%;max-width:950px;min-height:80vh;display:flex;flex-direction:column;box-shadow:0 25px 60px rgba(0,0,0,0.6);margin:auto;">'+
+    '<div style="background:linear-gradient(135deg,rgba(5,150,105,0.15),rgba(5,150,105,0.05));border-bottom:1px solid rgba(255,255,255,0.1);padding:18px 24px;display:flex;justify-content:space-between;align-items:center;border-radius:14px 14px 0 0;">'+
+      '<div><div style="font-size:1.15rem;font-weight:700;color:#f1f5f9;">🏦 Loan Draw Request Tracker</div>'+
+      '<p style="margin:2px 0 0;color:#64748b;font-size:0.8rem;">Track construction loan draws, inspections, and fund disbursements — Alt+0</p></div>'+
+      '<div style="display:flex;gap:8px;align-items:center;">'+
+        '<button onclick="ldrPrint()" style="background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);padding:7px 14px;border-radius:6px;cursor:pointer;font-size:0.8rem;">🖨️ Print</button>'+
+        '<button onclick="document.getElementById(\''+LDR_ID+'\').style.display=\'none\'" style="background:rgba(255,255,255,0.05);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);padding:7px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;">✕</button>'+
+      '</div>'+
+    '</div>'+
+    '<div style="padding:20px 24px;flex:1;" id="ldr-content"></div>'+
+  '</div>';
+  modal.addEventListener('click', function(e){ if(e.target===modal) document.getElementById(LDR_ID).style.display='none'; });
+  document.body.appendChild(modal);
+  renderLDR();
+}
+
+function renderLDR(){
+  var c = document.getElementById('ldr-content');
+  if(!c) return;
+  var data = getLDRData();
+  var totalRequested = data.draws.reduce(function(a,d){ return a+(parseFloat(d.amount)||0); },0);
+  var totalFunded = data.draws.filter(function(d){ return d.status==='Funded'; }).reduce(function(a,d){ return a+(parseFloat(d.amount)||0); },0);
+  var totalRetainage = data.draws.reduce(function(a,d){ return a+(parseFloat(d.retainage)||0); },0);
+  var pending = data.draws.filter(function(d){ return d.status!=='Funded'&&d.status!=='Denied'; }).length;
+  var loanAmt = parseFloat(data.loanAmount)||0;
+  var remaining = loanAmt - totalFunded;
+  var pctDrawn = loanAmt>0?Math.round(totalFunded/loanAmt*100):0;
+
+  // Loan setup bar
+  var setupHtml = '<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:14px;margin-bottom:16px;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">'+
+      '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">'+
+        '<div><span style="font-size:0.7rem;color:#64748b;">Loan Amount</span><div style="font-size:1.1rem;font-weight:700;color:#10b981;">'+(loanAmt?fmt$(loanAmt):'Not set')+'</div></div>'+
+        '<div><span style="font-size:0.7rem;color:#64748b;">Lender</span><div style="font-size:0.9rem;color:#f1f5f9;">'+(data.lenderName||'Not set')+'</div></div>'+
+        '<div><span style="font-size:0.7rem;color:#64748b;">Inspector</span><div style="font-size:0.9rem;color:#f1f5f9;">'+(data.inspectorName||'Not set')+'</div></div>'+
+        '<div><span style="font-size:0.7rem;color:#64748b;">Retainage</span><div style="font-size:0.9rem;color:#f1f5f9;">'+(data.retainagePct||10)+'%</div></div>'+
+      '</div>'+
+      '<button onclick="ldrSetup()" style="background:rgba(255,255,255,0.05);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;">⚙️ Setup</button>'+
+    '</div>'+
+    (loanAmt?'<div style="margin-top:10px;">'+
+      '<div style="display:flex;justify-content:space-between;font-size:0.75rem;color:#94a3b8;margin-bottom:4px;">'+
+        '<span>Drawn: '+fmt$(totalFunded)+' of '+fmt$(loanAmt)+'</span><span>'+pctDrawn+'%</span></div>'+
+      '<div style="background:rgba(255,255,255,0.1);border-radius:4px;height:8px;">'+
+        '<div style="background:#10b981;height:8px;border-radius:4px;width:'+Math.min(pctDrawn,100)+'%;transition:width 0.3s;"></div></div>'+
+    '</div>':'')+
+  '</div>';
+
+  var stats = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:16px;">'+
+    '<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px;text-align:center;">'+
+      '<div style="font-size:1.2rem;font-weight:700;color:#f1f5f9;">'+data.draws.length+'</div><div style="font-size:0.7rem;color:#64748b;">Draw Requests</div></div>'+
+    '<div style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:12px;text-align:center;">'+
+      '<div style="font-size:1rem;font-weight:700;color:#10b981;">'+fmt$(totalFunded)+'</div><div style="font-size:0.7rem;color:#64748b;">Total Funded</div></div>'+
+    '<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px;text-align:center;">'+
+      '<div style="font-size:1rem;font-weight:700;color:#f59e0b;">'+fmt$(totalRetainage)+'</div><div style="font-size:0.7rem;color:#64748b;">Retainage Held</div></div>'+
+    (remaining>0?'<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px;text-align:center;">'+
+      '<div style="font-size:1rem;font-weight:700;color:#60a5fa;">'+fmt$(remaining)+'</div><div style="font-size:0.7rem;color:#64748b;">Remaining</div></div>':'')+
+    (pending?'<div style="background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.3);border-radius:8px;padding:12px;text-align:center;">'+
+      '<div style="font-size:1.2rem;font-weight:700;color:#fbbf24;">'+pending+'</div><div style="font-size:0.7rem;color:#64748b;">Pending</div></div>':'')+
+  '</div>';
+
+  var addBtn = '<div style="margin-bottom:16px;">'+
+    '<button onclick="ldrAddDraw()" style="background:rgba(5,150,105,0.1);color:#4ade80;border:1px solid rgba(5,150,105,0.3);padding:9px 18px;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600;">+ New Draw Request</button>'+
+  '</div>';
+
+  var list = '';
+  if(!data.draws.length){
+    list = '<div style="text-align:center;padding:50px 20px;color:#64748b;">'+
+      '<div style="font-size:3rem;margin-bottom:12px;">🏦</div>'+
+      '<div style="font-size:1rem;font-weight:600;color:#94a3b8;margin-bottom:8px;">No draw requests yet</div>'+
+      '<div style="font-size:0.85rem;">Set up your loan info above, then add draw requests as work progresses.</div>'+
+    '</div>';
+  } else {
+    data.draws.sort(function(a,b){ return (b.drawNo||0)-(a.drawNo||0); });
+    data.draws.forEach(function(d, idx){
+      var sColor = STATUS_COLORS[d.status]||'#64748b';
+      var borderColor = d.status==='Funded'?'rgba(16,185,129,0.3)':d.status==='Denied'?'rgba(239,68,68,0.3)':'rgba(255,255,255,0.1)';
+      list += '<div style="background:rgba(30,41,59,0.7);border:1px solid '+borderColor+';border-radius:10px;padding:16px;margin-bottom:12px;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+          '<div>'+
+            '<span style="background:rgba(255,255,255,0.08);color:#fcd34d;padding:3px 10px;border-radius:4px;font-size:0.8rem;font-weight:700;">Draw #'+(d.drawNo||idx+1)+'</span>'+
+            '<span style="background:rgba(0,0,0,0.3);color:'+sColor+';border:1px solid '+sColor+';padding:3px 10px;border-radius:5px;font-size:0.75rem;font-weight:600;margin-left:8px;">'+escHtml(d.status||'Draft')+'</span>'+
+          '</div>'+
+          '<div style="display:flex;gap:6px;">'+
+            '<button onclick="ldrEditDraw('+idx+')" style="background:rgba(255,255,255,0.05);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);padding:5px 10px;border-radius:4px;cursor:pointer;font-size:0.75rem;">✏️</button>'+
+            '<button onclick="ldrDeleteDraw('+idx+')" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.2);padding:5px 10px;border-radius:4px;cursor:pointer;font-size:0.75rem;">🗑</button>'+
+          '</div>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-top:12px;">'+
+          '<div><div style="font-size:1.2rem;font-weight:700;color:#10b981;">'+fmt$(d.amount)+'</div><div style="font-size:0.7rem;color:#64748b;">Requested</div></div>'+
+          '<div><div style="font-size:1rem;font-weight:600;color:#f59e0b;">'+fmt$(d.retainage||0)+'</div><div style="font-size:0.7rem;color:#64748b;">Retainage</div></div>'+
+          '<div><div style="font-size:1rem;font-weight:600;color:#14b8a6;">'+fmt$((parseFloat(d.amount)||0)-(parseFloat(d.retainage)||0))+'</div><div style="font-size:0.7rem;color:#64748b;">Net Disbursement</div></div>'+
+          (d.pctComplete?'<div><div style="font-size:1rem;font-weight:600;color:#f1f5f9;">'+d.pctComplete+'%</div><div style="font-size:0.7rem;color:#64748b;">Complete</div></div>':'')+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;margin-top:10px;font-size:0.8rem;color:#94a3b8;">'+
+          (d.submitDate?'<div>📅 Submitted: '+escHtml(d.submitDate)+'</div>':'')+
+          (d.inspectionDate?'<div>🔍 Inspection: '+escHtml(d.inspectionDate)+'</div>':'')+
+          (d.fundedDate?'<div>💰 Funded: '+escHtml(d.fundedDate)+'</div>':'')+
+          (d.periodFrom&&d.periodTo?'<div>📆 Period: '+escHtml(d.periodFrom)+' to '+escHtml(d.periodTo)+'</div>':'')+
+        '</div>'+
+        (d.description?'<div style="margin-top:8px;font-size:0.8rem;color:#94a3b8;border-left:2px solid rgba(16,185,129,0.3);padding-left:10px;">'+escHtml(d.description)+'</div>':'')+
+        (d.lenderNotes?'<div style="margin-top:6px;font-size:0.75rem;color:#f97316;">🏦 Lender: '+escHtml(d.lenderNotes)+'</div>':'')+
+      '</div>';
+    });
+  }
+  c.innerHTML = setupHtml + stats + addBtn + list;
+}
+
+function ldrSetup(){
+  var data = getLDRData();
+  var la = prompt('Total loan amount ($):', data.loanAmount||'');
+  if(la!==null) data.loanAmount = la;
+  var ln = prompt('Lender name:', data.lenderName||'');
+  if(ln!==null) data.lenderName = ln;
+  var insp = prompt('Inspector / inspection company:', data.inspectorName||'');
+  if(insp!==null) data.inspectorName = insp;
+  var ret = prompt('Retainage % (default 10):', data.retainagePct||10);
+  if(ret!==null) data.retainagePct = ret;
+  saveLDRData(data);
+  renderLDR();
+}
+
+function ldrAddDraw(){
+  var data = getLDRData();
+  var drawNo = data.draws.length+1;
+  var draw = {
+    drawNo: drawNo,
+    amount: prompt('Draw amount requested ($):','')||'',
+    pctComplete: prompt('% complete at this draw:','')||'',
+    periodFrom: prompt('Period from (YYYY-MM-DD):','')||'',
+    periodTo: prompt('Period to (YYYY-MM-DD):','')||'',
+    submitDate: prompt('Submit date (YYYY-MM-DD):', new Date().toISOString().split('T')[0])||'',
+    inspectionDate: prompt('Inspection date (YYYY-MM-DD):','')||'',
+    status: prompt('Status ('+DRAW_STATUSES.join('/')+'): ','Draft')||'Draft',
+    description: prompt('Work completed this period:','')||'',
+    lenderNotes: prompt('Lender notes/requirements:','')||''
+  };
+  var retPct = parseFloat(data.retainagePct)||10;
+  draw.retainage = ((parseFloat(draw.amount)||0)*retPct/100).toFixed(0);
+  data.draws.push(draw);
+  saveLDRData(data);
+  renderLDR();
+}
+
+function ldrEditDraw(idx){
+  var data = getLDRData();
+  var d = data.draws[idx];
+  if(!d) return;
+  var newStatus = prompt('Status ('+DRAW_STATUSES.join('/')+'):', d.status||'');
+  if(newStatus!==null) d.status = newStatus;
+  var newAmt = prompt('Amount ($):', d.amount||'');
+  if(newAmt!==null) d.amount = newAmt;
+  var newInsp = prompt('Inspection date:', d.inspectionDate||'');
+  if(newInsp!==null) d.inspectionDate = newInsp;
+  var newFunded = prompt('Funded date (if funded):', d.fundedDate||'');
+  if(newFunded!==null) d.fundedDate = newFunded;
+  var newNotes = prompt('Lender notes:', d.lenderNotes||'');
+  if(newNotes!==null) d.lenderNotes = newNotes;
+  var retPct = parseFloat(data.retainagePct)||10;
+  d.retainage = ((parseFloat(d.amount)||0)*retPct/100).toFixed(0);
+  saveLDRData(data);
+  renderLDR();
+}
+
+function ldrDeleteDraw(idx){
+  if(!confirm('Delete draw #'+(idx+1)+'?')) return;
+  var data = getLDRData();
+  data.draws.splice(idx,1);
+  saveLDRData(data);
+  renderLDR();
+}
+
+function ldrPrint(){
+  var data = getLDRData();
+  var companyName = (document.getElementById('company-name')||{}).value||'Oncor Concrete';
+  var projectName = (document.getElementById('project-name')||{}).value||'Project';
+  var totalFunded = data.draws.filter(function(d){ return d.status==='Funded'; }).reduce(function(a,d){ return a+(parseFloat(d.amount)||0); },0);
+  var totalRetainage = data.draws.reduce(function(a,d){ return a+(parseFloat(d.retainage)||0); },0);
+  var rows = data.draws.map(function(d,i){
+    return '<tr style="border-bottom:1px solid #e2e8f0;'+(d.status==='Funded'?'background:#f0fdf4;':d.status==='Denied'?'background:#fef2f2;':'')+'">'+
+      '<td style="padding:8px;font-weight:700;">#'+(d.drawNo||i+1)+'</td>'+
+      '<td style="padding:8px;">'+escHtml(d.submitDate||'—')+'</td>'+
+      '<td style="padding:8px;text-align:right;">'+fmt$(d.amount)+'</td>'+
+      '<td style="padding:8px;text-align:right;">'+fmt$(d.retainage)+'</td>'+
+      '<td style="padding:8px;text-align:right;font-weight:600;">'+fmt$((parseFloat(d.amount)||0)-(parseFloat(d.retainage)||0))+'</td>'+
+      '<td style="padding:8px;">'+(d.pctComplete?d.pctComplete+'%':'—')+'</td>'+
+      '<td style="padding:8px;">'+escHtml(d.status||'—')+'</td>'+
+      '<td style="padding:8px;font-size:0.75rem;">'+escHtml(d.description||'—')+'</td>'+
+    '</tr>';
+  }).join('');
+  var html = '<!DOCTYPE html><html><head><title>Loan Draw Summary</title><style>body{font-family:sans-serif;color:#1e293b;padding:20px;max-width:1000px;margin:0 auto;font-size:0.85rem;} table{width:100%;border-collapse:collapse;} th{background:#1e293b;color:#fff;padding:8px;text-align:left;font-size:0.8rem;} @media print{button{display:none;}}</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;margin-bottom:20px;">'+
+      '<div><div style="font-size:1.2rem;font-weight:700;">'+escHtml(companyName)+'</div><div style="color:#64748b;">Project: '+escHtml(projectName)+'</div></div>'+
+      '<div style="text-align:right;"><div style="font-size:1rem;font-weight:700;">CONSTRUCTION LOAN DRAW SUMMARY</div>'+
+      '<div style="color:#64748b;font-size:0.8rem;">Lender: '+escHtml(data.lenderName||'—')+' | '+new Date().toLocaleDateString()+'</div></div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">'+
+      '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;text-align:center;"><div style="font-size:0.7rem;color:#64748b;">Loan Amount</div><div style="font-size:1.1rem;font-weight:700;">'+fmt$(data.loanAmount)+'</div></div>'+
+      '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:10px;text-align:center;"><div style="font-size:0.7rem;color:#64748b;">Total Funded</div><div style="font-size:1.1rem;font-weight:700;color:#16a34a;">'+fmt$(totalFunded)+'</div></div>'+
+      '<div style="background:#fefce8;border:1px solid #fef08a;border-radius:6px;padding:10px;text-align:center;"><div style="font-size:0.7rem;color:#64748b;">Retainage Held</div><div style="font-size:1.1rem;font-weight:700;color:#ca8a04;">'+fmt$(totalRetainage)+'</div></div>'+
+      '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px;text-align:center;"><div style="font-size:0.7rem;color:#64748b;">Remaining</div><div style="font-size:1.1rem;font-weight:700;color:#2563eb;">'+fmt$((parseFloat(data.loanAmount)||0)-totalFunded)+'</div></div>'+
+    '</div>'+
+    '<table><thead><tr><th>Draw #</th><th>Submitted</th><th>Requested</th><th>Retainage</th><th>Net</th><th>% Comp.</th><th>Status</th><th>Description</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<div style="margin-top:16px;font-size:0.75rem;color:#64748b;border-top:1px solid #e2e8f0;padding-top:8px;">CONFIDENTIAL — FOR LENDER AND BORROWER USE ONLY</div>'+
+    '<button onclick="window.print()" style="margin-top:12px;background:#1e293b;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;">🖨️ Print / Save PDF</button>'+
+  '</body></html>';
+  var w = window.open('','_blank');
+  if(w){ w.document.write(html); w.document.close(); }
+}
+
+window.showLDRModal = showLDRModal;
+window.ldrSetup = ldrSetup;
+window.ldrAddDraw = ldrAddDraw;
+window.ldrEditDraw = ldrEditDraw;
+window.ldrDeleteDraw = ldrDeleteDraw;
+window.ldrPrint = ldrPrint;
+
+document.addEventListener('keydown', function(e){
+  if(e.altKey && e.key==='0'){
+    e.preventDefault();
+    var m = document.getElementById(LDR_ID);
+    if(m && m.style.display!=='none') m.style.display='none';
+    else showLDRModal();
+  }
+});
+
+document.addEventListener('DOMContentLoaded', function(){
+  setTimeout(function(){
+    var vclBtn = document.querySelector('button[onclick*="showVCLModal"]');
+    if(!vclBtn) return;
+    var parentRow = vclBtn.closest('div');
+    if(!parentRow||!parentRow.parentNode) return;
+    var newRow = document.createElement('div');
+    newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+    newRow.innerHTML = '<button class="action-btn secondary" onclick="showLDRModal()" title="Loan Draw Request Tracker — track construction loan draws, inspections, fund disbursements (Alt+0)" style="background:rgba(5,150,105,0.08);border-color:rgba(5,150,105,0.3);color:#6ee7b7;">🏦 Loan Draws</button>';
+    parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+  }, 8300);
+});
+
+})();
+// ==================== END LOAN DRAW REQUEST TRACKER — Zeus ⚡ Session #92 ====================
+</script>
+
+<script>
+// ==================== PROJECT COMPARISON MATRIX — Zeus ⚡ Session #92 ====================
+// Ctrl+Alt+C — Side-by-side comparison of multiple saved projects
+// Purpose: Compare 2-4 projects head-to-head for bidding decisions, capacity planning
+(function(){
+'use strict';
+
+var PCM_ID = 'pcm-modal-zs92';
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmt$(n){ return '$'+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+function fmtN(n){ return parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+
+function showPCMModal(){
+  var existing = document.getElementById(PCM_ID);
+  if(existing){ existing.style.display='flex'; renderPCM(); return; }
+  var modal = document.createElement('div');
+  modal.id = PCM_ID;
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9800;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;backdrop-filter:blur(4px);';
+  modal.innerHTML = '<div style="background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:14px;width:100%;max-width:1000px;min-height:70vh;display:flex;flex-direction:column;box-shadow:0 25px 60px rgba(0,0,0,0.6);margin:auto;">'+
+    '<div style="background:linear-gradient(135deg,rgba(139,92,246,0.15),rgba(139,92,246,0.05));border-bottom:1px solid rgba(255,255,255,0.1);padding:18px 24px;display:flex;justify-content:space-between;align-items:center;border-radius:14px 14px 0 0;">'+
+      '<div><div style="font-size:1.15rem;font-weight:700;color:#f1f5f9;">📊 Project Comparison Matrix</div>'+
+      '<p style="margin:2px 0 0;color:#64748b;font-size:0.8rem;">Compare multiple projects side-by-side — Ctrl+Alt+C</p></div>'+
+      '<div style="display:flex;gap:8px;">'+
+        '<button onclick="pcmPrint()" style="background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);padding:7px 14px;border-radius:6px;cursor:pointer;font-size:0.8rem;">🖨️ Print</button>'+
+        '<button onclick="document.getElementById(\''+PCM_ID+'\').style.display=\'none\'" style="background:rgba(255,255,255,0.05);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);padding:7px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;">✕</button>'+
+      '</div>'+
+    '</div>'+
+    '<div style="padding:20px 24px;flex:1;" id="pcm-content"></div>'+
+  '</div>';
+  modal.addEventListener('click', function(e){ if(e.target===modal) document.getElementById(PCM_ID).style.display='none'; });
+  document.body.appendChild(modal);
+  renderPCM();
+}
+
+function renderPCM(){
+  var c = document.getElementById('pcm-content');
+  if(!c) return;
+  
+  var projects = [];
+  try{ projects = JSON.parse(localStorage.getItem('oncorProjects'))||[]; }catch(e){}
+  
+  if(projects.length<2){
+    c.innerHTML = '<div style="text-align:center;padding:50px 20px;color:#64748b;">'+
+      '<div style="font-size:3rem;margin-bottom:12px;">📊</div>'+
+      '<div style="font-size:1rem;font-weight:600;color:#94a3b8;margin-bottom:8px;">Need at least 2 saved projects to compare</div>'+
+      '<div style="font-size:0.85rem;">Save your current project (Ctrl+S), then save at least one more.</div>'+
+    '</div>';
+    return;
+  }
+  
+  // Select up to 4 most recent projects
+  var compareProjects = projects.slice(-4);
+  
+  // Selector
+  var selectorHtml = '<div style="margin-bottom:16px;font-size:0.85rem;color:#94a3b8;">Showing '+compareProjects.length+' most recent projects. '+projects.length+' total saved.</div>';
+  
+  // Build comparison metrics
+  var metrics = [
+    {label:'Project Name', key:'name', format:'text'},
+    {label:'Client / GC', key:'client', format:'text'},
+    {label:'Status', key:'status', format:'badge'},
+    {label:'Total Bid', key:'totalBid', format:'$'},
+    {label:'Total yd³', key:'totalYd3', format:'num'},
+    {label:'$/yd³', key:'costPerYd3', format:'$'},
+    {label:'Measurements', key:'measurementCount', format:'num'},
+    {label:'Overhead %', key:'overhead', format:'pct'},
+    {label:'Profit %', key:'profit', format:'pct'},
+    {label:'Concrete $/yd³', key:'concreteCost', format:'$'},
+    {label:'Labor Rate', key:'laborRate', format:'$'},
+    {label:'Saved Date', key:'date', format:'text'}
+  ];
+  
+  var projectData = compareProjects.map(function(p){
+    var est = p.lastEstimate||{};
+    var meas = p.measurements||[];
+    var totalYd3 = meas.reduce(function(a,m){ return a+(m.include!==false?(parseFloat(m.yd3)||0):0); },0);
+    return {
+      name: p.name||'Untitled',
+      client: p.client||'—',
+      status: p.status||'Estimating',
+      totalBid: est.totalBid||0,
+      totalYd3: totalYd3,
+      costPerYd3: totalYd3>0?(est.totalBid||0)/totalYd3:0,
+      measurementCount: meas.length,
+      overhead: p.overheadPercent||est.overheadPct||10,
+      profit: p.profitPercent||est.profitPct||15,
+      concreteCost: p.concretePrice||0,
+      laborRate: p.laborRate||0,
+      date: p.date||'—'
+    };
+  });
+  
+  // Color palette for projects
+  var colors = ['#60a5fa','#4ade80','#fbbf24','#f472b6'];
+  
+  // Build table
+  var tableHtml = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.85rem;">';
+  tableHtml += '<thead><tr><th style="background:rgba(30,41,59,0.9);color:#64748b;padding:10px 12px;text-align:left;border-bottom:2px solid rgba(255,255,255,0.1);min-width:140px;">Metric</th>';
+  projectData.forEach(function(p,i){
+    tableHtml += '<th style="background:rgba(30,41,59,0.9);color:'+colors[i]+';padding:10px 12px;text-align:center;border-bottom:2px solid '+colors[i]+';min-width:150px;">'+escHtml(p.name)+'</th>';
+  });
+  tableHtml += '</tr></thead><tbody>';
+  
+  metrics.forEach(function(m,rowIdx){
+    var values = projectData.map(function(p){ return p[m.key]; });
+    // Find best value for highlighting
+    var best = null;
+    if(m.format==='$'&&m.key==='totalBid') best = Math.max.apply(null,values.filter(function(v){return v>0;}));
+    if(m.key==='totalYd3') best = Math.max.apply(null,values);
+    if(m.key==='costPerYd3') best = Math.min.apply(null,values.filter(function(v){return v>0;}));
+    
+    tableHtml += '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);'+(rowIdx%2?'background:rgba(255,255,255,0.02);':'')+'">'+
+      '<td style="padding:10px 12px;color:#94a3b8;font-weight:600;">'+m.label+'</td>';
+    projectData.forEach(function(p,i){
+      var val = p[m.key];
+      var cellStyle = 'padding:10px 12px;text-align:center;';
+      var formatted = '';
+      if(m.format==='$') formatted = fmt$(val);
+      else if(m.format==='num') formatted = fmtN(val);
+      else if(m.format==='pct') formatted = val+'%';
+      else if(m.format==='badge'){
+        var bColor = val==='Awarded'?'#10b981':val==='Submitted'?'#3b82f6':val==='Lost'?'#ef4444':'#64748b';
+        formatted = '<span style="background:rgba(255,255,255,0.08);color:'+bColor+';padding:2px 8px;border-radius:4px;font-size:0.75rem;">'+escHtml(val)+'</span>';
+      }
+      else formatted = escHtml(val);
+      
+      // Highlight best
+      var highlight = '';
+      if(best!==null && val===best && val>0) highlight = 'color:#10b981;font-weight:700;';
+      
+      tableHtml += '<td style="'+cellStyle+highlight+'">'+formatted+'</td>';
+    });
+    tableHtml += '</tr>';
+  });
+  
+  tableHtml += '</tbody></table></div>';
+  
+  // Visual bars for bid comparison
+  var maxBid = Math.max.apply(null,projectData.map(function(p){ return p.totalBid||0; }));
+  var barsHtml = '<div style="margin-top:20px;"><div style="font-size:0.9rem;font-weight:600;color:#f1f5f9;margin-bottom:12px;">💰 Bid Comparison</div>';
+  projectData.forEach(function(p,i){
+    var pct = maxBid>0?Math.round((p.totalBid||0)/maxBid*100):0;
+    barsHtml += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'+
+      '<div style="min-width:120px;font-size:0.8rem;color:'+colors[i]+';font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(p.name)+'</div>'+
+      '<div style="flex:1;background:rgba(255,255,255,0.05);border-radius:4px;height:24px;">'+
+        '<div style="background:'+colors[i]+';opacity:0.6;height:24px;border-radius:4px;width:'+pct+'%;display:flex;align-items:center;padding-left:8px;">'+
+          '<span style="font-size:0.75rem;color:#fff;font-weight:600;">'+fmt$(p.totalBid)+'</span>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  });
+  barsHtml += '</div>';
+  
+  c.innerHTML = selectorHtml + tableHtml + barsHtml;
+}
+
+function pcmPrint(){
+  var projects = [];
+  try{ projects = JSON.parse(localStorage.getItem('oncorProjects'))||[]; }catch(e){}
+  if(projects.length<2){ alert('Need at least 2 projects to compare.'); return; }
+  var companyName = (document.getElementById('company-name')||{}).value||'Oncor Concrete';
+  var compareProjects = projects.slice(-4);
+  var projectData = compareProjects.map(function(p){
+    var est = p.lastEstimate||{};
+    var meas = p.measurements||[];
+    var totalYd3 = meas.reduce(function(a,m){ return a+(m.include!==false?(parseFloat(m.yd3)||0):0); },0);
+    return { name: p.name||'Untitled', client: p.client||'—', status: p.status||'—', totalBid: est.totalBid||0, totalYd3: totalYd3, costPerYd3: totalYd3>0?(est.totalBid||0)/totalYd3:0, measurements: meas.length, date: p.date||'—' };
+  });
+  var rows = '';
+  var labels = ['Project','Client','Status','Total Bid','Total yd³','$/yd³','Measurements','Saved'];
+  labels.forEach(function(label,i){
+    rows += '<tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:8px;font-weight:600;background:#f8fafc;">'+label+'</td>';
+    projectData.forEach(function(p){
+      var val = [p.name,p.client,p.status,fmt$(p.totalBid),fmtN(p.totalYd3),fmt$(p.costPerYd3),p.measurements,p.date][i];
+      rows += '<td style="padding:8px;text-align:center;">'+val+'</td>';
+    });
+    rows += '</tr>';
+  });
+  var html = '<!DOCTYPE html><html><head><title>Project Comparison</title><style>body{font-family:sans-serif;color:#1e293b;padding:20px;max-width:900px;margin:0 auto;} table{width:100%;border-collapse:collapse;font-size:0.85rem;} th{background:#1e293b;color:#fff;padding:8px;} @media print{button{display:none;}}</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;margin-bottom:20px;">'+
+      '<div style="font-size:1.2rem;font-weight:700;">'+escHtml(companyName)+'</div>'+
+      '<div style="text-align:right;"><div style="font-size:1rem;font-weight:700;">PROJECT COMPARISON MATRIX</div>'+
+      '<div style="color:#64748b;font-size:0.8rem;">'+new Date().toLocaleDateString()+'</div></div>'+
+    '</div>'+
+    '<table><thead><tr><th>Metric</th>'+projectData.map(function(p){ return '<th>'+escHtml(p.name)+'</th>'; }).join('')+'</tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<div style="margin-top:12px;font-size:0.75rem;color:#64748b;">CONFIDENTIAL</div>'+
+    '<button onclick="window.print()" style="margin-top:12px;background:#1e293b;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;">🖨️ Print</button>'+
+  '</body></html>';
+  var w = window.open('','_blank');
+  if(w){ w.document.write(html); w.document.close(); }
+}
+
+window.showPCMModal = showPCMModal;
+window.pcmPrint = pcmPrint;
+
+document.addEventListener('keydown', function(e){
+  if(e.ctrlKey && e.altKey && (e.key==='c'||e.key==='C')){
+    e.preventDefault();
+    var m = document.getElementById(PCM_ID);
+    if(m && m.style.display!=='none') m.style.display='none';
+    else showPCMModal();
+  }
+});
+
+document.addEventListener('DOMContentLoaded', function(){
+  setTimeout(function(){
+    var ldrBtn = document.querySelector('button[onclick*="showLDRModal"]');
+    if(!ldrBtn) return;
+    var parentRow = ldrBtn.closest('div');
+    if(!parentRow||!parentRow.parentNode) return;
+    var newRow = document.createElement('div');
+    newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+    newRow.innerHTML = '<button class="action-btn secondary" onclick="showPCMModal()" title="Project Comparison Matrix — compare projects side-by-side (Ctrl+Alt+C)" style="background:rgba(139,92,246,0.08);border-color:rgba(139,92,246,0.3);color:#a78bfa;">📊 Compare Projects</button>';
+    parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+  }, 8500);
+});
+
+})();
+// ==================== END PROJECT COMPARISON MATRIX — Zeus ⚡ Session #92 ====================
+</script>
+
+<script>
+// ==================== DAILY SAFETY PERMIT LOG — Zeus ⚡ Session #92 ====================
+// Ctrl+Alt+S — Hot Work, Confined Space, Lockout/Tagout permits per OSHA
+// Purpose: Document daily safety permits required on commercial concrete jobs
+(function(){
+'use strict';
+
+var SPL_ID = 'spl-modal-zs92';
+
+function getSPLData(){
+  var pk = ((document.getElementById('project-name')||{}).value||'').replace(/[^a-z0-9]/gi,'_').toLowerCase();
+  try{ return JSON.parse(localStorage.getItem('oncor_safety_permits_v1_'+pk))||{permits:[]}; }
+  catch(e){ return {permits:[]}; }
+}
+function saveSPLData(d){
+  var pk = ((document.getElementById('project-name')||{}).value||'').replace(/[^a-z0-9]/gi,'_').toLowerCase();
+  localStorage.setItem('oncor_safety_permits_v1_'+pk, JSON.stringify(d));
+}
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+var PERMIT_TYPES = ['Hot Work (OSHA 1926.352)','Confined Space Entry (1926.1203)','Lockout/Tagout (1910.147)','Excavation/Trenching (1926.652)','Crane/Critical Lift','Scaffolding (1926.450)','Fall Protection Deviation','Night Work','Concrete Pour — Special','Demolition Permit','Noise/Vibration Permit','Environmental/Discharge','Traffic Control','Other'];
+var PERMIT_STATUSES = ['Active','Expired','Cancelled','Completed'];
+
+function showSPLModal(){
+  var existing = document.getElementById(SPL_ID);
+  if(existing){ existing.style.display='flex'; renderSPL(); return; }
+  var modal = document.createElement('div');
+  modal.id = SPL_ID;
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9900;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;backdrop-filter:blur(4px);';
+  modal.innerHTML = '<div style="background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:14px;width:100%;max-width:900px;min-height:70vh;display:flex;flex-direction:column;box-shadow:0 25px 60px rgba(0,0,0,0.6);margin:auto;">'+
+    '<div style="background:linear-gradient(135deg,rgba(239,68,68,0.15),rgba(239,68,68,0.05));border-bottom:1px solid rgba(255,255,255,0.1);padding:18px 24px;display:flex;justify-content:space-between;align-items:center;border-radius:14px 14px 0 0;">'+
+      '<div><div style="font-size:1.15rem;font-weight:700;color:#f1f5f9;">🔒 Safety Permit Log</div>'+
+      '<p style="margin:2px 0 0;color:#64748b;font-size:0.8rem;">Hot Work, Confined Space, LOTO, Excavation permits — OSHA compliance — Ctrl+Alt+S</p></div>'+
+      '<div style="display:flex;gap:8px;">'+
+        '<button onclick="splPrint()" style="background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);padding:7px 14px;border-radius:6px;cursor:pointer;font-size:0.8rem;">🖨️ Print</button>'+
+        '<button onclick="document.getElementById(\''+SPL_ID+'\').style.display=\'none\'" style="background:rgba(255,255,255,0.05);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);padding:7px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;">✕</button>'+
+      '</div>'+
+    '</div>'+
+    '<div style="padding:20px 24px;flex:1;" id="spl-content"></div>'+
+  '</div>';
+  modal.addEventListener('click', function(e){ if(e.target===modal) document.getElementById(SPL_ID).style.display='none'; });
+  document.body.appendChild(modal);
+  renderSPL();
+}
+
+function renderSPL(){
+  var c = document.getElementById('spl-content');
+  if(!c) return;
+  var data = getSPLData();
+  var active = data.permits.filter(function(p){ return p.status==='Active'; }).length;
+  var completed = data.permits.filter(function(p){ return p.status==='Completed'; }).length;
+  var today = new Date().toISOString().split('T')[0];
+  var todayPermits = data.permits.filter(function(p){ return p.date===today; }).length;
+
+  var stats = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:16px;">'+
+    '<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px;text-align:center;">'+
+      '<div style="font-size:1.3rem;font-weight:700;color:#f1f5f9;">'+data.permits.length+'</div><div style="font-size:0.7rem;color:#64748b;">Total Permits</div></div>'+
+    (active?'<div style="background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:12px;text-align:center;">'+
+      '<div style="font-size:1.3rem;font-weight:700;color:#4ade80;">'+active+'</div><div style="font-size:0.7rem;color:#64748b;">Active Now</div></div>':'')+
+    '<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px;text-align:center;">'+
+      '<div style="font-size:1.3rem;font-weight:700;color:#14b8a6;">'+completed+'</div><div style="font-size:0.7rem;color:#64748b;">Completed</div></div>'+
+    '<div style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px;text-align:center;">'+
+      '<div style="font-size:1.3rem;font-weight:700;color:#60a5fa;">'+todayPermits+'</div><div style="font-size:0.7rem;color:#64748b;">Today</div></div>'+
+  '</div>';
+
+  var addBtn = '<div style="margin-bottom:16px;">'+
+    '<button onclick="splAdd()" style="background:rgba(239,68,68,0.1);color:#fca5a5;border:1px solid rgba(239,68,68,0.3);padding:9px 18px;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600;">+ Issue Safety Permit</button>'+
+  '</div>';
+
+  var list = '';
+  if(!data.permits.length){
+    list = '<div style="text-align:center;padding:50px 20px;color:#64748b;">'+
+      '<div style="font-size:3rem;margin-bottom:12px;">🔒</div>'+
+      '<div style="font-size:1rem;font-weight:600;color:#94a3b8;margin-bottom:8px;">No safety permits logged yet</div>'+
+      '<div style="font-size:0.85rem;">Issue permits for hot work, confined space, LOTO, excavation, and crane operations.</div>'+
+    '</div>';
+  } else {
+    data.permits.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+    data.permits.forEach(function(p, idx){
+      var typeColor = p.type&&p.type.indexOf('Hot Work')===0?'#f97316':
+                      p.type&&p.type.indexOf('Confined')===0?'#ef4444':
+                      p.type&&p.type.indexOf('Lockout')===0?'#f59e0b':
+                      p.type&&p.type.indexOf('Excavation')===0?'#8b5cf6':
+                      p.type&&p.type.indexOf('Crane')===0?'#3b82f6':'#64748b';
+      var statusColor = p.status==='Active'?'#10b981':p.status==='Completed'?'#64748b':p.status==='Expired'?'#ef4444':'#94a3b8';
+      var borderColor = p.status==='Active'?'rgba(16,185,129,0.3)':'rgba(255,255,255,0.1)';
+      list += '<div style="background:rgba(30,41,59,0.7);border:1px solid '+borderColor+';border-radius:10px;padding:14px;margin-bottom:10px;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+          '<div>'+
+            '<span style="background:rgba(0,0,0,0.3);color:'+typeColor+';padding:3px 10px;border-radius:4px;font-size:0.75rem;font-weight:700;">'+escHtml(p.type||'Permit')+'</span>'+
+            '<span style="background:rgba(0,0,0,0.3);color:'+statusColor+';padding:3px 8px;border-radius:4px;font-size:0.7rem;font-weight:600;margin-left:6px;">'+escHtml(p.status||'—')+'</span>'+
+          '</div>'+
+          '<div style="display:flex;gap:4px;">'+
+            '<button onclick="splEdit('+idx+')" style="background:rgba(255,255,255,0.05);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);padding:4px 8px;border-radius:4px;cursor:pointer;font-size:0.7rem;">✏️</button>'+
+            '<button onclick="splDelete('+idx+')" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.2);padding:4px 8px;border-radius:4px;cursor:pointer;font-size:0.7rem;">🗑</button>'+
+          '</div>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;margin-top:10px;font-size:0.8rem;color:#94a3b8;">'+
+          '<div>📅 '+escHtml(p.date||'—')+(p.timeStart?' • '+escHtml(p.timeStart)+(p.timeEnd?' to '+escHtml(p.timeEnd):''):'')+' </div>'+
+          (p.location?'<div>📍 '+escHtml(p.location)+'</div>':'')+
+          (p.issuedBy?'<div>👤 Issued by: '+escHtml(p.issuedBy)+'</div>':'')+
+          (p.workers?'<div>👷 Workers: '+escHtml(p.workers)+'</div>':'')+
+        '</div>'+
+        (p.hazards?'<div style="margin-top:8px;font-size:0.75rem;color:#fca5a5;background:rgba(239,68,68,0.05);border-left:2px solid rgba(239,68,68,0.3);padding:6px 10px;border-radius:0 4px 4px 0;">⚠️ '+escHtml(p.hazards)+'</div>':'')+
+        (p.controls?'<div style="margin-top:6px;font-size:0.75rem;color:#4ade80;background:rgba(34,197,94,0.05);border-left:2px solid rgba(34,197,94,0.3);padding:6px 10px;border-radius:0 4px 4px 0;">✅ '+escHtml(p.controls)+'</div>':'')+
+        (p.notes?'<div style="margin-top:6px;font-size:0.75rem;color:#94a3b8;">'+escHtml(p.notes)+'</div>':'')+
+      '</div>';
+    });
+  }
+  c.innerHTML = stats + addBtn + list;
+}
+
+function splAdd(){
+  var type = prompt('Permit type:\n'+PERMIT_TYPES.map(function(t,i){return (i+1)+'. '+t;}).join('\n')+'\n\nEnter number or type name:','1');
+  if(!type) return;
+  var typeIdx = parseInt(type)-1;
+  var typeName = typeIdx>=0&&typeIdx<PERMIT_TYPES.length?PERMIT_TYPES[typeIdx]:type;
+  
+  var data = getSPLData();
+  var permit = {
+    type: typeName,
+    date: prompt('Date (YYYY-MM-DD):', new Date().toISOString().split('T')[0])||new Date().toISOString().split('T')[0],
+    timeStart: prompt('Start time:','')||'',
+    timeEnd: prompt('End time (or blank if still active):','')||'',
+    location: prompt('Location/area on site:','')||'',
+    issuedBy: prompt('Issued by (name):','')||'',
+    workers: prompt('Workers covered (names or count):','')||'',
+    hazards: prompt('Hazards identified:','')||'',
+    controls: prompt('Controls/precautions in place:','')||'',
+    status: prompt('Status (Active/Completed/Expired/Cancelled):','Active')||'Active',
+    notes: prompt('Additional notes:','')||''
+  };
+  data.permits.push(permit);
+  saveSPLData(data);
+  renderSPL();
+}
+
+function splEdit(idx){
+  var data = getSPLData();
+  var p = data.permits[idx];
+  if(!p) return;
+  var newStatus = prompt('Status (Active/Completed/Expired/Cancelled):', p.status||'');
+  if(newStatus!==null) p.status = newStatus;
+  var newEnd = prompt('End time:', p.timeEnd||'');
+  if(newEnd!==null) p.timeEnd = newEnd;
+  var newNotes = prompt('Notes:', p.notes||'');
+  if(newNotes!==null) p.notes = newNotes;
+  saveSPLData(data);
+  renderSPL();
+}
+
+function splDelete(idx){
+  if(!confirm('Delete this permit?')) return;
+  var data = getSPLData();
+  data.permits.splice(idx,1);
+  saveSPLData(data);
+  renderSPL();
+}
+
+function splPrint(){
+  var data = getSPLData();
+  if(!data.permits.length){ alert('No permits to print.'); return; }
+  var companyName = (document.getElementById('company-name')||{}).value||'Oncor Concrete';
+  var projectName = (document.getElementById('project-name')||{}).value||'Project';
+  var rows = data.permits.map(function(p,i){
+    return '<tr style="border-bottom:1px solid #e2e8f0;">'+
+      '<td style="padding:6px;">'+(i+1)+'</td>'+
+      '<td style="padding:6px;">'+escHtml(p.date||'')+'</td>'+
+      '<td style="padding:6px;font-weight:600;">'+escHtml(p.type||'')+'</td>'+
+      '<td style="padding:6px;">'+escHtml(p.location||'')+'</td>'+
+      '<td style="padding:6px;">'+escHtml(p.issuedBy||'')+'</td>'+
+      '<td style="padding:6px;">'+(p.timeStart||'')+(p.timeEnd?' – '+p.timeEnd:'')+'</td>'+
+      '<td style="padding:6px;">'+escHtml(p.status||'')+'</td>'+
+      '<td style="padding:6px;font-size:0.75rem;">'+escHtml(p.hazards||'')+'</td>'+
+      '<td style="padding:6px;font-size:0.75rem;">'+escHtml(p.controls||'')+'</td>'+
+    '</tr>';
+  }).join('');
+  var html = '<!DOCTYPE html><html><head><title>Safety Permit Log</title><style>body{font-family:sans-serif;color:#1e293b;padding:20px;max-width:1100px;margin:0 auto;font-size:0.8rem;} table{width:100%;border-collapse:collapse;} th{background:#7f1d1d;color:#fff;padding:6px;text-align:left;font-size:0.75rem;} @media print{button{display:none;}}</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;margin-bottom:16px;">'+
+      '<div><div style="font-size:1.1rem;font-weight:700;">'+escHtml(companyName)+'</div><div style="color:#64748b;font-size:0.8rem;">Project: '+escHtml(projectName)+'</div></div>'+
+      '<div style="text-align:right;"><div style="font-size:0.95rem;font-weight:700;color:#991b1b;">SAFETY PERMIT LOG</div>'+
+      '<div style="color:#64748b;font-size:0.75rem;">OSHA 29 CFR 1926 Compliance | '+new Date().toLocaleDateString()+'</div></div>'+
+    '</div>'+
+    '<table><thead><tr><th>#</th><th>Date</th><th>Permit Type</th><th>Location</th><th>Issued By</th><th>Time</th><th>Status</th><th>Hazards</th><th>Controls</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<div style="margin-top:16px;padding:10px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:0.75rem;color:#991b1b;">'+
+      '⚠️ All safety permits must be retained per OSHA 29 CFR 1926 record-keeping requirements. Hot work permits per OSHA 1926.352. Confined space per 1926.1203. LOTO per 1910.147.'+
+    '</div>'+
+    '<button onclick="window.print()" style="margin-top:12px;background:#7f1d1d;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;">🖨️ Print</button>'+
+  '</body></html>';
+  var w = window.open('','_blank');
+  if(w){ w.document.write(html); w.document.close(); }
+}
+
+window.showSPLModal = showSPLModal;
+window.splAdd = splAdd;
+window.splEdit = splEdit;
+window.splDelete = splDelete;
+window.splPrint = splPrint;
+
+document.addEventListener('keydown', function(e){
+  if(e.ctrlKey && e.altKey && (e.key==='s'||e.key==='S')){
+    e.preventDefault();
+    var m = document.getElementById(SPL_ID);
+    if(m && m.style.display!=='none') m.style.display='none';
+    else showSPLModal();
+  }
+});
+
+document.addEventListener('DOMContentLoaded', function(){
+  setTimeout(function(){
+    var pcmBtn = document.querySelector('button[onclick*="showPCMModal"]');
+    if(!pcmBtn) return;
+    var parentRow = pcmBtn.closest('div');
+    if(!parentRow||!parentRow.parentNode) return;
+    var newRow = document.createElement('div');
+    newRow.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+    newRow.innerHTML = '<button class="action-btn secondary" onclick="showSPLModal()" title="Safety Permit Log — Hot Work, Confined Space, LOTO, Excavation permits (Ctrl+Alt+S)" style="background:rgba(239,68,68,0.08);border-color:rgba(239,68,68,0.3);color:#fca5a5;">🔒 Safety Permits</button>';
+    parentRow.parentNode.insertBefore(newRow, parentRow.nextSibling);
+  }, 8700);
+});
+
+})();
+// ==================== END DAILY SAFETY PERMIT LOG — Zeus ⚡ Session #92 ====================
+</script>
