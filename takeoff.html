@@ -174993,3 +174993,244 @@ document.addEventListener('keydown', function(e) {
 })();
 // ==================== END SESSION #104 — Zeus ⚡ Backcharge Log (Ctrl+Alt+D) + Photo Log (Ctrl+Alt+E) + RFI Quick Tracker (Ctrl+Alt+F) ====================
 </script>
+
+// ==================== START SESSION #105 — Zeus ⚡ Productivity Analytics (Ctrl+Alt+G) + Supplier Scorecard (Ctrl+Alt+H) + Material Inventory (Ctrl+Alt+I) ====================
+(function() {
+'use strict';
+
+// ── FEATURE 1: Productivity Analytics Dashboard (Ctrl+Alt+G) — ~175 lines ──
+window._oncorProd = {
+  open: false,
+  render() {
+    const proj = (document.getElementById('projectName') || {}).value || 'project';
+    const tc   = JSON.parse(localStorage.getItem('oncor_timecards_v1_' + proj) || '[]');
+    const fl   = JSON.parse(localStorage.getItem('oncor_field_log_v1_'  + proj) || '[]');
+    const dt   = JSON.parse(localStorage.getItem('oncor_delivery_tickets_v1_' + proj) || '[]');
+    // Build pour-level data by date key
+    const byDate = {};
+    fl.forEach(e => {
+      const d = e.pourDate || e.date || '';
+      if (!byDate[d]) byDate[d] = { date: d, label: e.pourName || e.elements || d, actYd: 0, estYd: 0 };
+      byDate[d].actYd += parseFloat(e.actualYds || e.actualYd || 0);
+      byDate[d].estYd += parseFloat(e.estYds    || e.estYd    || 0);
+    });
+    dt.filter(t => t.status !== 'Rejected').forEach(t => {
+      const d = (t.pourDate || t.date || '').slice(0,10);
+      if (!byDate[d]) byDate[d] = { date: d, label: t.pourName || d, actYd: 0, estYd: 0 };
+      byDate[d].actYd += parseFloat(t.yardage || t.ydQty || 0);
+    });
+    tc.forEach(e => {
+      const d = (e.workDate || e.date || '').slice(0,10);
+      if (!byDate[d]) byDate[d] = { date: d, label: d, actYd: 0, estYd: 0 };
+      const hrs = (parseFloat(e.regHours || 0) + parseFloat(e.otHours || 0));
+      const cost = (parseFloat(e.regHours || 0) * parseFloat(e.rate || 0)) + (parseFloat(e.otHours || 0) * parseFloat(e.rate || 0) * 1.5);
+      if (!byDate[d].laborHrs) byDate[d].laborHrs = 0;
+      if (!byDate[d].laborCost) byDate[d].laborCost = 0;
+      byDate[d].laborHrs  += hrs;
+      byDate[d].laborCost += cost;
+    });
+    const rows = Object.values(byDate).filter(r => r.actYd > 0).sort((a,b) => a.date.localeCompare(b.date));
+    const totYd   = rows.reduce((s,r) => s + r.actYd, 0);
+    const totHrs  = rows.reduce((s,r) => s + (r.laborHrs || 0), 0);
+    const totCost = rows.reduce((s,r) => s + (r.laborCost || 0), 0);
+    const prodRate = totHrs > 0 ? (totYd / totHrs).toFixed(2) : '—';
+    const cpYd     = totYd  > 0 ? '$' + (totCost / totYd).toFixed(2) : '—';
+    const fmt = n => n >= 1000 ? '$' + (n/1000).toFixed(1) + 'K' : '$' + Math.round(n);
+    const rowsHtml = rows.map(r => {
+      const pRate = r.laborHrs > 0 ? (r.actYd / r.laborHrs).toFixed(2) : '—';
+      const cPYd  = r.actYd > 0 && r.laborCost > 0 ? '$' + (r.laborCost / r.actYd).toFixed(2) : '—';
+      const grade = pRate === '—' ? '—' : parseFloat(pRate) >= 1.2 ? '<span style="color:#22c55e">✅ Excellent</span>' : parseFloat(pRate) >= 0.8 ? '<span style="color:#22d3ee">Good</span>' : parseFloat(pRate) >= 0.5 ? '<span style="color:#f59e0b">⚠️ Below Avg</span>' : '<span style="color:#ef4444">🔴 Low</span>';
+      return `<tr><td>${r.date}</td><td>${r.label.slice(0,30)}</td><td>${r.actYd.toFixed(1)}</td><td>${r.laborHrs ? r.laborHrs.toFixed(1) : '—'}</td><td>${pRate}</td><td>${cPYd}</td><td>${grade}</td></tr>`;
+    }).join('');
+    return `<div style="font-family:sans-serif;color:#e5e7eb;max-width:860px"><h2 style="color:#22d3ee;margin:0 0 12px">📊 Productivity Analytics</h2>
+<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+${[['Total yd³',totYd.toFixed(1)],['Labor Hours',totHrs.toFixed(1)],['yd³ / Labor-Hr',prodRate],['Labor Cost / yd³',cpYd]].map(([l,v])=>`<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px 18px;min-width:140px"><div style="color:#94a3b8;font-size:11px">${l}</div><div style="color:#22d3ee;font-size:22px;font-weight:700">${v}</div></div>`).join('')}
+</div>
+<div style="background:#1e293b;padding:10px 14px;border-radius:6px;margin-bottom:12px;font-size:12px;color:#94a3b8">📐 <b style="color:#e2e8f0">ACI Benchmarks:</b> Flatwork 0.8–1.5 yd³/hr · Foundations 0.4–0.8 yd³/hr · ≥1.2 = Excellent · 0.8–1.2 = Good · &lt;0.5 = Investigate</div>
+${rows.length === 0 ? '<p style="color:#64748b;text-align:center;padding:20px">No pour data yet — log pours in Field Log and labor in Crew Time Cards</p>' : `<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#334155">${['Date','Pour / Area','yd³','Labor Hrs','yd³/Hr','Cost/yd³','Grade'].map(h=>`<th style="padding:6px 8px;text-align:left;color:#94a3b8">${h}</th>`).join('')}</tr></thead><tbody>${rowsHtml}</tbody></table>`}
+<button onclick="window._oncorProd.print()" style="margin-top:14px;background:#0284c7;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer">🖨️ Print Report</button></div>`;
+  },
+  print() {
+    const w = window.open('','_blank');
+    w.document.write('<html><head><title>Productivity Analytics</title><style>body{font-family:sans-serif;padding:20px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ccc;padding:5px 8px}th{background:#f1f5f9}@media print{button{display:none}}</style></head><body><h2>Productivity Analytics</h2>' + document.getElementById('oncorProdContent').innerHTML + '<br><button onclick="window.print()">🖨️ Print</button></body></html>');
+    w.document.close();
+  },
+  toggle() {
+    let el = document.getElementById('oncorProdModal');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'oncorProdModal';
+      el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+      el.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:24px;max-width:900px;width:95%;max-height:90vh;overflow-y:auto;position:relative"><button onclick="document.getElementById(\'oncorProdModal\').remove()" style="position:absolute;top:12px;right:12px;background:#334155;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer">✕</button><div id="oncorProdContent"></div></div>';
+      document.body.appendChild(el);
+    }
+    document.getElementById('oncorProdContent').innerHTML = this.render();
+  }
+};
+
+// ── FEATURE 2: Supplier Scorecard (Ctrl+Alt+H) — ~175 lines ──
+window._oncorSupplier = {
+  toggle() {
+    let el = document.getElementById('oncorSupplierModal');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'oncorSupplierModal';
+      el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+      el.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:24px;max-width:920px;width:95%;max-height:90vh;overflow-y:auto;position:relative"><button onclick="document.getElementById(\'oncorSupplierModal\').remove()" style="position:absolute;top:12px;right:12px;background:#334155;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer">✕</button><div id="oncorSupplierContent"></div></div>';
+      document.body.appendChild(el);
+    }
+    document.getElementById('oncorSupplierContent').innerHTML = this.render();
+  },
+  render() {
+    const proj = (document.getElementById('projectName') || {}).value || 'project';
+    const dt = JSON.parse(localStorage.getItem('oncor_delivery_tickets_v1_' + proj) || '[]');
+    const suppliers = {};
+    dt.forEach(t => {
+      const s = (t.batchPlant || t.supplier || 'Unknown').trim();
+      if (!suppliers[s]) suppliers[s] = { name: s, total: 0, yd: 0, rejected: 0, water: 0, overSlump: 0, hot: 0, cold: 0, temps: [] };
+      suppliers[s].total++;
+      suppliers[s].yd += parseFloat(t.yardage || t.ydQty || 0);
+      if (t.status === 'Rejected') suppliers[s].rejected++;
+      if (parseFloat(t.waterAdded || 0) > 0) suppliers[s].water++;
+      const slump = parseFloat(t.slump || 0), maxSlump = parseFloat(t.maxSlump || 99);
+      if (slump > maxSlump && maxSlump < 99) suppliers[s].overSlump++;
+      const temp = parseFloat(t.concreteTemp || 0);
+      if (temp > 0) { suppliers[s].temps.push(temp); if (temp > 90) suppliers[s].hot++; if (temp < 50) suppliers[s].cold++; }
+    });
+    const scoreSupplier = s => {
+      if (s.total === 0) return 100;
+      let score = 100;
+      score -= Math.round((s.rejected / s.total) * 50);
+      score -= Math.round((s.water / s.total) * 20);
+      score -= Math.round((s.overSlump / s.total) * 20);
+      score -= Math.round(((s.hot + s.cold) / s.total) * 10);
+      return Math.max(0, score);
+    };
+    const gradeColor = s => s >= 90 ? '#22c55e' : s >= 75 ? '#22d3ee' : s >= 60 ? '#f59e0b' : '#ef4444';
+    const gradeChar = s => s >= 90 ? 'A' : s >= 80 ? 'B' : s >= 70 ? 'C' : s >= 60 ? 'D' : 'F';
+    const rows = Object.values(suppliers).map(s => {
+      const score = scoreSupplier(s);
+      const avgTemp = s.temps.length ? (s.temps.reduce((a,b)=>a+b,0)/s.temps.length).toFixed(0)+'°F' : '—';
+      const rejRate = s.total > 0 ? ((s.rejected/s.total)*100).toFixed(1)+'%' : '0%';
+      const waterPct = s.total > 0 ? ((s.water/s.total)*100).toFixed(1)+'%' : '0%';
+      return `<tr><td style="font-weight:600">${s.name}</td><td>${s.total}</td><td>${s.yd.toFixed(1)}</td><td style="color:${s.rejected>0?'#ef4444':'#22c55e'}">${s.rejected} (${rejRate})</td><td style="color:${s.water>0?'#f59e0b':'#22c55e'}">${s.water} (${waterPct})</td><td>${s.overSlump}</td><td>${avgTemp}</td><td><span style="font-size:24px;font-weight:700;color:${gradeColor(score)}">${gradeChar(score)}</span> <span style="font-size:11px;color:#94a3b8">(${score})</span></td></tr>`;
+    });
+    const expHtml = `<div style="font-size:12px;color:#64748b;margin-top:14px">📌 <b style="color:#94a3b8">Scoring:</b> Start 100 pts — Rejection −50pts, Water Added −20pts, Over Slump −20pts, Temp Issues −10pts (proportional)</div>`;
+    return `<div style="font-family:sans-serif;color:#e5e7eb;max-width:880px"><h2 style="color:#22d3ee;margin:0 0 12px">🏭 Supplier Scorecard</h2>
+${rows.length === 0 ? '<p style="color:#64748b;text-align:center;padding:30px">No delivery ticket data yet — log tickets in Delivery Ticket Log (Ctrl+Shift+W)</p>' : `<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:#1e3a5f">${['Batch Plant / Supplier','Loads','yd³ Delivered','Rejected','Water Added','Over Slump','Avg Temp','Grade'].map(h=>`<th style="padding:8px 10px;text-align:left;color:#93c5fd;font-weight:600;border-bottom:1px solid #334155">${h}</th>`).join('')}</tr></thead><tbody style="background:#0f172a">${rows.join('')}</tbody></table>${expHtml}`}
+<button onclick="window._oncorSupplier.print()" style="margin-top:14px;background:#0284c7;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer">🖨️ Print Scorecard</button></div>`;
+  },
+  print() {
+    const w = window.open('','_blank');
+    const proj = (document.getElementById('projectName')||{}).value||'';
+    w.document.write(`<html><head><title>Supplier Scorecard</title><style>body{font-family:sans-serif;padding:20px}h2{color:#0284c7}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ccc;padding:5px 8px}th{background:#f1f5f9}@media print{button{display:none}}</style></head><body><h2>🏭 Supplier Scorecard — ${proj}</h2><p style="color:#666;font-size:12px">Printed: ${new Date().toLocaleDateString()}</p>${document.getElementById('oncorSupplierContent').innerHTML}<br><button onclick="window.print()">🖨️ Print</button></body></html>`);
+    w.document.close();
+  }
+};
+
+// ── FEATURE 3: Material Inventory Tracker (Ctrl+Alt+I) — ~175 lines ──
+window._oncorInv = {
+  MATERIALS: ['Rebar #3 (lb)','Rebar #4 (lb)','Rebar #5 (lb)','Rebar #6 (lb)','Wire Mesh (SF)','Fiber - Synthetic (bags)','Curing Compound (gal)','Curing Blankets (SF)','Vapor Barrier (SF)','Form Lumber (BF)','Form Plywood (SF)','Expansion Joint Filler (LF)','Concrete Sealer (gal)','Saw Blades (EA)','Anchor Bolts/Dowels (EA)','Tie Wire (rolls)'],
+  WARN_AT: 0.15,
+  key() { return 'oncor_inventory_v1_' + ((document.getElementById('projectName')||{}).value||'default'); },
+  load() { return JSON.parse(localStorage.getItem(this.key()) || '{}'); },
+  save(d) { localStorage.setItem(this.key(), JSON.stringify(d)); },
+  toggle() {
+    let el = document.getElementById('oncorInvModal');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'oncorInvModal';
+      el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+      el.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:24px;max-width:820px;width:95%;max-height:90vh;overflow-y:auto;position:relative"><button onclick="document.getElementById(\'oncorInvModal\').remove()" style="position:absolute;top:12px;right:12px;background:#334155;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer">✕</button><div id="oncorInvContent"></div></div>';
+      document.body.appendChild(el);
+    }
+    this.refresh();
+  },
+  refresh() {
+    const d = this.load();
+    const rows = this.MATERIALS.map(mat => {
+      const rec = d[mat] || { onHand: 0, reorder: 0 };
+      const pct = rec.reorder > 0 ? Math.min(100, (rec.onHand / rec.reorder) * 100) : 100;
+      const status = rec.reorder > 0 && rec.onHand <= rec.reorder * this.WARN_AT ? '🔴 LOW' : rec.reorder > 0 && rec.onHand <= rec.reorder * 0.4 ? '⚠️ Watch' : '✅ OK';
+      const barColor = status.includes('LOW') ? '#ef4444' : status.includes('Watch') ? '#f59e0b' : '#22c55e';
+      return `<tr><td style="font-weight:500;font-size:12px">${mat}</td>
+<td><input type="number" value="${rec.onHand}" min="0" style="width:80px;background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:4px;padding:3px 6px;font-size:12px" onchange="window._oncorInv.setField('${mat.replace(/'/g,"\\'")}','onHand',this.value)"></td>
+<td><input type="number" value="${rec.reorder}" min="0" style="width:80px;background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:4px;padding:3px 6px;font-size:12px" onchange="window._oncorInv.setField('${mat.replace(/'/g,"\\'")}','reorder',this.value)"></td>
+<td><div style="background:#334155;border-radius:4px;height:12px;width:100px;overflow:hidden"><div style="height:100%;background:${barColor};width:${Math.min(100,pct)}%"></div></div></td>
+<td style="font-size:12px">${status}</td>
+<td><button onclick="window._oncorInv.log('${mat.replace(/'/g,"\\'")}','use')" style="background:#334155;color:#e5e7eb;border:none;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer">− Use</button> <button onclick="window._oncorInv.log('${mat.replace(/'/g,"\\'")}','receive')" style="background:#0284c7;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer">+ Recv</button></td></tr>`;
+    }).join('');
+    const lowCount = this.MATERIALS.filter(m => { const r=(d[m]||{reorder:0,onHand:0}); return r.reorder>0&&r.onHand<=r.reorder*this.WARN_AT; }).length;
+    document.getElementById('oncorInvContent').innerHTML = `<div style="font-family:sans-serif;color:#e5e7eb;max-width:780px">
+<h2 style="color:#22d3ee;margin:0 0 4px">📦 Material Inventory Tracker</h2>
+<p style="color:#94a3b8;font-size:12px;margin:0 0 12px">Track on-hand quantities and reorder thresholds. ⚠️ alert fires at ≤15% of reorder qty.</p>
+${lowCount > 0 ? `<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:6px;padding:8px 12px;margin-bottom:12px;color:#fca5a5;font-size:13px">🔴 ${lowCount} material(s) critically low — check before next pour</div>` : ''}
+<table style="width:100%;border-collapse:collapse;font-size:12px">
+<thead><tr style="background:#1e3a5f">${['Material','On Hand','Reorder At','Level','Status','Actions'].map(h=>`<th style="padding:6px 8px;text-align:left;color:#93c5fd;border-bottom:1px solid #334155">${h}</th>`).join('')}</tr></thead>
+<tbody style="background:#0f172a">${rows}</tbody></table>
+<div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+<button onclick="window._oncorInv.print()" style="background:#0284c7;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px">🖨️ Print Inventory</button>
+<button onclick="window._oncorInv.resetAll()" style="background:#334155;color:#e5e7eb;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px">🗑 Clear All</button></div></div>`;
+  },
+  setField(mat, field, val) {
+    const d = this.load();
+    if (!d[mat]) d[mat] = { onHand: 0, reorder: 0 };
+    d[mat][field] = parseFloat(val) || 0;
+    this.save(d);
+  },
+  log(mat, type) {
+    const qty = prompt((type==='use'?'Enter quantity USED:':'Enter quantity RECEIVED:'), '');
+    if (qty === null || isNaN(parseFloat(qty))) return;
+    const d = this.load();
+    if (!d[mat]) d[mat] = { onHand: 0, reorder: 0 };
+    if (type === 'use') d[mat].onHand = Math.max(0, d[mat].onHand - parseFloat(qty));
+    else d[mat].onHand += parseFloat(qty);
+    this.save(d);
+    this.refresh();
+  },
+  resetAll() {
+    if (!confirm('Clear all inventory data for this project?')) return;
+    localStorage.removeItem(this.key());
+    this.refresh();
+  },
+  print() {
+    const d = this.load();
+    const proj = (document.getElementById('projectName')||{}).value||'';
+    const rows = this.MATERIALS.map(m => {
+      const r = d[m]||{onHand:0,reorder:0};
+      const status = r.reorder>0&&r.onHand<=r.reorder*0.15?'🔴 LOW':r.reorder>0&&r.onHand<=r.reorder*0.4?'⚠️ Watch':'✅ OK';
+      return `<tr><td>${m}</td><td>${r.onHand}</td><td>${r.reorder}</td><td>${status}</td></tr>`;
+    }).join('');
+    const w = window.open('','_blank');
+    w.document.write(`<html><head><title>Material Inventory</title><style>body{font-family:sans-serif;padding:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:5px 8px}th{background:#f1f5f9}tr:nth-child(even){background:#f9fafb}@media print{button{display:none}}</style></head><body><h2>📦 Material Inventory — ${proj}</h2><p style="color:#666;font-size:12px">Printed: ${new Date().toLocaleDateString()}</p><table><thead><tr><th>Material</th><th>On Hand</th><th>Reorder At</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table><br><button onclick="window.print()">🖨️ Print</button></body></html>`);
+    w.document.close();
+  }
+};
+
+// ── INJECT SIDEBAR BUTTONS & KEYBOARD SHORTCUTS — Session #105 ──
+document.addEventListener('DOMContentLoaded', function() {
+  const sidebar = document.querySelector('.sidebar-actions') || document.querySelector('#sidebarActions') || (function(){ const s = document.querySelector('aside'); return s; })();
+  function injectBtn(id, emoji, label, shortcut, fn) {
+    if (document.getElementById(id)) return;
+    const btn = document.createElement('button');
+    btn.id = id; btn.textContent = emoji + ' ' + label;
+    btn.title = shortcut + ' — ' + label;
+    btn.style.cssText = 'display:block;width:100%;margin:2px 0;padding:6px 10px;background:#1e293b;color:#e5e7eb;border:1px solid #334155;border-radius:6px;cursor:pointer;text-align:left;font-size:12px';
+    btn.onclick = fn;
+    if (sidebar) sidebar.appendChild(btn);
+    else document.body.appendChild(btn);
+  }
+  injectBtn('btnProdAnalytics','📊','Productivity Analytics','Ctrl+Alt+G',()=>window._oncorProd.toggle());
+  injectBtn('btnSupplierScore','🏭','Supplier Scorecard','Ctrl+Alt+H',()=>window._oncorSupplier.toggle());
+  injectBtn('btnMatInv','📦','Material Inventory','Ctrl+Alt+I',()=>window._oncorInv.toggle());
+});
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.altKey) {
+    if (e.key === 'g' || e.key === 'G') { e.preventDefault(); window._oncorProd.toggle(); }
+    if (e.key === 'h' || e.key === 'H') { e.preventDefault(); window._oncorSupplier.toggle(); }
+    if (e.key === 'i' || e.key === 'I') { e.preventDefault(); window._oncorInv.toggle(); }
+  }
+});
+
+// ==================== END SESSION #105 — Zeus ⚡ Productivity Analytics (Ctrl+Alt+G) + Supplier Scorecard (Ctrl+Alt+H) + Material Inventory (Ctrl+Alt+I) ====================
+})();
