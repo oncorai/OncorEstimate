@@ -176378,4 +176378,707 @@ document.addEventListener('keydown', function(e) {
 })();
 
 // ==================== END SESSION #107 — Zeus ⚡ Crew Fatigue & OT Alert + Batch Plant Rating + Lessons Learned ====================
+
+// ==================== SESSION #108 — Zeus ⚡ Material Delivery Planner + Pre-Bid Scope Checklist + Pour Performance Report ====================
+(function(){
+  'use strict';
+
+  /* ─── shared helpers ─── */
+  function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function _proj(){ return (window._oncorProject && window._oncorProject.name) ? window._oncorProject.name.replace(/\s+/g,'_').toLowerCase() : 'default'; }
+
+  /* ══════════════════════════════════════════════════════════════
+     FEATURE 1 — 🗓️ Material Delivery Planner  (Ctrl+Alt+`)
+  ══════════════════════════════════════════════════════════════ */
+  window._oncorDeliveryPlan = (function(){
+    var STORAGE_KEY = function(){ return 'oncor_delivery_plan_v1_' + _proj(); };
+    var MATERIALS = ['Concrete (Ready-Mix)','Rebar (ASTM A615)','Wire Mesh / WWF','Fiber (Synthetic)','Fiber (Steel)','Base Course / Aggregate','Vapor Barrier','Form Lumber','Form Plywood','Rebar Chairs / Supports','Expansion Joint Material','Curing Compound','Sealer / Densifier','Epoxy Dowels','Anchor Bolts','Pump Hose & Fittings','Concrete Admixture','Accelerator / Retarder','Polyethylene Film','Other'];
+    var UNITS = ['yd³','tons','lbs','bags','rolls','sheets','lf','sf','ea','gal'];
+    var STATUS_COLORS = {Scheduled:'#0891b2',Confirmed:'#7c3aed',Delivered:'#16a34a',Partial:'#ca8a04',Cancelled:'#6b7280',Delayed:'#dc2626'};
+    var overlay = null;
+
+    function load(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY()))||[]; }catch(e){ return []; } }
+    function save(d){ localStorage.setItem(STORAGE_KEY(), JSON.stringify(d)); }
+
+    function isOverdue(item){
+      if(item.status==='Delivered'||item.status==='Cancelled') return false;
+      var now = new Date(); var dt = new Date(item.date+'T'+(item.time||'23:59'));
+      return dt < now;
+    }
+
+    function calcKPIs(data){
+      var total=data.length, confirmed=0, delivered=0, pending=0, overdue=0;
+      data.forEach(function(d){
+        if(d.status==='Confirmed') confirmed++;
+        if(d.status==='Delivered') delivered++;
+        if(d.status==='Scheduled'||d.status==='Partial'||d.status==='Delayed') pending++;
+        if(isOverdue(d)) overdue++;
+      });
+      return {total:total,confirmed:confirmed,delivered:delivered,pending:pending,overdue:overdue};
+    }
+
+    function kpiCard(label,val,color){
+      return '<div style="background:#0f172a;padding:12px;border-radius:8px;text-align:center;border:1px solid #334155;flex:1;min-width:90px"><div style="font-size:22px;font-weight:700;color:'+(color||'#f8fafc')+'">'+_esc(val)+'</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">'+_esc(label)+'</div></div>';
+    }
+
+    function renderDeliveries(data){
+      var sorted = data.slice().sort(function(a,b){ return new Date(a.date+'T'+(a.time||'00:00')) - new Date(b.date+'T'+(b.time||'00:00')); });
+      if(!sorted.length) return '<div style="color:#94a3b8;text-align:center;padding:32px">No deliveries yet. Add one above.</div>';
+      return sorted.map(function(d,i){
+        var ov = isOverdue(d);
+        var sc = STATUS_COLORS[d.status]||'#94a3b8';
+        return '<div style="background:#0f172a;border:1px solid #334155;border-left:4px solid '+sc+';border-radius:8px;padding:12px;margin-bottom:8px">'
+          +'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">'
+          +'<div><span style="font-weight:700;color:#f8fafc;font-size:14px">'+_esc(d.material)+'</span>'
+          +(ov?'&nbsp;<span style="background:#dc2626;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700">OVERDUE</span>':'')
+          +'</div>'
+          +'<div style="display:flex;gap:8px;align-items:center">'
+          +'<span style="background:'+sc+';color:#fff;font-size:11px;padding:2px 8px;border-radius:12px">'+_esc(d.status)+'</span>'
+          +'<button onclick="window._oncorDeliveryPlan._del('+i+')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:16px;padding:0 4px" title="Delete">×</button>'
+          +'</div></div>'
+          +'<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:12px;color:#94a3b8">'
+          +'<span>📅 '+_esc(d.date)+(d.time?' '+_esc(d.time):'')+'</span>'
+          +(d.vendor?'<span>🏢 '+_esc(d.vendor)+'</span>':'')
+          +(d.qty?'<span>📦 '+_esc(d.qty)+' '+_esc(d.unit||'')+'</span>':'')
+          +(d.po?'<span>🧾 PO: '+_esc(d.po)+'</span>':'')
+          +(d.contact?'<span>📞 '+_esc(d.contact)+'</span>':'')
+          +'</div>'
+          +(d.notes?'<div style="margin-top:6px;font-size:12px;color:#64748b;font-style:italic">'+_esc(d.notes)+'</div>':'')
+          +'</div>';
+      }).join('');
+    }
+
+    function render(){
+      if(!overlay) return;
+      var data = load();
+      var kpis = calcKPIs(data);
+      var body = overlay.querySelector('#dp-body');
+      if(!body) return;
+      body.innerHTML =
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">'
+        +kpiCard('Total Deliveries',kpis.total,'#f8fafc')
+        +kpiCard('Confirmed',kpis.confirmed,'#7c3aed')
+        +kpiCard('Delivered',kpis.delivered,'#16a34a')
+        +kpiCard('Pending',kpis.pending,'#ca8a04')
+        +kpiCard('Overdue',kpis.overdue,'#dc2626')
+        +'</div>'
+        +'<div id="dp-list">'+renderDeliveries(data)+'</div>';
+    }
+
+    function buildForm(){
+      var matOpts = MATERIALS.map(function(m){ return '<option value="'+_esc(m)+'">'+_esc(m)+'</option>'; }).join('');
+      var unitOpts = UNITS.map(function(u){ return '<option value="'+_esc(u)+'">'+_esc(u)+'</option>'; }).join('');
+      var statOpts = Object.keys(STATUS_COLORS).map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('');
+      var inp = 'background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box';
+      return '<div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px;margin-bottom:16px">'
+        +'<div style="font-weight:700;color:#f8fafc;margin-bottom:12px;font-size:14px">➕ Add Delivery Event</div>'
+        +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">'
+        +'<div><label style="font-size:11px;color:#94a3b8">Material *</label><select id="dp-mat" style="'+inp+'"><option value="">Select…</option>'+matOpts+'</select></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Vendor/Supplier</label><input id="dp-vendor" placeholder="Vendor name" style="'+inp+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Date *</label><input id="dp-date" type="date" style="'+inp+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Time</label><input id="dp-time" type="time" style="'+inp+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Quantity</label><input id="dp-qty" type="number" min="0" placeholder="0" style="'+inp+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Unit</label><select id="dp-unit" style="'+inp+'">'+unitOpts+'</select></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">PO #</label><input id="dp-po" placeholder="PO-0000" style="'+inp+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Contact / Phone</label><input id="dp-contact" placeholder="Name or #" style="'+inp+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Status</label><select id="dp-status" style="'+inp+'">'+statOpts+'</select></div>'
+        +'</div>'
+        +'<div style="margin-top:8px"><label style="font-size:11px;color:#94a3b8">Notes</label><input id="dp-notes" placeholder="Optional notes…" style="'+inp+'"></div>'
+        +'<div style="display:flex;gap:8px;margin-top:12px">'
+        +'<button onclick="window._oncorDeliveryPlan._add()" style="background:#0891b2;color:#fff;border:none;border-radius:8px;padding:8px 20px;cursor:pointer;font-weight:700">Add Delivery</button>'
+        +'<button onclick="window._oncorDeliveryPlan._print()" style="background:#334155;color:#e2e8f0;border:none;border-radius:8px;padding:8px 16px;cursor:pointer">🖨️ Print Schedule</button>'
+        +'</div></div>';
+    }
+
+    function open(){
+      if(overlay){ overlay.style.display='flex'; render(); return; }
+      overlay = document.createElement('div');
+      overlay.id = 'overlay-delivery-plan';
+      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:flex-start;justify-content:center;padding:20px;box-sizing:border-box;overflow-y:auto';
+      overlay.innerHTML =
+        '<div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border:1px solid #334155;border-radius:12px;width:100%;max-width:860px;padding:20px;color:#f8fafc">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+        +'<div><span style="font-size:20px;font-weight:800">🗓️ Material Delivery Planner</span><span style="margin-left:10px;font-size:12px;color:#94a3b8">Ctrl+Alt+~</span></div>'
+        +'<button onclick="window._oncorDeliveryPlan.toggle()" style="background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer">×</button>'
+        +'</div>'
+        +buildForm()
+        +'<div id="dp-body"></div>'
+        +'</div>';
+      overlay.addEventListener('click', function(e){ if(e.target===overlay) close(); });
+      document.body.appendChild(overlay);
+      render();
+    }
+
+    function close(){
+      if(overlay) overlay.style.display='none';
+    }
+
+    function toggle(){ overlay && overlay.style.display!=='none' ? close() : open(); }
+
+    window._oncorDeliveryPlan = {
+      toggle: toggle,
+      _add: function(){
+        var mat = (document.getElementById('dp-mat')||{}).value;
+        var date = (document.getElementById('dp-date')||{}).value;
+        if(!mat||!date){ alert('Material and Date are required.'); return; }
+        var data = load();
+        data.push({
+          material: mat,
+          vendor: (document.getElementById('dp-vendor')||{}).value||'',
+          date: date,
+          time: (document.getElementById('dp-time')||{}).value||'',
+          qty: (document.getElementById('dp-qty')||{}).value||'',
+          unit: (document.getElementById('dp-unit')||{}).value||'yd³',
+          po: (document.getElementById('dp-po')||{}).value||'',
+          contact: (document.getElementById('dp-contact')||{}).value||'',
+          status: (document.getElementById('dp-status')||{}).value||'Scheduled',
+          notes: (document.getElementById('dp-notes')||{}).value||'',
+          created: Date.now()
+        });
+        save(data);
+        ['dp-mat','dp-vendor','dp-date','dp-time','dp-qty','dp-po','dp-contact','dp-notes'].forEach(function(id){
+          var el=document.getElementById(id); if(el) el.value='';
+        });
+        render();
+      },
+      _del: function(i){
+        if(!confirm('Delete this delivery?')) return;
+        var data = load(); data.splice(i,1); save(data); render();
+      },
+      _print: function(){
+        var data = load();
+        var sorted = data.slice().sort(function(a,b){ return new Date(a.date+'T'+(a.time||'00:00'))-new Date(b.date+'T'+(b.time||'00:00')); });
+        var rows = sorted.map(function(d){
+          var ov = isOverdue(d);
+          return '<tr style="border-bottom:1px solid #ccc">'
+            +'<td style="padding:6px">'+_esc(d.date)+(d.time?' '+_esc(d.time):'')+'</td>'
+            +'<td style="padding:6px">'+_esc(d.material)+'</td>'
+            +'<td style="padding:6px">'+_esc(d.vendor)+'</td>'
+            +'<td style="padding:6px">'+_esc(d.qty)+' '+_esc(d.unit)+'</td>'
+            +'<td style="padding:6px">'+_esc(d.po)+'</td>'
+            +'<td style="padding:6px">'+_esc(d.contact)+'</td>'
+            +'<td style="padding:6px">'+_esc(d.status)+(ov?' ⚠️':'')+'</td>'
+            +'<td style="padding:6px">'+_esc(d.notes)+'</td>'
+            +'</tr>';
+        }).join('');
+        var w=window.open('','_blank','width=900,height=700');
+        w.document.write('<!DOCTYPE html><html><head><title>Delivery Schedule</title><style>body{font-family:Arial,sans-serif;margin:20px}table{width:100%;border-collapse:collapse}th{background:#1e293b;color:#fff;padding:8px;text-align:left}td{padding:6px;border-bottom:1px solid #ccc}@media print{button{display:none}}</style></head><body>'
+          +'<h2>🗓️ Delivery Coordination Schedule</h2><p>Project: '+_esc(_proj())+' — Printed: '+new Date().toLocaleDateString()+'</p>'
+          +'<table><thead><tr><th>Date/Time</th><th>Material</th><th>Vendor</th><th>Qty</th><th>PO#</th><th>Contact</th><th>Status</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table>'
+          +'<br><button onclick="window.print()">🖨️ Print</button></body></html>');
+        w.document.close();
+      }
+    };
+
+    return window._oncorDeliveryPlan;
+  })();
+
+
+  /* ══════════════════════════════════════════════════════════════
+     FEATURE 2 — 📋 Pre-Bid Scope Verification Checklist  (Ctrl+Alt+-)
+  ══════════════════════════════════════════════════════════════ */
+  window._oncorPreBid = (function(){
+    var STORAGE_KEY = function(){ return 'oncor_prebid_v1_' + _proj(); };
+
+    var SECTIONS = [
+      { icon:'📐', title:'Drawings & Scope', items:[
+        {text:'All drawing sheets reviewed',critical:true},
+        {text:'Concrete scope fully identified',critical:true},
+        {text:'Addenda incorporated into takeoff',critical:true},
+        {text:'Alternates listed and priced',critical:false},
+        {text:'Exclusions clearly noted',critical:false},
+        {text:'GC scope confirmation received',critical:false}
+      ]},
+      { icon:'📏', title:'Quantities', items:[
+        {text:'All concrete elements measured',critical:true},
+        {text:'Thicknesses verified per spec',critical:true},
+        {text:'Fiber/reinforcing type & rate verified',critical:true},
+        {text:'Waste % applied to all elements',critical:false},
+        {text:'Sub-slab prep scope included',critical:false},
+        {text:'Saw cutting scope checked',critical:false}
+      ]},
+      { icon:'🧪', title:'Concrete Specs', items:[
+        {text:'PSI requirement confirmed per element',critical:true},
+        {text:'Slump / workability noted',critical:false},
+        {text:'Mix design availability confirmed',critical:false},
+        {text:'Special requirements (fiber dose, w/cm, air content)',critical:true},
+        {text:'Exposure class / durability confirmed',critical:false}
+      ]},
+      { icon:'🚚', title:'Logistics', items:[
+        {text:'Truck access routes confirmed',critical:true},
+        {text:'Pump setup location identified',critical:true},
+        {text:'Concrete washout area designated',critical:false},
+        {text:'Pour sequence is feasible',critical:false},
+        {text:'Hot/cold weather contingency planned',critical:false}
+      ]},
+      { icon:'💰', title:'Pricing', items:[
+        {text:'Batch plant quote is current',critical:true},
+        {text:'Pump pricing locked',critical:true},
+        {text:'Rebar supplier quote obtained',critical:false},
+        {text:'Labor rate current and verified',critical:true},
+        {text:'All line items entered in estimate',critical:true},
+        {text:'Markup % verified and approved',critical:false}
+      ]},
+      { icon:'⚖️', title:'Contract', items:[
+        {text:'Payment terms clearly stated',critical:true},
+        {text:'Retainage % noted',critical:false},
+        {text:'Lien rights confirmed in contract',critical:true},
+        {text:'Change order process defined',critical:false},
+        {text:'Insurance requirements met',critical:true}
+      ]},
+      { icon:'📄', title:'Bid Submission', items:[
+        {text:'Bid form is complete',critical:true},
+        {text:'Inclusions / exclusions listed',critical:true},
+        {text:'Alternates priced if required',critical:false},
+        {text:'Bid bond included if required',critical:false},
+        {text:'Submitted by deadline',critical:true},
+        {text:'Copy of bid saved to project folder',critical:false}
+      ]},
+      { icon:'✅', title:'Final Review', items:[
+        {text:'Full estimate reviewed by PM/estimator',critical:true},
+        {text:'Math / totals double-checked',critical:true},
+        {text:'Scope notes complete and clear',critical:false},
+        {text:'Contact info current',critical:false},
+        {text:'Ready to submit — no open questions',critical:true},
+        {text:'Final sign-off received',critical:false}
+      ]}
+    ];
+
+    var overlay = null;
+
+    function load(){
+      try{ return JSON.parse(localStorage.getItem(STORAGE_KEY()))||{}; }catch(e){ return {}; }
+    }
+    function save(d){ localStorage.setItem(STORAGE_KEY(), JSON.stringify(d)); }
+
+    function getState(secIdx, itemIdx){
+      var d = load();
+      return (d['s'+secIdx+'i'+itemIdx])||'none'; // none / ok / flag / na
+    }
+    function setState(secIdx, itemIdx, val){
+      var d = load();
+      d['s'+secIdx+'i'+itemIdx] = val;
+      save(d);
+    }
+
+    function calcProgress(){
+      var total=0, done=0, flagged=0;
+      SECTIONS.forEach(function(sec, si){
+        sec.items.forEach(function(item, ii){
+          total++;
+          var st = getState(si,ii);
+          if(st==='ok'||st==='na') done++;
+          if(st==='flag') flagged++;
+        });
+      });
+      return {total:total, done:done, flagged:flagged, pct: total?Math.round(done/total*100):0};
+    }
+
+    function cycleState(si, ii){
+      var cur = getState(si,ii);
+      var next = cur==='none'?'ok': cur==='ok'?'flag': cur==='flag'?'na':'none';
+      setState(si, ii, next);
+      render();
+    }
+
+    function stateLabel(st){
+      if(st==='ok') return '<span style="color:#16a34a;font-weight:700">✓ OK</span>';
+      if(st==='flag') return '<span style="color:#dc2626;font-weight:700">⚠️ Flag</span>';
+      if(st==='na') return '<span style="color:#6b7280;font-weight:700">N/A</span>';
+      return '<span style="color:#475569">— Tap</span>';
+    }
+
+    function renderBody(){
+      var prog = calcProgress();
+      var pctBar = '<div style="background:#1e293b;border-radius:8px;height:12px;overflow:hidden;margin-bottom:6px"><div style="height:100%;background:'+(prog.pct===100?'#16a34a':'#0891b2')+';width:'+prog.pct+'%;transition:width .3s"></div></div>';
+      var statusMsg = prog.flagged>0
+        ? '<div style="background:#7f1d1d;border:1px solid #dc2626;border-radius:8px;padding:10px;text-align:center;font-weight:700;color:#fca5a5;margin-bottom:12px">⛔ '+prog.flagged+' item'+(prog.flagged>1?'s':'')+' flagged — DO NOT SUBMIT</div>'
+        : prog.pct===100
+          ? '<div style="background:#14532d;border:1px solid #16a34a;border-radius:8px;padding:10px;text-align:center;font-weight:700;color:#86efac;margin-bottom:12px">✅ READY TO BID</div>'
+          : '';
+
+      var secs = SECTIONS.map(function(sec, si){
+        var itemsHtml = sec.items.map(function(item, ii){
+          var st = getState(si,ii);
+          var bg = st==='ok'?'rgba(22,163,74,.1)': st==='flag'?'rgba(220,38,38,.1)': st==='na'?'rgba(107,114,128,.1)':'transparent';
+          return '<div onclick="window._oncorPreBid._cycle('+si+','+ii+')" style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:4px;background:'+bg+';border:1px solid #334155;user-select:none">'
+            +'<span style="font-size:13px;color:#e2e8f0">'+(item.critical?'★ ':'')+_esc(item.text)+'</span>'
+            +'<span style="font-size:12px;min-width:60px;text-align:right">'+stateLabel(st)+'</span>'
+            +'</div>';
+        }).join('');
+        return '<div style="margin-bottom:12px"><div style="font-weight:700;color:#f8fafc;margin-bottom:8px;font-size:13px">'+_esc(sec.icon)+' '+_esc(sec.title)+'</div>'+itemsHtml+'</div>';
+      }).join('');
+
+      return '<div style="margin-bottom:12px">'
+        +'<div style="display:flex;justify-content:space-between;font-size:12px;color:#94a3b8;margin-bottom:4px"><span>Progress</span><span>'+prog.done+' / '+prog.total+' ('+prog.pct+'%)</span></div>'
+        +pctBar
+        +'</div>'
+        +statusMsg
+        +'<div style="font-size:11px;color:#64748b;margin-bottom:12px">Click any item to cycle: — → ✓ OK → ⚠️ Flag → N/A → —&nbsp;&nbsp;|&nbsp;&nbsp;★ = Critical item</div>'
+        +secs;
+    }
+
+    function render(){
+      if(!overlay) return;
+      var body = overlay.querySelector('#pb-body');
+      if(body) body.innerHTML = renderBody();
+    }
+
+    function open(){
+      if(overlay){ overlay.style.display='flex'; render(); return; }
+      overlay = document.createElement('div');
+      overlay.id = 'overlay-prebid';
+      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:flex-start;justify-content:center;padding:20px;box-sizing:border-box;overflow-y:auto';
+      overlay.innerHTML =
+        '<div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border:1px solid #334155;border-radius:12px;width:100%;max-width:800px;padding:20px;color:#f8fafc">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+        +'<div><span style="font-size:20px;font-weight:800">📋 Pre-Bid Scope Verification</span><span style="margin-left:10px;font-size:12px;color:#94a3b8">Ctrl+Alt+-</span></div>'
+        +'<div style="display:flex;gap:8px">'
+        +'<button onclick="window._oncorPreBid._reset()" style="background:#334155;color:#e2e8f0;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px">↺ Reset</button>'
+        +'<button onclick="window._oncorPreBid._print()" style="background:#334155;color:#e2e8f0;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px">🖨️ Print</button>'
+        +'<button onclick="window._oncorPreBid.toggle()" style="background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer">×</button>'
+        +'</div></div>'
+        +'<div id="pb-body"></div>'
+        +'</div>';
+      overlay.addEventListener('click', function(e){ if(e.target===overlay) close(); });
+      document.body.appendChild(overlay);
+      render();
+    }
+
+    function close(){ if(overlay) overlay.style.display='none'; }
+    function toggle(){ overlay && overlay.style.display!=='none' ? close() : open(); }
+
+    window._oncorPreBid = {
+      toggle: toggle,
+      _cycle: function(si,ii){ cycleState(si,ii); },
+      _reset: function(){
+        if(!confirm('Reset ALL checklist items?')) return;
+        localStorage.removeItem(STORAGE_KEY());
+        render();
+      },
+      _print: function(){
+        var w=window.open('','_blank','width=800,height=700');
+        var rows = SECTIONS.map(function(sec, si){
+          var itemsRows = sec.items.map(function(item,ii){
+            var st = getState(si,ii);
+            var stLabel = st==='ok'?'✓ OK': st==='flag'?'⚠️ FLAG': st==='na'?'N/A':'—';
+            return '<tr><td style="padding:5px 8px">'+(item.critical?'★ ':'')+_esc(item.text)+'</td><td style="padding:5px 8px;font-weight:700">'+(st==='flag'?'<span style="color:red">'+stLabel+'</span>':stLabel)+'</td></tr>';
+          }).join('');
+          return '<tr style="background:#e2e8f0"><td colspan="2" style="padding:6px 8px;font-weight:700">'+_esc(sec.icon)+' '+_esc(sec.title)+'</td></tr>'+itemsRows;
+        }).join('');
+        var prog = calcProgress();
+        w.document.write('<!DOCTYPE html><html><head><title>Pre-Bid Checklist</title><style>body{font-family:Arial,sans-serif;margin:20px}table{width:100%;border-collapse:collapse;font-size:13px}td{border-bottom:1px solid #ccc}@media print{button{display:none}}</style></head><body>'
+          +'<h2>📋 Pre-Bid Scope Verification Checklist</h2>'
+          +'<p>Project: '+_esc(_proj())+' — Printed: '+new Date().toLocaleDateString()+'&nbsp;&nbsp;|&nbsp;&nbsp;Progress: '+prog.done+'/'+prog.total+' ('+prog.pct+'%)'+(prog.flagged?' | ⚠️ '+prog.flagged+' FLAGGED':'')+'</p>'
+          +(prog.flagged?'<p style="color:red;font-weight:700">⛔ '+prog.flagged+' item(s) flagged — REVIEW BEFORE SUBMITTING</p>':'')
+          +(prog.pct===100&&!prog.flagged?'<p style="color:green;font-weight:700">✅ READY TO BID</p>':'')
+          +'<table>'+rows+'</table>'
+          +'<p style="font-size:11px;color:#888">★ = Critical item</p>'
+          +'<br><button onclick="window.print()">🖨️ Print</button></body></html>');
+        w.document.close();
+      }
+    };
+
+    return window._oncorPreBid;
+  })();
+
+
+  /* ══════════════════════════════════════════════════════════════
+     FEATURE 3 — 📊 Pour Performance Report  (Ctrl+Alt+=)
+  ══════════════════════════════════════════════════════════════ */
+  window._oncorPourPerf = (function(){
+    var STORAGE_KEY = function(){ return 'oncor_pour_perf_v1_' + _proj(); };
+    var ELEMENT_TYPES = ['Slab','Footing','Wall','Grade Beam','Curb','Flatwork','Column','Pier','Other'];
+    var ISSUES = ['Pump delay','Truck delay','Rejected load','Labor no-show','Form issue','Weather','Late start','Equipment failure','Other'];
+    var GRADE_COLORS = {A:'#16a34a',B:'#65a30d',C:'#ca8a04',D:'#ea580c',F:'#dc2626'};
+
+    var overlay = null;
+    var showForm = false;
+
+    function load(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY()))||[]; }catch(e){ return []; } }
+    function save(d){ localStorage.setItem(STORAGE_KEY(), JSON.stringify(d)); }
+
+    function calcGrade(p){
+      var pts = 100;
+      // Waste penalty
+      if(p.orderedYd && p.placedYd){
+        var waste = ((p.orderedYd - p.placedYd) / p.orderedYd) * 100;
+        if(waste > 5) pts -= Math.floor(waste - 5) * 5;
+      }
+      // Labor penalty
+      if(p.estLaborHrs && p.actLaborHrs){
+        if(parseFloat(p.actLaborHrs) > parseFloat(p.estLaborHrs) * 1.15) pts -= 10;
+      }
+      // 28-day break penalty
+      if(p.psiSpec && p.break28){
+        var spec = parseFloat(p.psiSpec), br28 = parseFloat(p.break28);
+        if(br28 < spec) pts -= 20;
+        else if(br28 < spec * 0.9) pts -= 10; // unlikely but keep for edge cases
+      }
+      // Issue penalties
+      var issueCount = (p.issues||[]).length;
+      pts -= issueCount * 3;
+      pts = Math.max(0, pts);
+      var letter = pts>=90?'A': pts>=80?'B': pts>=70?'C': pts>=60?'D':'F';
+      return {pts:pts, letter:letter};
+    }
+
+    function calcDuration(start, end){
+      if(!start||!end) return null;
+      var d1 = new Date('2000-01-01T'+start), d2 = new Date('2000-01-01T'+end);
+      if(d2<d1) d2 = new Date(d2.getTime()+86400000);
+      var mins = Math.round((d2-d1)/60000);
+      var h = Math.floor(mins/60), m = mins%60;
+      return h+'h '+(m<10?'0':'')+m+'m';
+    }
+
+    function calcKPIs(data){
+      if(!data.length) return {count:0, avgGrade:'—', totalYd:0, avgWaste:'—', avgYdHr:'—'};
+      var grades = data.map(function(p){ return calcGrade(p).pts; });
+      var avgPts = Math.round(grades.reduce(function(a,b){return a+b;},0)/grades.length);
+      var avgLetter = avgPts>=90?'A': avgPts>=80?'B': avgPts>=70?'C': avgPts>=60?'D':'F';
+      var totalYd = data.reduce(function(a,p){ return a+(parseFloat(p.placedYd)||0); },0);
+      var wasteArr = data.filter(function(p){ return p.orderedYd&&p.placedYd; }).map(function(p){ return ((p.orderedYd-p.placedYd)/p.orderedYd)*100; });
+      var avgWaste = wasteArr.length ? (wasteArr.reduce(function(a,b){return a+b;},0)/wasteArr.length).toFixed(1)+'%' : '—';
+      var hrArr = data.filter(function(p){ return p.actLaborHrs&&p.placedYd; }).map(function(p){ return parseFloat(p.placedYd)/parseFloat(p.actLaborHrs); });
+      var avgYdHr = hrArr.length ? (hrArr.reduce(function(a,b){return a+b;},0)/hrArr.length).toFixed(2) : '—';
+      return {count:data.length, avgGrade:avgLetter+' ('+avgPts+')', totalYd:totalYd.toFixed(1), avgWaste:avgWaste, avgYdHr:avgYdHr};
+    }
+
+    function kpiCard(label,val,color){
+      return '<div style="background:#0f172a;padding:12px;border-radius:8px;text-align:center;border:1px solid #334155;flex:1;min-width:90px"><div style="font-size:20px;font-weight:700;color:'+(color||'#f8fafc')+'">'+_esc(val)+'</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">'+_esc(label)+'</div></div>';
+    }
+
+    function inp(){ return 'background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box'; }
+
+    function buildAddForm(){
+      var elOpts = ELEMENT_TYPES.map(function(t){ return '<option>'+_esc(t)+'</option>'; }).join('');
+      var issueChecks = ISSUES.map(function(is,i){
+        return '<label style="display:inline-flex;align-items:center;gap:4px;margin:3px 6px 3px 0;font-size:12px;color:#e2e8f0;cursor:pointer"><input type="checkbox" id="pp-issue-'+i+'" value="'+_esc(is)+'" style="accent-color:#0891b2"> '+_esc(is)+'</label>';
+      }).join('');
+      return '<div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px;margin-bottom:16px">'
+        +'<div style="font-weight:700;color:#f8fafc;margin-bottom:12px;font-size:14px">➕ Add Pour Entry</div>'
+        +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:8px">'
+        +'<div><label style="font-size:11px;color:#94a3b8">Pour Name *</label><input id="pp-name" placeholder="e.g. Slab A-1" style="'+inp()+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Date</label><input id="pp-date" type="date" style="'+inp()+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Element Type</label><select id="pp-type" style="'+inp()+'">'+elOpts+'</select></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Est yd³</label><input id="pp-estYd" type="number" min="0" step="0.1" placeholder="0" style="'+inp()+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Ordered yd³</label><input id="pp-ordYd" type="number" min="0" step="0.1" placeholder="0" style="'+inp()+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Placed yd³</label><input id="pp-plcYd" type="number" min="0" step="0.1" placeholder="0" style="'+inp()+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Price / yd³</label><input id="pp-price" type="number" min="0" step="0.01" placeholder="0.00" style="'+inp()+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Est Labor Hrs</label><input id="pp-estLab" type="number" min="0" step="0.5" placeholder="0" style="'+inp()+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Actual Labor Hrs</label><input id="pp-actLab" type="number" min="0" step="0.5" placeholder="0" style="'+inp()+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Crew Size</label><input id="pp-crew" type="number" min="1" step="1" placeholder="0" style="'+inp()+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">PSI Spec</label><input id="pp-psiSpec" type="number" min="0" step="100" placeholder="e.g. 4000" style="'+inp()+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">7-Day Break (psi)</label><input id="pp-br7" type="number" min="0" step="10" placeholder="0" style="'+inp()+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">28-Day Break (psi)</label><input id="pp-br28" type="number" min="0" step="10" placeholder="0" style="'+inp()+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Start Time</label><input id="pp-start" type="time" style="'+inp()+'"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">End Time</label><input id="pp-end" type="time" style="'+inp()+'"></div>'
+        +'</div>'
+        +'<div style="margin-top:8px"><label style="font-size:11px;color:#94a3b8">Issues (check all that apply)</label><div style="margin-top:4px">'+issueChecks+'</div></div>'
+        +'<div style="margin-top:8px"><label style="font-size:11px;color:#94a3b8">Notes</label><input id="pp-notes" placeholder="Optional notes…" style="'+inp()+'"></div>'
+        +'<div style="display:flex;gap:8px;margin-top:12px">'
+        +'<button onclick="window._oncorPourPerf._add()" style="background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:8px 20px;cursor:pointer;font-weight:700">Add Pour</button>'
+        +'<button onclick="window._oncorPourPerf._hideForm()" style="background:#334155;color:#e2e8f0;border:none;border-radius:8px;padding:8px 16px;cursor:pointer">Cancel</button>'
+        +'</div></div>';
+    }
+
+    function renderPours(data){
+      if(!data.length) return '<div style="color:#94a3b8;text-align:center;padding:32px">No pours recorded yet.</div>';
+      var sorted = data.slice().sort(function(a,b){ return new Date(b.date||0)-new Date(a.date||0); });
+      return sorted.map(function(p, i){
+        var g = calcGrade(p);
+        var gc = GRADE_COLORS[g.letter]||'#94a3b8';
+        var waste = (p.orderedYd&&p.placedYd) ? (((p.orderedYd-p.placedYd)/p.orderedYd)*100).toFixed(1)+'%' : '—';
+        var dur = calcDuration(p.startTime, p.endTime);
+        var br28pass = p.psiSpec&&p.break28 ? (parseFloat(p.break28)>=parseFloat(p.psiSpec)?'<span style="color:#16a34a">✓ PASS</span>':'<span style="color:#dc2626">✗ FAIL</span>') : '';
+        var br7pass = p.psiSpec&&p.break7 ? (parseFloat(p.break7)>=parseFloat(p.psiSpec)*0.7?'<span style="color:#16a34a">✓</span>':'<span style="color:#dc2626">✗</span>') : '';
+        var origIdx = data.indexOf(sorted[i]);
+        return '<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:10px">'
+          +'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">'
+          +'<div style="display:flex;align-items:center;gap:10px">'
+          +'<div style="background:'+gc+';color:#fff;font-size:22px;font-weight:900;border-radius:8px;width:44px;height:44px;display:flex;align-items:center;justify-content:center">'+g.letter+'</div>'
+          +'<div><div style="font-weight:700;color:#f8fafc;font-size:15px">'+_esc(p.name||'Unnamed Pour')+'</div>'
+          +'<div style="font-size:12px;color:#94a3b8">'+_esc(p.type||'')+(p.date?' · '+_esc(p.date):'')+(dur?' · ⏱ '+dur:'')+'</div></div>'
+          +'</div>'
+          +'<div style="display:flex;align-items:center;gap:8px">'
+          +'<span style="font-size:12px;color:#94a3b8">'+g.pts+' pts</span>'
+          +'<button onclick="window._oncorPourPerf._del('+origIdx+')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:16px;padding:0 4px">×</button>'
+          +'</div></div>'
+          +'<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;font-size:12px;color:#94a3b8">'
+          +(p.orderedYd?'<span>📦 Ordered: '+_esc(p.orderedYd)+' yd³</span>':'')
+          +(p.placedYd?'<span>✅ Placed: '+_esc(p.placedYd)+' yd³</span>':'')
+          +'<span>♻️ Waste: '+waste+'</span>'
+          +(p.estLaborHrs?'<span>👷 Labor: '+_esc(p.actLaborHrs||'?')+'/'+_esc(p.estLaborHrs)+' hrs</span>':'')
+          +(p.psiSpec?'<span>🧪 PSI Spec: '+_esc(p.psiSpec)+'</span>':'')
+          +(p.break7?'<span>7d: '+_esc(p.break7)+' '+br7pass+'</span>':'')
+          +(p.break28?'<span>28d: '+_esc(p.break28)+' '+br28pass+'</span>':'')
+          +((p.issues&&p.issues.length)?'<span>⚠️ Issues: '+_esc(p.issues.join(', '))+'</span>':'')
+          +'</div>'
+          +(p.notes?'<div style="margin-top:6px;font-size:12px;color:#64748b;font-style:italic">'+_esc(p.notes)+'</div>':'')
+          +'</div>';
+      }).join('');
+    }
+
+    function render(){
+      if(!overlay) return;
+      var data = load();
+      var kpis = calcKPIs(data);
+      var formDiv = overlay.querySelector('#pp-form-area');
+      var bodyDiv = overlay.querySelector('#pp-body');
+      if(formDiv) formDiv.innerHTML = showForm ? buildAddForm() : '<button onclick="window._oncorPourPerf._showForm()" style="background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:8px 18px;cursor:pointer;font-weight:700;margin-bottom:16px">➕ Add Pour</button>';
+      if(!bodyDiv) return;
+      bodyDiv.innerHTML =
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">'
+        +kpiCard('Total Pours',kpis.count,'#f8fafc')
+        +kpiCard('Avg Grade',kpis.avgGrade,'#7c3aed')
+        +kpiCard('Total yd³',kpis.totalYd,'#0891b2')
+        +kpiCard('Avg Waste %',kpis.avgWaste,parseFloat(kpis.avgWaste)>8?'#dc2626':'#16a34a')
+        +kpiCard('Avg yd³/hr',kpis.avgYdHr,'#f8fafc')
+        +'</div>'
+        +renderPours(data);
+    }
+
+    function open(){
+      if(overlay){ overlay.style.display='flex'; render(); return; }
+      overlay = document.createElement('div');
+      overlay.id = 'overlay-pour-perf';
+      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:flex-start;justify-content:center;padding:20px;box-sizing:border-box;overflow-y:auto';
+      overlay.innerHTML =
+        '<div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border:1px solid #334155;border-radius:12px;width:100%;max-width:900px;padding:20px;color:#f8fafc">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+        +'<div><span style="font-size:20px;font-weight:800">📊 Pour Performance Report</span><span style="margin-left:10px;font-size:12px;color:#94a3b8">Ctrl+Alt+=</span></div>'
+        +'<div style="display:flex;gap:8px">'
+        +'<button onclick="window._oncorPourPerf._print()" style="background:#334155;color:#e2e8f0;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px">🖨️ Print</button>'
+        +'<button onclick="window._oncorPourPerf.toggle()" style="background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer">×</button>'
+        +'</div></div>'
+        +'<div id="pp-form-area"></div>'
+        +'<div id="pp-body"></div>'
+        +'</div>';
+      overlay.addEventListener('click', function(e){ if(e.target===overlay) close(); });
+      document.body.appendChild(overlay);
+      render();
+    }
+
+    function close(){ if(overlay) overlay.style.display='none'; }
+    function toggle(){ overlay && overlay.style.display!=='none' ? close() : open(); }
+
+    window._oncorPourPerf = {
+      toggle: toggle,
+      _showForm: function(){ showForm=true; render(); },
+      _hideForm: function(){ showForm=false; render(); },
+      _add: function(){
+        var name = (document.getElementById('pp-name')||{}).value||'';
+        if(!name){ alert('Pour name is required.'); return; }
+        var issues = [];
+        ISSUES.forEach(function(is,i){
+          var cb = document.getElementById('pp-issue-'+i);
+          if(cb && cb.checked) issues.push(is);
+        });
+        var data = load();
+        data.push({
+          name: name,
+          date: (document.getElementById('pp-date')||{}).value||'',
+          type: (document.getElementById('pp-type')||{}).value||'',
+          estYd: (document.getElementById('pp-estYd')||{}).value||'',
+          orderedYd: (document.getElementById('pp-ordYd')||{}).value||'',
+          placedYd: (document.getElementById('pp-plcYd')||{}).value||'',
+          priceYd: (document.getElementById('pp-price')||{}).value||'',
+          estLaborHrs: (document.getElementById('pp-estLab')||{}).value||'',
+          actLaborHrs: (document.getElementById('pp-actLab')||{}).value||'',
+          crew: (document.getElementById('pp-crew')||{}).value||'',
+          psiSpec: (document.getElementById('pp-psiSpec')||{}).value||'',
+          break7: (document.getElementById('pp-br7')||{}).value||'',
+          break28: (document.getElementById('pp-br28')||{}).value||'',
+          startTime: (document.getElementById('pp-start')||{}).value||'',
+          endTime: (document.getElementById('pp-end')||{}).value||'',
+          issues: issues,
+          notes: (document.getElementById('pp-notes')||{}).value||'',
+          created: Date.now()
+        });
+        save(data);
+        showForm = false;
+        render();
+      },
+      _del: function(i){
+        if(!confirm('Delete this pour entry?')) return;
+        var data = load(); data.splice(i,1); save(data); render();
+      },
+      _print: function(){
+        var data = load();
+        var sorted = data.slice().sort(function(a,b){ return new Date(b.date||0)-new Date(a.date||0); });
+        var rows = sorted.map(function(p){
+          var g = calcGrade(p);
+          var waste = (p.orderedYd&&p.placedYd)?(((p.orderedYd-p.placedYd)/p.orderedYd)*100).toFixed(1)+'%':'—';
+          var dur = calcDuration(p.startTime,p.endTime)||'—';
+          var br28r = p.psiSpec&&p.break28?(parseFloat(p.break28)>=parseFloat(p.psiSpec)?'PASS':'FAIL'):'—';
+          return '<tr><td>'+_esc(p.date)+'</td><td>'+_esc(p.name)+'</td><td>'+_esc(p.type)+'</td>'
+            +'<td style="text-align:center;font-weight:700">'+g.letter+' ('+g.pts+')</td>'
+            +'<td>'+_esc(p.placedYd||'—')+' yd³</td><td>'+waste+'</td>'
+            +'<td>'+_esc(p.actLaborHrs||'—')+' hrs</td><td>'+dur+'</td>'
+            +'<td>'+(br28r==='FAIL'?'<span style="color:red">FAIL</span>':br28r)+'</td>'
+            +'<td>'+_esc((p.issues&&p.issues.length)?p.issues.join(', '):'None')+'</td>'
+            +'</tr>';
+        }).join('');
+        var kpis = calcKPIs(data);
+        var w = window.open('','_blank','width=1000,height=700');
+        w.document.write('<!DOCTYPE html><html><head><title>Pour Performance Summary</title><style>body{font-family:Arial,sans-serif;margin:20px;font-size:13px}table{width:100%;border-collapse:collapse}th{background:#1e293b;color:#fff;padding:7px;text-align:left}td{padding:6px 7px;border-bottom:1px solid #ccc}.kpi{display:inline-block;min-width:110px;margin:6px;padding:10px;border:1px solid #ccc;border-radius:6px;text-align:center}.kv{font-size:20px;font-weight:700}.kl{font-size:11px;color:#666;margin-top:4px}@media print{button{display:none}}</style></head><body>'
+          +'<h2>📊 Pour Performance Summary</h2>'
+          +'<p>Project: '+_esc(_proj())+' — Printed: '+new Date().toLocaleDateString()+'</p>'
+          +'<div>'
+          +'<div class="kpi"><div class="kv">'+kpis.count+'</div><div class="kl">Total Pours</div></div>'
+          +'<div class="kpi"><div class="kv">'+kpis.avgGrade+'</div><div class="kl">Avg Grade</div></div>'
+          +'<div class="kpi"><div class="kv">'+kpis.totalYd+'</div><div class="kl">Total yd³</div></div>'
+          +'<div class="kpi"><div class="kv">'+kpis.avgWaste+'</div><div class="kl">Avg Waste %</div></div>'
+          +'<div class="kpi"><div class="kv">'+kpis.avgYdHr+'</div><div class="kl">Avg yd³/hr</div></div>'
+          +'</div>'
+          +'<br><table><thead><tr><th>Date</th><th>Pour</th><th>Type</th><th>Grade</th><th>Placed</th><th>Waste</th><th>Labor</th><th>Duration</th><th>28d Break</th><th>Issues</th></tr></thead><tbody>'+rows+'</tbody></table>'
+          +'<br><button onclick="window.print()">🖨️ Print</button></body></html>');
+        w.document.close();
+      }
+    };
+
+    return window._oncorPourPerf;
+  })();
+
+
+  /* ─── Keyboard shortcuts ─── */
+  document.addEventListener('keydown', function(e){
+    if(e.ctrlKey && e.altKey){
+      if(e.key==='`'){ e.preventDefault(); window._oncorDeliveryPlan.toggle(); }
+      if(e.key==='-'){ e.preventDefault(); window._oncorPreBid.toggle(); }
+      if(e.key==='='){ e.preventDefault(); window._oncorPourPerf.toggle(); }
+    }
+  });
+
+  /* ─── ESC to close ─── */
+  document.addEventListener('keydown', function(e){
+    if(e.key==='Escape'){
+      ['overlay-delivery-plan','overlay-prebid','overlay-pour-perf'].forEach(function(id){
+        var el = document.getElementById(id);
+        if(el && el.style.display!=='none') el.style.display='none';
+      });
+    }
+  });
+
+  /* ─── Sidebar buttons ─── */
+  document.addEventListener('DOMContentLoaded', function(){
+    var sidebar = document.querySelector('.sidebar-actions')||document.querySelector('#sidebarActions')||document.querySelector('aside');
+    function injectBtn(id,emoji,label,fn){
+      if(document.getElementById(id)) return;
+      var btn = document.createElement('button');
+      btn.id = id; btn.textContent = emoji+' '+label;
+      btn.style.cssText = 'display:block;width:100%;margin:2px 0;padding:6px 10px;background:#1e293b;color:#e5e7eb;border:1px solid #334155;border-radius:6px;cursor:pointer;text-align:left;font-size:12px';
+      btn.onclick = fn;
+      if(sidebar) sidebar.appendChild(btn);
+    }
+    injectBtn('btnDeliveryPlan','🗓️','Delivery Planner',function(){ window._oncorDeliveryPlan.toggle(); });
+    injectBtn('btnPreBid','📋','Pre-Bid Checklist',function(){ window._oncorPreBid.toggle(); });
+    injectBtn('btnPourPerf','📊','Pour Performance',function(){ window._oncorPourPerf.toggle(); });
+  });
+
+})();
+
+// ==================== END SESSION #108 — Zeus ⚡ Material Delivery Planner + Pre-Bid Scope Checklist + Pour Performance Report ====================
+
 })();
