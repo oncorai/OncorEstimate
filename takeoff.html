@@ -171788,3 +171788,713 @@ if(typeof _escHtml === 'undefined') {
 })();
 // ==================== END SESSION #98 — Zeus ⚡ Project P&L Dashboard (Ctrl+Alt+T) + Bid Follow-Up CRM (Ctrl+Alt+U) + Estimate vs Actual (Ctrl+Alt+V) ====================
 </script>
+<script>
+// ==================== SESSION #99 — Zeus ⚡ Revenue & Cash Flow Forecast (Ctrl+Alt+W) + Project Health Audit (Ctrl+Alt+X) + Crew & Labor Analytics (Ctrl+Alt+Y) ====================
+(function() {
+'use strict';
+
+// =====================================================================
+// SECTION 1: REVENUE & CASH FLOW FORECAST (Ctrl+Alt+W)
+// =====================================================================
+
+window.openCashFlowModal = function() {
+  var existing = document.getElementById('cashflow-modal');
+  if (existing) { existing.remove(); return; }
+  var proj = (typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var projKey = proj.replace(/\s+/g,'_');
+  var overlay = document.createElement('div');
+  overlay.id = 'cashflow-modal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.82);z-index:20000;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;';
+  overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
+
+  // Load data from various modules
+  var arData = JSON.parse(localStorage.getItem('oncor_ar_v1_'+projKey)||'[]');
+  var apData = JSON.parse(localStorage.getItem('oncor_ap_v1_'+projKey)||'[]');
+  var coData = JSON.parse(localStorage.getItem('oncor_change_orders_v1')||'{}');
+  var projectCOs = coData[projKey]||[];
+  var est = (typeof window.lastEstimate!=='undefined'&&window.lastEstimate)?window.lastEstimate:{};
+
+  // Build monthly buckets for next 6 months
+  var today = new Date();
+  var months = [];
+  for (var m=0; m<6; m++) {
+    var d = new Date(today.getFullYear(), today.getMonth()+m, 1);
+    months.push({
+      label: d.toLocaleDateString('en-US',{month:'short',year:'numeric'}),
+      yearMonth: d.getFullYear()*100 + d.getMonth(),
+      arExpected: 0, arCollected: 0, apDue: 0, netCash: 0
+    });
+  }
+
+  // Bucket AR by due date
+  arData.forEach(function(inv){
+    if (!inv.dueDate) return;
+    var dd = new Date(inv.dueDate);
+    var ym = dd.getFullYear()*100 + dd.getMonth();
+    var amt = parseFloat(inv.amount)||0;
+    var paid = parseFloat(inv.amountPaid||0)||0;
+    var isPaid = inv.status==='Paid';
+    months.forEach(function(mo){
+      if (mo.yearMonth===ym) {
+        if (isPaid) mo.arCollected += amt;
+        else mo.arExpected += (amt - paid);
+      }
+    });
+  });
+
+  // Bucket AP by due date
+  apData.forEach(function(bill){
+    if (!bill.dueDate) return;
+    var dd = new Date(bill.dueDate);
+    var ym = dd.getFullYear()*100 + dd.getMonth();
+    var amt = parseFloat(bill.amount)||0;
+    var status = bill.status||'Unpaid';
+    if (status==='Paid'||status==='Voided') return;
+    months.forEach(function(mo){
+      if (mo.yearMonth===ym) mo.apDue += amt;
+    });
+  });
+
+  // Calculate net and running balance
+  var runningBalance = 0;
+  months.forEach(function(mo){
+    var inflow = mo.arCollected + mo.arExpected;
+    mo.netCash = inflow - mo.apDue;
+    runningBalance += mo.netCash;
+    mo.runningBalance = runningBalance;
+  });
+
+  // Summary stats
+  var totalAROutstanding = arData.filter(function(i){return i.status!=='Paid'&&i.status!=='Voided';}).reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var totalAPOutstanding = apData.filter(function(b){return b.status!=='Paid'&&b.status!=='Voided';}).reduce(function(s,b){return s+(parseFloat(b.amount)||0);},0);
+  var totalAROverdue = arData.filter(function(i){
+    if (i.status==='Paid'||i.status==='Voided') return false;
+    if (!i.dueDate) return false;
+    return new Date(i.dueDate) < today;
+  }).reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var contractValue = parseFloat(est.totalBid)||0;
+  var pendingCOValue = projectCOs.filter(function(c){return c.status==='Pending';}).reduce(function(s,c){return s+(parseFloat(c.total)||0);},0);
+
+  function fmt(n){ return '$'+(Math.abs(n)||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+  function fmtSigned(n){ return (n<0?'-$':'$')+(Math.abs(n)||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+
+  // Build monthly rows
+  var monthRows = months.map(function(mo){
+    var inflow = mo.arCollected + mo.arExpected;
+    var isNeg = mo.netCash < 0;
+    var balColor = mo.runningBalance >= 0 ? '#34d399' : '#ef4444';
+    return '<tr style="border-bottom:1px solid #1e293b;">' +
+      '<td style="padding:9px 10px;color:#e2e8f0;font-weight:600;">'+mo.label+'</td>' +
+      '<td style="padding:9px 10px;text-align:right;color:#34d399;">'+(mo.arCollected>0?fmt(mo.arCollected):'—')+'</td>' +
+      '<td style="padding:9px 10px;text-align:right;color:#22c55e;">'+(mo.arExpected>0?fmt(mo.arExpected):'—')+'</td>' +
+      '<td style="padding:9px 10px;text-align:right;color:#ef4444;">'+(mo.apDue>0?fmt(mo.apDue):'—')+'</td>' +
+      '<td style="padding:9px 10px;text-align:right;color:'+(isNeg?'#ef4444':'#34d399')+';font-weight:700;">'+(inflow>0||mo.apDue>0?fmtSigned(mo.netCash):'—')+'</td>' +
+      '<td style="padding:9px 10px;text-align:right;color:'+balColor+';font-weight:700;">'+(mo.runningBalance!==0?fmtSigned(mo.runningBalance):'—')+'</td>' +
+    '</tr>';
+  }).join('');
+
+  // Overdue AR warnings
+  var overdueInvoices = arData.filter(function(i){
+    if (i.status==='Paid'||i.status==='Voided') return false;
+    if (!i.dueDate) return false;
+    return new Date(i.dueDate) < today;
+  });
+  var overdueWarning = overdueInvoices.length>0 ?
+    '<div style="background:rgba(239,68,68,0.1);border:1px solid #ef4444;border-radius:8px;padding:12px 16px;margin-bottom:16px;">'+
+    '<div style="color:#ef4444;font-weight:700;font-size:13px;margin-bottom:6px;">🔴 '+overdueInvoices.length+' Overdue Invoice'+(overdueInvoices.length>1?'s':'')+' — '+fmt(totalAROverdue)+' Past Due</div>'+
+    '<div style="color:#fca5a5;font-size:12px;">TX Prompt Payment Act — 1.5%/month interest accruing. Send demand letters if >35 days.</div></div>' : '';
+
+  // Upcoming AP payments
+  var next7dAP = apData.filter(function(b){
+    if (b.status==='Paid'||b.status==='Voided') return false;
+    if (!b.dueDate) return false;
+    var d = new Date(b.dueDate);
+    var diff = (d-today)/(1000*60*60*24);
+    return diff>=0 && diff<=7;
+  });
+  var apWarning = next7dAP.length>0 ?
+    '<div style="background:rgba(245,158,11,0.1);border:1px solid #f59e0b;border-radius:8px;padding:12px 16px;margin-bottom:16px;">'+
+    '<div style="color:#f59e0b;font-weight:700;font-size:13px;margin-bottom:6px;">⚠️ '+next7dAP.length+' AP Payment'+(next7dAP.length>1?'s':'')+' Due This Week</div>'+
+    '<div style="color:#fcd34d;font-size:12px;">'+next7dAP.map(function(b){return _escHtml(b.vendor||'Vendor')+' — '+fmt(parseFloat(b.amount)||0);}).join(' &nbsp;|&nbsp; ')+'</div></div>' : '';
+
+  overlay.innerHTML = '<div style="background:#0f172a;border-radius:16px;padding:28px;max-width:900px;width:100%;margin:auto;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
+    '<div><div style="font-size:20px;font-weight:700;color:#e2e8f0;">💲 Revenue & Cash Flow Forecast</div>' +
+    '<div style="font-size:12px;color:#64748b;margin-top:2px;">'+proj+' — 6-Month Projection</div></div>' +
+    '<button onclick="document.getElementById(\'cashflow-modal\').remove()" style="background:rgba(255,255,255,0.05);color:#94a3b8;border:none;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;">✕</button></div>' +
+    // KPI cards
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">' +
+    '<div style="background:#1e293b;border-radius:10px;padding:14px;"><div style="font-size:11px;color:#64748b;margin-bottom:4px;">Contract Value</div><div style="font-size:18px;font-weight:700;color:#6366f1;">'+(contractValue>0?fmt(contractValue):'—')+'</div></div>' +
+    '<div style="background:#1e293b;border-radius:10px;padding:14px;"><div style="font-size:11px;color:#64748b;margin-bottom:4px;">AR Outstanding</div><div style="font-size:18px;font-weight:700;color:#22c55e;">'+(totalAROutstanding>0?fmt(totalAROutstanding):'$0')+'</div></div>' +
+    '<div style="background:#1e293b;border-radius:10px;padding:14px;"><div style="font-size:11px;color:#64748b;margin-bottom:4px;">AP Outstanding</div><div style="font-size:18px;font-weight:700;color:#ef4444;">'+(totalAPOutstanding>0?fmt(totalAPOutstanding):'$0')+'</div></div>' +
+    '<div style="background:#1e293b;border-radius:10px;padding:14px;"><div style="font-size:11px;color:#64748b;margin-bottom:4px;">AR Overdue</div><div style="font-size:18px;font-weight:700;color:'+(totalAROverdue>0?'#ef4444':'#34d399')+'">'+(totalAROverdue>0?fmt(totalAROverdue):'$0')+'</div></div>' +
+    '</div>' +
+    overdueWarning + apWarning +
+    // Monthly table
+    '<div style="background:#1e293b;border-radius:12px;overflow:hidden;margin-bottom:20px;">' +
+    '<div style="padding:14px 16px;background:rgba(99,102,241,0.12);border-bottom:1px solid #334155;">' +
+    '<div style="font-size:13px;font-weight:700;color:#6366f1;">📅 6-Month Cash Flow Projection</div>' +
+    '<div style="font-size:11px;color:#64748b;margin-top:2px;">Based on AR due dates and AP payment deadlines</div></div>' +
+    '<div style="overflow-x:auto;">' +
+    '<table style="width:100%;border-collapse:collapse;min-width:600px;">' +
+    '<thead><tr style="background:#0f172a;">' +
+    '<th style="padding:10px;text-align:left;color:#64748b;font-size:11px;">Month</th>' +
+    '<th style="padding:10px;text-align:right;color:#64748b;font-size:11px;">AR Collected</th>' +
+    '<th style="padding:10px;text-align:right;color:#64748b;font-size:11px;">AR Expected</th>' +
+    '<th style="padding:10px;text-align:right;color:#64748b;font-size:11px;">AP Payments</th>' +
+    '<th style="padding:10px;text-align:right;color:#64748b;font-size:11px;">Net Cash</th>' +
+    '<th style="padding:10px;text-align:right;color:#64748b;font-size:11px;">Running Balance</th>' +
+    '</tr></thead><tbody>'+ (monthRows||'<tr><td colspan="6" style="padding:20px;text-align:center;color:#64748b;font-size:12px;">No AR or AP data yet. Add invoices and bills to see projections.</td></tr>') +'</tbody></table></div></div>' +
+    // Cash flow notes
+    '<div style="background:#1e293b;border-radius:10px;padding:16px;margin-bottom:16px;">' +
+    '<div style="font-size:12px;color:#64748b;font-weight:700;margin-bottom:8px;">💡 Cash Flow Notes</div>' +
+    '<div style="font-size:12px;color:#94a3b8;line-height:1.7;">• <strong style="color:#e2e8f0;">AR Collected</strong> = invoices marked Paid with due date in that month<br>' +
+    '• <strong style="color:#e2e8f0;">AR Expected</strong> = unpaid invoices due in that month<br>' +
+    '• <strong style="color:#e2e8f0;">AP Payments</strong> = bills and vendor invoices due that month<br>' +
+    '• TX Prompt Payment Act (§28.004): GCs must pay within 35 days or 1.5%/mo interest accrues<br>' +
+    '• Add AR invoices (Alt+R) and AP bills (Alt+A) to improve forecast accuracy</div></div>' +
+    // Print button
+    '<button onclick="window.printCashFlowReport()" style="width:100%;padding:12px;background:rgba(99,102,241,0.2);color:#6366f1;border:1px solid #6366f1;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:0.2s;" onmouseover="this.style.background=\'rgba(99,102,241,0.3)\'" onmouseout="this.style.background=\'rgba(99,102,241,0.2)\'">🖨️ Print Cash Flow Report</button>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+};
+
+window.printCashFlowReport = function() {
+  var proj = (typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var comp = (document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var compPhone = (document.getElementById('company-phone')||{}).value||'';
+  var compEmail = (document.getElementById('company-email')||{}).value||'';
+  var today = new Date();
+  var projKey = proj.replace(/\s+/g,'_');
+  var arData = JSON.parse(localStorage.getItem('oncor_ar_v1_'+projKey)||'[]');
+  var apData = JSON.parse(localStorage.getItem('oncor_ap_v1_'+projKey)||'[]');
+  function fmt(n){ return '$'+(Math.abs(n)||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+  function fmtSigned(n){ return (n<0?'-$':'$')+(Math.abs(n)||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+  var months = [];
+  for (var m=0; m<6; m++) {
+    var d = new Date(today.getFullYear(), today.getMonth()+m, 1);
+    months.push({ label:d.toLocaleDateString('en-US',{month:'short',year:'numeric'}), yearMonth:d.getFullYear()*100+d.getMonth(), arExpected:0, arCollected:0, apDue:0 });
+  }
+  arData.forEach(function(inv){
+    if (!inv.dueDate) return;
+    var dd=new Date(inv.dueDate); var ym=dd.getFullYear()*100+dd.getMonth();
+    var amt=parseFloat(inv.amount)||0; var paid=parseFloat(inv.amountPaid||0)||0;
+    months.forEach(function(mo){ if(mo.yearMonth===ym){ if(inv.status==='Paid') mo.arCollected+=amt; else mo.arExpected+=(amt-paid); }});
+  });
+  apData.forEach(function(b){
+    if(!b.dueDate||b.status==='Paid'||b.status==='Voided') return;
+    var dd=new Date(b.dueDate); var ym=dd.getFullYear()*100+dd.getMonth();
+    months.forEach(function(mo){ if(mo.yearMonth===ym) mo.apDue+=(parseFloat(b.amount)||0); });
+  });
+  var runBal=0;
+  var rows = months.map(function(mo){
+    var inflow=mo.arCollected+mo.arExpected; mo.netCash=inflow-mo.apDue; runBal+=mo.netCash;
+    return '<tr><td style="padding:7px 8px;border-bottom:1px solid #e5e7eb;">'+mo.label+'</td>'+
+      '<td style="padding:7px 8px;border-bottom:1px solid #e5e7eb;text-align:right;color:green;">'+(mo.arCollected>0?fmt(mo.arCollected):'—')+'</td>'+
+      '<td style="padding:7px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">'+(mo.arExpected>0?fmt(mo.arExpected):'—')+'</td>'+
+      '<td style="padding:7px 8px;border-bottom:1px solid #e5e7eb;text-align:right;color:red;">'+(mo.apDue>0?fmt(mo.apDue):'—')+'</td>'+
+      '<td style="padding:7px 8px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:700;color:'+(mo.netCash<0?'red':'green')+';">'+(inflow>0||mo.apDue>0?fmtSigned(mo.netCash):'—')+'</td>'+
+      '<td style="padding:7px 8px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:700;color:'+(runBal<0?'red':'green')+';">'+fmtSigned(runBal)+'</td>'+
+    '</tr>';
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cash Flow — '+proj+'</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:0;padding:20px;} .hdr{display:flex;justify-content:space-between;border-bottom:3px solid #6366f1;padding-bottom:10px;margin-bottom:16px;} th{background:#ede9fe;padding:7px 8px;text-align:right;font-size:9pt;} th:first-child{text-align:left;} .footer{margin-top:18px;text-align:center;font-size:8pt;color:#94a3b8;border-top:1px solid #e5e7eb;padding-top:8px;} @media print{button{display:none;}}</style></head><body>'+
+    '<div class="hdr"><div><div style="font-size:15pt;font-weight:700;color:#6366f1;">'+_escHtml(comp)+'</div><div style="font-size:9pt;color:#64748b;">REVENUE & CASH FLOW FORECAST — '+today.toLocaleDateString()+'</div></div>'+
+    '<div style="text-align:right;font-size:9pt;"><strong>'+_escHtml(proj)+'</strong><br>'+_escHtml(compPhone)+(compEmail?' | '+_escHtml(compEmail):'')+'</div></div>'+
+    '<h3 style="color:#6366f1;font-size:11pt;margin:0 0 10px;">6-Month Cash Flow Projection</h3>'+
+    '<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;">Month</th><th>AR Collected</th><th>AR Expected</th><th>AP Payments</th><th>Net Cash</th><th>Running Balance</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<div class="footer">CONFIDENTIAL — INTERNAL USE ONLY | TX Prompt Payment Act §28.004 applies to all AR invoices</div>'+
+    '<br><button onclick="window.print()">🖨️ Print / Save PDF</button></body></html>';
+  var w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// SECTION 2: PROJECT HEALTH AUDIT (Ctrl+Alt+X)
+// =====================================================================
+
+window.openHealthAuditModal = function() {
+  var existing = document.getElementById('health-audit-modal');
+  if (existing) { existing.remove(); return; }
+  var proj = (typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var projKey = proj.replace(/\s+/g,'_');
+  var overlay = document.createElement('div');
+  overlay.id = 'health-audit-modal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.82);z-index:20000;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;';
+  overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
+
+  var today = new Date();
+  function daysDiff(d){ return Math.round((new Date(d)-today)/(1000*60*60*24)); }
+
+  // Run all audit checks
+  var auditResults = [];
+
+  // --- FINANCIAL ---
+  var arData = JSON.parse(localStorage.getItem('oncor_ar_v1_'+projKey)||'[]');
+  var overdueAR = arData.filter(function(i){ return i.status!=='Paid'&&i.status!=='Voided'&&i.dueDate&&new Date(i.dueDate)<today; });
+  auditResults.push({ category:'💵 Financial', check:'AR Overdue Invoices', status: overdueAR.length===0?'pass':overdueAR.length<=2?'warn':'fail', detail: overdueAR.length===0?'No overdue invoices':''+overdueAR.length+' invoice(s) past due — demand letters needed' });
+
+  var apData = JSON.parse(localStorage.getItem('oncor_ap_v1_'+projKey)||'[]');
+  var overdueAP = apData.filter(function(b){ return b.status!=='Paid'&&b.status!=='Voided'&&b.dueDate&&new Date(b.dueDate)<today; });
+  auditResults.push({ category:'💵 Financial', check:'AP Overdue Bills', status: overdueAP.length===0?'pass':overdueAP.length<=2?'warn':'fail', detail: overdueAP.length===0?'No overdue bills':''+overdueAP.length+' bill(s) past due — pay immediately to avoid credit holds' });
+
+  var coData = JSON.parse(localStorage.getItem('oncor_change_orders_v1')||'{}');
+  var cos = coData[projKey]||[];
+  var pendingCOs = cos.filter(function(c){ return c.status==='Pending'; });
+  auditResults.push({ category:'💵 Financial', check:'Unsigned Change Orders', status: pendingCOs.length===0?'pass':pendingCOs.length<=2?'warn':'fail', detail: pendingCOs.length===0?'All COs signed':''+pendingCOs.length+' CO(s) pending signature — collect before invoicing' });
+
+  // --- LEGAL ---
+  var lienData = JSON.parse(localStorage.getItem('oncor_lien_notices_v1_'+projKey)||'{}');
+  var lienDeadlines = lienData.deadlines||{};
+  var ntoStatus = 'warn';
+  var ntoDetail = 'No NTO data found — set first work date in Lien Tracker';
+  var ntoNotices = (lienData.notices||[]).filter(function(n){ return n.type==='Notice to Owner' && (n.status==='Sent'||n.status==='Filed'); });
+  if (ntoNotices.length>0) { ntoStatus='pass'; ntoDetail='NTO filed/sent ✓'; }
+  else if (lienDeadlines.nto) {
+    var daysLeft = daysDiff(lienDeadlines.nto);
+    if (daysLeft < 0) { ntoStatus='fail'; ntoDetail='NTO DEADLINE MISSED by '+Math.abs(daysLeft)+' days — lien rights may be lost!'; }
+    else if (daysLeft<=7) { ntoStatus='fail'; ntoDetail='NTO due in '+daysLeft+' days — send immediately!'; }
+    else if (daysLeft<=14) { ntoStatus='warn'; ntoDetail='NTO due in '+daysLeft+' days — prepare and send'; }
+    else { ntoStatus='warn'; ntoDetail='NTO due in '+daysLeft+' days'; }
+  }
+  auditResults.push({ category:'⚖️ Legal', check:'TX Notice to Owner (NTO)', status:ntoStatus, detail:ntoDetail });
+
+  var lienAffNotices = (lienData.notices||[]).filter(function(n){ return n.type==='Lien Affidavit Filing' && n.status==='Filed'; });
+  if (lienDeadlines.affidavit) {
+    var daysToAff = daysDiff(lienDeadlines.affidavit);
+    var affStatus = lienAffNotices.length>0?'pass':daysToAff<0?'fail':daysToAff<=14?'warn':'pass';
+    var affDetail = lienAffNotices.length>0?'Lien affidavit filed ✓':daysToAff<0?'LIEN AFFIDAVIT DEADLINE PASSED by '+Math.abs(daysToAff)+' days!':daysToAff<=14?'Lien affidavit due in '+daysToAff+' days':'Lien affidavit due in '+daysToAff+' days';
+    auditResults.push({ category:'⚖️ Legal', check:'Lien Affidavit Deadline', status:affStatus, detail:affDetail });
+  }
+
+  var subData = JSON.parse(localStorage.getItem('oncor_subs_v1_'+projKey)||'[]');
+  var expiredCOIs = subData.filter(function(s){
+    var gl = s.glExpiry && new Date(s.glExpiry)<today;
+    var wc = s.wcExpiry && new Date(s.wcExpiry)<today;
+    return gl||wc;
+  });
+  auditResults.push({ category:'⚖️ Legal', check:'Subcontractor COI Status', status:expiredCOIs.length===0?'pass':'fail', detail:expiredCOIs.length===0?'All sub insurance current':''+expiredCOIs.length+' sub(s) with expired COIs — do not allow on site' });
+
+  // --- QUALITY ---
+  var qcData = JSON.parse(localStorage.getItem('oncor_qc_log_v1_'+projKey)||'[]');
+  var failedBreaks = qcData.filter(function(q){ return q.result==='FAIL'; });
+  var pendingBreaks = qcData.filter(function(q){ return !q.break28a && q.castDate; }).filter(function(q){
+    var daysOld = (today - new Date(q.castDate))/(1000*60*60*24);
+    return daysOld >= 28;
+  });
+  auditResults.push({ category:'🧪 Quality', check:'28-Day Cylinder Breaks', status:failedBreaks.length===0?'pass':failedBreaks.length<=1?'warn':'fail', detail:failedBreaks.length===0?'No failed cylinder sets'+(qcData.length>0?' ('+qcData.length+' sets logged)':''):''+failedBreaks.length+' FAILED cylinder set(s) — ACI 318-19 §26.12.4 investigation required' });
+  auditResults.push({ category:'🧪 Quality', check:'Overdue Break Results', status:pendingBreaks.length===0?'pass':pendingBreaks.length<=2?'warn':'fail', detail:pendingBreaks.length===0?'All break results entered':''+pendingBreaks.length+' cylinder set(s) ≥28 days old with missing results — contact testing lab' });
+
+  var tickets = JSON.parse(localStorage.getItem('oncor_delivery_tickets_v1_'+projKey)||'[]');
+  var rejectedLoads = tickets.filter(function(t){ return t.status==='Rejected'; });
+  var waterAdded = tickets.filter(function(t){ return parseFloat(t.waterAdded||0)>0; });
+  auditResults.push({ category:'🧪 Quality', check:'Rejected Loads', status:rejectedLoads.length===0?'pass':'warn', detail:rejectedLoads.length===0?'No rejected loads recorded':''+rejectedLoads.length+' rejected load(s) on record' });
+  auditResults.push({ category:'🧪 Quality', check:'Water Added On-Site (ASTM C94)', status:waterAdded.length===0?'pass':'warn', detail:waterAdded.length===0?'No unauthorized water additions':''+waterAdded.length+' load(s) with water added on-site — document ACI compliance' });
+
+  // --- SAFETY ---
+  var safetyData = JSON.parse(localStorage.getItem('oncor_safety_v1_'+projKey)||'{}');
+  var talks = safetyData.talks||[];
+  var incidents = safetyData.incidents||[];
+  var lastTalkDays = talks.length>0 ? (today - new Date(talks.reduce(function(a,b){ return new Date(a.date)>new Date(b.date)?a:b; }).date))/(1000*60*60*24) : 999;
+  var oshaRecordables = incidents.filter(function(i){ return i.oshaRecordable==='Yes'; });
+  var openIncidents = incidents.filter(function(i){ return i.status==='Open'||i.status==='In Progress'; });
+  auditResults.push({ category:'🦺 Safety', check:'Toolbox Talk Frequency', status:lastTalkDays<=7?'pass':lastTalkDays<=14?'warn':'fail', detail:lastTalkDays<999?'Last talk '+Math.round(lastTalkDays)+' days ago'+(lastTalkDays>7?' — hold a talk this week':''):'No toolbox talks recorded yet' });
+  auditResults.push({ category:'🦺 Safety', check:'OSHA Recordable Incidents', status:oshaRecordables.length===0?'pass':'fail', detail:oshaRecordables.length===0?'No OSHA recordable incidents':''+oshaRecordables.length+' recordable incident(s) — OSHA 300 log required within 7 days' });
+  auditResults.push({ category:'🦺 Safety', check:'Open Safety Incidents', status:openIncidents.length===0?'pass':'warn', detail:openIncidents.length===0?'No open incidents':''+openIncidents.length+' incident(s) still open — close out with corrective actions' });
+
+  // --- DOCUMENTATION ---
+  var rfiData = JSON.parse(localStorage.getItem('oncor_rfi_log_v1_'+projKey)||'[]');
+  var overdueRFIs = rfiData.filter(function(r){ return (r.status==='Open'||r.status==='Under Review')&&r.dueDate&&new Date(r.dueDate)<today; });
+  auditResults.push({ category:'📋 Documentation', check:'Overdue RFIs', status:overdueRFIs.length===0?'pass':'warn', detail:overdueRFIs.length===0?'No overdue RFIs':''+overdueRFIs.length+' RFI(s) past response due date — follow up with GC/EOR' });
+
+  var subData2 = JSON.parse(localStorage.getItem('oncor_submittal_log_v1_'+projKey)||'[]');
+  var rrsSubmittals = subData2.filter(function(s){ return s.status==='Revise & Resubmit'; });
+  auditResults.push({ category:'📋 Documentation', check:'Revise & Resubmit Submittals', status:rrsSubmittals.length===0?'pass':'warn', detail:rrsSubmittals.length===0?'No R&R submittals':''+rrsSubmittals.length+' submittal(s) need revision and resubmission' });
+
+  var punchData = JSON.parse(localStorage.getItem('oncor_punch_list_v1_'+projKey)||'[]');
+  var overduePunch = punchData.filter(function(p){ return (p.status==='Open'||p.status==='In Progress')&&p.dueDate&&new Date(p.dueDate)<today; });
+  auditResults.push({ category:'📋 Documentation', check:'Overdue Punch List Items', status:overduePunch.length===0?'pass':'warn', detail:overduePunch.length===0?'No overdue punch items':''+overduePunch.length+' punch item(s) past due date' });
+
+  // --- PERMITS ---
+  var permitData = JSON.parse(localStorage.getItem('oncor_permits_v1_'+projKey)||'[]');
+  var expiredPermits = permitData.filter(function(p){ return p.status==='Active'&&p.expiryDate&&new Date(p.expiryDate)<today; });
+  var expiringPermits = permitData.filter(function(p){ return p.status==='Active'&&p.expiryDate&&daysDiff(p.expiryDate)>=0&&daysDiff(p.expiryDate)<=30; });
+  auditResults.push({ category:'📄 Permits', check:'Active Permit Expiry', status:expiredPermits.length===0?'pass':'fail', detail:expiredPermits.length===0?'All permits current':''+expiredPermits.length+' permit(s) EXPIRED — work must stop until renewed' });
+  if(expiringPermits.length>0) auditResults.push({ category:'📄 Permits', check:'Permits Expiring Soon', status:'warn', detail:expiringPermits.length+' permit(s) expiring within 30 days — initiate renewal' });
+
+  // --- RISK ---
+  var rrData = JSON.parse(localStorage.getItem('oncor_rr_v1_'+projKey)||'[]');
+  var critRisks = rrData.filter(function(r){ return (r.status==='Open'||r.status==='Monitoring')&&(parseInt(r.likelihood)||0)*(parseInt(r.impact)||0)>=20; });
+  auditResults.push({ category:'⚠️ Risk', check:'Critical Risks Open', status:critRisks.length===0?'pass':critRisks.length<=1?'warn':'fail', detail:critRisks.length===0?'No critical risks open':''+critRisks.length+' critical risk(s) open — review mitigation plans' });
+
+  // Score calculation
+  var totalChecks = auditResults.length;
+  var passes = auditResults.filter(function(a){ return a.status==='pass'; }).length;
+  var warns = auditResults.filter(function(a){ return a.status==='warn'; }).length;
+  var fails = auditResults.filter(function(a){ return a.status==='fail'; }).length;
+  var score = Math.round((passes + warns*0.5) / totalChecks * 100);
+  var overallGrade = score>=90?'A':score>=80?'B':score>=70?'C':score>=60?'D':'F';
+  var gradeColor = score>=80?'#34d399':score>=60?'#f59e0b':'#ef4444';
+
+  // Group by category
+  var categories = {};
+  auditResults.forEach(function(a){
+    if(!categories[a.category]) categories[a.category]=[];
+    categories[a.category].push(a);
+  });
+
+  function statusBadge(s) {
+    if(s==='pass') return '<span style="background:rgba(52,211,153,0.15);color:#34d399;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">✅ PASS</span>';
+    if(s==='warn') return '<span style="background:rgba(245,158,11,0.15);color:#f59e0b;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">⚠️ WARN</span>';
+    return '<span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">🔴 FAIL</span>';
+  }
+
+  var catHTML = Object.keys(categories).map(function(cat){
+    var items = categories[cat];
+    var catFails = items.filter(function(i){ return i.status==='fail'; }).length;
+    var catWarns = items.filter(function(i){ return i.status==='warn'; }).length;
+    var catRows = items.map(function(item){
+      return '<tr style="border-bottom:1px solid #0f172a;">' +
+        '<td style="padding:10px 12px;color:#e2e8f0;font-size:12px;">'+_escHtml(item.check)+'</td>' +
+        '<td style="padding:10px 12px;text-align:center;">'+statusBadge(item.status)+'</td>' +
+        '<td style="padding:10px 12px;color:#94a3b8;font-size:11px;">'+_escHtml(item.detail)+'</td>' +
+      '</tr>';
+    }).join('');
+    var catAlert = (catFails>0?'<span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:1px 6px;border-radius:8px;font-size:10px;margin-left:6px;">'+catFails+' FAIL</span>':'') +
+      (catWarns>0?'<span style="background:rgba(245,158,11,0.15);color:#f59e0b;padding:1px 6px;border-radius:8px;font-size:10px;margin-left:4px;">'+catWarns+' WARN</span>':'');
+    return '<div style="background:#1e293b;border-radius:12px;overflow:hidden;margin-bottom:14px;">' +
+      '<div style="padding:12px 16px;background:rgba(255,255,255,0.03);border-bottom:1px solid #334155;display:flex;align-items:center;justify-content:space-between;">' +
+      '<span style="font-size:13px;font-weight:700;color:#e2e8f0;">'+cat+'</span>' +
+      '<span>'+catAlert+'</span></div>' +
+      '<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#0f172a;">' +
+      '<th style="padding:8px 12px;text-align:left;color:#64748b;font-size:10px;width:35%;">Check</th>' +
+      '<th style="padding:8px 12px;text-align:center;color:#64748b;font-size:10px;width:15%;">Status</th>' +
+      '<th style="padding:8px 12px;text-align:left;color:#64748b;font-size:10px;">Detail</th>' +
+      '</tr></thead><tbody>'+catRows+'</tbody></table></div>';
+  }).join('');
+
+  overlay.innerHTML = '<div style="background:#0f172a;border-radius:16px;padding:28px;max-width:860px;width:100%;margin:auto;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
+    '<div><div style="font-size:20px;font-weight:700;color:#e2e8f0;">🔍 Project Health Audit</div>' +
+    '<div style="font-size:12px;color:#64748b;margin-top:2px;">'+proj+' — '+totalChecks+' checks across 7 categories</div></div>' +
+    '<button onclick="document.getElementById(\'health-audit-modal\').remove()" style="background:rgba(255,255,255,0.05);color:#94a3b8;border:none;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;">✕</button></div>' +
+    // Score summary
+    '<div style="display:grid;grid-template-columns:1fr 3fr;gap:16px;margin-bottom:20px;">' +
+    '<div style="background:#1e293b;border-radius:12px;padding:20px;text-align:center;border:2px solid '+gradeColor+';">' +
+    '<div style="font-size:48px;font-weight:700;color:'+gradeColor+';">'+overallGrade+'</div>' +
+    '<div style="font-size:14px;color:#94a3b8;margin-top:4px;">Health Score</div>' +
+    '<div style="font-size:20px;font-weight:700;color:'+gradeColor+';margin-top:4px;">'+score+'%</div>' +
+    '</div>' +
+    '<div style="background:#1e293b;border-radius:12px;padding:20px;">' +
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;">' +
+    '<div style="text-align:center;"><div style="font-size:28px;font-weight:700;color:#34d399;">'+passes+'</div><div style="font-size:11px;color:#64748b;">Passing</div></div>' +
+    '<div style="text-align:center;"><div style="font-size:28px;font-weight:700;color:#f59e0b;">'+warns+'</div><div style="font-size:11px;color:#64748b;">Warnings</div></div>' +
+    '<div style="text-align:center;"><div style="font-size:28px;font-weight:700;color:#ef4444;">'+fails+'</div><div style="font-size:11px;color:#64748b;">Failing</div></div>' +
+    '</div>' +
+    '<div style="background:#0f172a;border-radius:8px;height:12px;overflow:hidden;"><div style="height:100%;background:linear-gradient(90deg,#34d399,#f59e0b);width:'+score+'%;transition:0.4s;"></div></div>' +
+    '<div style="font-size:11px;color:#64748b;margin-top:8px;">'+score+'% health score | '+totalChecks+' checks performed across all project modules</div>' +
+    '</div></div>' +
+    // Audit results by category
+    catHTML +
+    // Action summary
+    (fails>0?'<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:10px;padding:14px;margin-bottom:14px;">' +
+    '<div style="color:#ef4444;font-weight:700;font-size:13px;margin-bottom:6px;">🔴 Immediate Action Required ('+fails+' failing check'+(fails>1?'s':'')+')</div>' +
+    '<div style="color:#fca5a5;font-size:12px;">Address all failing items before proceeding. Some (expired permits, missed lien deadlines) may have legal or financial consequences.</div></div>':'') +
+    '<button onclick="window.printHealthAuditReport()" style="width:100%;padding:12px;background:rgba(14,165,233,0.15);color:#38bdf8;border:1px solid #38bdf8;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;" onmouseover="this.style.background=\'rgba(14,165,233,0.25)\'" onmouseout="this.style.background=\'rgba(14,165,233,0.15)\'">🖨️ Print Health Audit Report</button>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  // Store for print
+  window._lastAuditResults = auditResults;
+  window._lastAuditScore = {score:score, grade:overallGrade, passes:passes, warns:warns, fails:fails, proj:proj};
+};
+
+window.printHealthAuditReport = function() {
+  var data = window._lastAuditResults||[];
+  var sc = window._lastAuditScore||{};
+  var comp = (document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var today = new Date().toLocaleDateString();
+  function sBadge(s){ return s==='pass'?'✅ PASS':s==='warn'?'⚠️ WARN':'🔴 FAIL'; }
+  function sColor(s){ return s==='pass'?'green':s==='warn'?'#b45309':'red'; }
+  var rows = data.map(function(a){
+    return '<tr style="border-bottom:1px solid #e5e7eb;"><td style="padding:6px 8px;font-size:9pt;">'+a.category+'</td>'+
+      '<td style="padding:6px 8px;font-size:9pt;">'+a.check+'</td>'+
+      '<td style="padding:6px 8px;font-weight:700;color:'+sColor(a.status)+';font-size:9pt;">'+sBadge(a.status)+'</td>'+
+      '<td style="padding:6px 8px;font-size:9pt;">'+a.detail+'</td></tr>';
+  }).join('');
+  var gradeColor = (sc.score||0)>=80?'#059669':(sc.score||0)>=60?'#b45309':'#dc2626';
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Health Audit — '+(sc.proj||'Project')+'</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:0;padding:20px;} .hdr{display:flex;justify-content:space-between;border-bottom:3px solid #0ea5e9;padding-bottom:10px;margin-bottom:16px;} th{background:#e0f2fe;padding:6px 8px;text-align:left;font-size:9pt;} .footer{margin-top:18px;text-align:center;font-size:8pt;color:#94a3b8;border-top:1px solid #e5e7eb;padding-top:8px;} @media print{button{display:none;}}</style></head><body>'+
+    '<div class="hdr"><div><div style="font-size:15pt;font-weight:700;color:#0ea5e9;">'+_escHtml(comp)+'</div><div style="font-size:9pt;color:#64748b;">PROJECT HEALTH AUDIT — '+today+'</div></div>'+
+    '<div style="text-align:right;"><strong style="color:'+gradeColor+';font-size:18pt;">'+sc.grade+'</strong><br><span style="font-size:10pt;color:'+gradeColor+';">'+sc.score+'%</span><br><span style="font-size:8pt;color:#64748b;">'+sc.passes+' Pass / '+sc.warns+' Warn / '+sc.fails+' Fail</span></div></div>'+
+    '<h3 style="color:#0ea5e9;font-size:11pt;margin:0 0 10px;">Health Audit Results — '+(sc.proj||'Project')+'</h3>'+
+    '<table style="width:100%;border-collapse:collapse;"><thead><tr><th>Category</th><th>Check</th><th>Status</th><th>Detail</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<div class="footer">CONFIDENTIAL — INTERNAL USE ONLY | Oncor Takeoff Tool Health Audit Report</div>'+
+    '<br><button onclick="window.print()">🖨️ Print / Save PDF</button></body></html>';
+  var w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// SECTION 3: CREW & LABOR ANALYTICS (Ctrl+Alt+Y)
+// =====================================================================
+
+window.openLaborAnalyticsModal = function() {
+  var existing = document.getElementById('labor-analytics-modal');
+  if (existing) { existing.remove(); return; }
+  var proj = (typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var projKey = proj.replace(/\s+/g,'_');
+  var overlay = document.createElement('div');
+  overlay.id = 'labor-analytics-modal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.82);z-index:20000;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;';
+  overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
+
+  var tcData = JSON.parse(localStorage.getItem('oncor_timecards_v1_'+projKey)||'[]');
+  var fieldLog = JSON.parse(localStorage.getItem('oncor_field_log_v1_'+projKey)||'[]');
+  var today = new Date();
+
+  function fmt(n){ return '$'+n.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+  function fmtDec(n,d){ return n.toLocaleString('en-US',{minimumFractionDigits:d||2,maximumFractionDigits:d||2}); }
+
+  // Overall stats
+  var totalHrs = tcData.reduce(function(s,t){ return s+(parseFloat(t.regHours)||0)+(parseFloat(t.otHours)||0); },0);
+  var totalRegHrs = tcData.reduce(function(s,t){ return s+(parseFloat(t.regHours)||0); },0);
+  var totalOTHrs = tcData.reduce(function(s,t){ return s+(parseFloat(t.otHours)||0); },0);
+  var totalLaborCost = tcData.reduce(function(s,t){
+    var r=parseFloat(t.rate)||0; var reg=parseFloat(t.regHours)||0; var ot=parseFloat(t.otHours)||0;
+    return s+(reg*r)+(ot*r*1.5);
+  },0);
+  var totalActualYds = fieldLog.reduce(function(s,f){ return s+(parseFloat(f.actualYds)||0); },0);
+  var ydsPerHour = totalHrs>0 && totalActualYds>0 ? totalActualYds/totalHrs : 0;
+  var costPerYd = totalActualYds>0 ? totalLaborCost/totalActualYds : 0;
+
+  // By trade
+  var tradeMap = {};
+  tcData.forEach(function(t){
+    var trade = t.trade||'Other';
+    if(!tradeMap[trade]) tradeMap[trade]={hrs:0,cost:0,workers:new Set(),otHrs:0};
+    var r=parseFloat(t.rate)||0; var reg=parseFloat(t.regHours)||0; var ot=parseFloat(t.otHours)||0;
+    tradeMap[trade].hrs += reg+ot;
+    tradeMap[trade].otHrs += ot;
+    tradeMap[trade].cost += (reg*r)+(ot*r*1.5);
+    if(t.worker) tradeMap[trade].workers.add(t.worker);
+  });
+  var tradeRows = Object.keys(tradeMap).sort(function(a,b){ return tradeMap[b].cost-tradeMap[a].cost; }).map(function(trade){
+    var d = tradeMap[trade];
+    var pctHrs = totalHrs>0?(d.hrs/totalHrs*100):0;
+    var otPct = d.hrs>0?(d.otHrs/d.hrs*100):0;
+    var barW = Math.round(pctHrs);
+    return '<tr style="border-bottom:1px solid #1e293b;">' +
+      '<td style="padding:9px 10px;color:#e2e8f0;font-size:12px;">'+_escHtml(trade)+'</td>' +
+      '<td style="padding:9px 10px;text-align:right;color:#94a3b8;font-size:12px;">'+d.workers.size+'</td>' +
+      '<td style="padding:9px 10px;text-align:right;color:#94a3b8;font-size:12px;">'+fmtDec(d.hrs,1)+'h</td>' +
+      '<td style="padding:9px 10px;"><div style="display:flex;align-items:center;gap:6px;"><div style="flex:1;background:#1e293b;border-radius:4px;height:8px;overflow:hidden;"><div style="height:100%;background:#6366f1;width:'+barW+'%;"></div></div><span style="font-size:10px;color:#64748b;white-space:nowrap;">'+barW+'%</span></div></td>' +
+      '<td style="padding:9px 10px;text-align:right;color:'+(otPct>20?'#f59e0b':'#94a3b8')+';font-size:12px;">'+fmtDec(otPct,1)+'%</td>' +
+      '<td style="padding:9px 10px;text-align:right;color:#34d399;font-size:12px;font-weight:700;">'+fmt(d.cost)+'</td>' +
+    '</tr>';
+  }).join('');
+
+  // By worker
+  var workerMap = {};
+  tcData.forEach(function(t){
+    var w = t.worker||'Unknown';
+    if(!workerMap[w]) workerMap[w]={hrs:0,cost:0,otHrs:0,trade:'',days:new Set()};
+    var r=parseFloat(t.rate)||0; var reg=parseFloat(t.regHours)||0; var ot=parseFloat(t.otHours)||0;
+    workerMap[w].hrs += reg+ot;
+    workerMap[w].otHrs += ot;
+    workerMap[w].cost += (reg*r)+(ot*r*1.5);
+    if(t.trade) workerMap[w].trade = t.trade;
+    if(t.date) workerMap[w].days.add(t.date);
+  });
+  var workerRows = Object.keys(workerMap).sort(function(a,b){ return workerMap[b].cost-workerMap[a].cost; }).slice(0,10).map(function(w){
+    var d=workerMap[w]; var otPct=d.hrs>0?(d.otHrs/d.hrs*100):0;
+    return '<tr style="border-bottom:1px solid #1e293b;">' +
+      '<td style="padding:9px 10px;color:#e2e8f0;font-size:12px;">'+_escHtml(w)+'</td>' +
+      '<td style="padding:9px 10px;color:#94a3b8;font-size:11px;">'+_escHtml(d.trade)+'</td>' +
+      '<td style="padding:9px 10px;text-align:right;color:#94a3b8;font-size:12px;">'+d.days.size+'</td>' +
+      '<td style="padding:9px 10px;text-align:right;color:#94a3b8;font-size:12px;">'+fmtDec(d.hrs,1)+'h</td>' +
+      '<td style="padding:9px 10px;text-align:right;color:'+(otPct>20?'#f59e0b':'#94a3b8')+';font-size:12px;">'+fmtDec(d.otHrs,1)+'h ('+fmtDec(otPct,0)+'%)</td>' +
+      '<td style="padding:9px 10px;text-align:right;color:#34d399;font-size:12px;font-weight:700;">'+fmt(d.cost)+'</td>' +
+    '</tr>';
+  }).join('');
+
+  // Weekly trend
+  var weekMap = {};
+  tcData.forEach(function(t){
+    if(!t.date) return;
+    var d = new Date(t.date);
+    var dayOfWeek = d.getDay();
+    var monday = new Date(d); monday.setDate(d.getDate()-((dayOfWeek+6)%7));
+    var wk = monday.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    if(!weekMap[wk]) weekMap[wk]={hrs:0,cost:0,label:wk,date:monday};
+    var r=parseFloat(t.rate)||0; var reg=parseFloat(t.regHours)||0; var ot=parseFloat(t.otHours)||0;
+    weekMap[wk].hrs+=reg+ot; weekMap[wk].cost+=(reg*r)+(ot*r*1.5);
+  });
+  var weeks = Object.values(weekMap).sort(function(a,b){ return a.date-b.date; }).slice(-8);
+  var maxWkCost = weeks.length>0 ? Math.max.apply(null,weeks.map(function(w){ return w.cost; })) : 1;
+  var weekRows = weeks.map(function(wk){
+    var barH = Math.round((wk.cost/maxWkCost)*80);
+    return '<div style="text-align:center;flex:1;">' +
+      '<div style="font-size:10px;color:#34d399;margin-bottom:4px;">'+fmt(wk.cost)+'</div>' +
+      '<div style="background:#1e293b;height:80px;position:relative;border-radius:4px 4px 0 0;overflow:hidden;">' +
+      '<div style="position:absolute;bottom:0;left:0;right:0;background:#6366f1;height:'+barH+'px;transition:0.3s;border-radius:4px 4px 0 0;"></div></div>' +
+      '<div style="font-size:9px;color:#64748b;margin-top:4px;">'+wk.label+'</div>' +
+      '<div style="font-size:9px;color:#94a3b8;">'+fmtDec(wk.hrs,0)+'h</div></div>';
+  }).join('');
+
+  var hasData = tcData.length > 0;
+  var emptyMsg = hasData?'':
+    '<div style="text-align:center;padding:40px;color:#64748b;">' +
+    '<div style="font-size:32px;margin-bottom:12px;">👷</div>' +
+    '<div style="font-size:14px;margin-bottom:6px;">No time card data yet</div>' +
+    '<div style="font-size:12px;">Add crew entries in the Time Cards module (Ctrl+Shift+H) to see labor analytics.</div></div>';
+
+  overlay.innerHTML = '<div style="background:#0f172a;border-radius:16px;padding:28px;max-width:920px;width:100%;margin:auto;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
+    '<div><div style="font-size:20px;font-weight:700;color:#e2e8f0;">👷 Crew & Labor Analytics</div>' +
+    '<div style="font-size:12px;color:#64748b;margin-top:2px;">'+proj+' — '+tcData.length+' time card entries</div></div>' +
+    '<button onclick="document.getElementById(\'labor-analytics-modal\').remove()" style="background:rgba(255,255,255,0.05);color:#94a3b8;border:none;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;">✕</button></div>' +
+    // KPI cards
+    '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px;">' +
+    '<div style="background:#1e293b;border-radius:10px;padding:14px;"><div style="font-size:10px;color:#64748b;margin-bottom:4px;">Total Hours</div><div style="font-size:18px;font-weight:700;color:#6366f1;">'+fmtDec(totalHrs,0)+'h</div></div>' +
+    '<div style="background:#1e293b;border-radius:10px;padding:14px;"><div style="font-size:10px;color:#64748b;margin-bottom:4px;">Overtime Hours</div><div style="font-size:18px;font-weight:700;color:'+(totalOTHrs>0?'#f59e0b':'#34d399')+'">'+fmtDec(totalOTHrs,0)+'h</div></div>' +
+    '<div style="background:#1e293b;border-radius:10px;padding:14px;"><div style="font-size:10px;color:#64748b;margin-bottom:4px;">Total Labor Cost</div><div style="font-size:18px;font-weight:700;color:#34d399;">'+fmt(totalLaborCost)+'</div></div>' +
+    '<div style="background:#1e293b;border-radius:10px;padding:14px;"><div style="font-size:10px;color:#64748b;margin-bottom:4px;">yd³ / Labor Hour</div><div style="font-size:18px;font-weight:700;color:'+(ydsPerHour>0?'#22c55e':'#64748b')+'">'+(ydsPerHour>0?fmtDec(ydsPerHour,2):'—')+'</div></div>' +
+    '<div style="background:#1e293b;border-radius:10px;padding:14px;"><div style="font-size:10px;color:#64748b;margin-bottom:4px;">Labor Cost / yd³</div><div style="font-size:18px;font-weight:700;color:'+(costPerYd>0?'#22c55e':'#64748b')+'">'+(costPerYd>0?fmt(costPerYd):'—')+'</div></div>' +
+    '</div>' +
+    (hasData ? (
+    // By trade section
+    '<div style="background:#1e293b;border-radius:12px;overflow:hidden;margin-bottom:16px;">' +
+    '<div style="padding:12px 16px;background:rgba(99,102,241,0.1);border-bottom:1px solid #334155;"><div style="font-size:13px;font-weight:700;color:#6366f1;">👷 Hours & Cost by Trade</div></div>' +
+    '<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#0f172a;">' +
+    '<th style="padding:9px 10px;text-align:left;color:#64748b;font-size:10px;">Trade</th>' +
+    '<th style="padding:9px 10px;text-align:right;color:#64748b;font-size:10px;">Workers</th>' +
+    '<th style="padding:9px 10px;text-align:right;color:#64748b;font-size:10px;">Total Hours</th>' +
+    '<th style="padding:9px 10px;color:#64748b;font-size:10px;">Share</th>' +
+    '<th style="padding:9px 10px;text-align:right;color:#64748b;font-size:10px;">OT %</th>' +
+    '<th style="padding:9px 10px;text-align:right;color:#64748b;font-size:10px;">Cost</th>' +
+    '</tr></thead><tbody>'+(tradeRows||'<tr><td colspan="6" style="padding:14px;text-align:center;color:#64748b;font-size:12px;">No trade data</td></tr>')+'</tbody></table></div>' +
+    // Weekly chart
+    (weeks.length>0?'<div style="background:#1e293b;border-radius:12px;padding:16px;margin-bottom:16px;">' +
+    '<div style="font-size:13px;font-weight:700;color:#6366f1;margin-bottom:14px;">📈 Weekly Labor Cost Trend</div>' +
+    '<div style="display:flex;gap:6px;align-items:flex-end;">'+weekRows+'</div></div>':'') +
+    // By worker section
+    (Object.keys(workerMap).length>0?'<div style="background:#1e293b;border-radius:12px;overflow:hidden;margin-bottom:16px;">' +
+    '<div style="padding:12px 16px;background:rgba(52,211,153,0.08);border-bottom:1px solid #334155;"><div style="font-size:13px;font-weight:700;color:#34d399;">🏆 Top Workers by Cost (up to 10)</div></div>' +
+    '<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#0f172a;">' +
+    '<th style="padding:9px 10px;text-align:left;color:#64748b;font-size:10px;">Worker</th>' +
+    '<th style="padding:9px 10px;text-align:left;color:#64748b;font-size:10px;">Trade</th>' +
+    '<th style="padding:9px 10px;text-align:right;color:#64748b;font-size:10px;">Days</th>' +
+    '<th style="padding:9px 10px;text-align:right;color:#64748b;font-size:10px;">Hours</th>' +
+    '<th style="padding:9px 10px;text-align:right;color:#64748b;font-size:10px;">OT Hrs (%)</th>' +
+    '<th style="padding:9px 10px;text-align:right;color:#64748b;font-size:10px;">Cost</th>' +
+    '</tr></thead><tbody>'+workerRows+'</tbody></table></div>':'') +
+    // Productivity note
+    (ydsPerHour>0?'<div style="background:#1e293b;border-radius:10px;padding:14px;margin-bottom:14px;">' +
+    '<div style="font-size:12px;color:#94a3b8;font-weight:700;margin-bottom:6px;">📊 Productivity Benchmarks</div>' +
+    '<div style="font-size:12px;color:#94a3b8;line-height:1.8;">• This project: <strong style="color:#22c55e;">'+fmtDec(ydsPerHour,2)+' yd³/labor hour</strong> | <strong style="color:#22c55e;">'+fmt(costPerYd)+'/yd³ labor</strong><br>' +
+    '• Typical flatwork: 0.8–1.5 yd³/labor hour (slab, finish, cure)<br>' +
+    '• Typical foundations: 0.4–0.8 yd³/labor hour (form, pour, strip)<br>' +
+    '• OT over 20% of total hours indicates scheduling or scope issues</div></div>':'')
+    ) : emptyMsg) +
+    '<button onclick="window.printLaborAnalyticsReport()" style="width:100%;padding:12px;background:rgba(99,102,241,0.15);color:#6366f1;border:1px solid #6366f1;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;" onmouseover="this.style.background=\'rgba(99,102,241,0.25)\'" onmouseout="this.style.background=\'rgba(99,102,241,0.15)\'">🖨️ Print Labor Analytics Report</button>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  window._lastLaborData = { tcData:tcData, fieldLog:fieldLog, tradeMap:tradeMap, workerMap:workerMap, totalHrs:totalHrs, totalLaborCost:totalLaborCost, totalActualYds:totalActualYds, proj:proj };
+};
+
+window.printLaborAnalyticsReport = function() {
+  var d = window._lastLaborData||{};
+  var comp = (document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var today = new Date().toLocaleDateString();
+  function fmt(n){ return '$'+n.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+  function fmtDec(n,dec){ return n.toLocaleString('en-US',{minimumFractionDigits:dec||2,maximumFractionDigits:dec||2}); }
+  var tradeMap = d.tradeMap||{};
+  var workerMap = d.workerMap||{};
+  var tRows = Object.keys(tradeMap).sort(function(a,b){ return tradeMap[b].cost-tradeMap[a].cost; }).map(function(t){
+    var v=tradeMap[t]; var pct=d.totalHrs>0?(v.hrs/d.totalHrs*100):0;
+    return '<tr><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">'+t+'</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">'+v.workers.size+'</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">'+fmtDec(v.hrs,1)+'h</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">'+fmtDec(pct,1)+'%</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;color:green;font-weight:700;">'+fmt(v.cost)+'</td></tr>';
+  }).join('');
+  var wRows = Object.keys(workerMap).sort(function(a,b){ return workerMap[b].cost-workerMap[a].cost; }).slice(0,10).map(function(w){
+    var v=workerMap[w];
+    return '<tr><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">'+w+'</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">'+v.trade+'</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">'+v.days.size+'</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">'+fmtDec(v.hrs,1)+'h</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">'+fmtDec(v.otHrs,1)+'h</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;color:green;font-weight:700;">'+fmt(v.cost)+'</td></tr>';
+  }).join('');
+  var yph=d.totalActualYds>0&&d.totalHrs>0?d.totalActualYds/d.totalHrs:0;
+  var cpy=d.totalActualYds>0?d.totalLaborCost/d.totalActualYds:0;
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Labor Analytics — '+(d.proj||'Project')+'</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:0;padding:20px;} .hdr{display:flex;justify-content:space-between;border-bottom:3px solid #6366f1;padding-bottom:10px;margin-bottom:16px;} th{background:#ede9fe;padding:6px 8px;text-align:left;font-size:9pt;} th:last-child,th:nth-child(3),th:nth-child(4),th:nth-child(5){text-align:right;} .footer{margin-top:18px;text-align:center;font-size:8pt;color:#94a3b8;border-top:1px solid #e5e7eb;padding-top:8px;} .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;} .kpi{border:1px solid #e5e7eb;border-radius:6px;padding:10px;text-align:center;} @media print{button{display:none;}}</style></head><body>'+
+    '<div class="hdr"><div><div style="font-size:15pt;font-weight:700;color:#6366f1;">'+_escHtml(comp)+'</div><div style="font-size:9pt;color:#64748b;">CREW & LABOR ANALYTICS — '+today+'</div></div>'+
+    '<div style="text-align:right;font-size:9pt;"><strong>'+(d.proj||'Project')+'</strong></div></div>'+
+    '<div class="kpi-grid"><div class="kpi"><div style="font-size:9pt;color:#64748b;">Total Hours</div><div style="font-size:16pt;font-weight:700;color:#6366f1;">'+fmtDec(d.totalHrs||0,0)+'h</div></div>'+
+    '<div class="kpi"><div style="font-size:9pt;color:#64748b;">Total Labor Cost</div><div style="font-size:16pt;font-weight:700;color:green;">'+fmt(d.totalLaborCost||0)+'</div></div>'+
+    '<div class="kpi"><div style="font-size:9pt;color:#64748b;">yd³ / Labor Hour</div><div style="font-size:16pt;font-weight:700;color:#059669;">'+(yph>0?fmtDec(yph,2):'—')+'</div></div>'+
+    '<div class="kpi"><div style="font-size:9pt;color:#64748b;">Labor Cost / yd³</div><div style="font-size:16pt;font-weight:700;color:#059669;">'+(cpy>0?fmt(cpy):'—')+'</div></div></div>'+
+    '<h3 style="color:#6366f1;font-size:11pt;margin:0 0 8px;">Hours & Cost by Trade</h3>'+
+    '<table style="width:100%;border-collapse:collapse;margin-bottom:18px;"><thead><tr><th>Trade</th><th style="text-align:right;">Workers</th><th style="text-align:right;">Total Hrs</th><th style="text-align:right;">Share %</th><th style="text-align:right;">Cost</th></tr></thead><tbody>'+tRows+'</tbody></table>'+
+    (wRows?'<h3 style="color:#6366f1;font-size:11pt;margin:0 0 8px;">Top Workers by Cost</h3>'+
+    '<table style="width:100%;border-collapse:collapse;margin-bottom:18px;"><thead><tr><th>Worker</th><th>Trade</th><th style="text-align:right;">Days</th><th style="text-align:right;">Hrs</th><th style="text-align:right;">OT Hrs</th><th style="text-align:right;">Cost</th></tr></thead><tbody>'+wRows+'</tbody></table>':'')+
+    '<div class="footer">CONFIDENTIAL — INTERNAL USE ONLY | Oncor Takeoff Tool Labor Analytics</div>'+
+    '<br><button onclick="window.print()">🖨️ Print / Save PDF</button></body></html>';
+  var w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// INJECT SIDEBAR BUTTONS
+// =====================================================================
+document.addEventListener('DOMContentLoaded', function() {
+  // Wait for EVA button, then inject below it
+  setTimeout(function() {
+    // Inject Cash Flow Forecast button
+    var btn1 = document.createElement('button');
+    btn1.id = 'oncor-cashflow-btn';
+    btn1.innerHTML = '💲 Cash Flow Forecast';
+    btn1.title = 'Ctrl+Alt+W — Revenue & Cash Flow Forecast';
+    btn1.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(99,102,241,0.12);color:#818cf8;border:1px solid rgba(99,102,241,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btn1.onclick = window.openCashFlowModal;
+    btn1.onmouseover = function(){ this.style.background='rgba(99,102,241,0.22)'; };
+    btn1.onmouseout = function(){ this.style.background='rgba(99,102,241,0.12)'; };
+
+    // Inject Health Audit button
+    var btn2 = document.createElement('button');
+    btn2.id = 'oncor-healthaudit-btn';
+    btn2.innerHTML = '🔍 Project Health Audit';
+    btn2.title = 'Ctrl+Alt+X — Project Health Audit';
+    btn2.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(14,165,233,0.12);color:#38bdf8;border:1px solid rgba(14,165,233,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btn2.onclick = window.openHealthAuditModal;
+    btn2.onmouseover = function(){ this.style.background='rgba(14,165,233,0.22)'; };
+    btn2.onmouseout = function(){ this.style.background='rgba(14,165,233,0.12)'; };
+
+    // Inject Labor Analytics button
+    var btn3 = document.createElement('button');
+    btn3.id = 'oncor-laboranalytics-btn';
+    btn3.innerHTML = '👷 Crew Labor Analytics';
+    btn3.title = 'Ctrl+Alt+Y — Crew & Labor Analytics';
+    btn3.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(52,211,153,0.10);color:#34d399;border:1px solid rgba(52,211,153,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btn3.onclick = window.openLaborAnalyticsModal;
+    btn3.onmouseover = function(){ this.style.background='rgba(52,211,153,0.20)'; };
+    btn3.onmouseout = function(){ this.style.background='rgba(52,211,153,0.10)'; };
+
+    // Try to insert after EVA button
+    var evaBtn = document.getElementById('oncor-eva-btn');
+    if (evaBtn && evaBtn.parentNode) {
+      evaBtn.parentNode.insertBefore(btn1, evaBtn.nextSibling);
+      btn1.parentNode.insertBefore(btn2, btn1.nextSibling);
+      btn2.parentNode.insertBefore(btn3, btn2.nextSibling);
+    } else {
+      [btn1, btn2, btn3].forEach(function(b, i){
+        b.style.cssText += 'position:fixed;bottom:'+(620+i*50)+'px;right:20px;z-index:9000;width:auto;';
+        document.body.appendChild(b);
+      });
+    }
+  }, 15200);
+});
+
+// =====================================================================
+// KEYBOARD SHORTCUTS — Session #99
+// =====================================================================
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.altKey) {
+    if (e.key === 'w' || e.key === 'W') { e.preventDefault(); window.openCashFlowModal(); }
+    if (e.key === 'x' || e.key === 'X') { e.preventDefault(); window.openHealthAuditModal(); }
+    if (e.key === 'y' || e.key === 'Y') { e.preventDefault(); window.openLaborAnalyticsModal(); }
+  }
+});
+
+})();
+// ==================== END SESSION #99 — Zeus ⚡ Cash Flow Forecast (Ctrl+Alt+W) + Project Health Audit (Ctrl+Alt+X) + Crew Labor Analytics (Ctrl+Alt+Y) ====================
+</script>
