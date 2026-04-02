@@ -1,5 +1,63 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 2, 2026 - 17:02 UTC (Overnight Cron #107)
+**Status:** ✅ THREE NEW FEATURES added (+458 lines)
+
+### What Was Added:
+
+---
+
+### 😴 Crew Fatigue & OT Alert Dashboard (Ctrl+Alt+`) — ~160 lines
+- New `😴 Crew Fatigue` button in sidebar
+- `Ctrl+Alt+\`` keyboard shortcut opens/toggles the modal
+- **Purpose:** Track weekly crew overtime hours and flag fatigue risk per OSHA guidelines. Workers exceeding 50 hours/week have 37% higher accident probability.
+
+**Features:**
+- 5-card KPI header: Crew Count / Total Hours / OT Hours / Avg Hours/Person / Fatigue Risk Count
+- Per-crew entry: Name, Trade (8 types), Hours worked, OT calculation, Status badge, Notes
+- Auto-calculated OT (hours above 40)
+- Status system: ✅ OK (≤40h) / OT (40-45h) / ⚠️ MONITOR (45-50h) / 🔴 HIGH RISK (50h+)
+- Week start date picker
+- OSHA guidelines reference panel
+- **Printable Crew Fatigue Report** — full table with OT breakdown and OSHA guidance
+- localStorage per project: `oncor_fatigue_v1_[project]`
+
+---
+
+### 🏭 Concrete Batch Plant Rating System — ~170 lines
+- New `🏭 Plant Ratings` button in sidebar
+- **Purpose:** Rate batch plants on 5 dimensions — Reliability, Quality, Pricing, On-Time Delivery, Service. Know which plants to use and which to avoid.
+
+**Features:**
+- 5 rating dimensions (1-5 scale each): 🔄 Reliability, 🧪 Quality, 💰 Pricing, ⏰ On-Time, 🤝 Service
+- Auto-calculated letter grade (A-F) based on average rating
+- Per-plant: Name, Location, Contact, Phone, Ratings, Notes
+- Color-coded grade badge (green A, lime B, amber C, orange D, red F)
+- **Printable Batch Plant Scorecard** — comparison table with all plants ranked by grade
+- localStorage global: `oncor_plantrating_v1` (cross-project — same plants across all jobs)
+
+---
+
+### 📚 Project Lessons Learned Log — ~130 lines
+- New `📚 Lessons Learned` button in sidebar
+- **Purpose:** Capture what went well and what went wrong on each project. Build institutional knowledge for better future bids.
+
+**Features:**
+- 4-card KPI: Total Lessons / Positive / Negative / Categories
+- Per-lesson: Category (13 types), Impact (⬆️ Positive / ➡️ Neutral / ⬇️ Negative), Date, Title, Description
+- 13 Categories: Estimating, Concrete/Materials, Labor/Crew, Schedule, Safety, Quality/QC, Subcontractors, Equipment, Weather, Financial, Communication, Legal/Contract, Other
+- Color-coded borders based on impact (green positive, red negative)
+- Project summary/takeaways textarea
+- **Printable Lessons Learned Report** — stats + full lesson table + summary
+- localStorage per project: `oncor_lessons_v1_[project]`
+
+**Commits:**
+- 0e31a11: 😴🏭📚 Crew Fatigue & OT Alert (Ctrl+Alt+`) + Batch Plant Rating + Lessons Learned (+458 lines) [Session #107]
+
+**Total Lines:** ~176,381 | **New Shortcuts:** Ctrl+Alt+` (Fatigue Dashboard)
+
+---
+
 ## ✅ SESSION: Apr 2, 2026 - 15:53 UTC (Overnight Cron #106)
 **Status:** ✅ THREE NEW FEATURES added (+687 lines)
 
