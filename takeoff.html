@@ -172498,3 +172498,597 @@ document.addEventListener('keydown', function(e) {
 })();
 // ==================== END SESSION #99 — Zeus ⚡ Cash Flow Forecast (Ctrl+Alt+W) + Project Health Audit (Ctrl+Alt+X) + Crew Labor Analytics (Ctrl+Alt+Y) ====================
 </script>
+<script>
+// ==================== SESSION #100 — Zeus ⚡ Project Timeline Gantt (Ctrl+Alt+Z) + Document Checklist (Ctrl+Alt+1) + Job Flash Report (Ctrl+Alt+2) ====================
+(function() {
+'use strict';
+
+// =====================================================================
+// SECTION 1: PROJECT TIMELINE GANTT CHART (Ctrl+Alt+Z)
+// =====================================================================
+
+window.openGanttModal = function() {
+  var existing = document.getElementById('gantt-modal');
+  if (existing) { existing.remove(); return; }
+  var proj = (typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var projKey = proj.replace(/\s+/g,'_');
+  var overlay = document.createElement('div');
+  overlay.id = 'gantt-modal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.82);z-index:20000;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;';
+  overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
+
+  // Load milestones from localStorage or create default
+  var ganttKey = 'oncor_gantt_v1_'+projKey;
+  var ganttData = JSON.parse(localStorage.getItem(ganttKey)||'{"milestones":[]}');
+  var milestones = ganttData.milestones||[];
+
+  // Default milestone types
+  var milestoneTypes = ['Contract Signed','NTP/Notice to Proceed','Submittals Due','Mobilization','Site Work Start','Forming Start','Rebar Placement','Concrete Pour #1','Concrete Pour #2','Concrete Pour #3','Concrete Complete','Punch Walk','Substantial Completion','Final Inspection','Retainage Release','Project Closeout','Custom'];
+
+  function saveMilestones() {
+    ganttData.milestones = milestones;
+    localStorage.setItem(ganttKey, JSON.stringify(ganttData));
+    renderGantt();
+  }
+
+  function formatDate(d) {
+    if (!d) return '';
+    var dt = new Date(d);
+    return dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  }
+
+  function daysBetween(d1, d2) {
+    return Math.round((new Date(d2) - new Date(d1)) / (1000*60*60*24));
+  }
+
+  var today = new Date();
+  today.setHours(0,0,0,0);
+
+  function renderGantt() {
+    var contentDiv = document.getElementById('gantt-content');
+    if (!contentDiv) return;
+
+    // Sort by start date
+    milestones.sort(function(a,b){ return new Date(a.start) - new Date(b.start); });
+
+    // Calculate date range
+    var minDate = null, maxDate = null;
+    milestones.forEach(function(m){
+      if (m.start) {
+        var d = new Date(m.start);
+        if (!minDate || d < minDate) minDate = d;
+      }
+      if (m.end) {
+        var d2 = new Date(m.end);
+        if (!maxDate || d2 > maxDate) maxDate = d2;
+      }
+    });
+
+    // Pad range
+    if (minDate && maxDate) {
+      minDate = new Date(minDate.getTime() - 7*24*60*60*1000);
+      maxDate = new Date(maxDate.getTime() + 14*24*60*60*1000);
+    } else {
+      minDate = new Date();
+      maxDate = new Date(Date.now() + 90*24*60*60*1000);
+    }
+    var totalDays = daysBetween(minDate, maxDate) || 90;
+
+    // Build week headers
+    var weeks = [];
+    var d = new Date(minDate);
+    while (d <= maxDate) {
+      weeks.push(new Date(d));
+      d.setDate(d.getDate() + 7);
+    }
+    var weekHeaders = weeks.map(function(w){
+      return '<div style="flex:0 0 '+(7/totalDays*100)+'%;text-align:center;font-size:9px;color:#64748b;border-left:1px solid #334155;padding:4px 0;">'+w.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</div>';
+    }).join('');
+
+    // Build milestone rows
+    var rows = milestones.map(function(m, idx){
+      var start = m.start ? new Date(m.start) : null;
+      var end = m.end ? new Date(m.end) : start;
+      var leftPct = start ? (daysBetween(minDate, start) / totalDays * 100) : 0;
+      var widthPct = start && end ? (Math.max(daysBetween(start, end), 1) / totalDays * 100) : 2;
+      var isPast = end && new Date(end) < today;
+      var isActive = start && end && start <= today && today <= new Date(end);
+      var isFuture = start && new Date(start) > today;
+      var barColor = m.complete ? '#34d399' : isPast ? '#ef4444' : isActive ? '#6366f1' : '#64748b';
+      var statusBadge = m.complete ? '<span style="background:rgba(52,211,153,0.15);color:#34d399;padding:1px 6px;border-radius:8px;font-size:9px;margin-left:6px;">✓ DONE</span>' :
+        isPast ? '<span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:1px 6px;border-radius:8px;font-size:9px;margin-left:6px;">OVERDUE</span>' :
+        isActive ? '<span style="background:rgba(99,102,241,0.15);color:#818cf8;padding:1px 6px;border-radius:8px;font-size:9px;margin-left:6px;">ACTIVE</span>' : '';
+
+      return '<div style="display:flex;align-items:center;margin-bottom:8px;">' +
+        '<div style="width:180px;flex-shrink:0;padding-right:10px;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+        '<span style="color:#e2e8f0;font-size:11px;font-weight:600;">'+_escHtml(m.name||'Milestone')+'</span>' +
+        statusBadge +
+        '</div>' +
+        '<div style="color:#64748b;font-size:10px;">'+formatDate(m.start)+(m.end && m.end!==m.start?' → '+formatDate(m.end):'')+'</div>' +
+        '</div>' +
+        '<div style="flex:1;position:relative;height:20px;background:#0f172a;border-radius:4px;overflow:hidden;">' +
+        '<div style="position:absolute;left:'+leftPct+'%;width:'+Math.max(widthPct,1)+'%;height:100%;background:'+barColor+';border-radius:4px;transition:0.3s;"></div>' +
+        '</div>' +
+        '<div style="width:80px;flex-shrink:0;display:flex;gap:4px;padding-left:8px;">' +
+        '<button onclick="window._editMilestone('+idx+')" style="background:rgba(99,102,241,0.15);color:#818cf8;border:none;width:24px;height:24px;border-radius:4px;font-size:11px;cursor:pointer;">✏️</button>' +
+        '<button onclick="window._toggleMilestoneComplete('+idx+')" style="background:rgba(52,211,153,0.15);color:#34d399;border:none;width:24px;height:24px;border-radius:4px;font-size:11px;cursor:pointer;">'+(m.complete?'↩':'✓')+'</button>' +
+        '<button onclick="window._deleteMilestone('+idx+')" style="background:rgba(239,68,68,0.15);color:#ef4444;border:none;width:24px;height:24px;border-radius:4px;font-size:11px;cursor:pointer;">✕</button>' +
+        '</div></div>';
+    }).join('');
+
+    // Today marker position
+    var todayPct = daysBetween(minDate, today) / totalDays * 100;
+
+    // Stats
+    var totalMilestones = milestones.length;
+    var completeMilestones = milestones.filter(function(m){ return m.complete; }).length;
+    var overdueMilestones = milestones.filter(function(m){ return !m.complete && m.end && new Date(m.end) < today; }).length;
+
+    contentDiv.innerHTML =
+      // Stats
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;">' +
+      '<div style="background:#1e293b;border-radius:8px;padding:12px;"><div style="font-size:10px;color:#64748b;margin-bottom:2px;">Total</div><div style="font-size:18px;font-weight:700;color:#6366f1;">'+totalMilestones+'</div></div>' +
+      '<div style="background:#1e293b;border-radius:8px;padding:12px;"><div style="font-size:10px;color:#64748b;margin-bottom:2px;">Complete</div><div style="font-size:18px;font-weight:700;color:#34d399;">'+completeMilestones+'</div></div>' +
+      '<div style="background:#1e293b;border-radius:8px;padding:12px;"><div style="font-size:10px;color:#64748b;margin-bottom:2px;">Overdue</div><div style="font-size:18px;font-weight:700;color:'+(overdueMilestones>0?'#ef4444':'#34d399')+';">'+overdueMilestones+'</div></div>' +
+      '<div style="background:#1e293b;border-radius:8px;padding:12px;"><div style="font-size:10px;color:#64748b;margin-bottom:2px;">Progress</div><div style="font-size:18px;font-weight:700;color:#818cf8;">'+(totalMilestones>0?Math.round(completeMilestones/totalMilestones*100):0)+'%</div></div>' +
+      '</div>' +
+      // Week header row
+      (milestones.length>0?'<div style="margin-left:180px;display:flex;margin-bottom:4px;">'+weekHeaders+'</div>':'') +
+      // Milestone rows
+      (rows || '<div style="text-align:center;padding:40px;color:#64748b;"><div style="font-size:28px;margin-bottom:10px;">📅</div><div>No milestones yet. Add project milestones to see the timeline.</div></div>') +
+      // Today line indicator
+      (milestones.length>0?'<div style="margin-left:180px;position:relative;height:2px;margin-top:8px;"><div style="position:absolute;left:'+todayPct+'%;width:2px;height:12px;background:#f59e0b;border-radius:1px;transform:translateY(-5px);"></div><div style="position:absolute;left:'+todayPct+'%;font-size:9px;color:#f59e0b;transform:translateX(-50%);top:8px;">Today</div></div>':'');
+  }
+
+  window._editMilestone = function(idx) {
+    var m = milestones[idx];
+    var newName = prompt('Milestone name:', m.name||'');
+    if (newName === null) return;
+    var newStart = prompt('Start date (YYYY-MM-DD):', m.start||'');
+    if (newStart === null) return;
+    var newEnd = prompt('End date (YYYY-MM-DD, leave blank if same as start):', m.end||'');
+    if (newEnd === null) return;
+    m.name = newName;
+    m.start = newStart;
+    m.end = newEnd || newStart;
+    saveMilestones();
+  };
+
+  window._toggleMilestoneComplete = function(idx) {
+    milestones[idx].complete = !milestones[idx].complete;
+    saveMilestones();
+  };
+
+  window._deleteMilestone = function(idx) {
+    if (!confirm('Delete this milestone?')) return;
+    milestones.splice(idx, 1);
+    saveMilestones();
+  };
+
+  window._addMilestone = function() {
+    var typeSelect = document.getElementById('gantt-new-type');
+    var startInput = document.getElementById('gantt-new-start');
+    var endInput = document.getElementById('gantt-new-end');
+    var type = typeSelect.value;
+    var name = type === 'Custom' ? prompt('Custom milestone name:', '') : type;
+    if (!name) return;
+    var start = startInput.value;
+    var end = endInput.value || start;
+    if (!start) { alert('Start date required'); return; }
+    milestones.push({ name: name, start: start, end: end, complete: false });
+    saveMilestones();
+    typeSelect.selectedIndex = 0;
+    startInput.value = '';
+    endInput.value = '';
+  };
+
+  overlay.innerHTML = '<div style="background:#0f172a;border-radius:16px;padding:28px;max-width:1000px;width:100%;margin:auto;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
+    '<div><div style="font-size:20px;font-weight:700;color:#e2e8f0;">📅 Project Timeline Gantt</div>' +
+    '<div style="font-size:12px;color:#64748b;margin-top:2px;">'+proj+' — Visual Schedule Overview</div></div>' +
+    '<button onclick="document.getElementById(\'gantt-modal\').remove()" style="background:rgba(255,255,255,0.05);color:#94a3b8;border:none;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;">✕</button></div>' +
+    // Add milestone form
+    '<div style="background:#1e293b;border-radius:10px;padding:14px;margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">' +
+    '<div style="flex:1;min-width:150px;"><label style="display:block;font-size:10px;color:#64748b;margin-bottom:4px;">Milestone Type</label>' +
+    '<select id="gantt-new-type" style="width:100%;padding:8px 10px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;font-size:12px;">' +
+    milestoneTypes.map(function(t){ return '<option value="'+t+'">'+t+'</option>'; }).join('') +
+    '</select></div>' +
+    '<div style="flex:0 0 130px;"><label style="display:block;font-size:10px;color:#64748b;margin-bottom:4px;">Start Date</label>' +
+    '<input type="date" id="gantt-new-start" style="width:100%;padding:8px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;font-size:12px;"></div>' +
+    '<div style="flex:0 0 130px;"><label style="display:block;font-size:10px;color:#64748b;margin-bottom:4px;">End Date (opt)</label>' +
+    '<input type="date" id="gantt-new-end" style="width:100%;padding:8px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;font-size:12px;"></div>' +
+    '<button onclick="window._addMilestone()" style="padding:8px 16px;background:#6366f1;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">+ Add</button>' +
+    '</div>' +
+    // Gantt content
+    '<div id="gantt-content"></div>' +
+    // Print button
+    '<button onclick="window.printGanttReport()" style="width:100%;padding:12px;background:rgba(99,102,241,0.15);color:#6366f1;border:1px solid #6366f1;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;margin-top:16px;" onmouseover="this.style.background=\'rgba(99,102,241,0.25)\'" onmouseout="this.style.background=\'rgba(99,102,241,0.15)\'">🖨️ Print Timeline Report</button>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+  renderGantt();
+};
+
+window.printGanttReport = function() {
+  var proj = (typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var projKey = proj.replace(/\s+/g,'_');
+  var comp = (document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var ganttData = JSON.parse(localStorage.getItem('oncor_gantt_v1_'+projKey)||'{"milestones":[]}');
+  var milestones = ganttData.milestones||[];
+  var today = new Date();
+  function fmt(d){ return d?new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):''; }
+  var rows = milestones.sort(function(a,b){ return new Date(a.start)-new Date(b.start); }).map(function(m){
+    var status = m.complete ? '✅ Complete' : (m.end && new Date(m.end)<today ? '🔴 Overdue' : '⏳ Pending');
+    var sColor = m.complete ? 'green' : (m.end && new Date(m.end)<today ? 'red' : '#666');
+    return '<tr><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">'+_escHtml(m.name||'')+'</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">'+fmt(m.start)+'</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">'+fmt(m.end)+'</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;color:'+sColor+';font-weight:700;">'+status+'</td></tr>';
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Timeline — '+proj+'</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:0;padding:20px;} .hdr{display:flex;justify-content:space-between;border-bottom:3px solid #6366f1;padding-bottom:10px;margin-bottom:16px;} th{background:#ede9fe;padding:6px 8px;text-align:left;font-size:9pt;} .footer{margin-top:18px;text-align:center;font-size:8pt;color:#94a3b8;border-top:1px solid #e5e7eb;padding-top:8px;} @media print{button{display:none;}}</style></head><body>'+
+    '<div class="hdr"><div><div style="font-size:15pt;font-weight:700;color:#6366f1;">'+_escHtml(comp)+'</div><div style="font-size:9pt;color:#64748b;">PROJECT TIMELINE — '+today.toLocaleDateString()+'</div></div><div style="text-align:right;font-size:9pt;"><strong>'+_escHtml(proj)+'</strong></div></div>'+
+    '<table style="width:100%;border-collapse:collapse;"><thead><tr><th>Milestone</th><th>Start</th><th>End</th><th>Status</th></tr></thead><tbody>'+(rows||'<tr><td colspan="4" style="padding:14px;text-align:center;color:#666;">No milestones</td></tr>')+'</tbody></table>'+
+    '<div class="footer">CONFIDENTIAL — INTERNAL USE ONLY</div><br><button onclick="window.print()">🖨️ Print</button></body></html>';
+  var w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// SECTION 2: PROJECT DOCUMENT CHECKLIST (Ctrl+Alt+1)
+// =====================================================================
+
+window.openDocChecklistModal = function() {
+  var existing = document.getElementById('docchecklist-modal');
+  if (existing) { existing.remove(); return; }
+  var proj = (typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var projKey = proj.replace(/\s+/g,'_');
+  var overlay = document.createElement('div');
+  overlay.id = 'docchecklist-modal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.82);z-index:20000;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;';
+  overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
+
+  var checklistKey = 'oncor_docchecklist_v1_'+projKey;
+  var checklistData = JSON.parse(localStorage.getItem(checklistKey)||'{}');
+
+  // Default document checklist for concrete subcontractors
+  var categories = [
+    { name: '📜 Contract & Legal', items: [
+      'Signed Subcontract Agreement', 'Notice to Owner (NTO) — TX Prop Code §53.056', 'Certificate of Insurance (COI)', 'Performance/Payment Bond (if req)', 'Retainage Agreement', 'Lien Waiver Template on File'
+    ]},
+    { name: '📐 Drawings & Specs', items: [
+      'IFC Drawings (Structural)', 'IFC Drawings (Architectural)', 'Project Specifications', 'Concrete Mix Design Approval', 'Rebar Shop Drawings (if fab)', 'Geotechnical Report'
+    ]},
+    { name: '📋 Submittals', items: [
+      'Mix Design Submittal', 'Rebar Submittal / Mill Certs', 'Curing Compound Data Sheet', 'Fiber Data Sheet', 'Vapor Retarder Data Sheet', 'Form Release Data Sheet'
+    ]},
+    { name: '🦺 Safety & Training', items: [
+      'Site-Specific Safety Plan', 'Toolbox Talk Log', 'OSHA 10/30 Certs (crew)', 'ACI Certification (finisher)', 'Emergency Contact List', 'SDS Sheets On-Site'
+    ]},
+    { name: '💵 Financial', items: [
+      'Schedule of Values (SOV)', 'Pay Application Template', 'Change Order Log', 'Lien Waiver Log', 'AR Tracking Sheet', 'Job Cost Budget'
+    ]},
+    { name: '🔬 QC & Testing', items: [
+      'QC Inspection Plan', 'Testing Lab Agreement', 'Cylinder Break Schedule', 'Pre-Pour Checklist Template', 'Delivery Ticket Log Template', 'Slump/Air Test Log'
+    ]},
+    { name: '📦 Closeout', items: [
+      'As-Built Drawings', 'O&M Manual (if req)', 'Warranty Letter', 'Final Lien Waiver', 'Punch List Completion', 'Final Pay Application'
+    ]}
+  ];
+
+  function saveChecklist() {
+    localStorage.setItem(checklistKey, JSON.stringify(checklistData));
+    renderChecklist();
+  }
+
+  function renderChecklist() {
+    var contentDiv = document.getElementById('docchecklist-content');
+    if (!contentDiv) return;
+
+    var totalItems = 0, checkedItems = 0;
+    categories.forEach(function(cat) {
+      cat.items.forEach(function(item) {
+        totalItems++;
+        if (checklistData[item]) checkedItems++;
+      });
+    });
+    var pct = totalItems > 0 ? Math.round(checkedItems / totalItems * 100) : 0;
+    var barColor = pct >= 100 ? '#34d399' : pct >= 70 ? '#f59e0b' : '#ef4444';
+
+    var catHTML = categories.map(function(cat) {
+      var catChecked = cat.items.filter(function(i){ return checklistData[i]; }).length;
+      var catTotal = cat.items.length;
+      var itemsHTML = cat.items.map(function(item) {
+        var checked = checklistData[item];
+        return '<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:'+(checked?'rgba(52,211,153,0.08)':'rgba(255,255,255,0.02)')+';border-radius:6px;cursor:pointer;transition:0.2s;" onmouseover="this.style.background=\''+(checked?'rgba(52,211,153,0.12)':'rgba(255,255,255,0.05)')+'\'" onmouseout="this.style.background=\''+(checked?'rgba(52,211,153,0.08)':'rgba(255,255,255,0.02)')+'\'">' +
+          '<input type="checkbox" '+(checked?'checked':'')+' onchange="window._toggleDocItem(\''+item.replace(/'/g,"\\'")+'\')" style="width:16px;height:16px;accent-color:#34d399;">' +
+          '<span style="color:'+(checked?'#34d399':'#e2e8f0')+';font-size:12px;'+(checked?'text-decoration:line-through;':'')+'">'+_escHtml(item)+'</span>' +
+        '</label>';
+      }).join('');
+      return '<div style="background:#1e293b;border-radius:10px;overflow:hidden;margin-bottom:12px;">' +
+        '<div style="padding:12px 14px;background:rgba(99,102,241,0.08);display:flex;justify-content:space-between;align-items:center;">' +
+        '<span style="font-size:13px;font-weight:700;color:#e2e8f0;">'+cat.name+'</span>' +
+        '<span style="font-size:11px;color:'+(catChecked===catTotal?'#34d399':'#64748b')+';">'+catChecked+'/'+catTotal+'</span>' +
+        '</div>' +
+        '<div style="padding:10px;display:grid;grid-template-columns:repeat(2,1fr);gap:6px;">'+itemsHTML+'</div>' +
+      '</div>';
+    }).join('');
+
+    contentDiv.innerHTML =
+      // Progress bar
+      '<div style="background:#1e293b;border-radius:10px;padding:16px;margin-bottom:18px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+      '<span style="font-size:14px;font-weight:700;color:#e2e8f0;">Document Completion</span>' +
+      '<span style="font-size:20px;font-weight:700;color:'+barColor+';">'+pct+'%</span>' +
+      '</div>' +
+      '<div style="background:#0f172a;height:12px;border-radius:6px;overflow:hidden;">' +
+      '<div style="height:100%;background:'+barColor+';width:'+pct+'%;transition:0.4s;border-radius:6px;"></div>' +
+      '</div>' +
+      '<div style="font-size:11px;color:#64748b;margin-top:8px;">'+checkedItems+' of '+totalItems+' documents collected'+(pct>=100?' — Ready for project closeout ✓':'')+' </div>' +
+      '</div>' +
+      // Categories
+      catHTML;
+  }
+
+  window._toggleDocItem = function(item) {
+    checklistData[item] = !checklistData[item];
+    saveChecklist();
+  };
+
+  overlay.innerHTML = '<div style="background:#0f172a;border-radius:16px;padding:28px;max-width:800px;width:100%;margin:auto;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
+    '<div><div style="font-size:20px;font-weight:700;color:#e2e8f0;">📁 Project Document Checklist</div>' +
+    '<div style="font-size:12px;color:#64748b;margin-top:2px;">'+proj+' — 7 categories, 43 items</div></div>' +
+    '<button onclick="document.getElementById(\'docchecklist-modal\').remove()" style="background:rgba(255,255,255,0.05);color:#94a3b8;border:none;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;">✕</button></div>' +
+    '<div id="docchecklist-content"></div>' +
+    '<button onclick="window.printDocChecklistReport()" style="width:100%;padding:12px;background:rgba(99,102,241,0.15);color:#6366f1;border:1px solid #6366f1;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;margin-top:12px;" onmouseover="this.style.background=\'rgba(99,102,241,0.25)\'" onmouseout="this.style.background=\'rgba(99,102,241,0.15)\'">🖨️ Print Document Checklist</button>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+  renderChecklist();
+};
+
+window.printDocChecklistReport = function() {
+  var proj = (typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var projKey = proj.replace(/\s+/g,'_');
+  var comp = (document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var checklistData = JSON.parse(localStorage.getItem('oncor_docchecklist_v1_'+projKey)||'{}');
+  var categories = [
+    { name: 'Contract & Legal', items: ['Signed Subcontract Agreement','Notice to Owner (NTO)','Certificate of Insurance (COI)','Performance/Payment Bond','Retainage Agreement','Lien Waiver Template'] },
+    { name: 'Drawings & Specs', items: ['IFC Drawings (Structural)','IFC Drawings (Architectural)','Project Specifications','Concrete Mix Design Approval','Rebar Shop Drawings','Geotechnical Report'] },
+    { name: 'Submittals', items: ['Mix Design Submittal','Rebar Submittal / Mill Certs','Curing Compound Data Sheet','Fiber Data Sheet','Vapor Retarder Data Sheet','Form Release Data Sheet'] },
+    { name: 'Safety & Training', items: ['Site-Specific Safety Plan','Toolbox Talk Log','OSHA 10/30 Certs','ACI Certification','Emergency Contact List','SDS Sheets On-Site'] },
+    { name: 'Financial', items: ['Schedule of Values','Pay Application Template','Change Order Log','Lien Waiver Log','AR Tracking','Job Cost Budget'] },
+    { name: 'QC & Testing', items: ['QC Inspection Plan','Testing Lab Agreement','Cylinder Break Schedule','Pre-Pour Checklist','Delivery Ticket Log','Slump/Air Test Log'] },
+    { name: 'Closeout', items: ['As-Built Drawings','O&M Manual','Warranty Letter','Final Lien Waiver','Punch List Completion','Final Pay Application'] }
+  ];
+  var totalItems=0, checkedItems=0;
+  categories.forEach(function(c){ c.items.forEach(function(i){ totalItems++; if(checklistData[i]) checkedItems++; }); });
+  var pct = Math.round(checkedItems/totalItems*100);
+  var rows = categories.map(function(cat){
+    return cat.items.map(function(item){
+      var chk = checklistData[item];
+      return '<tr><td style="padding:5px 8px;border-bottom:1px solid #e5e7eb;">'+cat.name+'</td><td style="padding:5px 8px;border-bottom:1px solid #e5e7eb;">'+item+'</td><td style="padding:5px 8px;border-bottom:1px solid #e5e7eb;text-align:center;color:'+(chk?'green':'#999')+';font-weight:700;">'+(chk?'✅':'⬜')+'</td></tr>';
+    }).join('');
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Doc Checklist — '+proj+'</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:0;padding:20px;} .hdr{display:flex;justify-content:space-between;border-bottom:3px solid #6366f1;padding-bottom:10px;margin-bottom:16px;} th{background:#ede9fe;padding:5px 8px;text-align:left;font-size:9pt;} .footer{margin-top:18px;text-align:center;font-size:8pt;color:#94a3b8;border-top:1px solid #e5e7eb;padding-top:8px;} @media print{button{display:none;}}</style></head><body>'+
+    '<div class="hdr"><div><div style="font-size:15pt;font-weight:700;color:#6366f1;">'+_escHtml(comp)+'</div><div style="font-size:9pt;color:#64748b;">PROJECT DOCUMENT CHECKLIST — '+new Date().toLocaleDateString()+'</div></div><div style="text-align:right;"><strong>'+_escHtml(proj)+'</strong><br><span style="font-size:12pt;font-weight:700;color:'+(pct>=100?'green':'#b45309')+';">'+pct+'% Complete</span></div></div>'+
+    '<table style="width:100%;border-collapse:collapse;"><thead><tr><th>Category</th><th>Document</th><th style="text-align:center;width:60px;">Status</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<div class="footer">CONFIDENTIAL — INTERNAL USE ONLY</div><br><button onclick="window.print()">🖨️ Print</button></body></html>';
+  var w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// SECTION 3: JOB FLASH REPORT (Ctrl+Alt+2)
+// =====================================================================
+
+window.openFlashReportModal = function() {
+  var existing = document.getElementById('flashreport-modal');
+  if (existing) { existing.remove(); return; }
+  var proj = (typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var projKey = proj.replace(/\s+/g,'_');
+  var overlay = document.createElement('div');
+  overlay.id = 'flashreport-modal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.82);z-index:20000;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;';
+  overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
+
+  var today = new Date();
+  function fmt(n){ return '$'+(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+
+  // Pull data from all modules
+  var est = (typeof window.lastEstimate!=='undefined'&&window.lastEstimate)?window.lastEstimate:{};
+  var contractValue = parseFloat(est.totalBid)||0;
+
+  // Change Orders
+  var coData = JSON.parse(localStorage.getItem('oncor_change_orders_v1')||'{}');
+  var cos = coData[projKey]||[];
+  var signedCOValue = cos.filter(function(c){ return c.status==='Signed'; }).reduce(function(s,c){ return s+(parseFloat(c.total)||0); },0);
+  var pendingCOValue = cos.filter(function(c){ return c.status==='Pending'; }).reduce(function(s,c){ return s+(parseFloat(c.total)||0); },0);
+  var revisedContract = contractValue + signedCOValue;
+
+  // AR
+  var arData = JSON.parse(localStorage.getItem('oncor_ar_v1_'+projKey)||'[]');
+  var totalInvoiced = arData.reduce(function(s,i){ return s+(parseFloat(i.amount)||0); },0);
+  var totalCollected = arData.filter(function(i){ return i.status==='Paid'; }).reduce(function(s,i){ return s+(parseFloat(i.amount)||0); },0);
+  var arOutstanding = totalInvoiced - totalCollected;
+  var overdueAR = arData.filter(function(i){ return i.status!=='Paid'&&i.status!=='Voided'&&i.dueDate&&new Date(i.dueDate)<today; }).reduce(function(s,i){ return s+(parseFloat(i.amount)||0); },0);
+
+  // Job Costs
+  var jobCosts = JSON.parse(localStorage.getItem('oncor_job_cost_v1_'+projKey)||'[]');
+  var totalCostSpent = jobCosts.reduce(function(s,j){ return s+(parseFloat(j.amount)||0); },0);
+
+  // Field Log / Production
+  var fieldLog = JSON.parse(localStorage.getItem('oncor_field_log_v1_'+projKey)||'[]');
+  var actualYds = fieldLog.reduce(function(s,f){ return s+(parseFloat(f.actualYds)||0); },0);
+  var estYds = parseFloat(est.totalYds)||0;
+  var pourDays = fieldLog.length;
+
+  // Punch List
+  var punchData = JSON.parse(localStorage.getItem('oncor_punch_list_v1_'+projKey)||'[]');
+  var openPunch = punchData.filter(function(p){ return p.status==='Open'||p.status==='In Progress'; }).length;
+  var totalPunch = punchData.length;
+
+  // RFIs
+  var rfiData = JSON.parse(localStorage.getItem('oncor_rfi_log_v1_'+projKey)||'[]');
+  var openRFIs = rfiData.filter(function(r){ return r.status==='Open'||r.status==='Under Review'; }).length;
+
+  // Safety
+  var safetyData = JSON.parse(localStorage.getItem('oncor_safety_v1_'+projKey)||'{}');
+  var incidents = (safetyData.incidents||[]).filter(function(i){ return i.oshaRecordable==='Yes'; }).length;
+
+  // Gross profit estimate
+  var grossProfit = totalCollected - totalCostSpent;
+  var grossMargin = totalCollected > 0 ? (grossProfit / totalCollected * 100) : 0;
+
+  // Progress %
+  var progressPct = estYds > 0 ? Math.min(Math.round(actualYds / estYds * 100), 100) : 0;
+  var billedPct = revisedContract > 0 ? Math.round(totalInvoiced / revisedContract * 100) : 0;
+
+  // Health indicators
+  var healthItems = [];
+  if (overdueAR > 0) healthItems.push({ icon: '🔴', text: fmt(overdueAR)+' AR overdue' });
+  if (pendingCOValue > 0) healthItems.push({ icon: '⚠️', text: fmt(pendingCOValue)+' in unsigned COs' });
+  if (openRFIs > 0) healthItems.push({ icon: '❓', text: openRFIs+' open RFI'+(openRFIs>1?'s':'') });
+  if (openPunch > 0) healthItems.push({ icon: '📋', text: openPunch+' open punch item'+(openPunch>1?'s':'') });
+  if (incidents > 0) healthItems.push({ icon: '🚨', text: incidents+' OSHA recordable incident'+(incidents>1?'s':'') });
+  if (healthItems.length === 0) healthItems.push({ icon: '✅', text: 'No major issues detected' });
+
+  var healthHTML = healthItems.map(function(h){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;"><span style="font-size:14px;">'+h.icon+'</span><span style="font-size:12px;color:#e2e8f0;">'+h.text+'</span></div>';
+  }).join('');
+
+  overlay.innerHTML = '<div style="background:#0f172a;border-radius:16px;padding:28px;max-width:700px;width:100%;margin:auto;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
+    '<div><div style="font-size:20px;font-weight:700;color:#e2e8f0;">⚡ Job Flash Report</div>' +
+    '<div style="font-size:12px;color:#64748b;margin-top:2px;">'+proj+' — Quick Status Snapshot</div></div>' +
+    '<button onclick="document.getElementById(\'flashreport-modal\').remove()" style="background:rgba(255,255,255,0.05);color:#94a3b8;border:none;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;">✕</button></div>' +
+    // Contract & Progress
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;">' +
+    '<div style="background:#1e293b;border-radius:12px;padding:16px;">' +
+    '<div style="font-size:11px;color:#64748b;margin-bottom:6px;">📋 Contract</div>' +
+    '<div style="font-size:22px;font-weight:700;color:#6366f1;">'+fmt(revisedContract)+'</div>' +
+    (signedCOValue!==0?'<div style="font-size:10px;color:#94a3b8;margin-top:2px;">Base '+fmt(contractValue)+' + COs '+fmt(signedCOValue)+'</div>':'') +
+    '</div>' +
+    '<div style="background:#1e293b;border-radius:12px;padding:16px;">' +
+    '<div style="font-size:11px;color:#64748b;margin-bottom:6px;">📊 Progress</div>' +
+    '<div style="font-size:22px;font-weight:700;color:#34d399;">'+progressPct+'%</div>' +
+    '<div style="font-size:10px;color:#94a3b8;margin-top:2px;">'+actualYds.toFixed(0)+' / '+estYds.toFixed(0)+' yd³ placed | '+pourDays+' pour day'+(pourDays!==1?'s':'')+'</div>' +
+    '</div></div>' +
+    // Financial grid
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;">' +
+    '<div style="background:#1e293b;border-radius:10px;padding:14px;"><div style="font-size:10px;color:#64748b;margin-bottom:4px;">Invoiced</div><div style="font-size:16px;font-weight:700;color:#22c55e;">'+fmt(totalInvoiced)+'</div><div style="font-size:10px;color:#64748b;">'+billedPct+'% of contract</div></div>' +
+    '<div style="background:#1e293b;border-radius:10px;padding:14px;"><div style="font-size:10px;color:#64748b;margin-bottom:4px;">Collected</div><div style="font-size:16px;font-weight:700;color:#34d399;">'+fmt(totalCollected)+'</div></div>' +
+    '<div style="background:#1e293b;border-radius:10px;padding:14px;"><div style="font-size:10px;color:#64748b;margin-bottom:4px;">AR Outstanding</div><div style="font-size:16px;font-weight:700;color:'+(arOutstanding>0?'#f59e0b':'#34d399')+';">'+fmt(arOutstanding)+'</div></div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;">' +
+    '<div style="background:#1e293b;border-radius:10px;padding:14px;"><div style="font-size:10px;color:#64748b;margin-bottom:4px;">Costs Spent</div><div style="font-size:16px;font-weight:700;color:#ef4444;">'+fmt(totalCostSpent)+'</div></div>' +
+    '<div style="background:#1e293b;border-radius:10px;padding:14px;"><div style="font-size:10px;color:#64748b;margin-bottom:4px;">Gross Profit (Cash)</div><div style="font-size:16px;font-weight:700;color:'+(grossProfit>=0?'#34d399':'#ef4444')+';">'+fmt(grossProfit)+'</div></div>' +
+    '<div style="background:#1e293b;border-radius:10px;padding:14px;"><div style="font-size:10px;color:#64748b;margin-bottom:4px;">Gross Margin</div><div style="font-size:16px;font-weight:700;color:'+(grossMargin>=15?'#34d399':grossMargin>=5?'#f59e0b':'#ef4444')+';">'+grossMargin.toFixed(1)+'%</div></div>' +
+    '</div>' +
+    // Health indicators
+    '<div style="background:#1e293b;border-radius:12px;padding:16px;margin-bottom:18px;">' +
+    '<div style="font-size:12px;font-weight:700;color:#e2e8f0;margin-bottom:10px;">🏥 Health Check</div>' +
+    healthHTML +
+    '</div>' +
+    // Print button
+    '<button onclick="window.printFlashReport()" style="width:100%;padding:12px;background:rgba(245,158,11,0.15);color:#f59e0b;border:1px solid #f59e0b;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;" onmouseover="this.style.background=\'rgba(245,158,11,0.25)\'" onmouseout="this.style.background=\'rgba(245,158,11,0.15)\'">🖨️ Print Flash Report</button>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+};
+
+window.printFlashReport = function() {
+  var proj = (typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var projKey = proj.replace(/\s+/g,'_');
+  var comp = (document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var today = new Date();
+  function fmt(n){ return '$'+(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+  var est = (typeof window.lastEstimate!=='undefined'&&window.lastEstimate)?window.lastEstimate:{};
+  var coData = JSON.parse(localStorage.getItem('oncor_change_orders_v1')||'{}');
+  var cos = coData[projKey]||[];
+  var signedCO = cos.filter(function(c){ return c.status==='Signed'; }).reduce(function(s,c){ return s+(parseFloat(c.total)||0); },0);
+  var contractValue = (parseFloat(est.totalBid)||0)+signedCO;
+  var arData = JSON.parse(localStorage.getItem('oncor_ar_v1_'+projKey)||'[]');
+  var invoiced = arData.reduce(function(s,i){ return s+(parseFloat(i.amount)||0); },0);
+  var collected = arData.filter(function(i){ return i.status==='Paid'; }).reduce(function(s,i){ return s+(parseFloat(i.amount)||0); },0);
+  var jobCosts = JSON.parse(localStorage.getItem('oncor_job_cost_v1_'+projKey)||'[]');
+  var spent = jobCosts.reduce(function(s,j){ return s+(parseFloat(j.amount)||0); },0);
+  var profit = collected - spent;
+  var margin = collected>0?(profit/collected*100):0;
+  var fieldLog = JSON.parse(localStorage.getItem('oncor_field_log_v1_'+projKey)||'[]');
+  var actYds = fieldLog.reduce(function(s,f){ return s+(parseFloat(f.actualYds)||0); },0);
+  var estYds = parseFloat(est.totalYds)||0;
+  var pct = estYds>0?Math.round(actYds/estYds*100):0;
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Flash Report — '+proj+'</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:0;padding:20px;} .hdr{display:flex;justify-content:space-between;border-bottom:3px solid #f59e0b;padding-bottom:10px;margin-bottom:16px;} .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px;} .box{border:1px solid #e5e7eb;border-radius:6px;padding:12px;} .footer{margin-top:18px;text-align:center;font-size:8pt;color:#94a3b8;border-top:1px solid #e5e7eb;padding-top:8px;} @media print{button{display:none;}}</style></head><body>'+
+    '<div class="hdr"><div><div style="font-size:15pt;font-weight:700;color:#f59e0b;">'+_escHtml(comp)+'</div><div style="font-size:9pt;color:#64748b;">JOB FLASH REPORT — '+today.toLocaleDateString()+'</div></div><div style="text-align:right;"><strong>'+_escHtml(proj)+'</strong><br><span style="font-size:14pt;font-weight:700;color:#059669;">'+pct+'% Complete</span></div></div>'+
+    '<div class="grid"><div class="box"><div style="font-size:9pt;color:#64748b;">Contract Value</div><div style="font-size:14pt;font-weight:700;color:#6366f1;">'+fmt(contractValue)+'</div></div>'+
+    '<div class="box"><div style="font-size:9pt;color:#64748b;">Invoiced</div><div style="font-size:14pt;font-weight:700;color:green;">'+fmt(invoiced)+'</div></div>'+
+    '<div class="box"><div style="font-size:9pt;color:#64748b;">Collected</div><div style="font-size:14pt;font-weight:700;color:green;">'+fmt(collected)+'</div></div>'+
+    '<div class="box"><div style="font-size:9pt;color:#64748b;">Costs Spent</div><div style="font-size:14pt;font-weight:700;color:red;">'+fmt(spent)+'</div></div>'+
+    '<div class="box"><div style="font-size:9pt;color:#64748b;">Gross Profit (Cash)</div><div style="font-size:14pt;font-weight:700;color:'+(profit>=0?'green':'red')+';">'+fmt(profit)+'</div></div>'+
+    '<div class="box"><div style="font-size:9pt;color:#64748b;">Gross Margin</div><div style="font-size:14pt;font-weight:700;color:'+(margin>=15?'green':'#b45309')+';">'+margin.toFixed(1)+'%</div></div></div>'+
+    '<div style="font-size:9pt;color:#64748b;margin-bottom:6px;">Production: '+actYds.toFixed(0)+' / '+estYds.toFixed(0)+' yd³ placed ('+pct+'%)</div>'+
+    '<div class="footer">CONFIDENTIAL — INTERNAL USE ONLY</div><br><button onclick="window.print()">🖨️ Print</button></body></html>';
+  var w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// INJECT SIDEBAR BUTTONS
+// =====================================================================
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    // Inject Gantt button
+    var btn1 = document.createElement('button');
+    btn1.id = 'oncor-gantt-btn';
+    btn1.innerHTML = '📅 Project Timeline';
+    btn1.title = 'Ctrl+Alt+Z — Project Timeline Gantt';
+    btn1.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(99,102,241,0.12);color:#818cf8;border:1px solid rgba(99,102,241,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btn1.onclick = window.openGanttModal;
+    btn1.onmouseover = function(){ this.style.background='rgba(99,102,241,0.22)'; };
+    btn1.onmouseout = function(){ this.style.background='rgba(99,102,241,0.12)'; };
+
+    // Inject Document Checklist button
+    var btn2 = document.createElement('button');
+    btn2.id = 'oncor-docchecklist-btn';
+    btn2.innerHTML = '📁 Document Checklist';
+    btn2.title = 'Ctrl+Alt+1 — Project Document Checklist';
+    btn2.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(168,85,247,0.10);color:#c084fc;border:1px solid rgba(168,85,247,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btn2.onclick = window.openDocChecklistModal;
+    btn2.onmouseover = function(){ this.style.background='rgba(168,85,247,0.20)'; };
+    btn2.onmouseout = function(){ this.style.background='rgba(168,85,247,0.10)'; };
+
+    // Inject Flash Report button
+    var btn3 = document.createElement('button');
+    btn3.id = 'oncor-flashreport-btn';
+    btn3.innerHTML = '⚡ Job Flash Report';
+    btn3.title = 'Ctrl+Alt+2 — Quick Job Status Snapshot';
+    btn3.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(245,158,11,0.10);color:#f59e0b;border:1px solid rgba(245,158,11,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btn3.onclick = window.openFlashReportModal;
+    btn3.onmouseover = function(){ this.style.background='rgba(245,158,11,0.20)'; };
+    btn3.onmouseout = function(){ this.style.background='rgba(245,158,11,0.10)'; };
+
+    // Try to insert after labor analytics button
+    var labBtn = document.getElementById('oncor-laboranalytics-btn');
+    if (labBtn && labBtn.parentNode) {
+      labBtn.parentNode.insertBefore(btn1, labBtn.nextSibling);
+      btn1.parentNode.insertBefore(btn2, btn1.nextSibling);
+      btn2.parentNode.insertBefore(btn3, btn2.nextSibling);
+    } else {
+      [btn1, btn2, btn3].forEach(function(b, i){
+        b.style.cssText += 'position:fixed;bottom:'+(770+i*50)+'px;right:20px;z-index:9000;width:auto;';
+        document.body.appendChild(b);
+      });
+    }
+  }, 15800);
+});
+
+// =====================================================================
+// KEYBOARD SHORTCUTS — Session #100
+// =====================================================================
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.altKey) {
+    if (e.key === 'z' || e.key === 'Z') { e.preventDefault(); window.openGanttModal(); }
+    if (e.key === '1') { e.preventDefault(); window.openDocChecklistModal(); }
+    if (e.key === '2') { e.preventDefault(); window.openFlashReportModal(); }
+  }
+});
+
+})();
+// ==================== END SESSION #100 — Zeus ⚡ Project Timeline (Ctrl+Alt+Z) + Document Checklist (Ctrl+Alt+1) + Job Flash Report (Ctrl+Alt+2) ====================
+</script>
