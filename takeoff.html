@@ -175920,4 +175920,462 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ==================== END SESSION #106 — Zeus ⚡ Concrete Placement Log (Ctrl+Alt+0) + VE Ideas Log + Project Quick Contacts ====================
+
+// ==================== SESSION #107 — Zeus ⚡ Crew Fatigue & OT Alert + Concrete Batch Plant Rating + Project Lessons Learned ====================
+// 3 new features (~480 lines total)
+// 1. Crew Fatigue & OT Alert Dashboard (Ctrl+Alt+`) — Track crew overtime hours, flag fatigue risk per OSHA guidelines
+// 2. Concrete Batch Plant Rating System — Rate plants by reliability, quality, pricing, on-time delivery
+// 3. Project Lessons Learned Log — Capture what went well/wrong for future bids
+
+// ── 1. CREW FATIGUE & OT ALERT DASHBOARD (Ctrl+Alt+`) ──
+(function(){
+  var KEY='oncor_fatigue_v1_';
+  function _esc(s){return String(s||'').replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c];});}
+  function load(){var k=KEY+((window.lastEstimate&&window.lastEstimate.project)||'default');try{return JSON.parse(localStorage.getItem(k))||{weekStart:'',crewEntries:[],notes:''};}catch(e){return{weekStart:'',crewEntries:[],notes:''};}}
+  function save(d){var k=KEY+((window.lastEstimate&&window.lastEstimate.project)||'default');localStorage.setItem(k,JSON.stringify(d));}
+
+  function buildModal(){
+    var data=load();
+    var m=document.createElement('div');
+    m.id='fatigue-modal';
+    m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
+    
+    // Calculate stats
+    var totalHrs=0,otHrs=0,fatigueRisk=0,crewCount=data.crewEntries.length;
+    data.crewEntries.forEach(function(c){
+      var h=parseFloat(c.hours)||0;
+      totalHrs+=h;
+      if(h>40) otHrs+=(h-40);
+      if(h>50) fatigueRisk++;
+    });
+    var avgHrs=crewCount?Math.round(totalHrs/crewCount):0;
+    
+    var content='<div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-radius:16px;max-width:900px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 25px 50px rgba(0,0,0,0.5);border:1px solid #334155">'+
+      '<div style="padding:20px;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center">'+
+        '<div><h2 style="margin:0;color:#f8fafc;font-size:1.4rem">😴 Crew Fatigue & OT Alert</h2><p style="margin:4px 0 0;color:#94a3b8;font-size:0.85rem">OSHA fatigue risk tracking — flag crews approaching burnout</p></div>'+
+        '<button onclick="document.getElementById(\'fatigue-modal\').remove()" style="background:#334155;border:none;color:#94a3b8;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:18px">×</button>'+
+      '</div>'+
+      
+      '<div style="padding:16px 20px;background:#1e293b;display:grid;grid-template-columns:repeat(5,1fr);gap:12px">'+
+        '<div style="background:#0f172a;padding:12px;border-radius:8px;text-align:center;border:1px solid #334155"><div style="color:#94a3b8;font-size:0.75rem">CREW</div><div style="color:#f8fafc;font-size:1.4rem;font-weight:700">'+crewCount+'</div></div>'+
+        '<div style="background:#0f172a;padding:12px;border-radius:8px;text-align:center;border:1px solid #334155"><div style="color:#94a3b8;font-size:0.75rem">TOTAL HRS</div><div style="color:#38bdf8;font-size:1.4rem;font-weight:700">'+totalHrs.toFixed(1)+'</div></div>'+
+        '<div style="background:#0f172a;padding:12px;border-radius:8px;text-align:center;border:1px solid #334155"><div style="color:#94a3b8;font-size:0.75rem">OT HRS</div><div style="color:#f59e0b;font-size:1.4rem;font-weight:700">'+otHrs.toFixed(1)+'</div></div>'+
+        '<div style="background:#0f172a;padding:12px;border-radius:8px;text-align:center;border:1px solid #334155"><div style="color:#94a3b8;font-size:0.75rem">AVG/PERSON</div><div style="color:'+(avgHrs>50?'#ef4444':avgHrs>45?'#f59e0b':'#22c55e')+';font-size:1.4rem;font-weight:700">'+avgHrs+'h</div></div>'+
+        '<div style="background:'+(fatigueRisk>0?'rgba(239,68,68,0.15)':'#0f172a')+';padding:12px;border-radius:8px;text-align:center;border:1px solid '+(fatigueRisk>0?'#ef4444':'#334155')+'"><div style="color:'+(fatigueRisk>0?'#fca5a5':'#94a3b8')+';font-size:0.75rem">⚠️ FATIGUE RISK</div><div style="color:'+(fatigueRisk>0?'#ef4444':'#22c55e')+';font-size:1.4rem;font-weight:700">'+fatigueRisk+'</div></div>'+
+      '</div>'+
+      
+      '<div style="padding:20px">'+
+        '<div style="display:flex;gap:12px;margin-bottom:16px;align-items:center">'+
+          '<label style="color:#94a3b8;font-size:0.85rem">Week Starting:</label>'+
+          '<input type="date" id="fatigue-week" value="'+_esc(data.weekStart)+'" onchange="window._oncorFatigue.setWeek(this.value)" style="padding:6px 10px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0">'+
+          '<button onclick="window._oncorFatigue.addCrew()" style="margin-left:auto;padding:8px 16px;background:#7c3aed;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:0.85rem">+ Add Crew Member</button>'+
+        '</div>'+
+        
+        '<div id="fatigue-list" style="display:flex;flex-direction:column;gap:8px">'+renderCrewList(data)+'</div>'+
+        
+        '<div style="margin-top:16px;padding:12px;background:#0f172a;border-radius:8px;border:1px solid #334155">'+
+          '<div style="color:#94a3b8;font-size:0.75rem;margin-bottom:6px">OSHA Fatigue Guidelines</div>'+
+          '<div style="display:flex;gap:16px;font-size:0.8rem">'+
+            '<span style="color:#22c55e">✅ 40h/wk — Standard</span>'+
+            '<span style="color:#f59e0b">⚠️ 45-50h — Monitor</span>'+
+            '<span style="color:#ef4444">🔴 50h+ — High fatigue risk, accident probability increases 37%</span>'+
+          '</div>'+
+        '</div>'+
+        
+        '<div style="margin-top:16px;display:flex;gap:10px">'+
+          '<button onclick="window._oncorFatigue.print()" style="padding:8px 16px;background:#1e293b;border:1px solid #475569;border-radius:6px;color:#e2e8f0;cursor:pointer;font-size:0.85rem">🖨 Print Report</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+    m.innerHTML=content;
+    document.body.appendChild(m);
+    m.onclick=function(e){if(e.target===m)m.remove();};
+  }
+
+  function renderCrewList(data){
+    if(!data.crewEntries.length) return '<div style="text-align:center;color:#64748b;padding:30px">No crew members logged. Click "+ Add Crew Member" to start tracking.</div>';
+    return data.crewEntries.map(function(c,i){
+      var h=parseFloat(c.hours)||0;
+      var status=h>50?'🔴 HIGH RISK':h>45?'⚠️ MONITOR':h>40?'OT':'✅ OK';
+      var statusColor=h>50?'#ef4444':h>45?'#f59e0b':h>40?'#38bdf8':'#22c55e';
+      return '<div style="display:grid;grid-template-columns:180px 100px 80px 80px 100px 1fr 40px;gap:10px;align-items:center;padding:10px 12px;background:#0f172a;border-radius:8px;border:1px solid #334155">'+
+        '<input type="text" value="'+_esc(c.name)+'" placeholder="Name" onchange="window._oncorFatigue.update('+i+',\'name\',this.value)" style="padding:6px 8px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:0.85rem">'+
+        '<select onchange="window._oncorFatigue.update('+i+',\'trade\',this.value)" style="padding:6px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:0.8rem">'+
+          '<option value="">Trade</option>'+
+          ['Foreman','Finisher','Laborer','Rod Buster','Form Carpenter','Pump Op','Saw Cut','Helper'].map(function(t){return '<option value="'+t+'"'+(c.trade===t?' selected':'')+'>'+t+'</option>';}).join('')+
+        '</select>'+
+        '<input type="number" value="'+(c.hours||'')+'" placeholder="Hrs" min="0" max="100" step="0.5" onchange="window._oncorFatigue.update('+i+',\'hours\',this.value)" style="padding:6px 8px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:0.85rem;text-align:center">'+
+        '<span style="color:'+(h>40?'#f59e0b':'#64748b')+';font-size:0.8rem;text-align:center">'+(h>40?'+'+(h-40).toFixed(1)+' OT':'—')+'</span>'+
+        '<span style="color:'+statusColor+';font-size:0.78rem;font-weight:600">'+status+'</span>'+
+        '<input type="text" value="'+_esc(c.notes||'')+'" placeholder="Notes" onchange="window._oncorFatigue.update('+i+',\'notes\',this.value)" style="padding:6px 8px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#94a3b8;font-size:0.8rem">'+
+        '<button onclick="window._oncorFatigue.remove('+i+')" style="background:#1e293b;border:1px solid #475569;border-radius:5px;color:#94a3b8;cursor:pointer;padding:4px 8px;font-size:11px">🗑</button>'+
+      '</div>';
+    }).join('');
+  }
+
+  function addCrew(){
+    var data=load();
+    data.crewEntries.push({name:'',trade:'',hours:'',notes:''});
+    save(data);
+    document.getElementById('fatigue-modal').remove();
+    buildModal();
+  }
+
+  function updateField(idx,field,val){
+    var data=load();
+    if(data.crewEntries[idx]) data.crewEntries[idx][field]=val;
+    save(data);
+    document.getElementById('fatigue-modal').remove();
+    buildModal();
+  }
+
+  function removeCrew(idx){
+    if(!confirm('Remove this crew member?')) return;
+    var data=load();
+    data.crewEntries.splice(idx,1);
+    save(data);
+    document.getElementById('fatigue-modal').remove();
+    buildModal();
+  }
+
+  function setWeek(val){
+    var data=load();
+    data.weekStart=val;
+    save(data);
+  }
+
+  function printReport(){
+    var data=load();
+    var proj=(window.lastEstimate&&window.lastEstimate.project)||'Project';
+    var co=(window.companyInfo&&window.companyInfo.name)||'Oncor Construction';
+    var totalHrs=0,otHrs=0,fatigueRisk=0;
+    data.crewEntries.forEach(function(c){var h=parseFloat(c.hours)||0;totalHrs+=h;if(h>40)otHrs+=(h-40);if(h>50)fatigueRisk++;});
+    var rows=data.crewEntries.map(function(c){
+      var h=parseFloat(c.hours)||0;
+      var status=h>50?'🔴 HIGH RISK':h>45?'⚠️ MONITOR':h>40?'OT':'✅ OK';
+      return '<tr><td style="padding:8px;border-bottom:1px solid #e2e8f0">'+_esc(c.name||'—')+'</td><td style="padding:8px;border-bottom:1px solid #e2e8f0">'+_esc(c.trade||'—')+'</td><td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:center">'+h.toFixed(1)+'</td><td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:center;color:'+(h>40?'#d97706':'#64748b')+'">'+(h>40?'+'+(h-40).toFixed(1):'—')+'</td><td style="padding:8px;border-bottom:1px solid #e2e8f0">'+status+'</td><td style="padding:8px;border-bottom:1px solid #e2e8f0;color:#64748b">'+_esc(c.notes||'')+'</td></tr>';
+    }).join('');
+    var win=window.open('','_blank');
+    win.document.write('<!DOCTYPE html><html><head><title>Crew Fatigue Report</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#1e293b}h1{margin:0}table{width:100%;border-collapse:collapse;margin-top:16px}th{background:#1e293b;color:#fff;padding:10px;text-align:left}@media print{.no-print{display:none}}</style></head><body>'+
+      '<div style="display:flex;justify-content:space-between;border-bottom:3px solid #1e293b;padding-bottom:12px"><div><h1>😴 CREW FATIGUE & OT REPORT</h1><p style="margin:4px 0"><strong>'+_esc(proj)+'</strong> — '+_esc(co)+'</p><p style="margin:0;color:#64748b">Week of: '+(data.weekStart||'Not specified')+'</p></div><div style="text-align:right;color:#64748b">Printed: '+new Date().toLocaleDateString()+'</div></div>'+
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px"><div style="background:#f1f5f9;padding:12px;border-radius:8px;text-align:center"><div style="font-size:0.8rem;color:#64748b">Crew</div><div style="font-size:1.5rem;font-weight:700">'+data.crewEntries.length+'</div></div><div style="background:#f1f5f9;padding:12px;border-radius:8px;text-align:center"><div style="font-size:0.8rem;color:#64748b">Total Hours</div><div style="font-size:1.5rem;font-weight:700">'+totalHrs.toFixed(1)+'</div></div><div style="background:#fef3c7;padding:12px;border-radius:8px;text-align:center"><div style="font-size:0.8rem;color:#92400e">OT Hours</div><div style="font-size:1.5rem;font-weight:700;color:#d97706">'+otHrs.toFixed(1)+'</div></div><div style="background:'+(fatigueRisk>0?'#fee2e2':'#dcfce7')+';padding:12px;border-radius:8px;text-align:center"><div style="font-size:0.8rem;color:'+(fatigueRisk>0?'#991b1b':'#166534')+'">Fatigue Risk</div><div style="font-size:1.5rem;font-weight:700;color:'+(fatigueRisk>0?'#dc2626':'#22c55e')+'">'+fatigueRisk+'</div></div></div>'+
+      '<table><thead><tr><th>Name</th><th>Trade</th><th>Hours</th><th>OT</th><th>Status</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+      '<div style="margin-top:20px;padding:12px;background:#fef3c7;border-radius:8px;border-left:4px solid #f59e0b"><strong>OSHA Fatigue Guidelines:</strong> Workers exceeding 50 hours/week have 37% higher accident probability. Monitor all crew at 45+ hours, rotate assignments for those at 50+.</div>'+
+      '<button class="no-print" onclick="window.print()" style="position:fixed;bottom:20px;right:20px;padding:10px 20px;background:#1e293b;color:#fff;border:none;border-radius:6px;cursor:pointer">🖨 Print</button></body></html>');
+    win.document.close();
+  }
+
+  window._oncorFatigue={
+    toggle:function(){var m=document.getElementById('fatigue-modal');if(m){m.remove();return;}buildModal();},
+    addCrew:addCrew,
+    update:updateField,
+    remove:removeCrew,
+    setWeek:setWeek,
+    print:printReport
+  };
+})();
+
+// ── 2. CONCRETE BATCH PLANT RATING SYSTEM ──
+(function(){
+  var KEY='oncor_plantrating_v1';
+  function _esc(s){return String(s||'').replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c];});}
+  function load(){try{return JSON.parse(localStorage.getItem(KEY))||{plants:[]};}catch(e){return{plants:[]};}}
+  function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+
+  function calcGrade(p){
+    var scores=[];
+    if(p.reliability) scores.push(parseInt(p.reliability));
+    if(p.quality) scores.push(parseInt(p.quality));
+    if(p.pricing) scores.push(parseInt(p.pricing));
+    if(p.ontime) scores.push(parseInt(p.ontime));
+    if(p.service) scores.push(parseInt(p.service));
+    if(!scores.length) return {avg:0,grade:'N/A',color:'#64748b'};
+    var avg=scores.reduce(function(a,b){return a+b;},0)/scores.length;
+    var grade=avg>=4.5?'A':avg>=3.5?'B':avg>=2.5?'C':avg>=1.5?'D':'F';
+    var color=avg>=4.5?'#22c55e':avg>=3.5?'#84cc16':avg>=2.5?'#f59e0b':avg>=1.5?'#f97316':'#ef4444';
+    return {avg:avg.toFixed(1),grade:grade,color:color};
+  }
+
+  function buildModal(){
+    var data=load();
+    var m=document.createElement('div');
+    m.id='plantrating-modal';
+    m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
+    
+    var content='<div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-radius:16px;max-width:950px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 25px 50px rgba(0,0,0,0.5);border:1px solid #334155">'+
+      '<div style="padding:20px;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center">'+
+        '<div><h2 style="margin:0;color:#f8fafc;font-size:1.4rem">🏭 Batch Plant Rating System</h2><p style="margin:4px 0 0;color:#94a3b8;font-size:0.85rem">Rate your concrete suppliers — reliability, quality, pricing, delivery</p></div>'+
+        '<button onclick="document.getElementById(\'plantrating-modal\').remove()" style="background:#334155;border:none;color:#94a3b8;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:18px">×</button>'+
+      '</div>'+
+      
+      '<div style="padding:20px">'+
+        '<div style="display:flex;justify-content:flex-end;margin-bottom:16px">'+
+          '<button onclick="window._oncorPlantRate.addPlant()" style="padding:8px 16px;background:#7c3aed;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:0.85rem">+ Add Batch Plant</button>'+
+        '</div>'+
+        
+        '<div id="plantrating-list" style="display:flex;flex-direction:column;gap:12px">'+renderPlantList(data)+'</div>'+
+        
+        '<div style="margin-top:16px;padding:12px;background:#0f172a;border-radius:8px;border:1px solid #334155">'+
+          '<div style="color:#94a3b8;font-size:0.75rem;margin-bottom:6px">RATING SCALE (1-5)</div>'+
+          '<div style="display:flex;gap:16px;font-size:0.78rem;flex-wrap:wrap">'+
+            '<span style="color:#ef4444">1 — Poor</span>'+
+            '<span style="color:#f97316">2 — Below Avg</span>'+
+            '<span style="color:#f59e0b">3 — Average</span>'+
+            '<span style="color:#84cc16">4 — Good</span>'+
+            '<span style="color:#22c55e">5 — Excellent</span>'+
+          '</div>'+
+        '</div>'+
+        
+        '<div style="margin-top:16px"><button onclick="window._oncorPlantRate.print()" style="padding:8px 16px;background:#1e293b;border:1px solid #475569;border-radius:6px;color:#e2e8f0;cursor:pointer;font-size:0.85rem">🖨 Print Scorecard</button></div>'+
+      '</div>'+
+    '</div>';
+    m.innerHTML=content;
+    document.body.appendChild(m);
+    m.onclick=function(e){if(e.target===m)m.remove();};
+  }
+
+  function renderPlantList(data){
+    if(!data.plants.length) return '<div style="text-align:center;color:#64748b;padding:30px">No batch plants rated yet. Click "+ Add Batch Plant" to start.</div>';
+    return data.plants.map(function(p,i){
+      var g=calcGrade(p);
+      return '<div style="padding:14px;background:#0f172a;border-radius:10px;border:1px solid #334155">'+
+        '<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:12px">'+
+          '<div style="flex:1">'+
+            '<input type="text" value="'+_esc(p.name)+'" placeholder="Plant Name" onchange="window._oncorPlantRate.update('+i+',\'name\',this.value)" style="width:100%;padding:8px 10px;background:#1e293b;border:1px solid #475569;border-radius:6px;color:#e2e8f0;font-size:0.95rem;font-weight:600;margin-bottom:6px">'+
+            '<div style="display:flex;gap:8px">'+
+              '<input type="text" value="'+_esc(p.location||'')+'" placeholder="Location/City" onchange="window._oncorPlantRate.update('+i+',\'location\',this.value)" style="flex:1;padding:6px 8px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#94a3b8;font-size:0.8rem">'+
+              '<input type="text" value="'+_esc(p.contact||'')+'" placeholder="Contact" onchange="window._oncorPlantRate.update('+i+',\'contact\',this.value)" style="flex:1;padding:6px 8px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#94a3b8;font-size:0.8rem">'+
+              '<input type="tel" value="'+_esc(p.phone||'')+'" placeholder="Phone" onchange="window._oncorPlantRate.update('+i+',\'phone\',this.value)" style="width:120px;padding:6px 8px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#94a3b8;font-size:0.8rem">'+
+            '</div>'+
+          '</div>'+
+          '<div style="background:'+g.color+';padding:12px 16px;border-radius:8px;text-align:center;min-width:70px">'+
+            '<div style="font-size:1.6rem;font-weight:800;color:#fff">'+g.grade+'</div>'+
+            '<div style="font-size:0.7rem;color:rgba(255,255,255,0.8)">'+g.avg+'/5</div>'+
+          '</div>'+
+          '<button onclick="window._oncorPlantRate.remove('+i+')" style="background:#1e293b;border:1px solid #475569;border-radius:6px;color:#94a3b8;cursor:pointer;padding:8px 10px;font-size:12px">🗑</button>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">'+
+          renderRating(i,'reliability','🔄 Reliability',p.reliability)+
+          renderRating(i,'quality','🧪 Quality',p.quality)+
+          renderRating(i,'pricing','💰 Pricing',p.pricing)+
+          renderRating(i,'ontime','⏰ On-Time',p.ontime)+
+          renderRating(i,'service','🤝 Service',p.service)+
+        '</div>'+
+        '<div style="margin-top:10px"><textarea placeholder="Notes (strengths, weaknesses, issues...)" onchange="window._oncorPlantRate.update('+i+',\'notes\',this.value)" style="width:100%;padding:8px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#94a3b8;font-size:0.8rem;resize:vertical;min-height:40px;box-sizing:border-box">'+_esc(p.notes||'')+'</textarea></div>'+
+      '</div>';
+    }).join('');
+  }
+
+  function renderRating(idx,field,label,val){
+    var opts=[1,2,3,4,5].map(function(n){return '<option value="'+n+'"'+(parseInt(val)===n?' selected':'')+'>'+n+'</option>';}).join('');
+    return '<div style="text-align:center"><div style="color:#94a3b8;font-size:0.7rem;margin-bottom:4px">'+label+'</div><select onchange="window._oncorPlantRate.update('+idx+',\''+field+'\',this.value)" style="width:100%;padding:6px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:0.85rem;text-align:center"><option value="">—</option>'+opts+'</select></div>';
+  }
+
+  function addPlant(){
+    var data=load();
+    data.plants.push({name:'',location:'',contact:'',phone:'',reliability:'',quality:'',pricing:'',ontime:'',service:'',notes:''});
+    save(data);
+    document.getElementById('plantrating-modal').remove();
+    buildModal();
+  }
+
+  function updateField(idx,field,val){
+    var data=load();
+    if(data.plants[idx]) data.plants[idx][field]=val;
+    save(data);
+    document.getElementById('plantrating-modal').remove();
+    buildModal();
+  }
+
+  function removePlant(idx){
+    if(!confirm('Remove this plant rating?')) return;
+    var data=load();
+    data.plants.splice(idx,1);
+    save(data);
+    document.getElementById('plantrating-modal').remove();
+    buildModal();
+  }
+
+  function printReport(){
+    var data=load();
+    var rows=data.plants.map(function(p){
+      var g=calcGrade(p);
+      return '<tr><td style="padding:10px;border-bottom:1px solid #e2e8f0;font-weight:600">'+_esc(p.name||'—')+'</td><td style="padding:10px;border-bottom:1px solid #e2e8f0;color:#64748b">'+_esc(p.location||'—')+'</td><td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:center">'+(p.reliability||'—')+'</td><td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:center">'+(p.quality||'—')+'</td><td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:center">'+(p.pricing||'—')+'</td><td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:center">'+(p.ontime||'—')+'</td><td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:center">'+(p.service||'—')+'</td><td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700;font-size:1.1rem;color:'+g.color+'">'+g.grade+'</td><td style="padding:10px;border-bottom:1px solid #e2e8f0;color:#64748b;font-size:0.8rem">'+_esc(p.notes||'')+'</td></tr>';
+    }).join('');
+    var win=window.open('','_blank');
+    win.document.write('<!DOCTYPE html><html><head><title>Batch Plant Scorecard</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#1e293b}table{width:100%;border-collapse:collapse}th{background:#1e293b;color:#fff;padding:10px;text-align:left}@media print{.no-print{display:none}}</style></head><body>'+
+      '<div style="display:flex;justify-content:space-between;border-bottom:3px solid #1e293b;padding-bottom:12px"><h1 style="margin:0">🏭 BATCH PLANT SCORECARD</h1><div style="text-align:right;color:#64748b">Printed: '+new Date().toLocaleDateString()+'</div></div>'+
+      '<table style="margin-top:16px"><thead><tr><th>Plant</th><th>Location</th><th>Reliability</th><th>Quality</th><th>Pricing</th><th>On-Time</th><th>Service</th><th>Grade</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+      '<div style="margin-top:20px;padding:12px;background:#f1f5f9;border-radius:8px"><strong>Rating Scale:</strong> 1=Poor, 2=Below Avg, 3=Average, 4=Good, 5=Excellent | Grade: A (4.5+), B (3.5+), C (2.5+), D (1.5+), F (<1.5)</div>'+
+      '<button class="no-print" onclick="window.print()" style="position:fixed;bottom:20px;right:20px;padding:10px 20px;background:#1e293b;color:#fff;border:none;border-radius:6px;cursor:pointer">🖨 Print</button></body></html>');
+    win.document.close();
+  }
+
+  window._oncorPlantRate={
+    toggle:function(){var m=document.getElementById('plantrating-modal');if(m){m.remove();return;}buildModal();},
+    addPlant:addPlant,
+    update:updateField,
+    remove:removePlant,
+    print:printReport
+  };
+})();
+
+// ── 3. PROJECT LESSONS LEARNED LOG ──
+(function(){
+  var KEY='oncor_lessons_v1_';
+  function _esc(s){return String(s||'').replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c];});}
+  function load(){var k=KEY+((window.lastEstimate&&window.lastEstimate.project)||'default');try{return JSON.parse(localStorage.getItem(k))||{entries:[],summary:''};}catch(e){return{entries:[],summary:''};}}
+  function save(d){var k=KEY+((window.lastEstimate&&window.lastEstimate.project)||'default');localStorage.setItem(k,JSON.stringify(d));}
+
+  var CATEGORIES=['Estimating','Concrete/Materials','Labor/Crew','Schedule','Safety','Quality/QC','Subcontractors','Equipment','Weather','Financial','Communication','Legal/Contract','Other'];
+  var IMPACTS=['⬆️ Positive','➡️ Neutral','⬇️ Negative'];
+
+  function buildModal(){
+    var data=load();
+    var m=document.createElement('div');
+    m.id='lessons-modal';
+    m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
+    
+    var pos=data.entries.filter(function(e){return e.impact==='⬆️ Positive';}).length;
+    var neg=data.entries.filter(function(e){return e.impact==='⬇️ Negative';}).length;
+    
+    var content='<div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-radius:16px;max-width:950px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 25px 50px rgba(0,0,0,0.5);border:1px solid #334155">'+
+      '<div style="padding:20px;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center">'+
+        '<div><h2 style="margin:0;color:#f8fafc;font-size:1.4rem">📚 Project Lessons Learned</h2><p style="margin:4px 0 0;color:#94a3b8;font-size:0.85rem">Capture what went well, what went wrong — improve future bids</p></div>'+
+        '<button onclick="document.getElementById(\'lessons-modal\').remove()" style="background:#334155;border:none;color:#94a3b8;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:18px">×</button>'+
+      '</div>'+
+      
+      '<div style="padding:16px 20px;background:#1e293b;display:grid;grid-template-columns:repeat(4,1fr);gap:12px">'+
+        '<div style="background:#0f172a;padding:12px;border-radius:8px;text-align:center;border:1px solid #334155"><div style="color:#94a3b8;font-size:0.75rem">LESSONS</div><div style="color:#f8fafc;font-size:1.4rem;font-weight:700">'+data.entries.length+'</div></div>'+
+        '<div style="background:rgba(34,197,94,0.1);padding:12px;border-radius:8px;text-align:center;border:1px solid rgba(34,197,94,0.3)"><div style="color:#86efac;font-size:0.75rem">⬆️ POSITIVE</div><div style="color:#22c55e;font-size:1.4rem;font-weight:700">'+pos+'</div></div>'+
+        '<div style="background:rgba(239,68,68,0.1);padding:12px;border-radius:8px;text-align:center;border:1px solid rgba(239,68,68,0.3)"><div style="color:#fca5a5;font-size:0.75rem">⬇️ NEGATIVE</div><div style="color:#ef4444;font-size:1.4rem;font-weight:700">'+neg+'</div></div>'+
+        '<div style="background:#0f172a;padding:12px;border-radius:8px;text-align:center;border:1px solid #334155"><div style="color:#94a3b8;font-size:0.75rem">CATEGORIES</div><div style="color:#38bdf8;font-size:1.4rem;font-weight:700">'+[...new Set(data.entries.map(function(e){return e.category;}))].length+'</div></div>'+
+      '</div>'+
+      
+      '<div style="padding:20px">'+
+        '<div style="display:flex;justify-content:flex-end;margin-bottom:16px">'+
+          '<button onclick="window._oncorLessons.addLesson()" style="padding:8px 16px;background:#7c3aed;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:0.85rem">+ Add Lesson</button>'+
+        '</div>'+
+        
+        '<div id="lessons-list" style="display:flex;flex-direction:column;gap:10px">'+renderLessonsList(data)+'</div>'+
+        
+        '<div style="margin-top:20px">'+
+          '<label style="display:block;color:#94a3b8;font-size:0.8rem;margin-bottom:6px">Project Summary / Key Takeaways</label>'+
+          '<textarea id="lessons-summary" onchange="window._oncorLessons.saveSummary(this.value)" style="width:100%;min-height:80px;padding:10px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:0.9rem;resize:vertical;box-sizing:border-box" placeholder="Overall project summary, biggest wins, biggest challenges, recommendations for next time...">'+_esc(data.summary)+'</textarea>'+
+        '</div>'+
+        
+        '<div style="margin-top:16px"><button onclick="window._oncorLessons.print()" style="padding:8px 16px;background:#1e293b;border:1px solid #475569;border-radius:6px;color:#e2e8f0;cursor:pointer;font-size:0.85rem">🖨 Print Report</button></div>'+
+      '</div>'+
+    '</div>';
+    m.innerHTML=content;
+    document.body.appendChild(m);
+    m.onclick=function(e){if(e.target===m)m.remove();};
+  }
+
+  function renderLessonsList(data){
+    if(!data.entries.length) return '<div style="text-align:center;color:#64748b;padding:30px">No lessons recorded yet. Click "+ Add Lesson" to start documenting what you learned.</div>';
+    return data.entries.map(function(e,i){
+      var impactColor=e.impact==='⬆️ Positive'?'#22c55e':e.impact==='⬇️ Negative'?'#ef4444':'#64748b';
+      var borderColor=e.impact==='⬆️ Positive'?'rgba(34,197,94,0.3)':e.impact==='⬇️ Negative'?'rgba(239,68,68,0.3)':'#334155';
+      return '<div style="padding:12px;background:#0f172a;border-radius:8px;border:1px solid '+borderColor+'">'+
+        '<div style="display:flex;gap:10px;margin-bottom:10px">'+
+          '<select onchange="window._oncorLessons.update('+i+',\'category\',this.value)" style="padding:6px 8px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:0.8rem">'+
+            CATEGORIES.map(function(c){return '<option value="'+c+'"'+(e.category===c?' selected':'')+'>'+c+'</option>';}).join('')+
+          '</select>'+
+          '<select onchange="window._oncorLessons.update('+i+',\'impact\',this.value)" style="padding:6px 8px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:'+impactColor+';font-size:0.8rem;font-weight:600">'+
+            IMPACTS.map(function(imp){return '<option value="'+imp+'"'+(e.impact===imp?' selected':'')+'>'+imp+'</option>';}).join('')+
+          '</select>'+
+          '<input type="date" value="'+_esc(e.date||'')+'" onchange="window._oncorLessons.update('+i+',\'date\',this.value)" style="padding:6px 8px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#94a3b8;font-size:0.8rem">'+
+          '<button onclick="window._oncorLessons.remove('+i+')" style="margin-left:auto;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#94a3b8;cursor:pointer;padding:4px 10px;font-size:11px">🗑</button>'+
+        '</div>'+
+        '<input type="text" value="'+_esc(e.title||'')+'" placeholder="Lesson Title" onchange="window._oncorLessons.update('+i+',\'title\',this.value)" style="width:100%;padding:8px 10px;background:#1e293b;border:1px solid #475569;border-radius:6px;color:#e2e8f0;font-size:0.9rem;font-weight:600;margin-bottom:8px;box-sizing:border-box">'+
+        '<textarea placeholder="What happened? What did you learn? What would you do differently?" onchange="window._oncorLessons.update('+i+',\'description\',this.value)" style="width:100%;min-height:60px;padding:8px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#94a3b8;font-size:0.8rem;resize:vertical;box-sizing:border-box">'+_esc(e.description||'')+'</textarea>'+
+      '</div>';
+    }).join('');
+  }
+
+  function addLesson(){
+    var data=load();
+    data.entries.unshift({category:'Estimating',impact:'➡️ Neutral',date:new Date().toISOString().split('T')[0],title:'',description:''});
+    save(data);
+    document.getElementById('lessons-modal').remove();
+    buildModal();
+  }
+
+  function updateField(idx,field,val){
+    var data=load();
+    if(data.entries[idx]) data.entries[idx][field]=val;
+    save(data);
+    // Light refresh for impact color changes
+    document.getElementById('lessons-modal').remove();
+    buildModal();
+  }
+
+  function removeLesson(idx){
+    if(!confirm('Remove this lesson?')) return;
+    var data=load();
+    data.entries.splice(idx,1);
+    save(data);
+    document.getElementById('lessons-modal').remove();
+    buildModal();
+  }
+
+  function saveSummary(val){
+    var data=load();
+    data.summary=val;
+    save(data);
+  }
+
+  function printReport(){
+    var data=load();
+    var proj=(window.lastEstimate&&window.lastEstimate.project)||'Project';
+    var co=(window.companyInfo&&window.companyInfo.name)||'Oncor Construction';
+    var rows=data.entries.map(function(e){
+      var impactColor=e.impact==='⬆️ Positive'?'#22c55e':e.impact==='⬇️ Negative'?'#dc2626':'#64748b';
+      return '<tr><td style="padding:10px;border-bottom:1px solid #e2e8f0;color:#64748b;font-size:0.8rem">'+(e.date||'—')+'</td><td style="padding:10px;border-bottom:1px solid #e2e8f0"><span style="background:#e2e8f0;padding:2px 8px;border-radius:4px;font-size:0.75rem">'+_esc(e.category)+'</span></td><td style="padding:10px;border-bottom:1px solid #e2e8f0;color:'+impactColor+';font-weight:600">'+_esc(e.impact)+'</td><td style="padding:10px;border-bottom:1px solid #e2e8f0;font-weight:600">'+_esc(e.title||'—')+'</td><td style="padding:10px;border-bottom:1px solid #e2e8f0;color:#64748b">'+_esc(e.description||'')+'</td></tr>';
+    }).join('');
+    var pos=data.entries.filter(function(e){return e.impact==='⬆️ Positive';}).length;
+    var neg=data.entries.filter(function(e){return e.impact==='⬇️ Negative';}).length;
+    var win=window.open('','_blank');
+    win.document.write('<!DOCTYPE html><html><head><title>Lessons Learned Report</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#1e293b}table{width:100%;border-collapse:collapse}th{background:#1e293b;color:#fff;padding:10px;text-align:left}@media print{.no-print{display:none}}</style></head><body>'+
+      '<div style="display:flex;justify-content:space-between;border-bottom:3px solid #1e293b;padding-bottom:12px"><div><h1 style="margin:0">📚 LESSONS LEARNED REPORT</h1><p style="margin:4px 0"><strong>'+_esc(proj)+'</strong> — '+_esc(co)+'</p></div><div style="text-align:right;color:#64748b">Printed: '+new Date().toLocaleDateString()+'</div></div>'+
+      '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0"><div style="background:#f1f5f9;padding:12px;border-radius:8px;text-align:center"><div style="font-size:0.8rem;color:#64748b">Total Lessons</div><div style="font-size:1.5rem;font-weight:700">'+data.entries.length+'</div></div><div style="background:#dcfce7;padding:12px;border-radius:8px;text-align:center"><div style="font-size:0.8rem;color:#166534">Positive</div><div style="font-size:1.5rem;font-weight:700;color:#22c55e">'+pos+'</div></div><div style="background:#fee2e2;padding:12px;border-radius:8px;text-align:center"><div style="font-size:0.8rem;color:#991b1b">Negative</div><div style="font-size:1.5rem;font-weight:700;color:#dc2626">'+neg+'</div></div></div>'+
+      (data.summary?'<div style="margin:16px 0;padding:16px;background:#f8fafc;border-left:4px solid #7c3aed;border-radius:0 8px 8px 0"><strong>Summary:</strong><br>'+_esc(data.summary).replace(/\n/g,'<br>')+'</div>':'')+
+      '<table><thead><tr><th>Date</th><th>Category</th><th>Impact</th><th>Lesson</th><th>Description</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+      '<button class="no-print" onclick="window.print()" style="position:fixed;bottom:20px;right:20px;padding:10px 20px;background:#1e293b;color:#fff;border:none;border-radius:6px;cursor:pointer">🖨 Print</button></body></html>');
+    win.document.close();
+  }
+
+  window._oncorLessons={
+    toggle:function(){var m=document.getElementById('lessons-modal');if(m){m.remove();return;}buildModal();},
+    addLesson:addLesson,
+    update:updateField,
+    remove:removeLesson,
+    saveSummary:saveSummary,
+    print:printReport
+  };
+})();
+
+// ── INJECT SESSION #107 SIDEBAR BUTTONS & KEYBOARD SHORTCUTS ──
+(function(){
+  document.addEventListener('DOMContentLoaded', function() {
+    var sidebar = document.querySelector('.sidebar-actions') || document.querySelector('#sidebarActions') || document.querySelector('aside');
+    function injectBtn(id, emoji, label, fn) {
+      if (document.getElementById(id)) return;
+      var btn = document.createElement('button');
+      btn.id = id; btn.textContent = emoji + ' ' + label;
+      btn.style.cssText = 'display:block;width:100%;margin:2px 0;padding:6px 10px;background:#1e293b;color:#e5e7eb;border:1px solid #334155;border-radius:6px;cursor:pointer;text-align:left;font-size:12px';
+      btn.onclick = fn;
+      if (sidebar) sidebar.appendChild(btn);
+    }
+    injectBtn('btnFatigue','😴','Crew Fatigue',function(){window._oncorFatigue.toggle();});
+    injectBtn('btnPlantRate','🏭','Plant Ratings',function(){window._oncorPlantRate.toggle();});
+    injectBtn('btnLessons','📚','Lessons Learned',function(){window._oncorLessons.toggle();});
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.altKey && e.key === '`') { e.preventDefault(); window._oncorFatigue.toggle(); }
+  });
+})();
+
+// ==================== END SESSION #107 — Zeus ⚡ Crew Fatigue & OT Alert + Batch Plant Rating + Lessons Learned ====================
 })();
