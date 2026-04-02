@@ -1,5 +1,919 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 2, 2026 - 15:53 UTC (Overnight Cron #106)
+**Status:** ✅ THREE NEW FEATURES added (+687 lines)
+
+### What Was Added:
+
+---
+
+### 📋 Concrete Placement Log (Ctrl+Alt+0) — ~280 lines
+- New `📋 Placement Log` button in sidebar
+- `Ctrl+Alt+0` keyboard shortcut opens/toggles the modal
+- **Purpose:** Pour-by-pour running record of everything actually placed on the job — element, yd³ placed, yd³ ordered, delivery method, crew, duration, batch plant, truck count, start time. Cumulative progress vs estimated quantity.
+
+**Features:**
+- 5-card KPI header: Pour Days / yd³ Placed / Est yd³ / % Complete (color-coded green/amber/red) / Remaining yd³
+- Per-pour entry: date, element type (12), custom area name, yd³ placed, yd³ ordered, PSI, delivery method (Pump/Chute/Buggy/Conveyor), crew size, duration (hrs), batch plant, first truck time, truck count
+- Issues/Delays field (red-highlighted) — documents pump breakdowns, late trucks, rejected loads
+- Notes field for QC observations, cylinder set IDs, slump/temp readings
+- Cumulative % calculation — each pour shows running total vs estimate
+- Sorted newest-first in list view with color-coded delivery method badges
+- **Printable Placement Log** — table with all pours, cumulative %, waste yd³ per pour, ACI 304R waste benchmark footer
+- localStorage per project: `oncor_plac_log_v1_[project]`
+
+---
+
+### 💡 Value Engineering (VE) Ideas Log — ~280 lines
+- New `💡 VE Ideas Log` button in sidebar
+- **Purpose:** Track GC/Owner VE requests from first ask through final decision. Document proposed solutions, structural/QC risks, estimated savings, margin impact. Protect margin, document trade-offs, get EOR sign-off documented.
+
+**Features:**
+- 5-card stats: VE Items / Accepted / Rejected / Pending / Accepted Savings total
+- Per-item fields: Title, Date, Category (17 types), Requested By, Status (6 options), Risk Level (Low/Medium/High/N/A), Estimated Savings $, Margin Impact %, Spec/Drawing Ref
+- 4 rich text areas: Original Specification (what they want changed), Proposed Solution (green), Structural/QC Concerns (red), Final Decision (amber)
+- Status color-coded card borders: Accepted=green, Rejected=red, Pending=amber, etc.
+- **Printable VE Report** — table with all VE items, accepted savings total, ACI 318-19 compliance warning footer
+- localStorage per project: `oncor_ve_log_v1_[project]`
+
+---
+
+### 🗂️ Project Quick Contacts — ~130 lines
+- New `🗂️ Quick Contacts` button in sidebar
+- **Purpose:** All critical project contacts on one screen, printable for field trailer. Pre-seeded with 15 contact roles: GC PM, Owner/Developer, Architect, EOR, Special Inspector, City Inspector, Batch Plant, Pump Co, Testing Lab, Rebar Supplier, Saw Cutter, Job Foreman, Emergency 911, Hospital (UMC El Paso default), Poison Control.
+
+**Features:**
+- Inline editing — click any field to update name/company/phone/email/notes
+- 📞 Call and ✉️ Email quick-action buttons when phone/email filled in
+- Add custom contact roles beyond the 15 defaults
+- Emergency contacts (911, hospital, poison control) highlighted red in print view
+- **Printable Contact Sheet** — clean table with "POST IN FIELD TRAILER" header — professional field reference
+- Auto-saves every field change
+- localStorage per project: `oncor_qcontacts_v1_[project]`
+
+**Commits:**
+- 8322828: 📋💡🗂️ Concrete Placement Log (Ctrl+Alt+0) + VE Ideas Log + Project Quick Contacts (+687 lines) [Session #106]
+
+**Total Lines:** ~175,923 | **New Shortcuts:** Ctrl+Alt+0 (Placement Log)
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 14:48 UTC (Overnight Cron #105)
+**Status:** ✅ THREE NEW FEATURES added (+241 lines)
+
+### What Was Added:
+
+---
+
+### 📊 Productivity Analytics Dashboard (Ctrl+Alt+G) — ~80 lines
+- New `📊 Productivity Analytics` button in sidebar
+- `Ctrl+Alt+G` keyboard shortcut opens/toggles the modal
+- **Purpose:** Cross-module productivity analysis — yd³/labor-hour per pour, labor cost per yd³, efficiency grade per pour day. Pulls from Field Log + Crew Time Cards + Delivery Tickets.
+
+**Features:**
+- 4-Card KPIs: Total yd³ / Labor Hours / yd³/Labor-Hr / Labor Cost/yd³
+- Per-pour breakdown table: Date / Pour Area / yd³ / Labor Hrs / yd³/Hr / Cost/yd³ / Grade
+- Grade system: ✅ Excellent (≥1.2 yd³/hr) / Good (0.8–1.2) / ⚠️ Below Avg / 🔴 Low (<0.5)
+- ACI benchmarks reference panel (Flatwork 0.8–1.5 / Foundations 0.4–0.8)
+- Data from Field Log pours, Delivery Ticket accepted loads, Time Card labor hours
+- Printable productivity report
+
+---
+
+### 🏭 Supplier Scorecard (Ctrl+Alt+H) — ~80 lines
+- New `🏭 Supplier Scorecard` button in sidebar
+- `Ctrl+Alt+H` keyboard shortcut opens/toggles the modal
+- **Purpose:** Grade each batch plant/supplier A–F based on delivery ticket data — rejected loads, water added, over-slump, temperature issues. Know which plants to avoid re-using.
+
+**Features:**
+- Auto-builds from Delivery Ticket Log data (Ctrl+Shift+W)
+- Per-supplier table: Loads / yd³ Delivered / Rejected / Water Added / Over Slump / Avg Temp / Grade
+- Scoring algorithm: Start 100 pts, deductions for rejections (−50pts), water added (−20pts), over-slump (−20pts), temp issues (−10pts) — proportional to load count
+- Grade scale A–F with color-coded letter grade per supplier
+- Printable scorecard for vendor review meetings
+
+---
+
+### 📦 Material Inventory Tracker (Ctrl+Alt+I) — ~80 lines
+- New `📦 Material Inventory` button in sidebar
+- `Ctrl+Alt+I` keyboard shortcut opens/toggles the modal
+- **Purpose:** Track on-hand quantities of 16 materials (rebar, fiber, curing compound, wire mesh, vapor barrier, form lumber, etc.) with reorder threshold alerts.
+
+**Features:**
+- 16 Pre-loaded materials: Rebar #3–#6, Wire Mesh, Fiber (bags), Curing Compound, Curing Blankets, Vapor Barrier, Form Lumber, Form Plywood, Expansion Joint Filler, Sealer, Saw Blades, Anchor Bolts, Tie Wire
+- Per-material: On Hand qty + Reorder At qty + visual level bar
+- 🔴 LOW alert when on-hand ≤15% of reorder qty
+- ⚠️ Watch when ≤40% of reorder qty
+- − Use / + Receive buttons to log quantity changes
+- Global low-stock banner when any material critically low
+- Printable inventory report
+- Per-project localStorage: `oncor_inventory_v1_[project]`
+
+**Commits:**
+- ab38149: 📊🏭📦 Productivity Analytics (Ctrl+Alt+G) + Supplier Scorecard (Ctrl+Alt+H) + Material Inventory (Ctrl+Alt+I) (+241 lines) [Session #105]
+
+**Total Lines:** ~175,236 | **New Shortcuts:** Ctrl+Alt+G, Ctrl+Alt+H, Ctrl+Alt+I
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 13:24 UTC (Overnight Cron #101)
+**Status:** ✅ THREE NEW FEATURES added (+468 lines total)
+
+### What Was Added:
+
+---
+
+### 📊 Multi-Project P&L Snapshot (Ctrl+Alt+3) — ~200 lines
+- New `📊 Multi-Project P&L` button injected in sidebar below Job Flash Report
+- `Ctrl+Alt+3` keyboard shortcut opens/toggles the modal
+- **Purpose:** Cross-project financial dashboard — see collected vs. spent vs. net profit across ALL saved jobs in one view. The CFO view of the entire Oncor business.
+
+**Features:**
+- **4-Card KPI Header:** Total Contract Value / Total Collected / Total Costs Spent / Net Profit (with margin %)
+- **3-Card Secondary KPIs:** Total Invoiced / Retainage Held / AP Outstanding
+- **Full Project Table:** Each saved project with Contract, Invoiced, Collected, Costs, Net Profit, Margin %, Retainage
+- **Color-coded:** Green = healthy margin (≥15%), Amber = watch (8-15%), Red = problem (<8%)
+- **Totals Row:** Aggregated across all projects
+- **Data Sources:** Pulls from AR, Job Cost Tracker, and AP modules per project
+
+**Printable Multi-Project Financial Report:**
+- 4-card KPI grid
+- Full project comparison table
+- CONFIDENTIAL footer
+
+---
+
+### 📎 Document Links & Files (Ctrl+Alt+4) — ~185 lines
+- New `📎 Document Links` button injected in sidebar below Multi-Project P&L
+- `Ctrl+Alt+4` keyboard shortcut opens/toggles the modal
+- **Purpose:** Store Google Drive / Dropbox / SharePoint links for every project document — click to open instantly. The digital file cabinet.
+
+**Features:**
+- **Add Document Link Form:** Name, Category (15 types), URL, Rev/Version, Notes
+- **15 Categories:** Drawings & Plans, Specifications, Contract & Legal, Submittals, Mix Designs, Test Reports, Permits & Inspections, Safety Documents, Pay Applications, Change Orders, Meeting Minutes, Photos & Videos, Closeout Documents, Estimates, Other
+- **Grouped by Category:** Documents organized with color-coded headers
+- **One-Click Open:** Each document link opens in new tab
+- **Per-Project Storage:** Links keyed to project name
+
+**Printable Document Links Report:**
+- Grouped by category
+- Full URL and notes
+- CONFIDENTIAL footer
+
+**localStorage per project:** `oncor_doclinks_v1_[project]`
+
+---
+
+### ✏️ Quick Notes & Field Journal (Ctrl+Alt+5) — ~170 lines
+- New `✏️ Quick Notes` button injected in sidebar below Document Links
+- `Ctrl+Alt+5` keyboard shortcut opens/toggles the modal
+- **Purpose:** Fast timestamped notes — conversations, observations, issues, reminders, decisions. The field journal that becomes evidence when disputes arise.
+
+**Features:**
+- **Quick Add Form:** Text area + Category dropdown + "With/About" field
+- **13 Category Types:** General, Conversation (verbal), Decision Made, Issue/Problem, Field Observation, Reminder/To-Do, GC Direction, Owner Direction, Safety Note, Financial Note, Legal/Notice, Weather Note, Other
+- **Color-coded by Category:** Each note type has distinct color
+- **Timestamped Automatically:** Date and time recorded on every entry
+- **Search & Filter:** Search notes + filter by category
+- **Chronological Display:** Newest first with full timestamp
+
+**Printable Field Journal:**
+- Date/Time, Category, With/About, Note columns
+- Full note text preserved
+- CONFIDENTIAL footer
+
+**localStorage per project:** `oncor_quicknotes_v1_[project]`
+
+**Commits:**
+- f37d8ef: 📊📎✏️ Multi-Project P&L Snapshot (Ctrl+Alt+3) + Document Links (Ctrl+Alt+4) + Quick Notes (Ctrl+Alt+5) (+468 lines) [Session #101]
+
+**Total Lines:** ~173,562 | **New Shortcuts:** Ctrl+Alt+3, Ctrl+Alt+4, Ctrl+Alt+5
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 13:24 UTC (Overnight Cron #102)
+**Status:** ✅ THREE NEW FEATURES added (+490 lines total)
+
+### What Was Added:
+
+---
+
+### 📆 Calendar & Milestone Sync (Ctrl+Alt+6) — ~210 lines
+- New `📆 Calendar & Milestones` button injected in sidebar below Quick Notes
+- `Ctrl+Alt+6` keyboard shortcut opens/toggles the modal
+- **Purpose:** All project dates in one view — pours, inspections, deadlines, meetings. Export to .ics for calendar sync.
+
+**Features:**
+- **Add Event Form:** Title, Type (9 types), Date, Time (optional), Notes
+- **9 Event Types:** Concrete Pour, Inspection, Meeting, Deadline, Delivery, Milestone, Permit, Walkthrough, Other
+- **Color-coded by Type:** Each event type has distinct color
+- **Date Range Filters:** Next 7/14/30/60/90 days, All Events, Past Events
+- **Type Filter:** Filter to show only specific event types
+- **Toggle Complete:** Mark events done (crossed out, faded)
+- **Today Highlighting:** Today's events highlighted in amber
+- **Export .ics:** Download calendar file for Google Calendar, Outlook, Apple Calendar sync
+
+**Printable Calendar Report:**
+- Date/Time, Type, Event, Notes, Done columns
+- CONFIDENTIAL footer
+
+**localStorage per project:** `oncor_calendar_v1_[project]`
+
+---
+
+### 🔍 Inspection Scheduler (Ctrl+Alt+7) — ~200 lines
+- New `🔍 Inspection Scheduler` button injected in sidebar below Calendar
+- `Ctrl+Alt+7` keyboard shortcut opens/toggles the modal
+- **Purpose:** Schedule and track all required inspections — pre-pour, rebar, special, city, final. Never miss a required hold point.
+
+**Features:**
+- **12 Inspection Types:** Pre-Pour (Rebar/Forms), Special Inspector — Rebar, Special Inspector — Concrete, City/County — Foundation/Slab/Final, Compaction Test, Punch Walk, Final Walkthrough, Owner Inspection, QC/QA Internal, Other
+- **Schedule Form:** Type, Date, Time, Inspector name/company, Area/Location, Notes
+- **4-Card Stats:** Total / Scheduled / Passed / Failed counts
+- **Upcoming Alert:** Banner when inspections scheduled in next 7 days
+- **One-Click Status:** Pass / Fail / Cancel buttons with reason prompt
+- **Result Tracking:** Pass/fail notes stored and displayed
+
+**Printable Inspection Report:**
+- Date/Time, Type, Area, Inspector, Status, Notes/Result columns
+- Color-coded status (green pass, red fail)
+- CONFIDENTIAL footer
+
+**localStorage per project:** `oncor_inspections_v1_[project]`
+
+---
+
+### 👷 Daily Manpower Report (Ctrl+Alt+8) — ~175 lines
+- New `👷 Daily Manpower` button injected in sidebar below Inspections
+- `Ctrl+Alt+8` keyboard shortcut opens/toggles the modal
+- **Purpose:** Log daily crew counts by trade — track total man-hours and crew availability over time.
+
+**Features:**
+- **Daily Entry Form:** Date, Weather (7 conditions), Hours worked, Notes/Work performed
+- **8 Trade Categories:** Foreman, Finishers, Laborers, Rod Busters, Form Carpenters, Pump Operator, Saw Cutter, Helper
+- **Per-Trade Crew Count:** Input headcount for each trade
+- **Auto-Calculate:** Total crew × hours = man-hours per day
+- **3-Card Stats:** Days Logged / Total Man-Hours / Avg Crew Size
+- **Weather Tracking:** Record weather conditions each day
+- **Chronological Display:** Most recent entries first
+
+**Printable Manpower Report:**
+- Date, Weather, Crew, Hours, Man-Hrs, Breakdown, Notes columns
+- Total man-hours header
+- CONFIDENTIAL footer
+
+**localStorage per project:** `oncor_manpower_v1_[project]`
+
+**Commits:**
+- a6ce370: 📆🔍👷 Calendar & Milestones (Ctrl+Alt+6) + Inspection Scheduler (Ctrl+Alt+7) + Daily Manpower (Ctrl+Alt+8) (+490 lines) [Session #102]
+
+**Total Lines:** ~174,052 | **New Shortcuts:** Ctrl+Alt+6, Ctrl+Alt+7, Ctrl+Alt+8
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 13:24 UTC (Overnight Cron #103)
+**Status:** ✅ THREE NEW FEATURES added (+494 lines total)
+
+### What Was Added:
+
+---
+
+### 📐 Concrete Yield Tracker (Ctrl+Alt+9) — ~180 lines
+- New `📐 Yield Tracker` button injected in sidebar below Daily Manpower
+- `Ctrl+Alt+9` keyboard shortcut opens/toggles the modal
+- **Purpose:** Compare estimated vs. ordered vs. placed for each pour — calculate yield % and over/under order variance. Track concrete efficiency and waste cost.
+
+**Features:**
+- **Per-Pour Entry:** Pour name, Date, Estimated yd³, Ordered yd³, Placed yd³, Price/yd³, Notes
+- **5-Card KPI Stats:** Est yd³ / Ordered yd³ / Placed yd³ / Yield % / Waste yd³
+- **Color-coded Yield %:** Green ≥95%, Amber ≥90%, Red <90%
+- **Waste Cost Calculator:** When price entered, calculates waste × price = lost dollars
+- **Over-Order %:** Shows how much more was ordered vs estimated
+- **ACI 304R Benchmark:** Reference note that 3-8% waste is acceptable per ACI
+
+**Printable Yield Report:**
+- Date, Pour, Est, Ordered, Over %, Placed, Waste columns
+- Totals row with overall yield %
+- ACI 304R benchmark footer
+- CONFIDENTIAL footer
+
+**localStorage per project:** `oncor_yield_v1_[project]`
+
+---
+
+### 📋 Action Item Log (Ctrl+Alt+A) — ~175 lines
+- New `📋 Action Items` button injected in sidebar below Yield Tracker
+- `Ctrl+Alt+A` keyboard shortcut opens/toggles the modal
+- **Purpose:** Track all open tasks, assignments, and follow-ups — who owes what by when. The accountability tracker that ensures nothing falls through the cracks.
+
+**Features:**
+- **Task Entry Form:** Task description, Assigned To, Due Date, Priority (Critical/High/Normal/Low), Source/From Meeting
+- **4-Card Stats:** Total / Open / Overdue / Done counts
+- **Priority Color-coding:** Critical=red, High=amber, Normal=blue, Low=gray
+- **Overdue Detection:** Auto-flags items past due date with warning
+- **Filter Controls:** All Items / Open Only / Overdue Only / Done + search
+- **Toggle Complete:** One-click mark done or reopen
+- **Source Tracking:** Link action items back to meetings where they were assigned
+
+**Printable Action Items Report:**
+- Priority, Task, Assigned, Due, Status, Source columns
+- Overdue items highlighted
+- CONFIDENTIAL footer
+
+**localStorage per project:** `oncor_actionitems_v1_[project]`
+
+---
+
+### 📝 Meeting Notes (Ctrl+Alt+B) — ~170 lines
+- New `📝 Meeting Notes` button injected in sidebar below Action Items
+- `Ctrl+Alt+B` keyboard shortcut opens/toggles the modal
+- **Purpose:** Document pre-con meetings, OAC calls, coordination meetings — with attendees, location, and detailed notes. The formal meeting record.
+
+**Features:**
+- **Meeting Entry Form:** Title, Type (10 types), Date, Attendees, Location, Notes/Discussion
+- **10 Meeting Types:** Pre-Construction, OAC Meeting, Coordination, Progress Meeting, Safety Meeting, Kick-off, Closeout, Phone Call, Site Visit, Other
+- **Color-coded by Type:** Each meeting type has distinct color
+- **Rich Notes Display:** Full meeting notes shown with whitespace preserved
+- **Individual Print:** Print single meeting as formatted document with signature block
+- **Attendees & Location Tracking:** Who was there, where it happened
+
+**Printable Meeting Notes:**
+- Company header + project
+- Title, Type, Date, Attendees, Location
+- Full notes section
+- Dual signature block (Prepared By / Reviewed By)
+- CONFIDENTIAL footer
+
+**localStorage per project:** `oncor_meetings_v1_[project]`
+
+**Commits:**
+- 2cc1029: 📐📋📝 Concrete Yield Tracker (Ctrl+Alt+9) + Action Item Log (Ctrl+Alt+A) + Meeting Notes (Ctrl+Alt+B) (+494 lines) [Session #103]
+
+**Total Lines:** ~174,546 | **New Shortcuts:** Ctrl+Alt+9, Ctrl+Alt+A, Ctrl+Alt+B
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 13:24 UTC (Overnight Cron #104)
+**Status:** ✅ THREE NEW FEATURES added (+449 lines total)
+
+### What Was Added:
+
+---
+
+### 💸 Backcharge Log (Ctrl+Alt+D) — ~190 lines
+- Track backcharges received from GC and issued to subs
+- Direction toggle: Received (TO us) / Issued (BY us)
+- 12 reason types (Damage, Cleanup, Defective Work, Schedule Delay, Safety Violation, etc.)
+- 6 status options (Pending, Disputed, Accepted, Deducted, Resolved, Voided)
+- 4-card stats: Received $ / Issued $ / Pending count / Disputed count
+- Printable backcharge report
+
+### 📸 Photo Documentation Log (Ctrl+Alt+E) — ~165 lines
+- Catalog every photo taken on the project with metadata
+- 14 categories (Pre-Pour, During Pour, Rebar/Forms, Damage/Defect, Safety, etc.)
+- Fields: Description, Category, Date/Time, Location/Grid, Taken By, File/Link
+- Cloud storage links (Drive/Dropbox) open directly
+- Creates the evidence index for claims and disputes
+- Printable photo log report
+
+### ❓ RFI Quick Tracker (Ctrl+Alt+F) — ~165 lines
+- Fast RFI logging: question, directed to, date, drawing/spec ref, impact level
+- Auto-numbered RFI-001, RFI-002...
+- 5 impact levels (None, Potential CO, Schedule, Work Stoppage, Safety)
+- One-click answer recording with response text
+- Overdue detection (>7 days without answer)
+- 4-card stats: Total / Open / Overdue / Answered
+- Printable RFI log report
+
+**Commits:**
+- 186d0ad: 💸📸❓ Backcharge Log (Ctrl+Alt+D) + Photo Doc Log (Ctrl+Alt+E) + RFI Quick Tracker (Ctrl+Alt+F) (+449 lines) [Session #104]
+
+**Total Lines:** ~174,995 | **New Shortcuts:** Ctrl+Alt+D, Ctrl+Alt+E, Ctrl+Alt+F
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 12:24 UTC (Overnight Cron #100)
+**Status:** ✅ THREE NEW FEATURES added (+594 lines total)
+
+### What Was Added:
+
+---
+
+### 📅 Project Timeline Gantt (Ctrl+Alt+Z) — ~250 lines
+- New `📅 Project Timeline` button injected in sidebar below Crew Labor Analytics
+- `Ctrl+Alt+Z` keyboard shortcut opens/toggles the modal
+- **Purpose:** Visual project schedule with milestone tracking. See what's complete, active, and overdue at a glance.
+
+**Features:**
+- **17 Milestone Types:** Contract Signed, NTP, Submittals Due, Mobilization, Site Work Start, Forming Start, Rebar Placement, Concrete Pour #1-#3, Concrete Complete, Punch Walk, Substantial Completion, Final Inspection, Retainage Release, Project Closeout, Custom
+- **Add Milestones:** Type dropdown + start date + end date (optional)
+- **Gantt Bar Chart:** Week headers, horizontal bars showing duration
+- **Status Indicators:** ✅ DONE (green), ACTIVE (purple), OVERDUE (red), Pending (gray)
+- **Today Marker:** Yellow line showing current date position
+- **Per-Milestone Actions:** Edit (✏️), Toggle Complete (✓/↩), Delete (✕)
+
+**Stats Header:**
+- Total Milestones / Complete / Overdue / Progress %
+
+**localStorage per project:** `oncor_gantt_v1_[project]`
+
+**Printable Timeline Report:**
+- Milestone table with Start/End/Status columns
+- CONFIDENTIAL footer
+
+---
+
+### 📁 Project Document Checklist (Ctrl+Alt+1) — ~200 lines
+- New `📁 Document Checklist` button injected in sidebar below Project Timeline
+- `Ctrl+Alt+1` keyboard shortcut opens/toggles the modal
+- **Purpose:** Track all required project documents across 7 categories. Know what's missing before mobilization or closeout.
+
+**7 Categories (43 items total):**
+1. 📜 **Contract & Legal** — Signed contract, NTO, COI, Bond, Retainage, Lien Waiver
+2. 📐 **Drawings & Specs** — IFC Structural/Arch, Specs, Mix Design, Rebar Drawings, Geotech
+3. 📋 **Submittals** — Mix Design, Rebar/Mill Certs, Curing, Fiber, Vapor, Form Release
+4. 🦺 **Safety & Training** — Safety Plan, Toolbox Log, OSHA Certs, ACI Cert, Emergency, SDS
+5. 💵 **Financial** — SOV, Pay App Template, CO Log, Lien Waiver Log, AR, Job Cost
+6. 🔬 **QC & Testing** — QC Plan, Lab Agreement, Break Schedule, Pre-Pour, Tickets, Slump Log
+7. 📦 **Closeout** — As-Builts, O&M, Warranty, Final Lien, Punch, Final Pay App
+
+**Checklist Features:**
+- Checkbox per item (checked items strikethrough)
+- Progress bar with % complete
+- Per-category completion counter
+- localStorage persists per project
+
+**Printable Document Checklist:**
+- Category / Document / Status columns
+- Completion % header
+- CONFIDENTIAL footer
+
+---
+
+### ⚡ Job Flash Report (Ctrl+Alt+2) — ~145 lines
+- New `⚡ Job Flash Report` button injected in sidebar below Document Checklist
+- `Ctrl+Alt+2` keyboard shortcut opens/toggles the modal
+- **Purpose:** One-screen executive summary when someone asks "how's the job going?" — contract, progress, financials, and health check.
+
+**Contract & Progress Cards:**
+- Contract Value (base + signed COs)
+- Progress % with yd³ placed vs estimated
+
+**Financial Grid (6 cards):**
+- Invoiced / Collected / AR Outstanding
+- Costs Spent / Gross Profit (Cash) / Gross Margin %
+- Color-coded: green healthy, amber watch, red problem
+
+**Health Check Panel:**
+- Auto-detects issues from all project modules:
+  - 🔴 AR overdue amounts
+  - ⚠️ Unsigned CO value
+  - ❓ Open RFIs
+  - 📋 Open punch items
+  - 🚨 OSHA recordable incidents
+  - ✅ "No major issues" when clean
+
+**Printable Flash Report:**
+- 6-card grid layout
+- Progress percentage
+- CONFIDENTIAL footer
+
+**Commits:**
+- 136bf93: 📅📁⚡ Project Timeline Gantt (Ctrl+Alt+Z) + Document Checklist (Ctrl+Alt+1) + Job Flash Report (Ctrl+Alt+2) (+594 lines) [Session #100]
+
+**Total Lines:** ~173,094 | **New Shortcuts:** Ctrl+Alt+Z, Ctrl+Alt+1, Ctrl+Alt+2
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 12:24 UTC (Overnight Cron #99)
+**Status:** ✅ THREE NEW FEATURES added (+710 lines total)
+
+### What Was Added:
+
+---
+
+### 💲 Revenue & Cash Flow Forecast (Ctrl+Alt+W) — ~250 lines
+- New `💲 Cash Flow Forecast` button injected in sidebar below Estimate vs Actual
+- `Ctrl+Alt+W` keyboard shortcut opens/toggles the modal
+- **Purpose:** 6-month cash flow projection based on AR due dates and AP payment deadlines. Know before you run out of cash.
+
+**4-Card KPI Header (live):**
+- Contract Value (from estimate)
+- AR Outstanding (unpaid invoices)
+- AP Outstanding (unpaid bills)
+- AR Overdue (with red alert when any)
+
+**6-Month Cash Flow Projection Table:**
+- Month / AR Collected / AR Expected / AP Payments / Net Cash / Running Balance
+- Auto-buckets AR invoices and AP bills by their due dates
+- Running balance shows cumulative cash position
+- Color-coded: green positive, red negative
+
+**Alert Banners:**
+- 🔴 Red banner when overdue invoices exist — TX Prompt Payment Act 1.5%/month reminder
+- ⚠️ Amber banner when AP bills due within 7 days — with vendor names
+
+**Printable Cash Flow Report:**
+- Company header + 6-month table
+- TX Prompt Payment Act §28.004 reference
+- CONFIDENTIAL footer
+
+---
+
+### 🔍 Project Health Audit (Ctrl+Alt+X) — ~280 lines
+- New `🔍 Project Health Audit` button injected in sidebar below Cash Flow Forecast
+- `Ctrl+Alt+X` keyboard shortcut opens/toggles the modal
+- **Purpose:** One-click audit across 7 categories — runs 20+ automated checks against all project data. Get a letter grade (A-F) and instantly see what needs attention.
+
+**7 Audit Categories (20+ checks):**
+1. 💵 **Financial** — AR overdue, AP overdue, unsigned COs
+2. ⚖️ **Legal** — TX Notice to Owner (NTO), Lien Affidavit deadline, Sub COI expiry
+3. 🧪 **Quality** — Failed 28-day breaks, overdue break results, rejected loads, water added
+4. 🦺 **Safety** — Toolbox talk frequency, OSHA recordables, open incidents
+5. 📋 **Documentation** — Overdue RFIs, R&R submittals, overdue punch items
+6. 📄 **Permits** — Expired permits, expiring soon
+7. ⚠️ **Risk** — Critical risks open
+
+**Scoring:**
+- Each check: PASS ✅ / WARN ⚠️ / FAIL 🔴
+- Overall Health Score 0-100% with letter grade A-F
+- Color-coded grade box (green ≥80%, amber ≥60%, red <60%)
+- Pass/Warn/Fail counts displayed
+
+**Category Breakdown:**
+- Each category expandable with individual check status
+- FAIL and WARN counts shown per category
+- Detail message explains what to do
+
+**Printable Health Audit Report:**
+- Grade + score + all checks in table format
+- CONFIDENTIAL footer
+
+---
+
+### 👷 Crew & Labor Analytics (Ctrl+Alt+Y) — ~180 lines
+- New `👷 Crew Labor Analytics` button injected in sidebar below Health Audit
+- `Ctrl+Alt+Y` keyboard shortcut opens/toggles the modal
+- **Purpose:** Analyze time card data — see labor cost by trade, by worker, weekly trends, and productivity metrics. The CFO view of crew labor.
+
+**5-Card KPI Header (live):**
+- Total Hours (all time cards)
+- Overtime Hours (flagged if high)
+- Total Labor Cost
+- yd³ / Labor Hour (productivity)
+- Labor Cost / yd³ (efficiency)
+
+**Hours & Cost by Trade Table:**
+- Trade / Workers / Total Hours / Share % (with bar) / OT % / Cost
+- Sorted by cost descending
+- OT % flagged amber when >20%
+
+**Weekly Labor Cost Trend Chart:**
+- Bar chart of last 8 weeks
+- Shows cost per week + hours label
+
+**Top Workers by Cost Table:**
+- Worker / Trade / Days / Hours / OT Hours (%) / Cost
+- Top 10 workers sorted by total cost
+
+**Productivity Benchmarks:**
+- Compares actual yd³/hour to industry benchmarks
+- Flatwork: 0.8–1.5 yd³/labor hour
+- Foundations: 0.4–0.8 yd³/labor hour
+
+**Printable Labor Analytics Report:**
+- KPI grid + trade table + worker table
+- CONFIDENTIAL footer
+
+**Commits:**
+- 4054130: 💲🔍👷 Cash Flow Forecast (Ctrl+Alt+W) + Project Health Audit (Ctrl+Alt+X) + Crew Labor Analytics (Ctrl+Alt+Y) (+710 lines) [Session #99]
+
+**Total Lines:** ~172,500 | **New Shortcuts:** Ctrl+Alt+W, Ctrl+Alt+X, Ctrl+Alt+Y
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 11:24 UTC (Overnight Cron #98)
+**Status:** ✅ THREE NEW FEATURES added (+576 lines total)
+
+### What Was Added:
+
+---
+
+### 💰 Project P&L Dashboard (Ctrl+Alt+T) — ~190 lines
+- New `💰 Project P&L Dashboard` button injected in sidebar below Weekly Progress Report
+- `Ctrl+Alt+T` keyboard shortcut opens/toggles the modal
+- **Purpose:** Unified financial health view — all revenue vs all costs, net P&L per project. Pulls live data from AR (invoices), Job Cost Tracker, AP Bills, and the Estimate to give one complete financial picture.
+
+**6-Card KPI Header (live):**
+- Contract Value (base bid + signed COs)
+- Total Invoiced / Total Collected
+- AR Outstanding (with retainage detail)
+- Total Costs (Job Cost tracker)
+- Total AP Bills
+- Gross Profit + Gross Margin % (color-coded green/amber/red)
+
+**Cost Breakdown Tables:**
+- Side-by-side: Job Cost by Category vs AP Bills by Type
+- Each category with amount + % of total
+- Totals row per side
+
+**P&L Summary Bar:**
+- Revenue Collected / Total Costs Paid / Gross Profit (large callout box — green or red)
+- Gross Margin % with color coding (≥20% green, ≥10% amber, <10% red)
+
+**Printable P&L Report:**
+- Company header + 6-card KPI grid
+- Job cost by category table
+- P&L summary section with revenue/cost/profit breakdown
+- CONFIDENTIAL footer
+
+**`window._getPLStats()`** exposed: grossProfit, grossMargin, totalCollected
+
+---
+
+### 📞 Bid Follow-Up CRM (Ctrl+Alt+U) — ~200 lines
+- New `📞 Bid Follow-Up CRM` button injected in sidebar below P&L Dashboard
+- `Ctrl+Alt+U` keyboard shortcut opens/toggles the modal
+- **Purpose:** Track every pending bid with follow-up cadence, call log, decision dates, and GC contact info. Built for concrete sub bidding — where following up 2-3x after submitting is how you win.
+
+**5-Card Stats Bar:**
+- Active Bids / Follow-Up Due (red alert when any) / Won / Lost / Pipeline $ (total active bid value)
+
+**Per-Bid Entry (9 fields):**
+- Project / Bid Name, GC / Client, GC Contact, GC Phone
+- Bid Amount ($), Bid Date, Decision Date, Next Follow-Up Date
+- Status: Pending / Submitted / Waiting / Following Up / Won / Lost / No Bid / On Hold
+- Notes (why won or why lost)
+
+**Smart Sorting:**
+- Active bids first, then sorted by next follow-up date
+- "CALL DUE" red badge when follow-up date has passed and bid still active
+- "DECISION OVERDUE" orange badge when decision date passed
+
+**📞 Log Call Feature:**
+- One-click "Log Call" button per bid
+- Prompts for call note (e.g. "Called Mike, said decision next Friday")
+- Auto-sets status to "Following Up"
+- Shows last 3 call logs inline per bid
+
+**localStorage global:** `oncor_bfu_v1` (cross-project — all bids in one place)
+
+---
+
+### 📊 Estimate vs Actual Report (Ctrl+Alt+V) — ~190 lines
+- New `📊 Estimate vs Actual` button injected in sidebar below Bid Follow-Up CRM
+- `Ctrl+Alt+V` keyboard shortcut opens/toggles the modal
+- **Purpose:** After a project, compare estimated quantities and costs to what actually happened. Find where margin was made or lost. The feedback loop that makes future estimates better.
+
+**6-Card Comparison KPIs:**
+- yd³ Placed (Est vs Act from delivery tickets or field log)
+- Bid Revenue (Est bid vs actual AR invoiced)
+- Total Cost (Est direct costs vs actual job cost entries)
+- Concrete Materials (Est vs Act)
+- Labor (Est vs Act)
+- Collected (Est bid vs actual collected)
+- Each card shows: Est value / Act value / Variance (green if under, red if over)
+
+**Cost Category Comparison Table:**
+- Concrete Materials / Labor / Formwork / Rebar / Pump / Saw Cutting
+- Columns: Est | Actual | Variance $ | Variance %
+- Color-coded variance (green = under est, red = over est)
+
+**Pour-by-Pour Volume Comparison:**
+- Each field log entry: Date / Pour Name / Est yd³ / Actual yd³ / Δ yd³
+- Instantly see which pours over-ordered
+
+**Printable Est vs Actual Report:**
+- 3-card summary (Est Bid / Act Revenue / yd³ Est vs Act)
+- Full comparison table with variance columns
+- CONFIDENTIAL footer
+
+**Data Sources:**
+- Estimate: `window.lastEstimate`
+- Actual volumes: delivery tickets (accepted loads) or field log entries
+- Actual costs: Job Cost Tracker entries by category
+- Actual revenue: AR & Invoice entries
+
+**Commits:**
+- 731ca9c: 💰📞📊 Project P&L Dashboard (Ctrl+Alt+T) + Bid Follow-Up CRM (Ctrl+Alt+U) + Estimate vs Actual (Ctrl+Alt+V) (+576 lines) [Session #98]
+
+**Total Lines:** ~171,790 | **New Shortcuts:** Ctrl+Alt+T, Ctrl+Alt+U, Ctrl+Alt+V
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 10:24 UTC (Overnight Cron #97)
+**Status:** ✅ THREE NEW FEATURES added (+792 lines total)
+
+### What Was Added:
+
+---
+
+### 👷 Crew Certification Tracker (Ctrl+Alt+P) — ~280 lines
+- New `👷 Crew Certifications` button injected in sidebar below Subcontract Review
+- `Ctrl+Alt+P` keyboard shortcut opens/toggles the modal
+- **Purpose:** Track ACI, OSHA, and trade certifications for every crew member — with expiry alerts. Commercial GCs often audit sub credentials on-site. This gives JFS a professional cert registry for the whole crew.
+
+**Worker Roster:**
+- Add workers: name, trade (12 types), phone, required certs note
+- Per-worker: add/delete unlimited certifications
+- Delete workers (removes all their certs)
+
+**21 Certification Types tracked:**
+- ACI Field Testing Technician Grade I, ACI Flatwork Finisher, ACI Inspector
+- OSHA 10-Hour, OSHA 30-Hour (Construction)
+- First Aid/CPR, Flagger/Traffic Control
+- Forklift, AWP, Boom/Scissor Lift, Crane Signal Person (ASME B30.5), Rigger
+- Confined Space Entry, Hazcom/GHS, Silica Dust (OSHA 1926.1153), Fall Protection
+- Excavation Competent Person, Concrete Pump Operator (ACPA)
+- TX CDL A, TX CDL B, Other
+
+**Per-cert fields:** Type, Certificate #, Expiry Date, Issued Date, Issuing Body
+
+**5-card Stats Bar:** Workers / Total Certs / Expired 🚫 / Expiring ≤60d ⚠️ / No Expiry
+
+**Expiry Color Logic:**
+- 🟢 OK — valid >60 days
+- 🟡 Expiring soon — ≤60 days remaining
+- 🔴 EXPIRED — past expiry date
+
+**Printable Crew Certification Report:**
+- Company header + project
+- 5-card stats grid
+- Table: Worker / Trade / Certification / Cert # / Date Issued / Expiry Status
+- Expired cert warning box (workers cannot perform certified tasks)
+- ACI/OSHA cert renewal resources footer
+
+**localStorage per project:** `oncor_crew_certs_v1_[project]`
+
+**`window._getCCTStats()`** exposed: workers, totalCerts, expired, expiringSoon
+
+---
+
+### 🔬 Soil & Compaction Test Log (Ctrl+Alt+Q) — ~270 lines
+- New `🔬 Soil & Compaction Log` button injected in sidebar
+- `Ctrl+Alt+Q` keyboard shortcut opens/toggles the modal
+- **Purpose:** Log nuclear gauge and sand cone compaction tests per ASTM D698/D1557/D6938. Pass/fail auto-calculated against Proctor max density. On commercial jobs, compaction results are required before concrete placement.
+
+**Proctor Reference Panel:**
+- Set Max Dry Density (pcf), Optimum Moisture (%), Required Compaction % (default 95%)
+- Material type (11 types incl. Flex Base Caliche, Engineered Fill, Lime/Cement Stabilized)
+- Auto-calculated pass threshold: (Required% × MDD) pcf
+- Auto-saves on change
+
+**Per-Test Entry:**
+- Date, Test Method (Nuclear Gauge/Sand Cone/Balloon/DCP/Clegg/Other)
+- Location / Area (required)
+- Material type
+- Dry Density (pcf), Moisture (%), Compaction % (manual or auto-calc from MDD)
+- Lift # / Depth
+- Result (Pass/Fail/Pending) + Notes
+
+**Auto Pass/Fail Calculation:**
+- If MDD entered: compaction % = (dry density / MDD) × 100 — auto pass/fail vs required %
+- Color-coded: green ≥ required, red < required
+
+**5-card Stats:** Total Tests / Pass ✅ / Fail ❌ / Pending / Pass Rate %
+
+**Printable Compaction Report:**
+- Company header, Proctor data reference block
+- Full test table with auto-calculated compaction % per test
+- Fail rows highlighted red
+- Failed areas warning box
+- 3-column signature block (Testing Tech / PM / GC Review)
+- Standards footer: ASTM D698, D1557, D6938, D1556, TxDOT Item 247, IBC §1803
+
+**localStorage per project:** `oncor_soil_compaction_v1_[project]`
+
+**`window._getSCLStats()`** exposed: total, passed, failed
+
+---
+
+### 📊 Weekly Progress Report Generator (Ctrl+Alt+R) — ~240 lines
+- New `📊 Weekly Progress Report` button injected in sidebar
+- `Ctrl+Alt+R` keyboard shortcut opens/toggles the modal
+- **Purpose:** One-click weekly progress report for GC/owner — auto-pulls live data from 8 modules + manual fields for work accomplished, next week's plan, issues. The professional weekly check-in document.
+
+**Manual Input Fields:**
+- Week Start (Mon) / Week End (Sun) — defaults to current week
+- Report Week # (e.g. Week 4)
+- Work Accomplished (bullet points)
+- Next Week's Plan
+- Issues / Delays This Week
+- Safety / QC Notes
+- Overall % Complete
+- Schedule Status (On Schedule / Slightly Behind / Behind / Significantly Behind / Ahead)
+
+**Auto-Pulled from 8 Modules (filtered to report week):**
+1. **Field Log** — pours this week: pour days, yd³ placed, truck count
+2. **Crew Time Cards** — labor hours + labor cost this week
+3. **Change Orders** — count + value of pending COs
+4. **RFIs** — open RFI count
+5. **Safety Log** — toolbox talks + incidents this week
+6. **AR** — outstanding invoice balance
+7. **Equipment Rentals** — items currently on rent
+8. **Soil Tests** — (via stats)
+
+**6-card KPI Header:** yd³ Placed / Pour Days / Labor Hrs / Pending COs / Open RFIs / Incidents
+
+**Printable Weekly Report Sections:**
+- Company header + project + week range + Overall % Complete badge + Schedule Status badge (green/amber/red)
+- 6-card KPI grid
+- 2-column: Work Accomplished ↔ Next Week's Plan
+- 2-column: Issues/Delays/RFIs ↔ Safety & Quality
+- Financial Snapshot: Labor Cost / AR Outstanding / Equipment on Rent / Open CO Value
+- Concrete Pours table (if any pours this week): date, area, yd³, trucks, notes + weekly total row
+- Triple signature block: PM/Superintendent / GC Review / Owner/Developer
+- CONFIDENTIAL footer
+
+**Commits:**
+- fa70fa3: 👷🔬📊 Crew Cert Tracker (Ctrl+Alt+P) + Soil & Compaction Log (Ctrl+Alt+Q) + Weekly Progress Report (Ctrl+Alt+R) (+792 lines) [Session #97]
+
+**Total Lines:** ~171,214 | **New Shortcuts:** Ctrl+Alt+P, Ctrl+Alt+Q, Ctrl+Alt+R
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 09:24 UTC (Overnight Cron #96)
+**Status:** ✅ THREE NEW FEATURES added (+713 lines total)
+
+### What Was Added:
+
+---
+
+### 🏆 Project Scorecard (Ctrl+Alt+M) — ~200 lines
+- New `🏆 Project Scorecard` button injected in sidebar below Sub Performance
+- `Ctrl+Alt+M` keyboard shortcut opens/toggles the modal
+- **Purpose:** Auto-grade the project A–F across 6 dimensions using live data from all modules. No manual input — entirely data-driven.
+
+**6 Scored Dimensions:**
+1. 💵 **Financial Health** — AR overdue invoices + CTC over-budget detection
+2. 📅 **Schedule / Permits** — failed inspections + expired active permits
+3. 🧪 **Quality / QC** — failed 28-day cylinder breaks + rejected loads + water added
+4. 🦺 **Safety** — OSHA recordable incidents + critical incidents + no recent toolbox talks
+5. ⚖️ **Legal / Docs** — TX lien NTO missed + Revise & Resubmit submittals + overdue RFIs
+6. ⚠️ **Risk Register** — Critical risks (score ≥20) + High risks (12–16) open
+
+**Grade Scale:** A (90–100) · B (80–89) · C (70–79) · D (60–69) · F (<60)
+- Each dimension scored 0–100 with deductions for specific issues
+- Overall score = average of 6 dimensions
+- Large letter-grade callout box with teal progress bar per dimension
+- Notes field persisted per project
+- Printable scorecard report with grading methodology note
+
+---
+
+### ⚡ Daily Brief Generator (Ctrl+Alt+N) — ~170 lines
+- New `⚡ Daily Brief` button injected in sidebar below Project Scorecard
+- `Ctrl+Alt+N` keyboard shortcut opens/toggles the modal
+- **Purpose:** One-click morning status check — shows all critical alerts in a quick preview, then prints a full professional daily brief report. The "CEO view" for the field — open at 6 AM, know exactly what needs attention.
+
+**Quick Preview Modal:**
+- Today's date + project name
+- Live alerts pulled from 6 modules (AR, COs, RFIs, punch list, risk register, meetings)
+- Color-coded: 🔴 urgent, ⚠️ watch, ✅ clean
+- "Print Full Brief" button → generates full printable report
+
+**Printable Daily Brief:**
+- Company header + project + date
+- Urgent banner (red or green based on alert count)
+- 8-row status table: AR, RFIs, Submittals, Change Orders, Punch List, Inspections, Critical Risks, Overdue Actions
+- Upcoming Inspections (next 7 days) table with type/date/area
+- CONFIDENTIAL footer
+
+---
+
+### 📝 Subcontract Review Checklist (Ctrl+Alt+O) — ~350 lines
+- New `📝 Subcontract Review` button injected in sidebar below Daily Brief
+- `Ctrl+Alt+O` keyboard shortcut opens/toggles the modal
+- **Purpose:** 50-point contract review before signing any subcontract agreement. The checklist that ensures JFS doesn't miss critical contract provisions that could cost him money or rights.
+
+**50 Checklist Items Across 10 Categories:**
+1. 📋 **Scope & Parties** (5 items) — parties ID'd, scope defined, contract amount, drawings, exclusions
+2. 💰 **Payment Terms** (5 items) — payment terms, retainage %, pay-if-paid clause, billing procedure, final payment
+3. 📅 **Schedule** (4 items) — start/completion dates, LD clause, time extension, notice for delays
+4. ⚖️ **Changes & Claims** (5 items) — CO process, differing site conditions, notice of claim, no-damages-for-delay, scope creep
+5. 🛡️ **Insurance & Bonds** (5 items) — insurance requirements, additional insured, performance bond, indemnification, waiver of subrogation
+6. ⚖️ **Dispute Resolution** (4 items) — mediation/arbitration, venue/governing law, attorney fees, notice deadline
+7. 📜 **Lien Rights (TX)** (4 items) — TX Property Code Ch. 53, NTO, joint check, lien waiver requirements
+8. ✅ **Quality & Warranty** (4 items) — ACI/ASTM standards, warranty period, testing responsibilities, defective work
+9. 🦺 **Safety** (3 items) — OSHA compliance, toolbox talks, backcharge penalties
+10. 🔐 **Termination** (4 items) — termination for convenience, termination for cause, payment upon termination, right to cure
+11. 📋 **Flow-Down** (3 items) — flow-down provisions, dispute flow-down, escalation clause
+12. 🔍 **Final Review** (4 items) — full document read, all blanks filled, exhibits attached, attorney review (>$100K)
+
+**★ Critical items** — 26 items marked critical (highlighted with red star)
+**Per-item 3-state toggle:** ✓ OK / ⚠️ Flag / N/A
+**Live progress bar** — color changes if any items flagged
+**Flagged item alert** — "X item(s) flagged — DO NOT SIGN until resolved"
+**Review Notes** field — capture negotiation points
+**Printable Review Document** — company header, 4-card meta grid (GC, contract, value, date), completion %, flagged item warning box, full checklist table, dual signature block, legal disclaimer
+
+**Commits:**
+- 8d3521f: 🏆⚡📝 Project Scorecard (Ctrl+Alt+M) + Daily Brief (Ctrl+Alt+N) + Subcontract Review (Ctrl+Alt+O) (+713 lines) [Session #96]
+
+**Total Lines:** ~170,422 | **New Shortcuts:** Ctrl+Alt+M, Ctrl+Alt+N, Ctrl+Alt+O
+
+---
+
 ## ✅ SESSION: Apr 2, 2026 - 08:24 UTC (Overnight Cron #95)
 **Status:** ✅ THREE NEW FEATURES added (+729 lines total)
 
