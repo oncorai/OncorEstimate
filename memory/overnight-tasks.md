@@ -1,5 +1,78 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 2, 2026 - 08:24 UTC (Overnight Cron #95)
+**Status:** ✅ THREE NEW FEATURES added (+729 lines total)
+
+### What Was Added:
+
+---
+
+### 📋 ACI Compliance Monitor (Ctrl+Alt+J) — ~250 lines
+- New `📋 ACI Compliance` button injected in sidebar below Sub Performance
+- `Ctrl+Alt+J` keyboard shortcut opens/toggles the modal
+- **Purpose:** Aggregate all ACI/ASTM compliance flags from QC Log and Delivery Tickets in one view. Instead of hunting through individual records, see every code violation flagged in one place.
+
+**7 Compliance Checks:**
+1. ❌ **Failed 28-Day Cylinders** (ACI 318-19 §26.12.3) — critical, both avg < f'c AND min < f'c−500 psi
+2. ⚠️ **Low Break Warnings** (ACI 318-19 §26.12.3) — avg or min below threshold
+3. 🚫 **Rejected Loads** — with ticket #, date, area, reason
+4. 💧 **Water Added On-Site** (ASTM C94 §11.8) — gallons per load, date, area
+5. ☀️ **Hot Weather** (ACI 305R) — concrete temp >90°F logs
+6. ❄️ **Cold Weather** (ACI 306R) — concrete temp <50°F logs
+7. 📏 **Over-Slump Loads** (ASTM C143) — actual vs max slump per ticket
+
+**Features:**
+- 3-card KPI: Critical Issues / Warnings / Overall Status (green/amber/red)
+- Data source counter: X delivery tickets + Y QC tests
+- Per-section tables with ticket # / pour area / date / relevant values
+- No-data state when modules not yet used
+- Printable ACI Compliance Report
+- `window._getACIStats()` exposed for Project Status Card
+
+---
+
+### 💰 Quick Invoice Generator (Ctrl+Alt+K) — ~280 lines
+- New `💰 Quick Invoice` button injected in sidebar below ACI Compliance
+- `Ctrl+Alt+K` keyboard shortcut opens/toggles the modal
+- **Purpose:** Fast, one-click invoice creation for lump sum, T&M, milestone, and retainage invoices — separate from the full Pay Application generator (Ctrl+Shift+Y). For quick out-of-cycle billing.
+
+**Features:**
+- 4-card KPI: Total Invoices / Outstanding / Collected / Overdue
+- **New Invoice Form:** Invoice # (auto-generated INV-001...), Client, Invoice Type (9 types: Lump Sum, T&M, Milestone, Retainage Release, CO Invoice, Progress, Mobilization, Final, Other), Description, Invoice Date, Due Date, Amount, Status, Reference #, Notes
+- Invoice history table with OVERDUE badge when past due
+- Per-invoice: 🖨️ Print + 🗑 Delete
+- **Printable Professional Invoice** — company header, bill-to, meta grid, description box, INVOICE AMOUNT DUE callout box, TX Prompt Payment Act notice, dual signature block
+- Overdue invoices show red OVERDUE banner citing §28.004 1.5%/month
+- localStorage per project: `oncor_quick_invoices_v1_[project]`
+
+---
+
+### 🗺️ Project Information Board (Ctrl+Alt+L) — ~200 lines
+- New `🗺️ Project Info Board` button injected in sidebar below Quick Invoice
+- `Ctrl+Alt+L` keyboard shortcut opens/toggles the modal
+- **Purpose:** The job bulletin board — a single document with all project info, key contacts, emergency numbers, and concrete spec requirements. Print it, post it in the field trailer, hand it to foremen.
+
+**6 Sections (all auto-saved to localStorage):**
+1. 📋 **Project Identity** — name, number, client, GC, permit #, start/completion dates, retainage %
+2. 📞 **Key Project Contacts** — GC PM (name/phone/email), Owner Rep, Architect/EOR, Special Inspector — all with phone
+3. 🚚 **Suppliers & Subs** — Batch Plant (name/phone/contact), Testing Laboratory
+4. 🚨 **Emergency Contacts** — 2 emergency contacts, Nearest Hospital/ER (defaults: UMC El Paso), Poison Control (1-800-222-1222)
+5. 📐 **Concrete Spec Requirements** — f'c PSI, slump spec, fiber type/dose, ACI 318-19 exposure class, special notes
+6. 📝 **General Notes & Reminders** — freeform field notes
+
+**Printable Project Info Board:**
+- Color-coded sections (identity = indigo, contacts = green, suppliers = amber, emergency = red, concrete specs = blue, notes = purple)
+- Emergency section uses red text for hospital/ER
+- "POST IN FIELD TRAILER" header note
+- Printable to PDF — professional job site reference document
+
+**Commits:**
+- f2d6bef: 📋💰🗺️ ACI Compliance Monitor (Ctrl+Alt+J) + Quick Invoice Generator (Ctrl+Alt+K) + Project Info Board (Ctrl+Alt+L) (+729 lines) [Session #95]
+
+**Total Lines:** ~169,709 | **New Shortcuts:** Ctrl+Alt+J, Ctrl+Alt+K, Ctrl+Alt+L
+
+---
+
 ## ✅ SESSION: Apr 2, 2026 - 07:19 UTC (Overnight Cron #94)
 **Status:** ✅ THREE NEW FEATURES added (+437 lines total)
 
