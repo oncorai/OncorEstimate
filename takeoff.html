@@ -173092,3 +173092,471 @@ document.addEventListener('keydown', function(e) {
 })();
 // ==================== END SESSION #100 — Zeus ⚡ Project Timeline (Ctrl+Alt+Z) + Document Checklist (Ctrl+Alt+1) + Job Flash Report (Ctrl+Alt+2) ====================
 </script>
+
+<script>
+// ==================== SESSION #101 — Zeus ⚡ Multi-Project Financial Snapshot (Ctrl+Alt+3) + Document Links & Files (Ctrl+Alt+4) + Quick Notes & Field Journal (Ctrl+Alt+5) ====================
+(function() {
+'use strict';
+
+// =====================================================================
+// SHARED HELPERS
+// =====================================================================
+function _escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _fmt$(n){ return '$'+(parseFloat(n)||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+function _fmtDate(d){ if(!d) return '—'; var dt=new Date(d); return isNaN(dt)?d:dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+function _fmtTS(ts){ var dt=new Date(ts); return dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+' '+dt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); }
+function _sidebarInsertAfter(newBtn, anchorId, fallbackBottom){
+  var anchor=document.getElementById(anchorId);
+  if(anchor && anchor.parentNode){ anchor.parentNode.insertBefore(newBtn, anchor.nextSibling); }
+  else { newBtn.style.cssText+=';position:fixed;bottom:'+fallbackBottom+'px;right:20px;z-index:9000;width:auto;'; document.body.appendChild(newBtn); }
+}
+
+// =====================================================================
+// FEATURE 1: Multi-Project Financial Snapshot (Ctrl+Alt+3) — ~200 lines
+// =====================================================================
+window.openMultiFinancialSnapshot = function(){
+  if(document.getElementById('oncor-multifinancial-modal')) {
+    var m=document.getElementById('oncor-multifinancial-modal');
+    m.style.display=m.style.display==='none'?'flex':'none'; return;
+  }
+  var overlay=document.createElement('div');
+  overlay.id='oncor-multifinancial-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:11000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+  overlay.innerHTML='<div style="background:#1e293b;border-radius:12px;width:100%;max-width:960px;padding:24px;color:#e2e8f0;position:relative;min-height:400px;">'+
+    '<button onclick="this.closest(\'#oncor-multifinancial-modal\').style.display=\'none\'" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">'+
+      '<div><div style="font-size:16pt;font-weight:700;color:#22d3ee;">📊 Multi-Project Financial Snapshot</div>'+
+      '<div style="font-size:10pt;color:#94a3b8;">Cross-project P&amp;L — collected vs. spent vs. net across all saved jobs</div></div>'+
+      '<button onclick="window.printMultiFinancialReport()" style="background:rgba(34,211,238,0.15);color:#22d3ee;border:1px solid rgba(34,211,238,0.3);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨️ Print Report</button>'+
+    '</div>'+
+    '<div id="oncor-mfs-body" style="font-size:13px;">Loading...</div>'+
+  '</div>';
+  overlay.addEventListener('click',function(e){ if(e.target===overlay) overlay.style.display='none'; });
+  document.body.appendChild(overlay);
+  _renderMFS();
+};
+
+function _buildMFSData(){
+  var projects=[];
+  var raw=localStorage.getItem('oncorProjects');
+  if(!raw) return projects;
+  var saved=JSON.parse(raw)||[];
+  saved.forEach(function(p){
+    var name=(p.name||p.project||'Unnamed Project');
+    var projKey=name.replace(/\s+/g,'_');
+    var est=p.lastEstimate||p.estimate||{};
+    var contractVal=parseFloat(est.totalBid)||0;
+    // AR
+    var arData=JSON.parse(localStorage.getItem('oncor_ar_v1_'+projKey)||'[]');
+    var invoiced=arData.reduce(function(s,i){ return s+(parseFloat(i.amount)||0); },0);
+    var collected=arData.filter(function(i){ return i.status==='Paid'; }).reduce(function(s,i){ return s+(parseFloat(i.amount)||0); },0);
+    var retainage=arData.reduce(function(s,i){ return s+(parseFloat(i.retainage)||0); },0);
+    // AP
+    var apData=JSON.parse(localStorage.getItem('oncor_ap_v1_'+projKey)||'[]');
+    var apOutstanding=apData.filter(function(b){ return b.status!=='Paid'&&b.status!=='Voided'; }).reduce(function(s,b){ return s+(parseFloat(b.amount)||0)-(parseFloat(b.paid)||0); },0);
+    // Job costs
+    var jcData=JSON.parse(localStorage.getItem('oncor_job_cost_v1_'+projKey)||'[]');
+    var spent=jcData.reduce(function(s,j){ return s+(parseFloat(j.amount)||0); },0);
+    var netProfit=collected-spent;
+    var margin=collected>0?(netProfit/collected*100):0;
+    projects.push({ name:name, contractVal:contractVal, invoiced:invoiced, collected:collected, retainage:retainage, spent:spent, apOutstanding:apOutstanding, netProfit:netProfit, margin:margin, date:p.saveDate||p.date||'' });
+  });
+  return projects;
+}
+
+function _renderMFS(){
+  var projects=_buildMFSData();
+  var body=document.getElementById('oncor-mfs-body');
+  if(!body) return;
+  if(!projects.length){
+    body.innerHTML='<div style="text-align:center;padding:40px;color:#64748b;">No saved projects found. Save a project first to see the cross-project snapshot.</div>';
+    return;
+  }
+  // Totals
+  var totContract=0,totInvoiced=0,totCollected=0,totSpent=0,totRetainage=0,totNetProfit=0,totAPOut=0;
+  projects.forEach(function(p){ totContract+=p.contractVal; totInvoiced+=p.invoiced; totCollected+=p.collected; totSpent+=p.spent; totRetainage+=p.retainage; totNetProfit+=p.netProfit; totAPOut+=p.apOutstanding; });
+  var totMargin=totCollected>0?(totNetProfit/totCollected*100):0;
+  // Summary KPIs
+  var kpiStyle='background:rgba(255,255,255,0.05);border-radius:8px;padding:14px;text-align:center;';
+  var html='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">'+
+    '<div style="'+kpiStyle+'"><div style="font-size:9pt;color:#94a3b8;">Total Contract Value</div><div style="font-size:15pt;font-weight:700;color:#818cf8;">'+_fmt$(totContract)+'</div></div>'+
+    '<div style="'+kpiStyle+'"><div style="font-size:9pt;color:#94a3b8;">Total Collected</div><div style="font-size:15pt;font-weight:700;color:#22d3ee;">'+_fmt$(totCollected)+'</div></div>'+
+    '<div style="'+kpiStyle+'"><div style="font-size:9pt;color:#94a3b8;">Total Costs Spent</div><div style="font-size:15pt;font-weight:700;color:#f87171;">'+_fmt$(totSpent)+'</div></div>'+
+    '<div style="'+kpiStyle+'"><div style="font-size:9pt;color:#94a3b8;">Net Profit (Cash)</div><div style="font-size:15pt;font-weight:700;color:'+(totNetProfit>=0?'#4ade80':'#f87171')+';">'+_fmt$(totNetProfit)+'<span style="font-size:10pt;margin-left:4px;">('+totMargin.toFixed(1)+'%)</span></div></div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;">'+
+    '<div style="'+kpiStyle+'"><div style="font-size:9pt;color:#94a3b8;">Total Invoiced</div><div style="font-size:13pt;font-weight:700;color:#a78bfa;">'+_fmt$(totInvoiced)+'</div></div>'+
+    '<div style="'+kpiStyle+'"><div style="font-size:9pt;color:#94a3b8;">Retainage Held</div><div style="font-size:13pt;font-weight:700;color:#f59e0b;">'+_fmt$(totRetainage)+'</div></div>'+
+    '<div style="'+kpiStyle+'"><div style="font-size:9pt;color:#94a3b8;">AP Outstanding</div><div style="font-size:13pt;font-weight:700;color:#fb923c;">'+_fmt$(totAPOut)+'</div></div>'+
+    '</div>';
+  // Project table
+  html+='<div style="font-size:10pt;font-weight:600;color:#94a3b8;margin-bottom:8px;">ALL PROJECTS ('+projects.length+')</div>'+
+    '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11pt;">'+
+    '<tr style="background:rgba(255,255,255,0.07);"><th style="padding:8px 10px;text-align:left;color:#94a3b8;font-weight:600;">Project</th>'+
+    '<th style="padding:8px;text-align:right;color:#94a3b8;font-weight:600;">Contract</th>'+
+    '<th style="padding:8px;text-align:right;color:#94a3b8;font-weight:600;">Invoiced</th>'+
+    '<th style="padding:8px;text-align:right;color:#94a3b8;font-weight:600;">Collected</th>'+
+    '<th style="padding:8px;text-align:right;color:#94a3b8;font-weight:600;">Costs</th>'+
+    '<th style="padding:8px;text-align:right;color:#94a3b8;font-weight:600;">Net Profit</th>'+
+    '<th style="padding:8px;text-align:right;color:#94a3b8;font-weight:600;">Margin %</th>'+
+    '<th style="padding:8px;text-align:right;color:#94a3b8;font-weight:600;">Retainage</th></tr>';
+  projects.forEach(function(p,i){
+    var bgRow=i%2===0?'rgba(255,255,255,0.02)':'rgba(255,255,255,0.0)';
+    var profColor=p.netProfit>=0?'#4ade80':'#f87171';
+    var margColor=p.margin>=15?'#4ade80':(p.margin>=8?'#f59e0b':'#f87171');
+    html+='<tr style="background:'+bgRow+';border-bottom:1px solid rgba(255,255,255,0.06);">'+
+      '<td style="padding:8px 10px;font-weight:600;color:#e2e8f0;">'+_escH(p.name)+'</td>'+
+      '<td style="padding:8px;text-align:right;color:#818cf8;">'+_fmt$(p.contractVal)+'</td>'+
+      '<td style="padding:8px;text-align:right;color:#a78bfa;">'+_fmt$(p.invoiced)+'</td>'+
+      '<td style="padding:8px;text-align:right;color:#22d3ee;">'+_fmt$(p.collected)+'</td>'+
+      '<td style="padding:8px;text-align:right;color:#f87171;">'+_fmt$(p.spent)+'</td>'+
+      '<td style="padding:8px;text-align:right;color:'+profColor+';font-weight:600;">'+_fmt$(p.netProfit)+'</td>'+
+      '<td style="padding:8px;text-align:right;color:'+margColor+';font-weight:600;">'+p.margin.toFixed(1)+'%</td>'+
+      '<td style="padding:8px;text-align:right;color:#f59e0b;">'+_fmt$(p.retainage)+'</td></tr>';
+  });
+  // Totals row
+  var totMargColor=totMargin>=15?'#4ade80':(totMargin>=8?'#f59e0b':'#f87171');
+  html+='<tr style="background:rgba(34,211,238,0.08);border-top:2px solid rgba(34,211,238,0.3);font-weight:700;">'+
+    '<td style="padding:8px 10px;color:#22d3ee;">TOTALS ('+projects.length+' projects)</td>'+
+    '<td style="padding:8px;text-align:right;color:#818cf8;">'+_fmt$(totContract)+'</td>'+
+    '<td style="padding:8px;text-align:right;color:#a78bfa;">'+_fmt$(totInvoiced)+'</td>'+
+    '<td style="padding:8px;text-align:right;color:#22d3ee;">'+_fmt$(totCollected)+'</td>'+
+    '<td style="padding:8px;text-align:right;color:#f87171;">'+_fmt$(totSpent)+'</td>'+
+    '<td style="padding:8px;text-align:right;color:'+(totNetProfit>=0?'#4ade80':'#f87171')+';">'+_fmt$(totNetProfit)+'</td>'+
+    '<td style="padding:8px;text-align:right;color:'+totMargColor+';">'+totMargin.toFixed(1)+'%</td>'+
+    '<td style="padding:8px;text-align:right;color:#f59e0b;">'+_fmt$(totRetainage)+'</td></tr>'+
+    '</table></div>';
+  html+='<div style="font-size:9pt;color:#475569;margin-top:14px;">* Profit = Cash Collected − Job Costs Logged. Margin = Net Profit / Collected. Data from AR, Job Cost Tracker, and AP modules per project.</div>';
+  body.innerHTML=html;
+}
+
+window.printMultiFinancialReport = function(){
+  var projects=_buildMFSData();
+  var comp=(document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var today=new Date();
+  var totContract=0,totInvoiced=0,totCollected=0,totSpent=0,totNetProfit=0;
+  projects.forEach(function(p){ totContract+=p.contractVal; totInvoiced+=p.invoiced; totCollected+=p.collected; totSpent+=p.spent; totNetProfit+=p.netProfit; });
+  var totMargin=totCollected>0?(totNetProfit/totCollected*100):0;
+  var rows=projects.map(function(p){
+    return '<tr><td style="padding:6px 8px;">'+_escH(p.name)+'</td><td style="padding:6px 8px;text-align:right;">'+_fmt$(p.contractVal)+'</td><td style="padding:6px 8px;text-align:right;">'+_fmt$(p.invoiced)+'</td><td style="padding:6px 8px;text-align:right;">'+_fmt$(p.collected)+'</td><td style="padding:6px 8px;text-align:right;">'+_fmt$(p.spent)+'</td><td style="padding:6px 8px;text-align:right;font-weight:600;">'+_fmt$(p.netProfit)+'</td><td style="padding:6px 8px;text-align:right;">'+p.margin.toFixed(1)+'%</td><td style="padding:6px 8px;text-align:right;">'+_fmt$(p.retainage)+'</td></tr>';
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Multi-Project Financial Snapshot</title><style>body{font-family:Arial,sans-serif;font-size:10pt;margin:0;padding:20px;}table{width:100%;border-collapse:collapse;}th{background:#0f172a;color:#fff;padding:7px 8px;text-align:right;font-size:9pt;}th:first-child{text-align:left;}td{border-bottom:1px solid #e5e7eb;font-size:9.5pt;}.foot{margin-top:16px;text-align:center;font-size:8pt;color:#6b7280;border-top:1px solid #e5e7eb;padding-top:8px;} @media print{button{display:none;}}</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;border-bottom:2px solid #0ea5e9;padding-bottom:10px;margin-bottom:16px;"><div><strong style="font-size:14pt;">'+_escH(comp)+'</strong><br><span style="color:#555;">MULTI-PROJECT FINANCIAL SNAPSHOT</span></div><div style="text-align:right;font-size:9pt;color:#555;">Generated: '+today.toLocaleDateString()+'<br>'+projects.length+' Projects</div></div>'+
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;">'+
+    ['Total Contract:<br><strong>'+_fmt$(totContract)+'</strong>','Total Collected:<br><strong>'+_fmt$(totCollected)+'</strong>','Total Costs:<br><strong>'+_fmt$(totSpent)+'</strong>','Net Profit:<br><strong>'+_fmt$(totNetProfit)+' ('+totMargin.toFixed(1)+'%)</strong>'].map(function(c){ return '<div style="border:1px solid #e5e7eb;border-radius:4px;padding:10px;font-size:9pt;">'+c+'</div>'; }).join('')+'</div>'+
+    '<table><tr><th style="text-align:left;">Project</th><th>Contract</th><th>Invoiced</th><th>Collected</th><th>Costs</th><th>Net Profit</th><th>Margin</th><th>Retainage</th></tr>'+rows+'</table>'+
+    '<div class="foot">CONFIDENTIAL — INTERNAL USE ONLY &nbsp;|&nbsp; Data as of '+today.toLocaleDateString()+'</div>'+
+    '<br><button onclick="window.print()">🖨️ Print / Save PDF</button></body></html>';
+  var w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// FEATURE 2: Document Links & Files (Ctrl+Alt+4) — ~185 lines
+// =====================================================================
+function _getDLFKey(){
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'__global__';
+  return 'oncor_doclinks_v1_'+proj.replace(/\s+/g,'_');
+}
+function _loadDLF(){ return JSON.parse(localStorage.getItem(_getDLFKey())||'[]'); }
+function _saveDLF(arr){ localStorage.setItem(_getDLFKey(),JSON.stringify(arr)); }
+
+window.openDocLinksModal = function(){
+  var existing=document.getElementById('oncor-doclinks-modal');
+  if(existing){ existing.style.display=existing.style.display==='none'?'flex':'none'; _renderDLF(); return; }
+  var overlay=document.createElement('div');
+  overlay.id='oncor-doclinks-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:11000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+  overlay.innerHTML='<div style="background:#1e293b;border-radius:12px;width:100%;max-width:860px;padding:24px;color:#e2e8f0;position:relative;">'+
+    '<button onclick="this.closest(\'#oncor-doclinks-modal\').style.display=\'none\'" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">'+
+      '<div><div style="font-size:16pt;font-weight:700;color:#34d399;">📎 Document Links &amp; Files</div>'+
+      '<div style="font-size:10pt;color:#94a3b8;">Store Google Drive / Dropbox / SharePoint links for every project document — click to open instantly</div></div>'+
+      '<button onclick="window.printDocLinksReport()" style="background:rgba(52,211,153,0.15);color:#34d399;border:1px solid rgba(52,211,153,0.3);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨️ Print</button>'+
+    '</div>'+
+    '<div id="oncor-dlf-form" style="background:rgba(255,255,255,0.04);border-radius:8px;padding:16px;margin-bottom:16px;">'+
+      '<div style="font-size:11pt;font-weight:600;color:#34d399;margin-bottom:12px;">+ Add Document Link</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">'+
+        '<div><label style="font-size:10pt;color:#94a3b8;display:block;margin-bottom:4px;">Document Name *</label>'+
+        '<input id="dlf-name" placeholder="e.g. IFC Structural Drawings Rev 2" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+        '<div><label style="font-size:10pt;color:#94a3b8;display:block;margin-bottom:4px;">Category</label>'+
+        '<select id="dlf-cat" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;">'+
+          '<option>Drawings & Plans</option><option>Specifications</option><option>Contract & Legal</option><option>Submittals</option><option>Mix Designs</option><option>Test Reports</option><option>Permits & Inspections</option><option>Safety Documents</option><option>Pay Applications</option><option>Change Orders</option><option>Meeting Minutes</option><option>Photos & Videos</option><option>Closeout Documents</option><option>Estimates</option><option>Other</option>'+
+        '</select></div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:10px;align-items:end;">'+
+        '<div><label style="font-size:10pt;color:#94a3b8;display:block;margin-bottom:4px;">URL / Link *</label>'+
+        '<input id="dlf-url" placeholder="https://drive.google.com/..." style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+        '<button onclick="window._dlfAdd()" style="background:rgba(52,211,153,0.2);color:#34d399;border:1px solid rgba(52,211,153,0.4);border-radius:6px;padding:9px 18px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Add Link</button>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+        '<div><label style="font-size:10pt;color:#94a3b8;display:block;margin-bottom:4px;">Rev / Version</label>'+
+        '<input id="dlf-rev" placeholder="Rev 2, Final, etc." style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+        '<div><label style="font-size:10pt;color:#94a3b8;display:block;margin-bottom:4px;">Notes</label>'+
+        '<input id="dlf-notes" placeholder="e.g. Approved by EOR 3/28" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+      '</div>'+
+    '</div>'+
+    '<div id="oncor-dlf-list"></div>'+
+  '</div>';
+  overlay.addEventListener('click',function(e){ if(e.target===overlay) overlay.style.display='none'; });
+  document.body.appendChild(overlay);
+  _renderDLF();
+};
+
+window._dlfAdd = function(){
+  var name=(document.getElementById('dlf-name')||{}).value||'';
+  var url=(document.getElementById('dlf-url')||{}).value||'';
+  if(!name.trim()||!url.trim()){ alert('Document name and URL are required.'); return; }
+  var arr=_loadDLF();
+  arr.push({ id:Date.now(), name:name.trim(), cat:(document.getElementById('dlf-cat')||{}).value||'Other', url:url.trim(), rev:(document.getElementById('dlf-rev')||{}).value||'', notes:(document.getElementById('dlf-notes')||{}).value||'', added:Date.now() });
+  _saveDLF(arr);
+  ['dlf-name','dlf-url','dlf-rev','dlf-notes'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  _renderDLF();
+};
+
+window._dlfDelete = function(id){
+  if(!confirm('Remove this document link?')) return;
+  var arr=_loadDLF().filter(function(d){ return d.id!==id; });
+  _saveDLF(arr); _renderDLF();
+};
+
+var _dlfCatColors={'Drawings & Plans':'#6366f1','Specifications':'#8b5cf6','Contract & Legal':'#ef4444','Submittals':'#f59e0b','Mix Designs':'#14b8a6','Test Reports':'#3b82f6','Permits & Inspections':'#f97316','Safety Documents':'#22c55e','Pay Applications':'#a855f7','Change Orders':'#e11d48','Meeting Minutes':'#0ea5e9','Photos & Videos':'#ec4899','Closeout Documents':'#84cc16','Estimates':'#06b6d4','Other':'#64748b'};
+
+function _renderDLF(){
+  var list=document.getElementById('oncor-dlf-list');
+  if(!list) return;
+  var arr=_loadDLF();
+  if(!arr.length){ list.innerHTML='<div style="text-align:center;padding:30px;color:#64748b;">No document links yet. Add Google Drive, Dropbox, or SharePoint URLs above.</div>'; return; }
+  // Group by category
+  var grouped={};
+  arr.forEach(function(d){ if(!grouped[d.cat]) grouped[d.cat]=[]; grouped[d.cat].push(d); });
+  var html='<div style="font-size:10pt;font-weight:600;color:#94a3b8;margin-bottom:10px;">'+arr.length+' Document Link'+(arr.length!==1?'s':'')+'</div>';
+  Object.keys(grouped).forEach(function(cat){
+    var color=_dlfCatColors[cat]||'#64748b';
+    html+='<div style="margin-bottom:14px;"><div style="font-size:10pt;font-weight:700;color:'+color+';margin-bottom:6px;padding:4px 8px;background:rgba(255,255,255,0.04);border-radius:4px;border-left:3px solid '+color+';">'+_escH(cat)+' ('+grouped[cat].length+')</div>';
+    grouped[cat].forEach(function(d){
+      html+='<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-weight:600;color:#e2e8f0;font-size:11pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+_escH(d.name)+(d.rev?'<span style="font-size:9pt;color:#94a3b8;margin-left:6px;">['+_escH(d.rev)+']</span>':'')+'</div>'+
+          '<div style="font-size:9pt;margin-top:3px;"><a href="'+_escH(d.url)+'" target="_blank" style="color:#22d3ee;word-break:break-all;">🔗 '+_escH(d.url.length>70?d.url.substring(0,70)+'…':d.url)+'</a></div>'+
+          (d.notes?'<div style="font-size:9pt;color:#64748b;margin-top:2px;">'+_escH(d.notes)+'</div>':'')+
+          '<div style="font-size:8pt;color:#475569;margin-top:3px;">Added '+_fmtDate(new Date(d.added))+'</div>'+
+        '</div>'+
+        '<div style="margin-left:10px;display:flex;gap:6px;">'+
+          '<a href="'+_escH(d.url)+'" target="_blank" style="background:rgba(34,211,238,0.15);color:#22d3ee;border:1px solid rgba(34,211,238,0.3);border-radius:4px;padding:5px 10px;text-decoration:none;font-size:11px;cursor:pointer;">Open</a>'+
+          '<button onclick="window._dlfDelete('+d.id+')" style="background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);border-radius:4px;padding:5px 10px;cursor:pointer;font-size:11px;">✕</button>'+
+        '</div></div>';
+    });
+    html+='</div>';
+  });
+  list.innerHTML=html;
+}
+
+window.printDocLinksReport = function(){
+  var arr=_loadDLF();
+  var comp=(document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var grouped={};
+  arr.forEach(function(d){ if(!grouped[d.cat]) grouped[d.cat]=[]; grouped[d.cat].push(d); });
+  var sections=Object.keys(grouped).map(function(cat){
+    var rows=grouped[cat].map(function(d){ return '<tr><td style="padding:5px 8px;">'+_escH(d.name)+(d.rev?' ['+_escH(d.rev)+']':'')+'</td><td style="padding:5px 8px;word-break:break-all;"><a href="'+_escH(d.url)+'">'+_escH(d.url)+'</a></td><td style="padding:5px 8px;font-size:9pt;color:#555;">'+_escH(d.notes)+'</td></tr>'; }).join('');
+    return '<h3 style="color:#1e40af;margin:16px 0 6px;">'+_escH(cat)+'</h3><table style="width:100%;border-collapse:collapse;"><tr style="background:#f1f5f9;"><th style="padding:5px 8px;text-align:left;font-size:9pt;">Document</th><th style="padding:5px 8px;text-align:left;font-size:9pt;">Link</th><th style="padding:5px 8px;text-align:left;font-size:9pt;">Notes</th></tr>'+rows+'</table>';
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Document Links</title><style>body{font-family:Arial;font-size:10pt;margin:0;padding:20px;}a{color:#1d4ed8;}table{border-collapse:collapse;width:100%;}td,th{border-bottom:1px solid #e5e7eb;} @media print{button{display:none;}}</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;border-bottom:2px solid #1d4ed8;padding-bottom:10px;margin-bottom:14px;"><div><strong style="font-size:14pt;">'+_escH(comp)+'</strong><br><span>DOCUMENT LINKS — '+_escH(proj)+'</span></div><div style="text-align:right;font-size:9pt;color:#555;">'+arr.length+' Documents<br>'+new Date().toLocaleDateString()+'</div></div>'+
+    sections+
+    '<div style="margin-top:18px;text-align:center;font-size:8pt;color:#6b7280;border-top:1px solid #e5e7eb;padding-top:8px;">CONFIDENTIAL — INTERNAL USE ONLY</div>'+
+    '<br><button onclick="window.print()">🖨️ Print / Save PDF</button></body></html>';
+  var w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// FEATURE 3: Quick Notes & Field Journal (Ctrl+Alt+5) — ~170 lines
+// =====================================================================
+function _getQNKey(){
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'__global__';
+  return 'oncor_quicknotes_v1_'+proj.replace(/\s+/g,'_');
+}
+function _loadQN(){ return JSON.parse(localStorage.getItem(_getQNKey())||'[]'); }
+function _saveQN(arr){ localStorage.setItem(_getQNKey(),JSON.stringify(arr)); }
+
+window.openQuickNotesModal = function(){
+  var existing=document.getElementById('oncor-quicknotes-modal');
+  if(existing){ existing.style.display=existing.style.display==='none'?'flex':'none'; _renderQN(); return; }
+  var overlay=document.createElement('div');
+  overlay.id='oncor-quicknotes-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:11000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+  overlay.innerHTML='<div style="background:#1e293b;border-radius:12px;width:100%;max-width:840px;padding:24px;color:#e2e8f0;position:relative;">'+
+    '<button onclick="this.closest(\'#oncor-quicknotes-modal\').style.display=\'none\'" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+      '<div><div style="font-size:16pt;font-weight:700;color:#fb923c;">✏️ Quick Notes &amp; Field Journal</div>'+
+      '<div style="font-size:10pt;color:#94a3b8;">Fast timestamped notes — conversations, observations, issues, reminders, decisions</div></div>'+
+      '<button onclick="window.printQuickNotesReport()" style="background:rgba(251,146,60,0.15);color:#fb923c;border:1px solid rgba(251,146,60,0.3);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨️ Print Journal</button>'+
+    '</div>'+
+    '<div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:14px;margin-bottom:16px;">'+
+      '<div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:10px;align-items:start;">'+
+        '<textarea id="qn-text" placeholder="Type a note... (who said what, what you observed, decision made, something to remember)" rows="3" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:9px;color:#e2e8f0;font-size:11pt;resize:vertical;"></textarea>'+
+        '<button onclick="window._qnAdd()" style="background:rgba(251,146,60,0.2);color:#fb923c;border:1px solid rgba(251,146,60,0.4);border-radius:6px;padding:9px 16px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;margin-top:2px;">Log Note</button>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+        '<div><label style="font-size:10pt;color:#94a3b8;display:block;margin-bottom:4px;">Category</label>'+
+        '<select id="qn-cat" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;">'+
+          '<option value="General">General</option>'+
+          '<option value="Conversation">Conversation (verbal)</option>'+
+          '<option value="Decision">Decision Made</option>'+
+          '<option value="Issue">Issue / Problem</option>'+
+          '<option value="Observation">Field Observation</option>'+
+          '<option value="Reminder">Reminder / To-Do</option>'+
+          '<option value="GC Direction">GC Direction</option>'+
+          '<option value="Owner Direction">Owner Direction</option>'+
+          '<option value="Safety">Safety Note</option>'+
+          '<option value="Financial">Financial Note</option>'+
+          '<option value="Legal">Legal / Notice</option>'+
+          '<option value="Weather">Weather Note</option>'+
+          '<option value="Other">Other</option>'+
+        '</select></div>'+
+        '<div><label style="font-size:10pt;color:#94a3b8;display:block;margin-bottom:4px;">With / About (optional)</label>'+
+        '<input id="qn-who" placeholder="e.g. Mike (Beck GC), Inspector Jones" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+      '</div>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:12px;">'+
+      '<input id="qn-search" oninput="window._renderQN()" placeholder="Search notes..." style="flex:1;background:#0f172a;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:11pt;">'+
+      '<select id="qn-filter" onchange="window._renderQN()" style="background:#0f172a;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:11pt;"><option value="">All Categories</option>'+
+        ['Conversation','Decision','Issue','Observation','Reminder','GC Direction','Owner Direction','Safety','Financial','Legal','Weather','Other'].map(function(c){ return '<option>'+c+'</option>'; }).join('')+'</select>'+
+    '</div>'+
+    '<div id="oncor-qn-list"></div>'+
+  '</div>';
+  overlay.addEventListener('click',function(e){ if(e.target===overlay) overlay.style.display='none'; });
+  document.body.appendChild(overlay);
+  _renderQN();
+};
+
+window._qnAdd = function(){
+  var text=(document.getElementById('qn-text')||{}).value||'';
+  if(!text.trim()){ alert('Please type a note first.'); return; }
+  var arr=_loadQN();
+  arr.unshift({ id:Date.now(), ts:Date.now(), text:text.trim(), cat:(document.getElementById('qn-cat')||{}).value||'General', who:(document.getElementById('qn-who')||{}).value||'' });
+  _saveQN(arr);
+  var el=document.getElementById('qn-text'); if(el) el.value='';
+  var who=document.getElementById('qn-who'); if(who) who.value='';
+  _renderQN();
+};
+
+window._qnDelete = function(id){
+  if(!confirm('Delete this note?')) return;
+  _saveQN(_loadQN().filter(function(n){ return n.id!==id; }));
+  _renderQN();
+};
+
+var _qnCatColors={'General':'#64748b','Conversation':'#3b82f6','Decision':'#22d3ee','Issue':'#ef4444','Observation':'#22c55e','Reminder':'#f59e0b','GC Direction':'#a855f7','Owner Direction':'#8b5cf6','Safety':'#f97316','Financial':'#14b8a6','Legal':'#e11d48','Weather':'#0ea5e9','Other':'#64748b'};
+
+window._renderQN = function(){
+  var list=document.getElementById('oncor-qn-list');
+  if(!list) return;
+  var arr=_loadQN();
+  var search=((document.getElementById('qn-search')||{}).value||'').toLowerCase();
+  var filterCat=((document.getElementById('qn-filter')||{}).value||'');
+  if(search) arr=arr.filter(function(n){ return (n.text+n.who+n.cat).toLowerCase().indexOf(search)>=0; });
+  if(filterCat) arr=arr.filter(function(n){ return n.cat===filterCat; });
+  if(!arr.length){
+    list.innerHTML='<div style="text-align:center;padding:30px;color:#64748b;">No notes yet. Log your first note above — conversations, field observations, GC directions, issues, reminders.</div>'; return;
+  }
+  var total=_loadQN().length;
+  var html='<div style="font-size:10pt;color:#64748b;margin-bottom:8px;">'+total+' total note'+(total!==1?'s':'')+(arr.length!==total?' (filtered: '+arr.length+')':'')+'</div>';
+  arr.forEach(function(n){
+    var color=_qnCatColors[n.cat]||'#64748b';
+    html+='<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-left:3px solid '+color+';border-radius:6px;padding:10px 12px;margin-bottom:8px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+        '<div style="flex:1;">'+
+          '<div style="display:flex;gap:8px;align-items:center;margin-bottom:5px;">'+
+            '<span style="background:'+color+'22;color:'+color+';border:1px solid '+color+'44;border-radius:4px;padding:2px 7px;font-size:9pt;font-weight:600;">'+_escH(n.cat)+'</span>'+
+            (n.who?'<span style="font-size:9pt;color:#94a3b8;">with/re: '+_escH(n.who)+'</span>':'')+
+            '<span style="font-size:9pt;color:#475569;">'+_fmtTS(n.ts)+'</span>'+
+          '</div>'+
+          '<div style="color:#e2e8f0;font-size:11pt;line-height:1.5;white-space:pre-wrap;">'+_escH(n.text)+'</div>'+
+        '</div>'+
+        '<button onclick="window._qnDelete('+n.id+')" style="margin-left:10px;background:none;border:none;color:#475569;cursor:pointer;font-size:14px;flex-shrink:0;" title="Delete note">🗑</button>'+
+      '</div>'+
+    '</div>';
+  });
+  list.innerHTML=html;
+};
+
+window.printQuickNotesReport = function(){
+  var arr=_loadQN();
+  var comp=(document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var rows=arr.map(function(n){
+    return '<tr><td style="padding:5px 8px;font-size:9pt;color:#555;white-space:nowrap;">'+_fmtTS(n.ts)+'</td><td style="padding:5px 8px;font-size:9pt;font-weight:600;">'+_escH(n.cat)+'</td><td style="padding:5px 8px;font-size:9pt;">'+_escH(n.who)+'</td><td style="padding:5px 8px;white-space:pre-wrap;">'+_escH(n.text)+'</td></tr>';
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Field Journal</title><style>body{font-family:Arial;font-size:10pt;padding:20px;}table{width:100%;border-collapse:collapse;}td,th{border-bottom:1px solid #e5e7eb;}th{background:#f1f5f9;padding:6px 8px;font-size:9pt;text-align:left;} @media print{button{display:none;}}</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;border-bottom:2px solid #ea580c;padding-bottom:10px;margin-bottom:14px;"><div><strong style="font-size:14pt;">'+_escH(comp)+'</strong><br><span>QUICK NOTES &amp; FIELD JOURNAL — '+_escH(proj)+'</span></div><div style="text-align:right;font-size:9pt;color:#555;">'+arr.length+' Notes<br>Printed: '+new Date().toLocaleDateString()+'</div></div>'+
+    '<table><tr><th>Date/Time</th><th>Category</th><th>With/About</th><th>Note</th></tr>'+rows+'</table>'+
+    '<div style="margin-top:16px;text-align:center;font-size:8pt;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px;">CONFIDENTIAL — INTERNAL USE ONLY</div>'+
+    '<br><button onclick="window.print()">🖨️ Print / Save PDF</button></body></html>';
+  var w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// INJECT SIDEBAR BUTTONS
+// =====================================================================
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    // Multi-Project Financial Snapshot button
+    var btn3 = document.createElement('button');
+    btn3.id = 'oncor-multifinancial-btn';
+    btn3.innerHTML = '📊 Multi-Project P&L';
+    btn3.title = 'Ctrl+Alt+3 — Cross-Project Financial Snapshot';
+    btn3.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(34,211,238,0.10);color:#22d3ee;border:1px solid rgba(34,211,238,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btn3.onclick = window.openMultiFinancialSnapshot;
+    btn3.onmouseover = function(){ this.style.background='rgba(34,211,238,0.20)'; };
+    btn3.onmouseout = function(){ this.style.background='rgba(34,211,238,0.10)'; };
+
+    // Document Links button
+    var btn4 = document.createElement('button');
+    btn4.id = 'oncor-doclinks-btn';
+    btn4.innerHTML = '📎 Document Links';
+    btn4.title = 'Ctrl+Alt+4 — Project Document Links & Files';
+    btn4.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(52,211,153,0.10);color:#34d399;border:1px solid rgba(52,211,153,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btn4.onclick = window.openDocLinksModal;
+    btn4.onmouseover = function(){ this.style.background='rgba(52,211,153,0.20)'; };
+    btn4.onmouseout = function(){ this.style.background='rgba(52,211,153,0.10)'; };
+
+    // Quick Notes button
+    var btn5 = document.createElement('button');
+    btn5.id = 'oncor-quicknotes-btn';
+    btn5.innerHTML = '✏️ Quick Notes';
+    btn5.title = 'Ctrl+Alt+5 — Quick Notes & Field Journal';
+    btn5.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(251,146,60,0.10);color:#fb923c;border:1px solid rgba(251,146,60,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btn5.onclick = window.openQuickNotesModal;
+    btn5.onmouseover = function(){ this.style.background='rgba(251,146,60,0.20)'; };
+    btn5.onmouseout = function(){ this.style.background='rgba(251,146,60,0.10)'; };
+
+    // Insert after flash report button (Session #100)
+    var anchor = document.getElementById('oncor-flashreport-btn');
+    if (anchor && anchor.parentNode) {
+      anchor.parentNode.insertBefore(btn3, anchor.nextSibling);
+      btn3.parentNode.insertBefore(btn4, btn3.nextSibling);
+      btn4.parentNode.insertBefore(btn5, btn4.nextSibling);
+    } else {
+      [[btn3,820],[btn4,770],[btn5,720]].forEach(function(pair){
+        pair[0].style.cssText += ';position:fixed;bottom:'+pair[1]+'px;right:20px;z-index:9000;width:auto;';
+        document.body.appendChild(pair[0]);
+      });
+    }
+  }, 16000);
+});
+
+// =====================================================================
+// KEYBOARD SHORTCUTS — Session #101
+// =====================================================================
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.altKey) {
+    if (e.key === '3') { e.preventDefault(); window.openMultiFinancialSnapshot(); }
+    if (e.key === '4') { e.preventDefault(); window.openDocLinksModal(); }
+    if (e.key === '5') { e.preventDefault(); window.openQuickNotesModal(); }
+  }
+});
+
+})();
+// ==================== END SESSION #101 — Zeus ⚡ Multi-Project P&L Snapshot (Ctrl+Alt+3) + Document Links & Files (Ctrl+Alt+4) + Quick Notes & Field Journal (Ctrl+Alt+5) ====================
+</script>
