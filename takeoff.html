@@ -171211,4 +171211,580 @@ document.addEventListener('keydown', function(e) {
 
 })();
 // ==================== END SESSION #97 — Zeus ⚡ Crew Cert Tracker (Ctrl+Alt+P) + Soil & Compaction Log (Ctrl+Alt+Q) + Weekly Progress Report (Ctrl+Alt+R) ====================
+
+// ==================== SESSION #98 — Zeus ⚡ Project P&L Dashboard (Ctrl+Alt+T) + Bid Follow-Up CRM (Ctrl+Alt+U) + Estimate vs Actual Report (Ctrl+Alt+V) ====================
+(function() {
+'use strict';
+
+// ==================== 💰 PROJECT P&L DASHBOARD (Ctrl+Alt+T) ====================
+// Purpose: Unified financial health view — all money in, all money out, net P&L per project
+
+var PL_VERSION = 'v1';
+function getPLKey() { return 'oncor_pl_notes_'+PL_VERSION+'_'+(typeof activeProjectName!=='undefined'&&activeProjectName?activeProjectName.replace(/\s+/g,'_'):'global'); }
+
+function openPLModal() {
+  var existing = document.getElementById('oncor-pl-modal');
+  if (existing) { existing.style.display = existing.style.display==='none'?'flex':'none'; if(existing.style.display==='flex') refreshPLDashboard(); return; }
+  var modal = document.createElement('div');
+  modal.id = 'oncor-pl-modal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:19999;display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = '<div style="background:#1e293b;border-radius:14px;width:92%;max-width:900px;max-height:90vh;overflow-y:auto;padding:28px 32px;position:relative;font-family:inherit;">' +
+    '<button onclick="document.getElementById(\'oncor-pl-modal\').style.display=\'none\';" style="position:absolute;top:14px;right:18px;background:transparent;border:none;color:#94a3b8;font-size:22px;cursor:pointer;">✕</button>' +
+    '<h2 style="margin:0 0 6px;color:#34d399;font-size:20px;">💰 Project P&L Dashboard</h2>' +
+    '<p style="margin:0 0 20px;color:#64748b;font-size:12px;">All revenue vs all costs — live from every module | Ctrl+Alt+T</p>' +
+    '<div id="pl-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;"></div>' +
+    '<div id="pl-body" style="margin-bottom:16px;"></div>' +
+    '<div style="display:flex;gap:10px;margin-top:10px;">' +
+      '<button onclick="printPLReport();" style="padding:8px 20px;background:#059669;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;">🖨️ Print P&L Report</button>' +
+    '</div>' +
+  '</div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e){ if(e.target===modal) modal.style.display='none'; });
+  refreshPLDashboard();
+}
+
+function refreshPLDashboard() {
+  var proj = (typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName.replace(/\s+/g,'_'):'global';
+  // Revenue sources
+  var arData = JSON.parse(localStorage.getItem('oncor_ar_v1_'+proj)||'[]');
+  var totalInvoiced = arData.reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var totalCollected = arData.filter(function(i){return i.status==='Paid';}).reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var retainageHeld = arData.reduce(function(s,i){return s+(parseFloat(i.retainage)||0);},0);
+  var totalOutstandingAR = totalInvoiced - totalCollected;
+  // Cost sources
+  var jobCosts = JSON.parse(localStorage.getItem('oncor_job_cost_v1_'+proj)||'[]');
+  var totalCosts = jobCosts.reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var totalPaidCosts = jobCosts.filter(function(i){return i.status==='Paid';}).reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var apData = JSON.parse(localStorage.getItem('oncor_ap_v1_'+proj)||'[]');
+  var totalAP = apData.reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var paidAP = apData.filter(function(i){return i.status==='Paid';}).reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  // COs
+  var coData = JSON.parse(localStorage.getItem('oncor_change_orders_v1')||'{}');
+  var coList = coData[proj]||coData[(typeof activeProjectName!=='undefined'&&activeProjectName?activeProjectName:'')] || [];
+  var totalCOValue = coList.reduce(function(s,c){return s+(parseFloat(c.total)||0);},0);
+  var signedCOValue = coList.filter(function(c){return c.status==='Signed';}).reduce(function(s,c){return s+(parseFloat(c.total)||0);},0);
+  // Estimate
+  var est = (typeof window.lastEstimate!=='undefined'&&window.lastEstimate)?window.lastEstimate:{};
+  var estBid = parseFloat(est.totalBid)||0;
+  var revisedContract = estBid + signedCOValue;
+  // P&L
+  var grossProfit = totalCollected - totalPaidCosts - paidAP;
+  var grossMargin = totalCollected>0 ? (grossProfit/totalCollected*100) : 0;
+  var netProfit = totalInvoiced - totalCosts - totalAP;
+  var netMargin = totalInvoiced>0 ? (netProfit/totalInvoiced*100) : 0;
+  function fmt(n){return '$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});}
+  function card(label,val,sub,color){
+    return '<div style="background:#0f172a;border-radius:10px;padding:14px 16px;border:1px solid #334155;">' +
+      '<div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">'+label+'</div>' +
+      '<div style="color:'+(color||'#e2e8f0')+';font-size:22px;font-weight:700;">'+val+'</div>' +
+      (sub?'<div style="color:#64748b;font-size:11px;margin-top:4px;">'+sub+'</div>':'') +
+    '</div>';
+  }
+  var marginColor = grossMargin>=20?'#34d399':grossMargin>=10?'#fbbf24':'#ef4444';
+  document.getElementById('pl-kpis').innerHTML =
+    card('Contract Value', revisedContract>0?fmt(revisedContract):'—', estBid>0?'Base: '+fmt(estBid)+(signedCOValue?(' + COs: '+fmt(signedCOValue)):''):'', '#e2e8f0') +
+    card('Total Invoiced', fmt(totalInvoiced), 'Collected: '+fmt(totalCollected), '#34d399') +
+    card('AR Outstanding', fmt(totalOutstandingAR), retainageHeld>0?'Retainage: '+fmt(retainageHeld):'', totalOutstandingAR>0?'#fbbf24':'#34d399') +
+    card('Total Costs (Job)', fmt(totalCosts), 'Paid: '+fmt(totalPaidCosts), '#f87171') +
+    card('Total AP (Bills)', fmt(totalAP), 'Paid: '+fmt(paidAP), '#f87171') +
+    card('Gross Profit', (grossProfit<0?'-':'')+fmt(grossProfit), 'Margin: '+grossMargin.toFixed(1)+'%', marginColor);
+  // Cost category breakdown
+  var catTotals = {};
+  jobCosts.forEach(function(jc){
+    var cat = jc.category||'Other';
+    catTotals[cat]=(catTotals[cat]||0)+(parseFloat(jc.amount)||0);
+  });
+  var apCatTotals = {};
+  apData.forEach(function(ap){
+    var cat = ap.type||'Other';
+    apCatTotals[cat]=(apCatTotals[cat]||0)+(parseFloat(ap.amount)||0);
+  });
+  var catRows = Object.keys(catTotals).sort(function(a,b){return catTotals[b]-catTotals[a];}).map(function(c){
+    var pct = totalCosts>0?(catTotals[c]/totalCosts*100):0;
+    return '<tr><td style="padding:6px 8px;color:#e2e8f0;">'+c+'</td><td style="padding:6px 8px;text-align:right;color:#f87171;">'+fmt(catTotals[c])+'</td><td style="padding:6px 8px;text-align:right;color:#94a3b8;">'+pct.toFixed(1)+'%</td></tr>';
+  }).join('');
+  var apRows = Object.keys(apCatTotals).sort(function(a,b){return apCatTotals[b]-apCatTotals[a];}).map(function(c){
+    var pct = totalAP>0?(apCatTotals[c]/totalAP*100):0;
+    return '<tr><td style="padding:6px 8px;color:#e2e8f0;">'+c+'</td><td style="padding:6px 8px;text-align:right;color:#f87171;">'+fmt(apCatTotals[c])+'</td><td style="padding:6px 8px;text-align:right;color:#94a3b8;">'+pct.toFixed(1)+'%</td></tr>';
+  }).join('');
+  document.getElementById('pl-body').innerHTML =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">' +
+    '<div><h3 style="color:#94a3b8;font-size:13px;margin:0 0 10px;">📊 Job Cost Breakdown</h3>' +
+      (catRows?'<table style="width:100%;border-collapse:collapse;"><thead><tr style="border-bottom:1px solid #334155;"><th style="padding:6px 8px;color:#64748b;text-align:left;font-size:11px;">Category</th><th style="padding:6px 8px;color:#64748b;text-align:right;font-size:11px;">Amount</th><th style="padding:6px 8px;color:#64748b;text-align:right;font-size:11px;">%</th></tr></thead><tbody>'+catRows+'<tr style="border-top:2px solid #334155;font-weight:700;"><td style="padding:6px 8px;color:#94a3b8;">TOTAL</td><td style="padding:6px 8px;text-align:right;color:#f87171;">'+fmt(totalCosts)+'</td><td></td></tr></tbody></table>':'<p style="color:#64748b;font-size:12px;">No job cost entries yet.</p>') +
+    '</div>' +
+    '<div><h3 style="color:#94a3b8;font-size:13px;margin:0 0 10px;">📊 AP (Bills) Breakdown</h3>' +
+      (apRows?'<table style="width:100%;border-collapse:collapse;"><thead><tr style="border-bottom:1px solid #334155;"><th style="padding:6px 8px;color:#64748b;text-align:left;font-size:11px;">Type</th><th style="padding:6px 8px;color:#64748b;text-align:right;font-size:11px;">Amount</th><th style="padding:6px 8px;color:#64748b;text-align:right;font-size:11px;">%</th></tr></thead><tbody>'+apRows+'<tr style="border-top:2px solid #334155;font-weight:700;"><td style="padding:6px 8px;color:#94a3b8;">TOTAL</td><td style="padding:6px 8px;text-align:right;color:#f87171;">'+fmt(totalAP)+'</td><td></td></tr></tbody></table>':'<p style="color:#64748b;font-size:12px;">No AP bills yet.</p>') +
+    '</div>' +
+    '</div>' +
+    '<div style="margin-top:16px;background:#0f172a;border-radius:10px;padding:16px;border:2px solid '+(grossProfit>=0?'#059669':'#ef4444')+'">' +
+      '<div style="color:#94a3b8;font-size:11px;text-transform:uppercase;margin-bottom:8px;">P&L SUMMARY</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center;">' +
+        '<div><div style="color:#64748b;font-size:11px;">Revenue Collected</div><div style="color:#34d399;font-size:18px;font-weight:700;">'+fmt(totalCollected)+'</div></div>' +
+        '<div><div style="color:#64748b;font-size:11px;">Total Costs Paid</div><div style="color:#f87171;font-size:18px;font-weight:700;">'+fmt(totalPaidCosts+paidAP)+'</div></div>' +
+        '<div><div style="color:#64748b;font-size:11px;">Gross Profit</div><div style="color:'+(grossProfit>=0?'#34d399':'#ef4444')+';font-size:18px;font-weight:700;">'+(grossProfit<0?'-':'')+fmt(grossProfit)+'</div></div>' +
+        '<div><div style="color:#64748b;font-size:11px;">Gross Margin</div><div style="color:'+marginColor+';font-size:18px;font-weight:700;">'+grossMargin.toFixed(1)+'%</div></div>' +
+      '</div>' +
+    '</div>';
+}
+
+window.printPLReport = function() {
+  var proj = (typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var comp = (document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var now = new Date().toLocaleDateString();
+  // Re-gather all data
+  var projKey = proj.replace(/\s+/g,'_');
+  var arData = JSON.parse(localStorage.getItem('oncor_ar_v1_'+projKey)||'[]');
+  var totalInvoiced = arData.reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var totalCollected = arData.filter(function(i){return i.status==='Paid';}).reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var retainageHeld = arData.reduce(function(s,i){return s+(parseFloat(i.retainage)||0);},0);
+  var jobCosts = JSON.parse(localStorage.getItem('oncor_job_cost_v1_'+projKey)||'[]');
+  var totalCosts = jobCosts.reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var totalPaidCosts = jobCosts.filter(function(i){return i.status==='Paid';}).reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var apData = JSON.parse(localStorage.getItem('oncor_ap_v1_'+projKey)||'[]');
+  var totalAP = apData.reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var paidAP = apData.filter(function(i){return i.status==='Paid';}).reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var grossProfit = totalCollected - totalPaidCosts - paidAP;
+  var grossMargin = totalCollected>0?(grossProfit/totalCollected*100):0;
+  function fmt(n){return '$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});}
+  var catTotals = {};
+  jobCosts.forEach(function(jc){ var cat=jc.category||'Other'; catTotals[cat]=(catTotals[cat]||0)+(parseFloat(jc.amount)||0); });
+  var catRows = Object.keys(catTotals).sort(function(a,b){return catTotals[b]-catTotals[a];}).map(function(c){
+    return '<tr><td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">'+c+'</td><td style="padding:5px 8px;text-align:right;border-bottom:1px solid #e2e8f0;">'+fmt(catTotals[c])+'</td></tr>';
+  }).join('');
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Project P&L — '+proj+'</title><style>body{font-family:Arial,sans-serif;font-size:10pt;color:#1e293b;margin:0;padding:20px;} .header{display:flex;justify-content:space-between;border-bottom:3px solid #059669;padding-bottom:10px;margin-bottom:18px;} .kgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px;} .kcard{background:#f1f5f9;border-radius:6px;padding:10px 12px;} .kcard .label{color:#64748b;font-size:8pt;text-transform:uppercase;} .kcard .val{font-size:16pt;font-weight:700;color:#1e293b;} table{width:100%;border-collapse:collapse;margin-bottom:16px;} th{background:#e2e8f0;padding:6px 8px;text-align:left;font-size:9pt;} .summary{background:#f0fdf4;border:2px solid #059669;border-radius:8px;padding:14px;margin-top:14px;} .footer{margin-top:20px;text-align:center;color:#94a3b8;font-size:8pt;border-top:1px solid #e2e8f0;padding-top:10px;} @media print{button{display:none;}}</style></head><body>' +
+    '<div class="header"><div><div style="font-size:16pt;font-weight:700;color:#059669;">'+comp+'</div><div style="font-size:9pt;color:#64748b;">PROJECT P&L DASHBOARD</div></div><div style="text-align:right;font-size:9pt;color:#64748b;"><div><strong>'+proj+'</strong></div><div>'+now+'</div></div></div>' +
+    '<div class="kgrid">' +
+      '<div class="kcard"><div class="label">Total Invoiced</div><div class="val" style="color:#059669;">'+fmt(totalInvoiced)+'</div></div>' +
+      '<div class="kcard"><div class="label">Total Collected</div><div class="val" style="color:#059669;">'+fmt(totalCollected)+'</div></div>' +
+      '<div class="kcard"><div class="label">Retainage Held</div><div class="val" style="color:#d97706;">'+fmt(retainageHeld)+'</div></div>' +
+      '<div class="kcard"><div class="label">Job Costs (Total)</div><div class="val" style="color:#dc2626;">'+fmt(totalCosts)+'</div></div>' +
+      '<div class="kcard"><div class="label">AP Bills (Total)</div><div class="val" style="color:#dc2626;">'+fmt(totalAP)+'</div></div>' +
+      '<div class="kcard"><div class="label">Gross Margin</div><div class="val" style="color:'+(grossMargin>=15?'#059669':grossMargin>=8?'#d97706':'#dc2626')+';">'+grossMargin.toFixed(1)+'%</div></div>' +
+    '</div>' +
+    (catRows?'<h3 style="color:#1e293b;font-size:11pt;margin:0 0 8px;">Job Cost by Category</h3><table><thead><tr><th>Category</th><th style="text-align:right;">Amount</th></tr></thead><tbody>'+catRows+'</tbody></table>':'') +
+    '<div class="summary"><div style="font-weight:700;font-size:11pt;margin-bottom:10px;">P&L SUMMARY</div><table style="margin:0;"><tr><td style="padding:4px 0;">Revenue Collected</td><td style="text-align:right;font-weight:700;color:#059669;">'+fmt(totalCollected)+'</td></tr><tr><td style="padding:4px 0;">Total Costs Paid (Job + AP)</td><td style="text-align:right;font-weight:700;color:#dc2626;">— '+fmt(totalPaidCosts+paidAP)+'</td></tr><tr style="border-top:2px solid #059669;"><td style="padding:6px 0;font-weight:700;font-size:12pt;">Gross Profit</td><td style="text-align:right;font-weight:700;font-size:12pt;color:'+(grossProfit>=0?'#059669':'#dc2626')+';">'+(grossProfit<0?'— ':'')+fmt(grossProfit)+'</td></tr><tr><td style="padding:2px 0;color:#64748b;font-size:9pt;">Gross Margin</td><td style="text-align:right;color:#64748b;font-size:9pt;">'+grossMargin.toFixed(1)+'%</td></tr></table></div>' +
+    '<div class="footer">CONFIDENTIAL — INTERNAL USE ONLY | '+comp+' | Project P&L Dashboard | '+now+'</div>' +
+    '<script>window.onload=function(){window.print();};<\/script></body></html>';
+  var w = window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+window._getPLStats = function() {
+  var proj = (typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName.replace(/\s+/g,'_'):'global';
+  var arData = JSON.parse(localStorage.getItem('oncor_ar_v1_'+proj)||'[]');
+  var totalCollected = arData.filter(function(i){return i.status==='Paid';}).reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var jobCosts = JSON.parse(localStorage.getItem('oncor_job_cost_v1_'+proj)||'[]');
+  var totalPaidCosts = jobCosts.filter(function(i){return i.status==='Paid';}).reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var apData = JSON.parse(localStorage.getItem('oncor_ap_v1_'+proj)||'[]');
+  var paidAP = apData.filter(function(i){return i.status==='Paid';}).reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var grossProfit = totalCollected - totalPaidCosts - paidAP;
+  var grossMargin = totalCollected>0?(grossProfit/totalCollected*100):0;
+  return { grossProfit: grossProfit, grossMargin: grossMargin, totalCollected: totalCollected };
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn = document.createElement('button');
+    btn.id = 'oncor-pl-btn';
+    btn.textContent = '💰 Project P&L Dashboard';
+    btn.title = 'Project P&L Dashboard (Ctrl+Alt+T)';
+    btn.onclick = openPLModal;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(5,150,105,0.12);color:#6ee7b7;border:1px solid rgba(5,150,105,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(5,150,105,0.25)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(5,150,105,0.12)'; };
+    var wprBtn = document.getElementById('oncor-wpr-btn');
+    if (wprBtn && wprBtn.parentNode) {
+      wprBtn.parentNode.insertBefore(btn, wprBtn.nextSibling);
+    } else {
+      btn.style.cssText += 'position:fixed;bottom:470px;right:20px;z-index:9000;width:auto;';
+      document.body.appendChild(btn);
+    }
+  }, 14200);
+});
+// ==================== END PROJECT P&L DASHBOARD ====================
+
+// ==================== 📞 BID FOLLOW-UP CRM (Ctrl+Alt+U) ====================
+// Purpose: Track every bid with follow-up calls, decision dates, contact notes — built for concrete sub bidding cadence
+
+var BFU_KEY = 'oncor_bfu_v1';
+
+function loadBFUData() { try { return JSON.parse(localStorage.getItem(BFU_KEY)||'[]'); } catch(e) { return []; } }
+function saveBFUData(d) { localStorage.setItem(BFU_KEY, JSON.stringify(d)); }
+
+function openBFUModal() {
+  var existing = document.getElementById('oncor-bfu-modal');
+  if (existing) { existing.style.display = existing.style.display==='none'?'flex':'none'; if(existing.style.display==='flex') renderBFUList(); return; }
+  var modal = document.createElement('div');
+  modal.id = 'oncor-bfu-modal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:19999;display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = '<div style="background:#1e293b;border-radius:14px;width:94%;max-width:950px;max-height:92vh;overflow-y:auto;padding:26px 30px;position:relative;font-family:inherit;">' +
+    '<button onclick="document.getElementById(\'oncor-bfu-modal\').style.display=\'none\';" style="position:absolute;top:14px;right:18px;background:transparent;border:none;color:#94a3b8;font-size:22px;cursor:pointer;">✕</button>' +
+    '<h2 style="margin:0 0 4px;color:#60a5fa;font-size:19px;">📞 Bid Follow-Up CRM</h2>' +
+    '<p style="margin:0 0 16px;color:#64748b;font-size:12px;">Track follow-up calls, decision dates, and notes for every active bid | Ctrl+Alt+U</p>' +
+    '<div id="bfu-stats" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;"></div>' +
+    '<button onclick="openBFUForm();" style="padding:8px 18px;background:#1d4ed8;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;margin-bottom:14px;">+ Add Bid Follow-Up</button>' +
+    '<div id="bfu-form-area" style="margin-bottom:14px;"></div>' +
+    '<div id="bfu-list"></div>' +
+  '</div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e){ if(e.target===modal) modal.style.display='none'; });
+  renderBFUList();
+}
+
+function renderBFUList() {
+  var data = loadBFUData();
+  var today = new Date(); today.setHours(0,0,0,0);
+  // Stats
+  var active = data.filter(function(b){return ['Pending','Submitted','Waiting','Following Up'].indexOf(b.status)>-1;}).length;
+  var followUpDue = data.filter(function(b){
+    if(!b.nextFollowUp) return false;
+    var d = new Date(b.nextFollowUp); d.setHours(0,0,0,0);
+    return d<=today && ['Pending','Submitted','Waiting','Following Up'].indexOf(b.status)>-1;
+  }).length;
+  var won = data.filter(function(b){return b.status==='Won';}).length;
+  var lost = data.filter(function(b){return b.status==='Lost';}).length;
+  var totalPipeline = data.filter(function(b){return ['Pending','Submitted','Waiting','Following Up'].indexOf(b.status)>-1;}).reduce(function(s,b){return s+(parseFloat(b.bidAmount)||0);},0);
+  function statCard(l,v,c){ return '<div style="background:#0f172a;border-radius:8px;padding:10px 12px;border:1px solid #334155;text-align:center;"><div style="color:#64748b;font-size:10px;text-transform:uppercase;">'+l+'</div><div style="color:'+(c||'#e2e8f0')+';font-size:20px;font-weight:700;margin-top:4px;">'+v+'</div></div>'; }
+  var statsEl = document.getElementById('bfu-stats');
+  if(statsEl) statsEl.innerHTML = statCard('Active Bids',active,'#60a5fa') + statCard('Follow-Up Due',followUpDue,followUpDue>0?'#ef4444':'#34d399') + statCard('Won',won,'#34d399') + statCard('Lost',lost,'#f87171') + statCard('Pipeline','$'+(totalPipeline/1000).toFixed(0)+'k','#a78bfa');
+  // Sort: follow-up due first, then by nextFollowUp date
+  data.sort(function(a,b){
+    var aActive = ['Pending','Submitted','Waiting','Following Up'].indexOf(a.status)>-1?0:1;
+    var bActive = ['Pending','Submitted','Waiting','Following Up'].indexOf(b.status)>-1?0:1;
+    if(aActive!==bActive) return aActive-bActive;
+    var aDate = a.nextFollowUp?new Date(a.nextFollowUp):new Date('2099-01-01');
+    var bDate = b.nextFollowUp?new Date(b.nextFollowUp):new Date('2099-01-01');
+    return aDate-bDate;
+  });
+  var listEl = document.getElementById('bfu-list');
+  if(!listEl) return;
+  if(!data.length){ listEl.innerHTML='<p style="color:#64748b;font-size:13px;text-align:center;padding:20px;">No bids tracked yet. Add your first bid follow-up above.</p>'; return; }
+  var statusColors = {'Pending':'#60a5fa','Submitted':'#a78bfa','Waiting':'#fbbf24','Following Up':'#fb923c','Won':'#34d399','Lost':'#f87171','No Bid':'#94a3b8','On Hold':'#94a3b8'};
+  listEl.innerHTML = data.map(function(b,idx){
+    var isActive = ['Pending','Submitted','Waiting','Following Up'].indexOf(b.status)>-1;
+    var isDue = b.nextFollowUp && isActive && new Date(b.nextFollowUp)<=today;
+    var isOverdue = b.decisionDate && isActive && new Date(b.decisionDate)<today;
+    var border = isDue?'#ef4444':isOverdue?'#f97316':'#334155';
+    var callLog = b.calls||[];
+    return '<div style="background:#0f172a;border-radius:10px;padding:14px 16px;margin-bottom:10px;border:1px solid '+border+';">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
+        '<div style="flex:1;">' +
+          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">' +
+            '<span style="color:#e2e8f0;font-size:14px;font-weight:600;">'+_escHtml(b.projectName||'Unnamed Bid')+'</span>' +
+            '<span style="background:'+((statusColors[b.status])||'#94a3b8')+'22;color:'+((statusColors[b.status])||'#94a3b8')+';padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;">'+_escHtml(b.status||'Pending')+'</span>' +
+            (isDue?'<span style="background:#ef444422;color:#ef4444;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;">📞 CALL DUE</span>':'') +
+            (isOverdue?'<span style="background:#f9731622;color:#f97316;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;">⏰ DECISION OVERDUE</span>':'') +
+          '</div>' +
+          '<div style="color:#94a3b8;font-size:12px;margin-bottom:4px;">'+_escHtml(b.gcName||'')+(b.gcContact?' · '+_escHtml(b.gcContact):'')+(b.gcPhone?' · '+_escHtml(b.gcPhone):'')+'</div>' +
+          '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:#64748b;">' +
+            (b.bidAmount?'<span>Bid: <strong style="color:#a78bfa;">$'+(parseFloat(b.bidAmount)||0).toLocaleString()+'</strong></span>':'') +
+            (b.bidDate?'<span>Bid Date: '+_escHtml(b.bidDate)+'</span>':'') +
+            (b.decisionDate?'<span>Decision: <strong style="color:'+(isOverdue?'#f97316':'#e2e8f0')+';">'+_escHtml(b.decisionDate)+'</strong></span>':'') +
+            (b.nextFollowUp?'<span>Next Call: <strong style="color:'+(isDue?'#ef4444':'#60a5fa')+';">'+_escHtml(b.nextFollowUp)+'</strong></span>':'') +
+          '</div>' +
+          (b.notes?'<div style="color:#94a3b8;font-size:12px;margin-top:6px;font-style:italic;">'+_escHtml(b.notes)+'</div>':'') +
+          (callLog.length?'<div style="margin-top:8px;"><span style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">Call Log ('+callLog.length+')</span>' +
+            callLog.slice(-3).map(function(cl){ return '<div style="background:#1e293b;border-radius:6px;padding:6px 10px;margin-top:4px;font-size:12px;"><span style="color:#94a3b8;">'+_escHtml(cl.date||'')+'</span> <span style="color:#e2e8f0;">'+_escHtml(cl.note||'')+'</span></div>'; }).join('') +
+          '</div>':'') +
+        '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:6px;margin-left:14px;">' +
+          '<button onclick="openBFUForm('+idx+');" style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;">✏️ Edit</button>' +
+          '<button onclick="addBFUCallLog('+idx+');" style="background:#1e293b;color:#60a5fa;border:1px solid #1d4ed8;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;">📞 Log Call</button>' +
+          '<button onclick="deleteBFUEntry('+idx+');" style="background:#1e293b;color:#f87171;border:1px solid #991b1b;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;">🗑 Del</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+window.openBFUForm = function(idx) {
+  var data = loadBFUData();
+  var e = idx!==undefined ? data[idx] : {};
+  var fa = document.getElementById('bfu-form-area');
+  if(!fa) return;
+  fa.innerHTML = '<div style="background:#0f172a;border-radius:10px;padding:16px;border:1px solid #3b82f6;margin-bottom:4px;">' +
+    '<h3 style="margin:0 0 14px;color:#60a5fa;font-size:14px;">'+(idx!==undefined?'Edit':'New')+' Bid Follow-Up</h3>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">' +
+      '<div><label style="color:#94a3b8;font-size:11px;">Project / Bid Name *</label><input id="bfu-proj" value="'+_escHtml(e.projectName||'')+'" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;margin-top:3px;" placeholder="e.g. Mesa Verde Warehouse Slab"></div>' +
+      '<div><label style="color:#94a3b8;font-size:11px;">GC / Client</label><input id="bfu-gc" value="'+_escHtml(e.gcName||'')+'" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;margin-top:3px;" placeholder="Sundt Construction"></div>' +
+      '<div><label style="color:#94a3b8;font-size:11px;">GC Contact</label><input id="bfu-contact" value="'+_escHtml(e.gcContact||'')+'" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;margin-top:3px;" placeholder="Mike Rodriguez"></div>' +
+      '<div><label style="color:#94a3b8;font-size:11px;">GC Phone</label><input id="bfu-phone" value="'+_escHtml(e.gcPhone||'')+'" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;margin-top:3px;" placeholder="915-555-1234"></div>' +
+      '<div><label style="color:#94a3b8;font-size:11px;">Bid Amount ($)</label><input id="bfu-amt" type="number" value="'+_escHtml(e.bidAmount||'')+'" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;margin-top:3px;"></div>' +
+      '<div><label style="color:#94a3b8;font-size:11px;">Bid Date</label><input id="bfu-biddate" type="date" value="'+(e.bidDate||'')+'" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;margin-top:3px;"></div>' +
+      '<div><label style="color:#94a3b8;font-size:11px;">Decision Date</label><input id="bfu-decdate" type="date" value="'+(e.decisionDate||'')+'" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;margin-top:3px;"></div>' +
+      '<div><label style="color:#94a3b8;font-size:11px;">Next Follow-Up</label><input id="bfu-followup" type="date" value="'+(e.nextFollowUp||'')+'" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;margin-top:3px;"></div>' +
+      '<div><label style="color:#94a3b8;font-size:11px;">Status</label><select id="bfu-status" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;margin-top:3px;"><option value="Pending"'+(e.status==='Pending'?' selected':'')+'>Pending</option><option value="Submitted"'+(e.status==='Submitted'?' selected':'')+'>Submitted</option><option value="Waiting"'+(e.status==='Waiting'?' selected':'')+'>Waiting</option><option value="Following Up"'+(e.status==='Following Up'?' selected':'')+'>Following Up</option><option value="Won"'+(e.status==='Won'?' selected':'')+'>Won</option><option value="Lost"'+(e.status==='Lost'?' selected':'')+'>Lost</option><option value="No Bid"'+(e.status==='No Bid'?' selected':'')+'>No Bid</option><option value="On Hold"'+(e.status==='On Hold'?' selected':'')+'>On Hold</option></select></div>' +
+    '</div>' +
+    '<div style="margin-bottom:10px;"><label style="color:#94a3b8;font-size:11px;">Notes / Why Win or Why Lost</label><textarea id="bfu-notes" rows="2" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 10px;color:#e2e8f0;font-size:13px;box-sizing:border-box;margin-top:3px;resize:vertical;">'+_escHtml(e.notes||'')+'</textarea></div>' +
+    '<div style="display:flex;gap:10px;">' +
+      '<button onclick="saveBFUEntry('+(idx!==undefined?idx:'undefined')+');" style="padding:8px 18px;background:#1d4ed8;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;">'+(idx!==undefined?'Save Changes':'Add Bid')+'</button>' +
+      '<button onclick="document.getElementById(\'bfu-form-area\').innerHTML=\'\';" style="padding:8px 14px;background:transparent;color:#94a3b8;border:1px solid #334155;border-radius:8px;cursor:pointer;font-size:13px;">Cancel</button>' +
+    '</div>' +
+  '</div>';
+};
+
+window.saveBFUEntry = function(idx) {
+  var data = loadBFUData();
+  var entry = idx!==undefined ? data[idx] : {};
+  entry.projectName = (document.getElementById('bfu-proj')||{}).value||'';
+  entry.gcName = (document.getElementById('bfu-gc')||{}).value||'';
+  entry.gcContact = (document.getElementById('bfu-contact')||{}).value||'';
+  entry.gcPhone = (document.getElementById('bfu-phone')||{}).value||'';
+  entry.bidAmount = (document.getElementById('bfu-amt')||{}).value||'';
+  entry.bidDate = (document.getElementById('bfu-biddate')||{}).value||'';
+  entry.decisionDate = (document.getElementById('bfu-decdate')||{}).value||'';
+  entry.nextFollowUp = (document.getElementById('bfu-followup')||{}).value||'';
+  entry.status = (document.getElementById('bfu-status')||{}).value||'Pending';
+  entry.notes = (document.getElementById('bfu-notes')||{}).value||'';
+  if(!entry.projectName){alert('Project name required.');return;}
+  if(idx!==undefined){ data[idx]=entry; } else { data.push(entry); }
+  saveBFUData(data);
+  document.getElementById('bfu-form-area').innerHTML='';
+  renderBFUList();
+};
+
+window.deleteBFUEntry = function(idx) {
+  if(!confirm('Delete this bid follow-up?')) return;
+  var data = loadBFUData();
+  data.splice(idx,1);
+  saveBFUData(data);
+  renderBFUList();
+};
+
+window.addBFUCallLog = function(idx) {
+  var note = prompt('Call log note (e.g. "Called Mike, said decision next Friday"):');
+  if(!note) return;
+  var data = loadBFUData();
+  if(!data[idx].calls) data[idx].calls=[];
+  data[idx].calls.push({ date: new Date().toLocaleDateString(), note: note });
+  data[idx].status = 'Following Up';
+  saveBFUData(data);
+  renderBFUList();
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn = document.createElement('button');
+    btn.id = 'oncor-bfu-btn';
+    btn.textContent = '📞 Bid Follow-Up CRM';
+    btn.title = 'Bid Follow-Up CRM (Ctrl+Alt+U)';
+    btn.onclick = openBFUModal;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(29,78,216,0.12);color:#93c5fd;border:1px solid rgba(29,78,216,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(29,78,216,0.25)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(29,78,216,0.12)'; };
+    var plBtn = document.getElementById('oncor-pl-btn');
+    if (plBtn && plBtn.parentNode) {
+      plBtn.parentNode.insertBefore(btn, plBtn.nextSibling);
+    } else {
+      btn.style.cssText += 'position:fixed;bottom:510px;right:20px;z-index:9000;width:auto;';
+      document.body.appendChild(btn);
+    }
+  }, 14400);
+});
+// ==================== END BID FOLLOW-UP CRM ====================
+
+// ==================== 📊 ESTIMATE VS ACTUAL REPORT (Ctrl+Alt+V) ====================
+// Purpose: After a project, compare every estimate line to actual — find where margin was made or lost
+
+function openEVAModal() {
+  var existing = document.getElementById('oncor-eva-modal');
+  if (existing) { existing.style.display = existing.style.display==='none'?'flex':'none'; if(existing.style.display==='flex') refreshEVAReport(); return; }
+  var modal = document.createElement('div');
+  modal.id = 'oncor-eva-modal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:19999;display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = '<div style="background:#1e293b;border-radius:14px;width:94%;max-width:960px;max-height:92vh;overflow-y:auto;padding:26px 30px;position:relative;font-family:inherit;">' +
+    '<button onclick="document.getElementById(\'oncor-eva-modal\').style.display=\'none\';" style="position:absolute;top:14px;right:18px;background:transparent;border:none;color:#94a3b8;font-size:22px;cursor:pointer;">✕</button>' +
+    '<h2 style="margin:0 0 4px;color:#fbbf24;font-size:19px;">📊 Estimate vs Actual Report</h2>' +
+    '<p style="margin:0 0 18px;color:#64748b;font-size:12px;">Compare estimated quantities/costs to actual field results | Ctrl+Alt+V</p>' +
+    '<div id="eva-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:18px;"></div>' +
+    '<div id="eva-body"></div>' +
+    '<div style="display:flex;gap:10px;margin-top:12px;">' +
+      '<button onclick="printEVAReport();" style="padding:8px 20px;background:#d97706;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;">🖨️ Print Est. vs Actual Report</button>' +
+    '</div>' +
+  '</div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e){ if(e.target===modal) modal.style.display='none'; });
+  refreshEVAReport();
+}
+
+function refreshEVAReport() {
+  var proj = (typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName.replace(/\s+/g,'_'):'global';
+  var projName = (typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  // Estimate data
+  var est = (typeof window.lastEstimate!=='undefined'&&window.lastEstimate)?window.lastEstimate:{};
+  var estYds = parseFloat(est.totalYds)||0;
+  var estBid = parseFloat(est.totalBid)||0;
+  var estConcrete = parseFloat(est.concreteCost)||0;
+  var estLabor = parseFloat(est.laborCost)||0;
+  var estOverhead = parseFloat(est.overhead)||0;
+  var estProfit = parseFloat(est.profit)||0;
+  // Actual data from Field Log
+  var fieldLog = JSON.parse(localStorage.getItem('oncor_field_log_v1_'+proj)||'[]');
+  var actYds = fieldLog.reduce(function(s,f){return s+(parseFloat(f.actualYds)||0);},0);
+  var estYdsField = fieldLog.reduce(function(s,f){return s+(parseFloat(f.estimatedYds)||0);},0);
+  // Actual costs from Job Cost Tracker
+  var jobCosts = JSON.parse(localStorage.getItem('oncor_job_cost_v1_'+proj)||'[]');
+  var actConcreteMatl = jobCosts.filter(function(j){return j.category==='Concrete Materials';}).reduce(function(s,j){return s+(parseFloat(j.amount)||0);},0);
+  var actLabor = jobCosts.filter(function(j){return j.category==='Labor (Self-Performed)';}).reduce(function(s,j){return s+(parseFloat(j.amount)||0);},0);
+  var actFormwork = jobCosts.filter(function(j){return j.category==='Formwork';}).reduce(function(s,j){return s+(parseFloat(j.amount)||0);},0);
+  var actRebar = jobCosts.filter(function(j){return j.category==='Rebar & Wire Mesh';}).reduce(function(s,j){return s+(parseFloat(j.amount)||0);},0);
+  var actPump = jobCosts.filter(function(j){return j.category==='Concrete Pump';}).reduce(function(s,j){return s+(parseFloat(j.amount)||0);},0);
+  var actSawCut = jobCosts.filter(function(j){return j.category==='Saw Cutting';}).reduce(function(s,j){return s+(parseFloat(j.amount)||0);},0);
+  var actTotalCost = jobCosts.reduce(function(s,j){return s+(parseFloat(j.amount)||0);},0);
+  // AR data for actual revenue
+  var arData = JSON.parse(localStorage.getItem('oncor_ar_v1_'+proj)||'[]');
+  var actRevenue = arData.reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var actCollected = arData.filter(function(i){return i.status==='Paid';}).reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  // Delivery tickets for actual yd³ placed
+  var tickets = JSON.parse(localStorage.getItem('oncor_delivery_tickets_v1_'+proj)||'[]');
+  var ticketYds = tickets.filter(function(t){return t.status!=='Rejected';}).reduce(function(s,t){return s+(parseFloat(t.yards)||0);},0);
+  var actYdsFinal = ticketYds>0?ticketYds:(actYds>0?actYds:0);
+  // Variances
+  var ydsVar = actYdsFinal - estYds;
+  var ydsVarPct = estYds>0?(ydsVar/estYds*100):0;
+  var costVar = actTotalCost - (estBid - estProfit - estOverhead);
+  var revenueVar = actRevenue - estBid;
+  function fmt(n){return '$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});}
+  function fmtV(n,pct){var sign=n>0?'+':''; return sign+(pct?n.toFixed(1)+'%':(n>=0?fmt(n):'-'+fmt(n)));}
+  function kcard(label,est,act,varVal,varPct,unit){
+    var color = varVal<0?'#34d399':(varVal>0?'#ef4444':'#94a3b8');
+    return '<div style="background:#0f172a;border-radius:10px;padding:12px 14px;border:1px solid #334155;">' +
+      '<div style="color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">'+label+'</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+        '<div style="color:#94a3b8;font-size:11px;">Est</div><div style="color:#e2e8f0;font-size:13px;font-weight:600;">'+(est||'—')+'</div>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+        '<div style="color:#94a3b8;font-size:11px;">Act</div><div style="color:#e2e8f0;font-size:13px;font-weight:600;">'+(act||'—')+'</div>' +
+      '</div>' +
+      '<div style="background:#1e293b;border-radius:6px;padding:4px 8px;text-align:center;">' +
+        '<span style="color:'+color+';font-size:12px;font-weight:700;">'+varVal+'</span>' +
+        (varPct?'<span style="color:'+color+';font-size:11px;"> ('+varPct+')</span>':'') +
+      '</div>' +
+    '</div>';
+  }
+  var kpis = document.getElementById('eva-kpis');
+  if(kpis) kpis.innerHTML =
+    kcard('yd³ Placed', estYds>0?estYds.toFixed(1)+' yd³':'—', actYdsFinal>0?actYdsFinal.toFixed(1)+' yd³':'—', fmtV(ydsVar), fmtV(ydsVarPct,true), 'yd³') +
+    kcard('Bid Revenue', estBid>0?fmt(estBid):'—', actRevenue>0?fmt(actRevenue):'—', fmtV(revenueVar), '', '$') +
+    kcard('Total Cost', estBid>0?fmt(estBid-estProfit-estOverhead):'—', actTotalCost>0?fmt(actTotalCost):'—', fmtV(costVar), '', '$') +
+    kcard('Concrete Matl', estConcrete>0?fmt(estConcrete):'—', actConcreteMatl>0?fmt(actConcreteMatl):'—', estConcrete>0?fmtV(actConcreteMatl-estConcrete):'—', '', '$') +
+    kcard('Labor', estLabor>0?fmt(estLabor):'—', actLabor>0?fmt(actLabor):'—', estLabor>0?fmtV(actLabor-estLabor):'—', '', '$') +
+    kcard('Collected', estBid>0?fmt(estBid):'—', actCollected>0?fmt(actCollected):'—', estBid>0?fmtV(actCollected-estBid):'—', '', '$');
+  // Detailed table
+  var rows = [
+    ['Concrete Materials', estConcrete, actConcreteMatl],
+    ['Labor', estLabor, actLabor],
+    ['Formwork', parseFloat(est.formsCost)||0, actFormwork],
+    ['Rebar & Wire Mesh', parseFloat(est.rebarCost)||0, actRebar],
+    ['Concrete Pump', parseFloat(est.pumpCost)||0, actPump],
+    ['Saw Cutting', parseFloat(est.sawCost)||0, actSawCut],
+  ].filter(function(r){ return r[1]>0||r[2]>0; });
+  var tableRows = rows.map(function(r){
+    var vari = r[2]-r[1];
+    var varColor = vari<=0?'#34d399':'#ef4444';
+    return '<tr style="border-bottom:1px solid #1e293b;">' +
+      '<td style="padding:8px 10px;color:#e2e8f0;">'+r[0]+'</td>' +
+      '<td style="padding:8px 10px;text-align:right;color:#94a3b8;">'+(r[1]>0?fmt(r[1]):'—')+'</td>' +
+      '<td style="padding:8px 10px;text-align:right;color:#e2e8f0;">'+(r[2]>0?fmt(r[2]):'—')+'</td>' +
+      '<td style="padding:8px 10px;text-align:right;color:'+varColor+';font-weight:600;">'+(r[1]>0&&r[2]>0?(vari>0?'+':'')+fmt(vari):'—')+'</td>' +
+      '<td style="padding:8px 10px;text-align:right;color:'+varColor+';font-size:11px;">'+(r[1]>0&&r[2]>0?((vari/r[1]*100).toFixed(1)+'%'):'—')+'</td>' +
+    '</tr>';
+  }).join('');
+  // Pour log comparison
+  var pourRows = fieldLog.map(function(f){
+    var est2 = parseFloat(f.estimatedYds)||0;
+    var act2 = parseFloat(f.actualYds)||0;
+    var diff = act2-est2;
+    return '<tr style="border-bottom:1px solid #1e293b;">' +
+      '<td style="padding:7px 10px;color:#e2e8f0;">'+_escHtml(f.date||'')+'</td>' +
+      '<td style="padding:7px 10px;color:#94a3b8;">'+_escHtml(f.elements||f.pourName||'Pour')+'</td>' +
+      '<td style="padding:7px 10px;text-align:right;color:#94a3b8;">'+(est2>0?est2.toFixed(1):'—')+'</td>' +
+      '<td style="padding:7px 10px;text-align:right;color:#e2e8f0;">'+(act2>0?act2.toFixed(1):'—')+'</td>' +
+      '<td style="padding:7px 10px;text-align:right;color:'+(diff<0?'#34d399':diff>0?'#ef4444':'#94a3b8')+';font-weight:600;">'+(est2>0&&act2>0?(diff>0?'+':'')+diff.toFixed(1):'—')+'</td>' +
+    '</tr>';
+  }).join('');
+  var body = document.getElementById('eva-body');
+  if(body) body.innerHTML =
+    '<div style="margin-bottom:18px;">' +
+      '<h3 style="color:#94a3b8;font-size:13px;margin:0 0 10px;">📋 Cost Category Comparison</h3>' +
+      (tableRows?'<table style="width:100%;border-collapse:collapse;background:#0f172a;border-radius:10px;overflow:hidden;"><thead><tr style="background:#1e293b;"><th style="padding:8px 10px;text-align:left;color:#64748b;font-size:11px;">Category</th><th style="padding:8px 10px;text-align:right;color:#64748b;font-size:11px;">Est</th><th style="padding:8px 10px;text-align:right;color:#64748b;font-size:11px;">Actual</th><th style="padding:8px 10px;text-align:right;color:#64748b;font-size:11px;">Variance $</th><th style="padding:8px 10px;text-align:right;color:#64748b;font-size:11px;">Variance %</th></tr></thead><tbody>'+tableRows+'</tbody></table>':'<p style="color:#64748b;font-size:12px;">No estimate or job cost data yet. Add cost entries to see comparisons.</p>') +
+    '</div>' +
+    (pourRows?'<div><h3 style="color:#94a3b8;font-size:13px;margin:0 0 10px;">🚚 Pour-by-Pour Volume Comparison</h3><table style="width:100%;border-collapse:collapse;background:#0f172a;border-radius:10px;overflow:hidden;"><thead><tr style="background:#1e293b;"><th style="padding:7px 10px;text-align:left;color:#64748b;font-size:11px;">Date</th><th style="padding:7px 10px;text-align:left;color:#64748b;font-size:11px;">Pour / Area</th><th style="padding:7px 10px;text-align:right;color:#64748b;font-size:11px;">Est yd³</th><th style="padding:7px 10px;text-align:right;color:#64748b;font-size:11px;">Actual yd³</th><th style="padding:7px 10px;text-align:right;color:#64748b;font-size:11px;">Δ yd³</th></tr></thead><tbody>'+pourRows+'</tbody></table></div>':'') +
+    ((!tableRows&&!pourRows)?'<div style="text-align:center;padding:30px;color:#64748b;"><p style="font-size:13px;">No estimate or actual data found for this project.</p><p style="font-size:12px;">Recalculate the estimate, then add field log entries and job cost entries to see the comparison.</p></div>':'');
+}
+
+window.printEVAReport = function() {
+  var proj = (typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var comp = (document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var now = new Date().toLocaleDateString();
+  var projKey = proj.replace(/\s+/g,'_');
+  var est = (typeof window.lastEstimate!=='undefined'&&window.lastEstimate)?window.lastEstimate:{};
+  var estBid = parseFloat(est.totalBid)||0;
+  var estYds = parseFloat(est.totalYds)||0;
+  var estConcrete = parseFloat(est.concreteCost)||0;
+  var estLabor = parseFloat(est.laborCost)||0;
+  var jobCosts = JSON.parse(localStorage.getItem('oncor_job_cost_v1_'+projKey)||'[]');
+  var actTotalCost = jobCosts.reduce(function(s,j){return s+(parseFloat(j.amount)||0);},0);
+  var actConcreteMatl = jobCosts.filter(function(j){return j.category==='Concrete Materials';}).reduce(function(s,j){return s+(parseFloat(j.amount)||0);},0);
+  var actLabor = jobCosts.filter(function(j){return j.category==='Labor (Self-Performed)';}).reduce(function(s,j){return s+(parseFloat(j.amount)||0);},0);
+  var arData = JSON.parse(localStorage.getItem('oncor_ar_v1_'+projKey)||'[]');
+  var actRevenue = arData.reduce(function(s,i){return s+(parseFloat(i.amount)||0);},0);
+  var tickets = JSON.parse(localStorage.getItem('oncor_delivery_tickets_v1_'+projKey)||'[]');
+  var actYds = tickets.filter(function(t){return t.status!=='Rejected';}).reduce(function(s,t){return s+(parseFloat(t.yards)||0);},0);
+  function fmt(n){return '$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});}
+  var rows = [['Concrete Materials',estConcrete,actConcreteMatl],['Labor',estLabor,actLabor],['Total Costs',estBid>0?estBid-parseFloat(est.profit||0)-parseFloat(est.overhead||0):0,actTotalCost],['Revenue/Bid',estBid,actRevenue]];
+  var tRows = rows.map(function(r){
+    var v=r[2]-r[1]; var pct=r[1]>0?(v/r[1]*100):0;
+    return '<tr><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">'+r[0]+'</td><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;">'+(r[1]>0?fmt(r[1]):'—')+'</td><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;">'+(r[2]>0?fmt(r[2]):'—')+'</td><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;color:'+(v<=0?'green':'red')+';font-weight:700;">'+(r[1]>0&&r[2]>0?((v>0?'+':'')+fmt(v)):'—')+'</td><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;color:'+(v<=0?'green':'red')+';font-size:9pt;">'+(r[1]>0&&r[2]>0?pct.toFixed(1)+'%':'—')+'</td></tr>';
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Est vs Actual — '+proj+'</title><style>body{font-family:Arial,sans-serif;font-size:10pt;color:#1e293b;margin:0;padding:20px;} .header{display:flex;justify-content:space-between;border-bottom:3px solid #d97706;padding-bottom:10px;margin-bottom:18px;} table{width:100%;border-collapse:collapse;} th{background:#fef3c7;padding:6px 8px;text-align:left;font-size:9pt;} .footer{margin-top:20px;text-align:center;color:#94a3b8;font-size:8pt;border-top:1px solid #e2e8f0;padding-top:10px;} @media print{button{display:none;}}</style></head><body>' +
+    '<div class="header"><div><div style="font-size:16pt;font-weight:700;color:#d97706;">'+comp+'</div><div style="font-size:9pt;color:#64748b;">ESTIMATE vs ACTUAL REPORT</div></div><div style="text-align:right;font-size:9pt;color:#64748b;"><div><strong>'+proj+'</strong></div><div>'+now+'</div></div></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:18px;">' +
+      '<div style="background:#f1f5f9;border-radius:6px;padding:10px 12px;"><div style="color:#64748b;font-size:8pt;text-transform:uppercase;">Est Bid</div><div style="font-size:14pt;font-weight:700;">'+(estBid>0?fmt(estBid):'—')+'</div></div>' +
+      '<div style="background:#f1f5f9;border-radius:6px;padding:10px 12px;"><div style="color:#64748b;font-size:8pt;text-transform:uppercase;">Act Revenue Invoiced</div><div style="font-size:14pt;font-weight:700;">'+(actRevenue>0?fmt(actRevenue):'—')+'</div></div>' +
+      '<div style="background:'+(actYds>0&&estYds>0&&(actYds-estYds)/estYds>0.08?'#fef2f2':'#f0fdf4')+'border-radius:6px;padding:10px 12px;"><div style="color:#64748b;font-size:8pt;text-transform:uppercase;">yd³ Est / Actual</div><div style="font-size:14pt;font-weight:700;">'+(estYds>0?estYds.toFixed(1):'—')+' / '+(actYds>0?actYds.toFixed(1):'—')+'</div></div>' +
+    '</div>' +
+    '<table><thead><tr><th>Category</th><th style="text-align:right;">Estimated</th><th style="text-align:right;">Actual</th><th style="text-align:right;">Variance $</th><th style="text-align:right;">Variance %</th></tr></thead><tbody>'+tRows+'</tbody></table>' +
+    '<div class="footer">CONFIDENTIAL — INTERNAL USE ONLY | '+comp+' | Estimate vs Actual Report | '+now+'</div>' +
+    '<script>window.onload=function(){window.print();};<\/script></body></html>';
+  var w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn = document.createElement('button');
+    btn.id = 'oncor-eva-btn';
+    btn.textContent = '📊 Estimate vs Actual';
+    btn.title = 'Estimate vs Actual Report (Ctrl+Alt+V)';
+    btn.onclick = openEVAModal;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(217,119,6,0.12);color:#fcd34d;border:1px solid rgba(217,119,6,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(217,119,6,0.25)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(217,119,6,0.12)'; };
+    var bfuBtn = document.getElementById('oncor-bfu-btn');
+    if (bfuBtn && bfuBtn.parentNode) {
+      bfuBtn.parentNode.insertBefore(btn, bfuBtn.nextSibling);
+    } else {
+      btn.style.cssText += 'position:fixed;bottom:550px;right:20px;z-index:9000;width:auto;';
+      document.body.appendChild(btn);
+    }
+  }, 14600);
+});
+// ==================== END ESTIMATE VS ACTUAL REPORT ====================
+
+// ==================== KEYBOARD SHORTCUTS — Session #98 ====================
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.altKey) {
+    if (e.key === 't' || e.key === 'T') { e.preventDefault(); openPLModal(); }
+    if (e.key === 'u' || e.key === 'U') { e.preventDefault(); openBFUModal(); }
+    if (e.key === 'v' || e.key === 'V') { e.preventDefault(); openEVAModal(); }
+  }
+});
+// ==================== END KEYBOARD SHORTCUTS ====================
+
+// Helper: HTML escape (reuse if already defined)
+if(typeof _escHtml === 'undefined') {
+  window._escHtml = function(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+}
+
+})();
+// ==================== END SESSION #98 — Zeus ⚡ Project P&L Dashboard (Ctrl+Alt+T) + Bid Follow-Up CRM (Ctrl+Alt+U) + Estimate vs Actual (Ctrl+Alt+V) ====================
 </script>
