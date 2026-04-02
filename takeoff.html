@@ -174544,3 +174544,452 @@ document.addEventListener('keydown', function(e) {
 })();
 // ==================== END SESSION #103 — Zeus ⚡ Yield Tracker (Ctrl+Alt+9) + Action Items (Ctrl+Alt+A) + Meeting Notes (Ctrl+Alt+B) ====================
 </script>
+
+<script>
+// ==================== SESSION #104 — Zeus ⚡ Backcharge Log (Ctrl+Alt+D) + Photo Documentation Log (Ctrl+Alt+E) + RFI Quick Tracker (Ctrl+Alt+F) ====================
+(function() {
+'use strict';
+
+function _escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _fmt$(n){ return '$'+(parseFloat(n)||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+function _fmtDate(d){ if(!d) return '—'; var dt=new Date(d); return isNaN(dt)?d:dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+function _todayISO(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function _projKey(){ return ((typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'__global__').replace(/\s+/g,'_'); }
+
+// =====================================================================
+// FEATURE 1: Backcharge Log (Ctrl+Alt+D) — ~190 lines
+// =====================================================================
+function _loadBC(){ return JSON.parse(localStorage.getItem('oncor_backcharges_v1_'+_projKey())||'[]'); }
+function _saveBC(arr){ localStorage.setItem('oncor_backcharges_v1_'+_projKey(),JSON.stringify(arr)); }
+
+window.openBackchargeModal = function(){
+  var existing=document.getElementById('oncor-backcharge-modal');
+  if(existing){ existing.style.display=existing.style.display==='none'?'flex':'none'; _renderBC(); return; }
+  var overlay=document.createElement('div');
+  overlay.id='oncor-backcharge-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:11000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+  overlay.innerHTML='<div style="background:#1e293b;border-radius:12px;width:100%;max-width:900px;padding:24px;color:#e2e8f0;position:relative;">'+
+    '<button onclick="this.closest(\'#oncor-backcharge-modal\').style.display=\'none\'" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+      '<div><div style="font-size:16pt;font-weight:700;color:#f43f5e;">💸 Backcharge Log</div>'+
+      '<div style="font-size:10pt;color:#94a3b8;">Track backcharges issued TO you and BY you — document, dispute, and resolve. The paper trail that protects your money.</div></div>'+
+      '<button onclick="window.printBackchargeReport()" style="background:rgba(244,63,94,0.15);color:#f43f5e;border:1px solid rgba(244,63,94,0.3);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨️ Print</button>'+
+    '</div>'+
+    '<div id="oncor-bc-form" style="background:rgba(255,255,255,0.04);border-radius:8px;padding:14px;margin-bottom:16px;">'+
+      '<div style="font-size:11pt;font-weight:600;color:#f43f5e;margin-bottom:10px;">+ Log Backcharge</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Direction *</label>'+
+        '<select id="bc-dir" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;">'+
+          '<option value="received">⬇ Received (TO us)</option><option value="issued">⬆ Issued (BY us)</option>'+
+        '</select></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">From / To *</label>'+
+        '<input id="bc-party" placeholder="GC name, sub name" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Amount *</label>'+
+        '<input type="number" id="bc-amount" placeholder="5000" min="0" step="1" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Date</label>'+
+        '<input type="date" id="bc-date" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Reason</label>'+
+        '<select id="bc-reason" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;">'+
+          '<option>Damage to Other Work</option><option>Cleanup / Debris</option><option>Defective Work / Rework</option><option>Schedule Delay</option><option>Site Damage</option><option>Failed Inspection</option><option>Safety Violation</option><option>Unapproved Substitution</option><option>Over-Pour / Waste</option><option>Equipment Damage</option><option>Scope Not Completed</option><option>Other</option>'+
+        '</select></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Status</label>'+
+        '<select id="bc-status" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;">'+
+          '<option>Pending</option><option>Disputed</option><option>Accepted</option><option>Deducted</option><option>Resolved</option><option>Voided</option>'+
+        '</select></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">BC # / Ref</label>'+
+        '<input id="bc-ref" placeholder="BC-001" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;">Description / Response</label>'+
+        '<input id="bc-notes" placeholder="Describe what happened and your response..." style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<button onclick="window._bcAdd()" style="background:rgba(244,63,94,0.2);color:#f43f5e;border:1px solid rgba(244,63,94,0.4);border-radius:6px;padding:9px 16px;cursor:pointer;font-size:12px;font-weight:600;">Add</button>'+
+      '</div>'+
+    '</div>'+
+    '<div id="oncor-bc-stats" style="margin-bottom:12px;"></div>'+
+    '<div id="oncor-bc-list"></div>'+
+  '</div>';
+  overlay.addEventListener('click',function(e){ if(e.target===overlay) overlay.style.display='none'; });
+  document.body.appendChild(overlay);
+  document.getElementById('bc-date').value=_todayISO();
+  _renderBC();
+};
+
+window._bcAdd = function(){
+  var party=(document.getElementById('bc-party')||{}).value||'';
+  var amount=parseFloat((document.getElementById('bc-amount')||{}).value)||0;
+  if(!party.trim()||!amount){ alert('Party and amount are required.'); return; }
+  var arr=_loadBC();
+  arr.push({id:Date.now(),dir:(document.getElementById('bc-dir')||{}).value||'received',party:party.trim(),amount:amount,date:(document.getElementById('bc-date')||{}).value||'',reason:(document.getElementById('bc-reason')||{}).value||'Other',status:(document.getElementById('bc-status')||{}).value||'Pending',ref:(document.getElementById('bc-ref')||{}).value||'',notes:(document.getElementById('bc-notes')||{}).value||'',added:Date.now()});
+  _saveBC(arr);
+  ['bc-party','bc-amount','bc-ref','bc-notes'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  _renderBC();
+};
+
+window._bcDelete = function(id){
+  if(!confirm('Delete this backcharge?'))return;
+  _saveBC(_loadBC().filter(function(b){return b.id!==id;}));
+  _renderBC();
+};
+
+window._renderBC = function(){
+  var list=document.getElementById('oncor-bc-list');
+  var statsEl=document.getElementById('oncor-bc-stats');
+  if(!list)return;
+  var arr=_loadBC();
+  var recTotal=arr.filter(function(b){return b.dir==='received';}).reduce(function(s,b){return s+b.amount;},0);
+  var isTotal=arr.filter(function(b){return b.dir==='issued';}).reduce(function(s,b){return s+b.amount;},0);
+  var disputed=arr.filter(function(b){return b.status==='Disputed';}).length;
+  var pending=arr.filter(function(b){return b.status==='Pending';}).length;
+  if(statsEl){
+    statsEl.innerHTML='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">'+
+      '<div style="background:rgba(239,68,68,0.1);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#ef4444;">Received (TO us)</div><div style="font-size:14pt;font-weight:700;color:#ef4444;">'+_fmt$(recTotal)+'</div></div>'+
+      '<div style="background:rgba(34,197,94,0.1);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#22c55e;">Issued (BY us)</div><div style="font-size:14pt;font-weight:700;color:#22c55e;">'+_fmt$(isTotal)+'</div></div>'+
+      '<div style="background:rgba(245,158,11,0.1);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#f59e0b;">Pending</div><div style="font-size:14pt;font-weight:700;color:#f59e0b;">'+pending+'</div></div>'+
+      '<div style="background:rgba(168,85,247,0.1);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#a855f7;">Disputed</div><div style="font-size:14pt;font-weight:700;color:#a855f7;">'+disputed+'</div></div></div>';
+  }
+  arr.sort(function(a,b){return b.added-a.added;});
+  if(!arr.length){list.innerHTML='<div style="text-align:center;padding:30px;color:#64748b;">No backcharges logged. Track received and issued backcharges above.</div>';return;}
+  var html='';
+  arr.forEach(function(b){
+    var isRec=b.dir==='received';
+    var dirColor=isRec?'#ef4444':'#22c55e';
+    var statusColors={Pending:'#f59e0b',Disputed:'#a855f7',Accepted:'#3b82f6',Deducted:'#ef4444',Resolved:'#22c55e',Voided:'#64748b'};
+    html+='<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-left:3px solid '+dirColor+';border-radius:6px;padding:10px 12px;margin-bottom:8px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+        '<div style="flex:1;">'+
+          '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">'+
+            '<span style="background:'+dirColor+'22;color:'+dirColor+';border:1px solid '+dirColor+'44;border-radius:4px;padding:2px 7px;font-size:9pt;font-weight:600;">'+(isRec?'⬇ RECEIVED':'⬆ ISSUED')+'</span>'+
+            '<span style="font-size:14pt;font-weight:700;color:'+dirColor+';">'+_fmt$(b.amount)+'</span>'+
+            '<span style="background:'+(statusColors[b.status]||'#64748b')+'22;color:'+(statusColors[b.status]||'#64748b')+';border-radius:4px;padding:2px 7px;font-size:9pt;font-weight:600;">'+_escH(b.status)+'</span>'+
+            (b.ref?'<span style="font-size:9pt;color:#64748b;">#'+_escH(b.ref)+'</span>':'')+
+          '</div>'+
+          '<div style="font-size:11pt;color:#e2e8f0;"><strong>'+(isRec?'From: ':'To: ')+'</strong>'+_escH(b.party)+' | <strong>Reason:</strong> '+_escH(b.reason)+'</div>'+
+          (b.date?'<div style="font-size:9pt;color:#64748b;margin-top:2px;">'+_fmtDate(b.date)+'</div>':'')+
+          (b.notes?'<div style="font-size:10pt;color:#94a3b8;margin-top:4px;">'+_escH(b.notes)+'</div>':'')+
+        '</div>'+
+        '<button onclick="window._bcDelete('+b.id+')" style="margin-left:10px;background:none;border:none;color:#475569;cursor:pointer;font-size:14px;">🗑</button>'+
+      '</div></div>';
+  });
+  list.innerHTML=html;
+};
+
+window.printBackchargeReport = function(){
+  var arr=_loadBC().sort(function(a,b){return new Date(a.date||a.added)-new Date(b.date||b.added);});
+  var comp=(document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var rows=arr.map(function(b){
+    return '<tr><td style="padding:5px 8px;">'+_fmtDate(b.date)+'</td><td style="padding:5px 8px;font-weight:600;color:'+(b.dir==='received'?'red':'green')+';">'+(b.dir==='received'?'Received':'Issued')+'</td><td style="padding:5px 8px;">'+_escH(b.party)+'</td><td style="padding:5px 8px;">'+_escH(b.reason)+'</td><td style="padding:5px 8px;text-align:right;font-weight:600;">'+_fmt$(b.amount)+'</td><td style="padding:5px 8px;">'+_escH(b.status)+'</td><td style="padding:5px 8px;font-size:9pt;">'+_escH(b.notes)+'</td></tr>';
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Backcharge Log</title><style>body{font-family:Arial;font-size:10pt;padding:20px;}table{width:100%;border-collapse:collapse;}th{background:#e11d48;color:#fff;padding:6px 8px;text-align:left;font-size:9pt;}td{border-bottom:1px solid #e5e7eb;} @media print{button{display:none;}}</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;border-bottom:2px solid #e11d48;padding-bottom:10px;margin-bottom:14px;"><div><strong style="font-size:14pt;">'+_escH(comp)+'</strong><br>BACKCHARGE LOG — '+_escH(proj)+'</div><div style="text-align:right;font-size:9pt;color:#555;">'+arr.length+' Backcharges<br>'+new Date().toLocaleDateString()+'</div></div>'+
+    '<table><tr><th>Date</th><th>Direction</th><th>Party</th><th>Reason</th><th style="text-align:right;">Amount</th><th>Status</th><th>Notes</th></tr>'+rows+'</table>'+
+    '<div style="margin-top:16px;text-align:center;font-size:8pt;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px;">CONFIDENTIAL — INTERNAL USE ONLY</div>'+
+    '<br><button onclick="window.print()">🖨️ Print</button></body></html>';
+  var w=window.open('','_blank');if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// FEATURE 2: Photo Documentation Log (Ctrl+Alt+E) — ~165 lines
+// =====================================================================
+function _loadPL(){ return JSON.parse(localStorage.getItem('oncor_photolog_v1_'+_projKey())||'[]'); }
+function _savePL(arr){ localStorage.setItem('oncor_photolog_v1_'+_projKey(),JSON.stringify(arr)); }
+
+window.openPhotoLogModal = function(){
+  var existing=document.getElementById('oncor-photolog-modal');
+  if(existing){ existing.style.display=existing.style.display==='none'?'flex':'none'; _renderPL(); return; }
+  var overlay=document.createElement('div');
+  overlay.id='oncor-photolog-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:11000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+  overlay.innerHTML='<div style="background:#1e293b;border-radius:12px;width:100%;max-width:860px;padding:24px;color:#e2e8f0;position:relative;">'+
+    '<button onclick="this.closest(\'#oncor-photolog-modal\').style.display=\'none\'" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+      '<div><div style="font-size:16pt;font-weight:700;color:#ec4899;">📸 Photo Documentation Log</div>'+
+      '<div style="font-size:10pt;color:#94a3b8;">Catalog photos taken — who, when, where, what. Links to cloud storage. Creates the evidence index.</div></div>'+
+      '<button onclick="window.printPhotoLogReport()" style="background:rgba(236,72,153,0.15);color:#ec4899;border:1px solid rgba(236,72,153,0.3);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨️ Print</button>'+
+    '</div>'+
+    '<div id="oncor-pl-form" style="background:rgba(255,255,255,0.04);border-radius:8px;padding:14px;margin-bottom:16px;">'+
+      '<div style="font-size:11pt;font-weight:600;color:#ec4899;margin-bottom:10px;">+ Log Photo</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">What Was Photographed *</label>'+
+        '<input id="pl-desc" placeholder="Rebar placement Grid A-D before pour" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Category</label>'+
+        '<select id="pl-cat" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;">'+
+          '<option>Pre-Pour</option><option>During Pour</option><option>Post-Pour</option><option>Rebar/Forms</option><option>Site Conditions</option><option>Damage/Defect</option><option>Safety</option><option>Equipment</option><option>Delivery</option><option>Completed Work</option><option>Punch List</option><option>Weather</option><option>Progress</option><option>Other</option>'+
+        '</select></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Date/Time *</label>'+
+        '<input type="datetime-local" id="pl-date" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Location / Grid</label>'+
+        '<input id="pl-location" placeholder="Grid A-D, Footing 3" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Taken By</label>'+
+        '<input id="pl-by" placeholder="JFS" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">File / Link (opt)</label>'+
+        '<input id="pl-file" placeholder="IMG_1234 or Drive URL" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<button onclick="window._plAdd()" style="background:rgba(236,72,153,0.2);color:#ec4899;border:1px solid rgba(236,72,153,0.4);border-radius:6px;padding:9px 16px;cursor:pointer;font-size:12px;font-weight:600;">Add</button>'+
+      '</div>'+
+    '</div>'+
+    '<div id="oncor-pl-list"></div>'+
+  '</div>';
+  overlay.addEventListener('click',function(e){ if(e.target===overlay) overlay.style.display='none'; });
+  document.body.appendChild(overlay);
+  var now=new Date(); var dtStr=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0')+'T'+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('pl-date').value=dtStr;
+  _renderPL();
+};
+
+window._plAdd = function(){
+  var desc=(document.getElementById('pl-desc')||{}).value||'';
+  var dateVal=(document.getElementById('pl-date')||{}).value||'';
+  if(!desc.trim()||!dateVal){ alert('Description and date/time are required.'); return; }
+  var arr=_loadPL();
+  arr.push({id:Date.now(),desc:desc.trim(),cat:(document.getElementById('pl-cat')||{}).value||'Other',date:dateVal,location:(document.getElementById('pl-location')||{}).value||'',by:(document.getElementById('pl-by')||{}).value||'',file:(document.getElementById('pl-file')||{}).value||'',added:Date.now()});
+  _savePL(arr);
+  ['pl-desc','pl-location','pl-file'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  _renderPL();
+};
+
+window._plDelete = function(id){
+  if(!confirm('Delete this photo record?'))return;
+  _savePL(_loadPL().filter(function(p){return p.id!==id;}));
+  _renderPL();
+};
+
+var _plCatColors={'Pre-Pour':'#3b82f6','During Pour':'#f59e0b','Post-Pour':'#22c55e','Rebar/Forms':'#8b5cf6','Site Conditions':'#64748b','Damage/Defect':'#ef4444','Safety':'#f97316','Equipment':'#06b6d4','Delivery':'#14b8a6','Completed Work':'#84cc16','Punch List':'#e11d48','Weather':'#0ea5e9','Progress':'#a855f7','Other':'#64748b'};
+
+window._renderPL = function(){
+  var list=document.getElementById('oncor-pl-list');
+  if(!list)return;
+  var arr=_loadPL();
+  arr.sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+  if(!arr.length){list.innerHTML='<div style="text-align:center;padding:30px;color:#64748b;">No photos logged. Catalog your site photos above — before/during/after pour, rebar, conditions, damage.</div>';return;}
+  var html='<div style="font-size:10pt;color:#64748b;margin-bottom:10px;">'+arr.length+' photo'+(arr.length!==1?'s':'')+' documented</div>';
+  arr.forEach(function(p){
+    var color=_plCatColors[p.cat]||'#64748b';
+    var dt=new Date(p.date);
+    var dateStr=dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+' '+dt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    var isLink=p.file&&(p.file.startsWith('http')||p.file.startsWith('www'));
+    html+='<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-left:3px solid '+color+';border-radius:6px;padding:10px 12px;margin-bottom:7px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+        '<div style="flex:1;">'+
+          '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">'+
+            '<span style="background:'+color+'22;color:'+color+';border:1px solid '+color+'44;border-radius:4px;padding:2px 7px;font-size:9pt;font-weight:600;">'+_escH(p.cat)+'</span>'+
+            '<span style="font-size:10pt;color:#94a3b8;">'+dateStr+'</span>'+
+          '</div>'+
+          '<div style="font-size:11pt;font-weight:600;color:#e2e8f0;">'+_escH(p.desc)+'</div>'+
+          '<div style="font-size:10pt;color:#94a3b8;margin-top:3px;">'+(p.location?'📍 '+_escH(p.location)+' | ':'')+(p.by?'📷 '+_escH(p.by)+' | ':'')+(p.file?(isLink?'<a href="'+_escH(p.file)+'" target="_blank" style="color:#22d3ee;">🔗 Open</a>':'📄 '+_escH(p.file)):'')+'</div>'+
+        '</div>'+
+        '<button onclick="window._plDelete('+p.id+')" style="margin-left:10px;background:none;border:none;color:#475569;cursor:pointer;font-size:14px;">🗑</button>'+
+      '</div></div>';
+  });
+  list.innerHTML=html;
+};
+
+window.printPhotoLogReport = function(){
+  var arr=_loadPL().sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+  var comp=(document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var rows=arr.map(function(p){
+    var dt=new Date(p.date);
+    return '<tr><td style="padding:5px 8px;font-size:9pt;white-space:nowrap;">'+dt.toLocaleDateString()+' '+dt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})+'</td><td style="padding:5px 8px;">'+_escH(p.cat)+'</td><td style="padding:5px 8px;">'+_escH(p.desc)+'</td><td style="padding:5px 8px;">'+_escH(p.location)+'</td><td style="padding:5px 8px;">'+_escH(p.by)+'</td><td style="padding:5px 8px;font-size:9pt;">'+_escH(p.file)+'</td></tr>';
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Photo Log</title><style>body{font-family:Arial;font-size:10pt;padding:20px;}table{width:100%;border-collapse:collapse;}th{background:#be185d;color:#fff;padding:6px 8px;text-align:left;font-size:9pt;}td{border-bottom:1px solid #e5e7eb;} @media print{button{display:none;}}</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;border-bottom:2px solid #be185d;padding-bottom:10px;margin-bottom:14px;"><div><strong style="font-size:14pt;">'+_escH(comp)+'</strong><br>PHOTO DOCUMENTATION LOG — '+_escH(proj)+'</div><div style="text-align:right;font-size:9pt;color:#555;">'+arr.length+' Photos<br>'+new Date().toLocaleDateString()+'</div></div>'+
+    '<table><tr><th>Date/Time</th><th>Category</th><th>Description</th><th>Location</th><th>By</th><th>File</th></tr>'+rows+'</table>'+
+    '<div style="margin-top:16px;text-align:center;font-size:8pt;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px;">CONFIDENTIAL — INTERNAL USE ONLY</div>'+
+    '<br><button onclick="window.print()">🖨️ Print</button></body></html>';
+  var w=window.open('','_blank');if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// FEATURE 3: RFI Quick Tracker (Ctrl+Alt+F) — ~165 lines
+// =====================================================================
+function _loadRFIQ(){ return JSON.parse(localStorage.getItem('oncor_rfiq_v1_'+_projKey())||'[]'); }
+function _saveRFIQ(arr){ localStorage.setItem('oncor_rfiq_v1_'+_projKey(),JSON.stringify(arr)); }
+
+window.openRFIQuickModal = function(){
+  var existing=document.getElementById('oncor-rfiq-modal');
+  if(existing){ existing.style.display=existing.style.display==='none'?'flex':'none'; _renderRFIQ(); return; }
+  var overlay=document.createElement('div');
+  overlay.id='oncor-rfiq-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:11000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+  overlay.innerHTML='<div style="background:#1e293b;border-radius:12px;width:100%;max-width:900px;padding:24px;color:#e2e8f0;position:relative;">'+
+    '<button onclick="this.closest(\'#oncor-rfiq-modal\').style.display=\'none\'" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+      '<div><div style="font-size:16pt;font-weight:700;color:#6366f1;">❓ RFI Quick Tracker</div>'+
+      '<div style="font-size:10pt;color:#94a3b8;">Fast RFI log — question asked, who it\'s directed to, response, days open. No more lost questions.</div></div>'+
+      '<button onclick="window.printRFIQReport()" style="background:rgba(99,102,241,0.15);color:#6366f1;border:1px solid rgba(99,102,241,0.3);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨️ Print</button>'+
+    '</div>'+
+    '<div id="oncor-rfiq-form" style="background:rgba(255,255,255,0.04);border-radius:8px;padding:14px;margin-bottom:16px;">'+
+      '<div style="font-size:11pt;font-weight:600;color:#6366f1;margin-bottom:10px;">+ Log RFI</div>'+
+      '<div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:10px;align-items:end;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Question / Issue *</label>'+
+        '<input id="rfiq-q" placeholder="What is the rebar spacing at Grid Line 3?" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Directed To</label>'+
+        '<input id="rfiq-to" placeholder="EOR, GC, Architect" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Date Sent</label>'+
+        '<input type="date" id="rfiq-date" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<button onclick="window._rfiqAdd()" style="background:rgba(99,102,241,0.2);color:#6366f1;border:1px solid rgba(99,102,241,0.4);border-radius:6px;padding:9px 16px;cursor:pointer;font-size:12px;font-weight:600;">Add</button>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;">Drawing / Spec Ref</label>'+
+        '<input id="rfiq-ref" placeholder="S-201, Spec 03 30 00" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;">Impact</label>'+
+        '<select id="rfiq-impact" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;">'+
+          '<option>None — Info Only</option><option>Potential CO</option><option>Schedule Impact</option><option>Work Stoppage</option><option>Safety Concern</option>'+
+        '</select></div>'+
+      '</div>'+
+    '</div>'+
+    '<div id="oncor-rfiq-stats" style="margin-bottom:12px;"></div>'+
+    '<div id="oncor-rfiq-list"></div>'+
+  '</div>';
+  overlay.addEventListener('click',function(e){ if(e.target===overlay) overlay.style.display='none'; });
+  document.body.appendChild(overlay);
+  document.getElementById('rfiq-date').value=_todayISO();
+  _renderRFIQ();
+};
+
+window._rfiqAdd = function(){
+  var q=(document.getElementById('rfiq-q')||{}).value||'';
+  if(!q.trim()){alert('Question is required.');return;}
+  var arr=_loadRFIQ();
+  var num=arr.length+1;
+  arr.push({id:Date.now(),num:num,question:q.trim(),to:(document.getElementById('rfiq-to')||{}).value||'',date:(document.getElementById('rfiq-date')||{}).value||'',ref:(document.getElementById('rfiq-ref')||{}).value||'',impact:(document.getElementById('rfiq-impact')||{}).value||'None',status:'Open',answer:'',added:Date.now()});
+  _saveRFIQ(arr);
+  ['rfiq-q','rfiq-to','rfiq-ref'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  _renderRFIQ();
+};
+
+window._rfiqAnswer = function(id){
+  var ans=prompt('Enter the answer / response received:');
+  if(ans===null)return;
+  var arr=_loadRFIQ().map(function(r){if(r.id===id){r.answer=ans;r.status=ans?'Answered':'Open';}return r;});
+  _saveRFIQ(arr);_renderRFIQ();
+};
+
+window._rfiqDelete = function(id){
+  if(!confirm('Delete this RFI?'))return;
+  _saveRFIQ(_loadRFIQ().filter(function(r){return r.id!==id;}));
+  _renderRFIQ();
+};
+
+window._renderRFIQ = function(){
+  var list=document.getElementById('oncor-rfiq-list');
+  var statsEl=document.getElementById('oncor-rfiq-stats');
+  if(!list)return;
+  var arr=_loadRFIQ();
+  var today=new Date();today.setHours(0,0,0,0);
+  var open=arr.filter(function(r){return r.status==='Open';}).length;
+  var answered=arr.filter(function(r){return r.status==='Answered';}).length;
+  var overdue=arr.filter(function(r){return r.status==='Open'&&r.date&&((today-new Date(r.date))/(24*60*60*1000))>7;}).length;
+  if(statsEl){
+    statsEl.innerHTML='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">'+
+      '<div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#94a3b8;">Total RFIs</div><div style="font-size:14pt;font-weight:700;color:#e2e8f0;">'+arr.length+'</div></div>'+
+      '<div style="background:rgba(99,102,241,0.1);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#6366f1;">Open</div><div style="font-size:14pt;font-weight:700;color:#6366f1;">'+open+'</div></div>'+
+      '<div style="background:rgba(239,68,68,0.1);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#ef4444;">Overdue (>7d)</div><div style="font-size:14pt;font-weight:700;color:#ef4444;">'+overdue+'</div></div>'+
+      '<div style="background:rgba(34,197,94,0.1);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#22c55e;">Answered</div><div style="font-size:14pt;font-weight:700;color:#22c55e;">'+answered+'</div></div></div>';
+  }
+  arr.sort(function(a,b){if(a.status==='Answered'&&b.status!=='Answered')return 1;if(a.status!=='Answered'&&b.status==='Answered')return -1;return b.added-a.added;});
+  if(!arr.length){list.innerHTML='<div style="text-align:center;padding:30px;color:#64748b;">No RFIs logged. Ask questions about drawings, specs, details — track until answered.</div>';return;}
+  var html='';
+  arr.forEach(function(r){
+    var daysOpen=r.date?Math.floor((today-new Date(r.date))/(24*60*60*1000)):0;
+    var isOverdue=r.status==='Open'&&daysOpen>7;
+    html+='<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-left:3px solid '+(r.status==='Answered'?'#22c55e':'#6366f1')+';border-radius:6px;padding:10px 12px;margin-bottom:8px;opacity:'+(r.status==='Answered'?'0.6':'1')+';">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+        '<div style="flex:1;">'+
+          '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">'+
+            '<span style="background:#6366f122;color:#6366f1;border:1px solid #6366f144;border-radius:4px;padding:2px 7px;font-size:9pt;font-weight:700;">RFI-'+String(r.num).padStart(3,'0')+'</span>'+
+            '<span style="font-size:10pt;color:'+(r.status==='Answered'?'#22c55e':(isOverdue?'#ef4444':'#f59e0b'))+';font-weight:600;">'+r.status+(isOverdue?' ⚠️ '+daysOpen+'d':'')+'</span>'+
+            (r.impact&&r.impact!=='None — Info Only'?'<span style="font-size:9pt;color:#f59e0b;">⚡ '+_escH(r.impact)+'</span>':'')+
+          '</div>'+
+          '<div style="font-size:11pt;font-weight:600;color:#e2e8f0;">'+_escH(r.question)+'</div>'+
+          '<div style="font-size:10pt;color:#94a3b8;margin-top:3px;">→ '+_escH(r.to||'(unassigned)')+(r.ref?' | Ref: '+_escH(r.ref):'')+(r.date?' | Sent: '+_fmtDate(r.date):'')+'</div>'+
+          (r.answer?'<div style="font-size:11pt;color:#22c55e;margin-top:6px;background:rgba(34,197,94,0.08);border-left:3px solid #22c55e;padding:6px 10px;border-radius:4px;">💬 '+_escH(r.answer)+'</div>':'')+
+        '</div>'+
+        '<div style="display:flex;flex-direction:column;gap:4px;margin-left:10px;">'+
+          (r.status==='Open'?'<button onclick="window._rfiqAnswer('+r.id+')" style="background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.3);border-radius:4px;padding:5px 10px;cursor:pointer;font-size:10px;">💬 Answer</button>':'')+
+          '<button onclick="window._rfiqDelete('+r.id+')" style="background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);border-radius:4px;padding:5px 10px;cursor:pointer;font-size:10px;">🗑</button>'+
+        '</div>'+
+      '</div></div>';
+  });
+  list.innerHTML=html;
+};
+
+window.printRFIQReport = function(){
+  var arr=_loadRFIQ().sort(function(a,b){return a.num-b.num;});
+  var comp=(document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var rows=arr.map(function(r){
+    return '<tr style="'+(r.status==='Answered'?'opacity:0.6;':'')+'"><td style="padding:5px 8px;font-weight:700;">RFI-'+String(r.num).padStart(3,'0')+'</td><td style="padding:5px 8px;">'+_escH(r.question)+'</td><td style="padding:5px 8px;">'+_escH(r.to)+'</td><td style="padding:5px 8px;">'+_fmtDate(r.date)+'</td><td style="padding:5px 8px;font-weight:600;color:'+(r.status==='Answered'?'green':'#b45309')+';">'+r.status+'</td><td style="padding:5px 8px;font-size:9pt;">'+_escH(r.answer||r.ref)+'</td></tr>';
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>RFI Log</title><style>body{font-family:Arial;font-size:10pt;padding:20px;}table{width:100%;border-collapse:collapse;}th{background:#4338ca;color:#fff;padding:6px 8px;text-align:left;font-size:9pt;}td{border-bottom:1px solid #e5e7eb;} @media print{button{display:none;}}</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;border-bottom:2px solid #4338ca;padding-bottom:10px;margin-bottom:14px;"><div><strong style="font-size:14pt;">'+_escH(comp)+'</strong><br>RFI LOG — '+_escH(proj)+'</div><div style="text-align:right;font-size:9pt;color:#555;">'+arr.length+' RFIs<br>'+new Date().toLocaleDateString()+'</div></div>'+
+    '<table><tr><th>RFI #</th><th>Question</th><th>To</th><th>Sent</th><th>Status</th><th>Response/Ref</th></tr>'+rows+'</table>'+
+    '<div style="margin-top:16px;text-align:center;font-size:8pt;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px;">CONFIDENTIAL — INTERNAL USE ONLY</div>'+
+    '<br><button onclick="window.print()">🖨️ Print</button></body></html>';
+  var w=window.open('','_blank');if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// INJECT SIDEBAR BUTTONS
+// =====================================================================
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btnD = document.createElement('button');
+    btnD.id = 'oncor-backcharge-btn';
+    btnD.innerHTML = '💸 Backcharge Log';
+    btnD.title = 'Ctrl+Alt+D — Backcharge Log';
+    btnD.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(244,63,94,0.10);color:#f43f5e;border:1px solid rgba(244,63,94,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btnD.onclick = window.openBackchargeModal;
+    btnD.onmouseover = function(){ this.style.background='rgba(244,63,94,0.20)'; };
+    btnD.onmouseout = function(){ this.style.background='rgba(244,63,94,0.10)'; };
+
+    var btnE = document.createElement('button');
+    btnE.id = 'oncor-photolog-btn';
+    btnE.innerHTML = '📸 Photo Log';
+    btnE.title = 'Ctrl+Alt+E — Photo Documentation Log';
+    btnE.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(236,72,153,0.10);color:#ec4899;border:1px solid rgba(236,72,153,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btnE.onclick = window.openPhotoLogModal;
+    btnE.onmouseover = function(){ this.style.background='rgba(236,72,153,0.20)'; };
+    btnE.onmouseout = function(){ this.style.background='rgba(236,72,153,0.10)'; };
+
+    var btnF = document.createElement('button');
+    btnF.id = 'oncor-rfiq-btn';
+    btnF.innerHTML = '❓ RFI Tracker';
+    btnF.title = 'Ctrl+Alt+F — RFI Quick Tracker';
+    btnF.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(99,102,241,0.10);color:#6366f1;border:1px solid rgba(99,102,241,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btnF.onclick = window.openRFIQuickModal;
+    btnF.onmouseover = function(){ this.style.background='rgba(99,102,241,0.20)'; };
+    btnF.onmouseout = function(){ this.style.background='rgba(99,102,241,0.10)'; };
+
+    var anchor = document.getElementById('oncor-meetings-btn');
+    if (anchor && anchor.parentNode) {
+      anchor.parentNode.insertBefore(btnD, anchor.nextSibling);
+      btnD.parentNode.insertBefore(btnE, btnD.nextSibling);
+      btnE.parentNode.insertBefore(btnF, btnE.nextSibling);
+    } else {
+      [[btnD,370],[btnE,320],[btnF,270]].forEach(function(pair){
+        pair[0].style.cssText += ';position:fixed;bottom:'+pair[1]+'px;right:20px;z-index:9000;width:auto;';
+        document.body.appendChild(pair[0]);
+      });
+    }
+  }, 16600);
+});
+
+// =====================================================================
+// KEYBOARD SHORTCUTS — Session #104
+// =====================================================================
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.altKey) {
+    if (e.key === 'd' || e.key === 'D') { e.preventDefault(); window.openBackchargeModal(); }
+    if (e.key === 'e' || e.key === 'E') { e.preventDefault(); window.openPhotoLogModal(); }
+    if (e.key === 'f' || e.key === 'F') { e.preventDefault(); window.openRFIQuickModal(); }
+  }
+});
+
+})();
+// ==================== END SESSION #104 — Zeus ⚡ Backcharge Log (Ctrl+Alt+D) + Photo Log (Ctrl+Alt+E) + RFI Quick Tracker (Ctrl+Alt+F) ====================
+</script>
