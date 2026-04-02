@@ -167436,4 +167436,1108 @@ document.addEventListener('DOMContentLoaded', function(){
 
 })();
 // ==================== END DAILY SAFETY PERMIT LOG — Zeus ⚡ Session #92 ====================
+
+
+// ==================== BEGIN SESSION #93 — Zeus ⚡ ====================
+// Features: Productivity Dashboard (Ctrl+Alt+D) | JHA/Hazard Analysis (Ctrl+Alt+E) | Project Scorecard (Ctrl+Alt+F)
+// =====================================================================
+
+(function() {
+'use strict';
+
+// ==================== PRODUCTIVITY DASHBOARD — Ctrl+Alt+D ====================
+
+var PROD_KEY = 'oncor_productivity_v1';
+
+function prodLoad() {
+  try { return JSON.parse(localStorage.getItem(PROD_KEY) || '[]'); } catch(e) { return []; }
+}
+function prodSave(arr) { localStorage.setItem(PROD_KEY, JSON.stringify(arr)); }
+function prodRate(yds, hrs) { return (hrs > 0) ? (yds / hrs) : 0; }
+
+function prodStats(entries) {
+  var totalPours = entries.length;
+  var totalYds = 0, totalHrs = 0, totalCrew = 0, bestRate = 0;
+  entries.forEach(function(e) {
+    totalYds += parseFloat(e.yds) || 0;
+    totalHrs += parseFloat(e.hrs) || 0;
+    totalCrew += (parseFloat(e.crew) || 0) * (parseFloat(e.hrs) || 0);
+    var r = prodRate(parseFloat(e.yds)||0, parseFloat(e.hrs)||0);
+    if (r > bestRate) bestRate = r;
+  });
+  var avgRate = totalHrs > 0 ? totalYds / totalHrs : 0;
+  return { totalPours: totalPours, totalYds: totalYds.toFixed(1), totalHrs: totalHrs.toFixed(1), avgRate: avgRate.toFixed(2), bestRate: bestRate.toFixed(2), crewHrs: totalHrs.toFixed(1) };
+}
+
+function prodBenchmarks(entries) {
+  var byType = {};
+  entries.forEach(function(e) {
+    var t = e.elementType || 'Other';
+    if (!byType[t]) byType[t] = { totalYds: 0, totalHrs: 0, count: 0 };
+    byType[t].totalYds += parseFloat(e.yds) || 0;
+    byType[t].totalHrs += parseFloat(e.hrs) || 0;
+    byType[t].count++;
+  });
+  var result = [];
+  Object.keys(byType).forEach(function(t) {
+    var d = byType[t];
+    var rate = d.totalHrs > 0 ? d.totalYds / d.totalHrs : 0;
+    result.push({ type: t, avgRate: rate, count: d.count, totalYds: d.totalYds });
+  });
+  result.sort(function(a,b) { return b.avgRate - a.avgRate; });
+  return result;
+}
+
+function prodTrend(entries) {
+  if (entries.length < 1) return '';
+  var sorted = entries.slice().sort(function(a,b) { return new Date(b.date||'2000-01-01') - new Date(a.date||'2000-01-01'); });
+  var last3 = sorted.slice(0, 3);
+  var l3Yds = 0, l3Hrs = 0;
+  last3.forEach(function(e) { l3Yds += parseFloat(e.yds)||0; l3Hrs += parseFloat(e.hrs)||0; });
+  var l3Avg = l3Hrs > 0 ? (l3Yds/l3Hrs).toFixed(2) : '0.00';
+  var allYds = 0, allHrs = 0;
+  entries.forEach(function(e) { allYds += parseFloat(e.yds)||0; allHrs += parseFloat(e.hrs)||0; });
+  var overall = allHrs > 0 ? (allYds/allHrs).toFixed(2) : '0.00';
+  return 'Last 3 pours avg: ' + l3Avg + ' yd³/hr vs Overall avg: ' + overall + ' yd³/hr';
+}
+
+function openProductivityDash() {
+  var existing = document.getElementById('oncor-productivity-dash');
+  if (existing) { existing.style.display = 'flex'; renderProdDash(); return; }
+
+  var modal = document.createElement('div');
+  modal.id = 'oncor-productivity-dash';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;';
+  modal.innerHTML = '<div id="prod-dash-inner" style="background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:12px;width:100%;max-width:1100px;padding:24px;color:#f1f5f9;font-family:sans-serif;position:relative;">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">' +
+      '<h2 style="margin:0;font-size:22px;">📊 Productivity Dashboard</h2>' +
+      '<div style="display:flex;gap:10px;">' +
+        '<button onclick="window.prodPrint()" style="background:#0e7490;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px;">🖨️ Print</button>' +
+        '<button onclick="document.getElementById(\'oncor-productivity-dash\').style.display=\'none\'" style="background:rgba(255,255,255,0.1);color:#f1f5f9;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:20px;">✕</button>' +
+      '</div>' +
+    '</div>' +
+    '<div id="prod-stats-bar" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px;"></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">' +
+      '<div>' +
+        '<h3 style="margin:0 0 12px;font-size:16px;color:#94a3b8;">Add Pour Entry</h3>' +
+        '<div id="prod-form-container"></div>' +
+      '</div>' +
+      '<div>' +
+        '<h3 style="margin:0 0 12px;font-size:16px;color:#94a3b8;">Benchmarks by Element Type</h3>' +
+        '<div id="prod-benchmarks"></div>' +
+        '<p id="prod-trend" style="margin:12px 0 0;color:#0e7490;font-size:13px;font-style:italic;"></p>' +
+      '</div>' +
+    '</div>' +
+    '<h3 style="margin:20px 0 12px;font-size:16px;color:#94a3b8;">Pour Entries</h3>' +
+    '<div id="prod-entries-list"></div>' +
+  '</div>';
+
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.style.display = 'none'; });
+  renderProdDash();
+}
+
+var _prodEditId = null;
+
+function renderProdDash() {
+  var entries = prodLoad();
+  var stats = prodStats(entries);
+
+  // Stats bar
+  var sb = document.getElementById('prod-stats-bar');
+  if (sb) {
+    var statItems = [
+      { label: 'Total Pours', value: stats.totalPours },
+      { label: 'Total yd³ Placed', value: stats.totalYds },
+      { label: 'Avg yd³/Hour', value: stats.avgRate },
+      { label: 'Best yd³/hr', value: stats.bestRate },
+      { label: 'Total Crew-Hours', value: stats.crewHrs }
+    ];
+    sb.innerHTML = statItems.map(function(s) {
+      return '<div style="background:rgba(255,255,255,0.06);border-radius:8px;padding:14px;text-align:center;">' +
+        '<div style="font-size:24px;font-weight:700;color:#14b8a6;">' + s.value + '</div>' +
+        '<div style="font-size:12px;color:#94a3b8;margin-top:4px;">' + s.label + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // Form
+  var fc = document.getElementById('prod-form-container');
+  if (fc) {
+    var editEntry = _prodEditId ? entries.find(function(e) { return e.id === _prodEditId; }) : null;
+    var fv = editEntry || {};
+    fc.innerHTML = '<div style="display:flex;flex-direction:column;gap:10px;">' +
+      '<input id="prod-name" placeholder="Pour Name *" value="' + escHtml(fv.name||'') + '" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;">' +
+      '<input id="prod-date" type="date" value="' + escHtml(fv.date||new Date().toISOString().slice(0,10)) + '" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;">' +
+      '<select id="prod-type" style="background:#1e293b;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;">' +
+        ['Slab','Footing','Wall','Grade Beam','Curb','Other'].map(function(t) {
+          return '<option value="' + t + '"' + ((fv.elementType===t)?' selected':'') + '>' + t + '</option>';
+        }).join('') +
+      '</select>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+        '<input id="prod-yds" type="number" step="0.1" placeholder="yd³ Placed *" value="' + escHtml(String(fv.yds||'')) + '" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;">' +
+        '<input id="prod-hrs" type="number" step="0.25" placeholder="Duration Hours *" value="' + escHtml(String(fv.hrs||'')) + '" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;">' +
+        '<input id="prod-crew" type="number" placeholder="Crew Size" value="' + escHtml(String(fv.crew||'')) + '" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;">' +
+        '<input id="prod-foreman" placeholder="Foreman" value="' + escHtml(fv.foreman||'') + '" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;">' +
+      '</div>' +
+      '<textarea id="prod-notes" placeholder="Notes" rows="2" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;resize:vertical;">' + escHtml(fv.notes||'') + '</textarea>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button onclick="window.prodSaveEntry()" style="background:#0e7490;color:#fff;border:none;padding:9px 16px;border-radius:6px;cursor:pointer;font-size:13px;flex:1;">' + (_prodEditId ? '💾 Update' : '➕ Add Entry') + '</button>' +
+        (_prodEditId ? '<button onclick="window.prodCancelEdit()" style="background:rgba(255,255,255,0.1);color:#f1f5f9;border:none;padding:9px 14px;border-radius:6px;cursor:pointer;font-size:13px;">Cancel</button>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  // Benchmarks
+  var bm = document.getElementById('prod-benchmarks');
+  if (bm) {
+    var bmData = prodBenchmarks(entries);
+    if (bmData.length === 0) {
+      bm.innerHTML = '<p style="color:#64748b;font-size:13px;">No entries yet.</p>';
+    } else {
+      bm.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+        '<thead><tr>' +
+          '<th style="text-align:left;padding:6px 8px;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.1);">Element Type</th>' +
+          '<th style="text-align:right;padding:6px 8px;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.1);">Avg yd³/hr</th>' +
+          '<th style="text-align:right;padding:6px 8px;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.1);">Pours</th>' +
+        '</tr></thead><tbody>' +
+        bmData.map(function(b, i) {
+          var gold = i === 0 ? 'background:rgba(234,179,8,0.15);' : '';
+          var goldText = i === 0 ? 'color:#eab308;font-weight:700;' : '';
+          return '<tr style="' + gold + '">' +
+            '<td style="padding:6px 8px;' + goldText + '">' + escHtml(b.type) + (i===0?' 🥇':'') + '</td>' +
+            '<td style="text-align:right;padding:6px 8px;color:#14b8a6;font-weight:700;">' + b.avgRate.toFixed(2) + '</td>' +
+            '<td style="text-align:right;padding:6px 8px;color:#94a3b8;">' + b.count + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table>';
+    }
+  }
+
+  // Trend
+  var trendEl = document.getElementById('prod-trend');
+  if (trendEl) trendEl.textContent = prodTrend(entries);
+
+  // Entries list
+  var el = document.getElementById('prod-entries-list');
+  if (el) {
+    if (entries.length === 0) {
+      el.innerHTML = '<p style="color:#64748b;font-size:13px;">No pours logged yet. Add your first pour above.</p>';
+    } else {
+      var sorted = entries.slice().sort(function(a,b) { return new Date(b.date||'2000-01-01') - new Date(a.date||'2000-01-01'); });
+      el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;">' +
+        sorted.map(function(e) {
+          var rate = prodRate(parseFloat(e.yds)||0, parseFloat(e.hrs)||0);
+          return '<div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:14px;">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
+              '<strong style="font-size:14px;">' + escHtml(e.name) + '</strong>' +
+              '<span style="background:rgba(14,116,144,0.3);color:#38bdf8;font-size:11px;padding:2px 8px;border-radius:10px;">' + escHtml(e.elementType||'Other') + '</span>' +
+            '</div>' +
+            '<div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">' + escHtml(e.date||'') + (e.foreman ? ' · ' + escHtml(e.foreman) : '') + '</div>' +
+            '<div style="display:flex;gap:16px;font-size:13px;margin-bottom:8px;">' +
+              '<span><span style="color:#94a3b8;">yd³:</span> <strong>' + escHtml(String(e.yds||0)) + '</strong></span>' +
+              '<span><span style="color:#94a3b8;">hrs:</span> <strong>' + escHtml(String(e.hrs||0)) + '</strong></span>' +
+              (e.crew ? '<span><span style="color:#94a3b8;">crew:</span> <strong>' + escHtml(String(e.crew)) + '</strong></span>' : '') +
+              '<span style="background:rgba(20,184,166,0.2);color:#14b8a6;padding:1px 8px;border-radius:10px;font-weight:700;">' + rate.toFixed(2) + ' yd³/hr</span>' +
+            '</div>' +
+            (e.notes ? '<p style="font-size:12px;color:#94a3b8;margin:0 0 8px;">' + escHtml(e.notes) + '</p>' : '') +
+            '<div style="display:flex;gap:8px;">' +
+              '<button onclick="window.prodEdit(\'' + e.id + '\')" style="background:rgba(255,255,255,0.08);color:#f1f5f9;border:none;padding:4px 12px;border-radius:5px;cursor:pointer;font-size:12px;">✏️ Edit</button>' +
+              '<button onclick="window.prodDelete(\'' + e.id + '\')" style="background:rgba(239,68,68,0.2);color:#fca5a5;border:none;padding:4px 12px;border-radius:5px;cursor:pointer;font-size:12px;">🗑️ Delete</button>' +
+            '</div>' +
+          '</div>';
+        }).join('') +
+      '</div>';
+    }
+  }
+}
+
+window.prodSaveEntry = function() {
+  var name = (document.getElementById('prod-name')||{}).value || '';
+  var date = (document.getElementById('prod-date')||{}).value || '';
+  var type = (document.getElementById('prod-type')||{}).value || 'Slab';
+  var yds = parseFloat((document.getElementById('prod-yds')||{}).value) || 0;
+  var hrs = parseFloat((document.getElementById('prod-hrs')||{}).value) || 0;
+  var crew = parseInt((document.getElementById('prod-crew')||{}).value) || 0;
+  var foreman = (document.getElementById('prod-foreman')||{}).value || '';
+  var notes = (document.getElementById('prod-notes')||{}).value || '';
+  if (!name) { alert('Pour Name is required.'); return; }
+  if (!yds) { alert('yd³ Placed is required.'); return; }
+  if (!hrs) { alert('Duration Hours is required.'); return; }
+  var entries = prodLoad();
+  if (_prodEditId) {
+    entries = entries.map(function(e) {
+      return e.id === _prodEditId ? { id: e.id, name: name, date: date, elementType: type, yds: yds, hrs: hrs, crew: crew, foreman: foreman, notes: notes } : e;
+    });
+    _prodEditId = null;
+  } else {
+    entries.push({ id: 'prod_' + Date.now(), name: name, date: date, elementType: type, yds: yds, hrs: hrs, crew: crew, foreman: foreman, notes: notes });
+  }
+  prodSave(entries);
+  renderProdDash();
+};
+
+window.prodEdit = function(id) {
+  _prodEditId = id;
+  renderProdDash();
+  var fc = document.getElementById('prod-form-container');
+  if (fc) fc.scrollIntoView({ behavior: 'smooth' });
+};
+
+window.prodCancelEdit = function() {
+  _prodEditId = null;
+  renderProdDash();
+};
+
+window.prodDelete = function(id) {
+  if (!confirm('Delete this pour entry?')) return;
+  var entries = prodLoad().filter(function(e) { return e.id !== id; });
+  prodSave(entries);
+  renderProdDash();
+};
+
+window.prodPrint = function() {
+  var entries = prodLoad();
+  var stats = prodStats(entries);
+  var benchmarks = prodBenchmarks(entries);
+  var sorted = entries.slice().sort(function(a,b) { return new Date(b.date||'2000-01-01') - new Date(a.date||'2000-01-01'); });
+  var win = window.open('', '_blank');
+  win.document.write('<!DOCTYPE html><html><head><title>Productivity Report — Oncor</title><style>' +
+    'body{font-family:Arial,sans-serif;margin:30px;color:#111;font-size:13px;}' +
+    'h1{font-size:20px;color:#0e7490;margin-bottom:4px;}' +
+    '.stats{display:flex;gap:20px;margin:16px 0;flex-wrap:wrap;}' +
+    '.stat-box{border:1px solid #ccc;border-radius:6px;padding:10px 16px;text-align:center;}' +
+    '.stat-val{font-size:22px;font-weight:700;color:#0e7490;}' +
+    '.stat-lbl{font-size:11px;color:#666;}' +
+    'table{width:100%;border-collapse:collapse;margin:16px 0;font-size:12px;}' +
+    'th{background:#f0fdfa;padding:7px;text-align:left;border:1px solid #ccc;}' +
+    'td{padding:6px 7px;border:1px solid #ddd;}' +
+    '.rate{color:#0e7490;font-weight:700;}' +
+    '@media print{button{display:none!important;}}' +
+  '</style></head><body>' +
+    '<h1>📊 Productivity Report — Oncor Concrete</h1>' +
+    '<p style="color:#666;">Generated: ' + new Date().toLocaleString() + '</p>' +
+    '<div class="stats">' +
+      '<div class="stat-box"><div class="stat-val">' + stats.totalPours + '</div><div class="stat-lbl">Total Pours</div></div>' +
+      '<div class="stat-box"><div class="stat-val">' + stats.totalYds + '</div><div class="stat-lbl">Total yd³</div></div>' +
+      '<div class="stat-box"><div class="stat-val">' + stats.avgRate + '</div><div class="stat-lbl">Avg yd³/hr</div></div>' +
+      '<div class="stat-box"><div class="stat-val">' + stats.bestRate + '</div><div class="stat-lbl">Best yd³/hr</div></div>' +
+      '<div class="stat-box"><div class="stat-val">' + stats.crewHrs + '</div><div class="stat-lbl">Crew-Hours</div></div>' +
+    '</div>' +
+    '<h2 style="font-size:15px;">Element Type Benchmarks</h2>' +
+    '<table><thead><tr><th>Element Type</th><th>Avg yd³/hr</th><th>Pours</th><th>Total yd³</th></tr></thead><tbody>' +
+    benchmarks.map(function(b,i) { return '<tr' + (i===0?' style="background:#fffbeb;"':'') + '><td>' + b.type + (i===0?' ★':'') + '</td><td class="rate">' + b.avgRate.toFixed(2) + '</td><td>' + b.count + '</td><td>' + b.totalYds.toFixed(1) + '</td></tr>'; }).join('') +
+    '</tbody></table>' +
+    '<h2 style="font-size:15px;">All Pour Entries</h2>' +
+    '<table><thead><tr><th>Pour Name</th><th>Date</th><th>Type</th><th>yd³</th><th>Hrs</th><th>yd³/hr</th><th>Crew</th><th>Foreman</th><th>Notes</th></tr></thead><tbody>' +
+    sorted.map(function(e) {
+      var r = prodRate(parseFloat(e.yds)||0, parseFloat(e.hrs)||0);
+      return '<tr><td>' + e.name + '</td><td>' + (e.date||'') + '</td><td>' + (e.elementType||'') + '</td><td>' + e.yds + '</td><td>' + e.hrs + '</td><td class="rate">' + r.toFixed(2) + '</td><td>' + (e.crew||'') + '</td><td>' + (e.foreman||'') + '</td><td>' + (e.notes||'') + '</td></tr>';
+    }).join('') +
+    '</tbody></table>' +
+    '<script>window.print();<\/script></body></html>');
+  win.document.close();
+};
+
+// Sidebar button for Productivity
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var sidebar = document.querySelector('.sidebar, #sidebar, nav, aside');
+    if (!sidebar) {
+      var allBtns = document.querySelectorAll('button');
+      allBtns.forEach(function(b) {
+        if (b.textContent.indexOf('Safety Permit') !== -1 || b.textContent.indexOf('🦺') !== -1) {
+          sidebar = b.parentElement;
+        }
+      });
+    }
+    var btn = document.createElement('button');
+    btn.id = 'oncor-productivity-btn';
+    btn.innerHTML = '📊 Productivity';
+    btn.title = 'Productivity Dashboard (Ctrl+Alt+D)';
+    btn.onclick = openProductivityDash;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(14,116,144,0.15);color:#38bdf8;border:1px solid rgba(14,116,144,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(14,116,144,0.3)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(14,116,144,0.15)'; };
+
+    // Try to find the Safety Permits button and insert after it
+    var allBtns2 = document.querySelectorAll('button');
+    var safetyBtn = null;
+    allBtns2.forEach(function(b) {
+      if (b.textContent.indexOf('Safety Permit') !== -1 || b.textContent.indexOf('🦺') !== -1) safetyBtn = b;
+    });
+    if (safetyBtn && safetyBtn.parentNode) {
+      safetyBtn.parentNode.insertBefore(btn, safetyBtn.nextSibling);
+    } else if (sidebar) {
+      sidebar.appendChild(btn);
+    } else {
+      // Append to body as floating button fallback
+      btn.style.cssText += 'position:fixed;bottom:180px;right:20px;z-index:9000;width:auto;';
+      document.body.appendChild(btn);
+    }
+  }, 9000);
+});
+
+// ==================== END PRODUCTIVITY DASHBOARD ====================
+
+
+// ==================== JHA / HAZARD ANALYSIS — Ctrl+Alt+E ====================
+
+var JHA_KEY = 'oncor_jha_v1';
+var JHA_WORK_TYPES = ['Concrete Placing','Forming','Rebar Placement','Saw Cutting','Demolition','Excavation','Material Handling','Elevated Work','Hot Work','Confined Space','Equipment Operation','Chemical Handling','General Labor','Cleanup','Other'];
+var JHA_PPE = ['Hard Hat','Safety Glasses','Hi-Vis Vest','Steel-Toe Boots','Gloves','Hearing Protection','Respirator','Face Shield','Fall Harness'];
+var JHA_STATUSES = ['Open','Reviewed','Signed','Closed'];
+
+function jhaLoad() {
+  try { return JSON.parse(localStorage.getItem(JHA_KEY) || '[]'); } catch(e) { return []; }
+}
+function jhaSave(arr) { localStorage.setItem(JHA_KEY, JSON.stringify(arr)); }
+
+var _jhaEditId = null;
+var _jhaHazardRows = 3;
+
+function openJHAModal() {
+  var existing = document.getElementById('oncor-jha-modal');
+  if (existing) { existing.style.display = 'flex'; renderJHAModal(); return; }
+
+  var modal = document.createElement('div');
+  modal.id = 'oncor-jha-modal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;';
+  modal.innerHTML = '<div id="jha-inner" style="background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:12px;width:100%;max-width:1100px;padding:24px;color:#f1f5f9;font-family:sans-serif;position:relative;">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">' +
+      '<h2 style="margin:0;font-size:22px;">📋 Pre-Task Hazard Analysis (JHA)</h2>' +
+      '<button onclick="document.getElementById(\'oncor-jha-modal\').style.display=\'none\'" style="background:rgba(255,255,255,0.1);color:#f1f5f9;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:20px;">✕</button>' +
+    '</div>' +
+    '<div id="jha-stats-bar" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;"></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">' +
+      '<div>' +
+        '<h3 style="margin:0 0 12px;font-size:16px;color:#94a3b8;">New / Edit JHA</h3>' +
+        '<div id="jha-form-container"></div>' +
+      '</div>' +
+      '<div>' +
+        '<h3 style="margin:0 0 12px;font-size:16px;color:#94a3b8;">JHA Records</h3>' +
+        '<div id="jha-list"></div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.style.display = 'none'; });
+  renderJHAModal();
+}
+
+function renderJHAModal() {
+  var jhas = jhaLoad();
+  var today = new Date().toISOString().slice(0,10);
+  var todayCount = jhas.filter(function(j) { return j.date === today; }).length;
+  var openCount = jhas.filter(function(j) { return j.status === 'Open'; }).length;
+  var signedCount = jhas.filter(function(j) { return j.status === 'Signed'; }).length;
+
+  // Stats bar
+  var sb = document.getElementById('jha-stats-bar');
+  if (sb) {
+    sb.innerHTML = [
+      { label: "Total JHAs", value: jhas.length },
+      { label: "Open", value: openCount },
+      { label: "Signed", value: signedCount },
+      { label: "Today's JHAs", value: todayCount }
+    ].map(function(s) {
+      return '<div style="background:rgba(255,255,255,0.06);border-radius:8px;padding:14px;text-align:center;">' +
+        '<div style="font-size:24px;font-weight:700;color:#f59e0b;">' + s.value + '</div>' +
+        '<div style="font-size:12px;color:#94a3b8;margin-top:4px;">' + s.label + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // Form
+  var fc = document.getElementById('jha-form-container');
+  if (fc) {
+    var editEntry = _jhaEditId ? jhas.find(function(j) { return j.id === _jhaEditId; }) : null;
+    var fv = editEntry || {};
+    var steps = fv.steps || [{ step:'', hazard:'', control:'' },{ step:'', hazard:'', control:'' },{ step:'', hazard:'', control:'' }];
+    var ppe = fv.ppe || [];
+    fc.innerHTML = '<div style="display:flex;flex-direction:column;gap:9px;">' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+        '<input id="jha-date" type="date" value="' + escHtml(fv.date||today) + '" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;">' +
+        '<input id="jha-location" placeholder="Location/Grid Ref" value="' + escHtml(fv.location||'') + '" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;">' +
+      '</div>' +
+      '<input id="jha-task" placeholder="Task Description *" value="' + escHtml(fv.task||'') + '" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;">' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+        '<input id="jha-foreman" placeholder="Foreman/Supervisor" value="' + escHtml(fv.foreman||'') + '" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;">' +
+        '<select id="jha-worktype" style="background:#1e293b;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;">' +
+          JHA_WORK_TYPES.map(function(t) { return '<option value="' + t + '"' + (fv.workType===t?' selected':'') + '>' + t + '</option>'; }).join('') +
+        '</select>' +
+      '</div>' +
+      '<div style="margin-top:4px;">' +
+        '<div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">Hazard Steps</div>' +
+        '<div style="overflow-x:auto;">' +
+          '<table style="width:100%;border-collapse:collapse;font-size:12px;" id="jha-steps-table">' +
+            '<thead><tr>' +
+              '<th style="padding:5px;text-align:left;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.1);">Job Step</th>' +
+              '<th style="padding:5px;text-align:left;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.1);">Potential Hazard</th>' +
+              '<th style="padding:5px;text-align:left;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.1);">Control Measure</th>' +
+              '<th style="padding:5px;"></th>' +
+            '</tr></thead>' +
+            '<tbody id="jha-steps-body">' +
+              steps.map(function(s, i) {
+                return '<tr id="jha-row-' + i + '">' +
+                  '<td style="padding:4px;"><input data-row="' + i + '" data-col="step" class="jha-step-input" value="' + escHtml(s.step||'') + '" placeholder="Step ' + (i+1) + '" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:5px;color:#f1f5f9;font-size:12px;width:100%;"></td>' +
+                  '<td style="padding:4px;"><input data-row="' + i + '" data-col="hazard" class="jha-step-input" value="' + escHtml(s.hazard||'') + '" placeholder="Hazard" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:5px;color:#f1f5f9;font-size:12px;width:100%;"></td>' +
+                  '<td style="padding:4px;"><input data-row="' + i + '" data-col="control" class="jha-step-input" value="' + escHtml(s.control||'') + '" placeholder="Control" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:5px;color:#f1f5f9;font-size:12px;width:100%;"></td>' +
+                  '<td style="padding:4px;"><button onclick="window.jhaRemoveRow(' + i + ')" style="background:rgba(239,68,68,0.2);color:#fca5a5;border:none;padding:3px 7px;border-radius:4px;cursor:pointer;font-size:11px;">✕</button></td>' +
+                '</tr>';
+              }).join('') +
+            '</tbody>' +
+          '</table>' +
+        '</div>' +
+        '<button onclick="window.jhaAddRow()" style="background:rgba(255,255,255,0.08);color:#f1f5f9;border:none;padding:5px 12px;border-radius:5px;cursor:pointer;font-size:12px;margin-top:6px;">+ Add Step</button>' +
+      '</div>' +
+      '<div style="margin-top:4px;">' +
+        '<div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">PPE Required</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;">' +
+          JHA_PPE.map(function(p) {
+            return '<label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;">' +
+              '<input type="checkbox" class="jha-ppe-cb" value="' + p + '"' + (ppe.indexOf(p)!==-1?' checked':'') + '> ' + p +
+            '</label>';
+          }).join('') +
+        '</div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+        '<input id="jha-emergency-contact" placeholder="Emergency Contact/Phone" value="' + escHtml(fv.emergencyContact||'') + '" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;">' +
+        '<input id="jha-hospital" placeholder="Nearest Hospital" value="' + escHtml(fv.hospital||'') + '" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;">' +
+      '</div>' +
+      '<textarea id="jha-emergency-proc" placeholder="Emergency Procedures" rows="2" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;resize:vertical;">' + escHtml(fv.emergencyProc||'') + '</textarea>' +
+      '<textarea id="jha-crew" placeholder="Crew Names (reviewed/acknowledged)" rows="2" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;resize:vertical;">' + escHtml(fv.crew||'') + '</textarea>' +
+      '<select id="jha-status" style="background:#1e293b;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px;color:#f1f5f9;font-size:13px;">' +
+        JHA_STATUSES.map(function(s) { return '<option value="' + s + '"' + (fv.status===s?' selected':'') + '>' + s + '</option>'; }).join('') +
+      '</select>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button onclick="window.jhaSaveEntry()" style="background:#f59e0b;color:#000;border:none;padding:9px 16px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;flex:1;">' + (_jhaEditId ? '💾 Update JHA' : '➕ Create JHA') + '</button>' +
+        (_jhaEditId ? '<button onclick="window.jhaCancelEdit()" style="background:rgba(255,255,255,0.1);color:#f1f5f9;border:none;padding:9px 14px;border-radius:6px;cursor:pointer;font-size:13px;">Cancel</button>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  // JHA List
+  var jl = document.getElementById('jha-list');
+  if (jl) {
+    var sorted = jhas.slice().sort(function(a,b) { return new Date(b.date||'2000-01-01') - new Date(a.date||'2000-01-01'); });
+    if (sorted.length === 0) {
+      jl.innerHTML = '<p style="color:#64748b;font-size:13px;">No JHAs created yet.</p>';
+    } else {
+      var statusColors = { Open:'rgba(239,68,68,0.2)', Reviewed:'rgba(245,158,11,0.2)', Signed:'rgba(34,197,94,0.2)', Closed:'rgba(100,116,139,0.2)' };
+      var statusTextColors = { Open:'#fca5a5', Reviewed:'#fcd34d', Signed:'#86efac', Closed:'#94a3b8' };
+      jl.innerHTML = sorted.map(function(j) {
+        var sc = statusColors[j.status] || 'rgba(255,255,255,0.08)';
+        var tc = statusTextColors[j.status] || '#f1f5f9';
+        var stepCount = (j.steps||[]).filter(function(s) { return s.step; }).length;
+        return '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;margin-bottom:10px;">' +
+          '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;">' +
+            '<div>' +
+              '<strong style="font-size:13px;">' + escHtml(j.task||'Untitled') + '</strong><br>' +
+              '<span style="font-size:12px;color:#94a3b8;">' + escHtml(j.date||'') + (j.foreman?' · '+escHtml(j.foreman):'') + '</span>' +
+            '</div>' +
+            '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">' +
+              '<span style="background:' + sc + ';color:' + tc + ';font-size:11px;padding:2px 8px;border-radius:10px;">' + escHtml(j.status||'Open') + '</span>' +
+              '<span style="background:rgba(245,158,11,0.15);color:#fbbf24;font-size:11px;padding:2px 8px;border-radius:10px;">' + escHtml(j.workType||'Other') + '</span>' +
+              '<span style="background:rgba(255,255,255,0.08);color:#94a3b8;font-size:11px;padding:2px 8px;border-radius:10px;">' + stepCount + ' steps</span>' +
+            '</div>' +
+          '</div>' +
+          '<div style="display:flex;gap:8px;margin-top:8px;">' +
+            '<button onclick="window.jhaEdit(\'' + j.id + '\')" style="background:rgba(255,255,255,0.08);color:#f1f5f9;border:none;padding:4px 10px;border-radius:5px;cursor:pointer;font-size:12px;">✏️ Edit</button>' +
+            '<button onclick="window.jhaPrint(\'' + j.id + '\')" style="background:rgba(245,158,11,0.2);color:#fcd34d;border:none;padding:4px 10px;border-radius:5px;cursor:pointer;font-size:12px;">🖨️ Print</button>' +
+            '<button onclick="window.jhaDelete(\'' + j.id + '\')" style="background:rgba(239,68,68,0.2);color:#fca5a5;border:none;padding:4px 10px;border-radius:5px;cursor:pointer;font-size:12px;">🗑️ Delete</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+  }
+}
+
+function jhaGetFormSteps() {
+  var rows = document.querySelectorAll('#jha-steps-body tr');
+  var steps = [];
+  rows.forEach(function(row) {
+    var inputs = row.querySelectorAll('.jha-step-input');
+    if (inputs.length === 3) {
+      steps.push({ step: inputs[0].value||'', hazard: inputs[1].value||'', control: inputs[2].value||'' });
+    }
+  });
+  return steps;
+}
+
+function jhaGetPPE() {
+  var checked = document.querySelectorAll('.jha-ppe-cb:checked');
+  return Array.from(checked).map(function(c) { return c.value; });
+}
+
+window.jhaAddRow = function() {
+  var tbody = document.getElementById('jha-steps-body');
+  if (!tbody) return;
+  var rows = tbody.querySelectorAll('tr');
+  var idx = rows.length;
+  var tr = document.createElement('tr');
+  tr.id = 'jha-row-' + idx;
+  tr.innerHTML = '<td style="padding:4px;"><input data-row="' + idx + '" data-col="step" class="jha-step-input" placeholder="Step ' + (idx+1) + '" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:5px;color:#f1f5f9;font-size:12px;width:100%;"></td>' +
+    '<td style="padding:4px;"><input data-row="' + idx + '" data-col="hazard" class="jha-step-input" placeholder="Hazard" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:5px;color:#f1f5f9;font-size:12px;width:100%;"></td>' +
+    '<td style="padding:4px;"><input data-row="' + idx + '" data-col="control" class="jha-step-input" placeholder="Control" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:5px;color:#f1f5f9;font-size:12px;width:100%;"></td>' +
+    '<td style="padding:4px;"><button onclick="window.jhaRemoveRow(' + idx + ')" style="background:rgba(239,68,68,0.2);color:#fca5a5;border:none;padding:3px 7px;border-radius:4px;cursor:pointer;font-size:11px;">✕</button></td>';
+  tbody.appendChild(tr);
+};
+
+window.jhaRemoveRow = function(idx) {
+  var row = document.getElementById('jha-row-' + idx);
+  if (row) row.remove();
+};
+
+window.jhaSaveEntry = function() {
+  var date = (document.getElementById('jha-date')||{}).value || '';
+  var task = (document.getElementById('jha-task')||{}).value || '';
+  if (!date || !task) { alert('Date and Task Description are required.'); return; }
+  var location = (document.getElementById('jha-location')||{}).value || '';
+  var foreman = (document.getElementById('jha-foreman')||{}).value || '';
+  var workType = (document.getElementById('jha-worktype')||{}).value || 'Other';
+  var status = (document.getElementById('jha-status')||{}).value || 'Open';
+  var emergencyContact = (document.getElementById('jha-emergency-contact')||{}).value || '';
+  var hospital = (document.getElementById('jha-hospital')||{}).value || '';
+  var emergencyProc = (document.getElementById('jha-emergency-proc')||{}).value || '';
+  var crew = (document.getElementById('jha-crew')||{}).value || '';
+  var steps = jhaGetFormSteps();
+  var ppe = jhaGetPPE();
+  var jhas = jhaLoad();
+  var entry = { date:date, task:task, location:location, foreman:foreman, workType:workType, status:status, emergencyContact:emergencyContact, hospital:hospital, emergencyProc:emergencyProc, crew:crew, steps:steps, ppe:ppe };
+  if (_jhaEditId) {
+    entry.id = _jhaEditId;
+    jhas = jhas.map(function(j) { return j.id === _jhaEditId ? entry : j; });
+    _jhaEditId = null;
+  } else {
+    entry.id = 'jha_' + Date.now();
+    jhas.push(entry);
+  }
+  jhaSave(jhas);
+  renderJHAModal();
+};
+
+window.jhaEdit = function(id) {
+  _jhaEditId = id;
+  renderJHAModal();
+  var fc = document.getElementById('jha-form-container');
+  if (fc) fc.scrollIntoView({ behavior: 'smooth' });
+};
+
+window.jhaCancelEdit = function() {
+  _jhaEditId = null;
+  renderJHAModal();
+};
+
+window.jhaDelete = function(id) {
+  if (!confirm('Delete this JHA?')) return;
+  jhaSave(jhaLoad().filter(function(j) { return j.id !== id; }));
+  renderJHAModal();
+};
+
+window.jhaPrint = function(id) {
+  var jhas = jhaLoad();
+  var j = jhas.find(function(x) { return x.id === id; });
+  if (!j) return;
+  var steps = j.steps || [];
+  var ppe = j.ppe || [];
+  var win = window.open('', '_blank');
+  win.document.write('<!DOCTYPE html><html><head><title>JHA — ' + j.task + '</title><style>' +
+    'body{font-family:Arial,sans-serif;margin:30px;color:#111;font-size:13px;}' +
+    'h1{font-size:20px;color:#d97706;margin-bottom:2px;}' +
+    '.header-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;border:1px solid #ccc;padding:14px;border-radius:6px;margin-bottom:16px;}' +
+    '.field{margin-bottom:8px;} .label{font-size:11px;color:#666;} .value{font-weight:600;}' +
+    'table{width:100%;border-collapse:collapse;margin:12px 0;font-size:12px;}' +
+    'th{background:#fff8e1;padding:7px;text-align:left;border:1px solid #ccc;}' +
+    'td{padding:6px 7px;border:1px solid #ddd;vertical-align:top;}' +
+    '.ppe-grid{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0;}' +
+    '.ppe-item{border:1px solid #ccc;border-radius:4px;padding:4px 10px;font-size:12px;}' +
+    '.ppe-checked{background:#d1fae5;border-color:#10b981;}' +
+    '.emergency-box{border:2px solid #ef4444;border-radius:6px;padding:12px;margin:16px 0;background:#fef2f2;}' +
+    '.sig-table td{height:50px;}' +
+    '.footer{margin-top:24px;font-size:10px;color:#666;border-top:1px solid #ccc;padding-top:8px;}' +
+    '.cert-block{border:1px solid #ccc;border-radius:6px;padding:14px;margin:16px 0;}' +
+    '@media print{button{display:none!important;}}' +
+  '</style></head><body>' +
+    '<h1>📋 Job Hazard Analysis (JHA) — Oncor Concrete</h1>' +
+    '<p style="color:#666;font-size:12px;">Status: <strong>' + j.status + '</strong> &nbsp;|&nbsp; Work Type: <strong>' + j.workType + '</strong></p>' +
+    '<div class="header-grid">' +
+      '<div class="field"><div class="label">Date</div><div class="value">' + (j.date||'') + '</div></div>' +
+      '<div class="field"><div class="label">Location / Grid Ref</div><div class="value">' + (j.location||'—') + '</div></div>' +
+      '<div class="field"><div class="label">Task Description</div><div class="value">' + (j.task||'') + '</div></div>' +
+      '<div class="field"><div class="label">Foreman / Supervisor</div><div class="value">' + (j.foreman||'—') + '</div></div>' +
+    '</div>' +
+    '<h3 style="font-size:14px;margin-bottom:6px;">PPE Required</h3>' +
+    '<div class="ppe-grid">' + JHA_PPE.map(function(p) { return '<div class="ppe-item' + (ppe.indexOf(p)!==-1?' ppe-checked':'') + '">' + (ppe.indexOf(p)!==-1?'✅ ':'☐ ') + p + '</div>'; }).join('') + '</div>' +
+    '<h3 style="font-size:14px;margin-bottom:6px;">Job Steps — Hazards — Controls</h3>' +
+    '<table><thead><tr><th>#</th><th>Job Step</th><th>Potential Hazard</th><th>Control Measure</th></tr></thead><tbody>' +
+    steps.map(function(s, i) { return '<tr><td style="width:30px;">' + (i+1) + '</td><td>' + (s.step||'') + '</td><td>' + (s.hazard||'') + '</td><td>' + (s.control||'') + '</td></tr>'; }).join('') +
+    '</tbody></table>' +
+    '<div class="emergency-box">' +
+      '<strong style="color:#ef4444;">🚨 EMERGENCY INFORMATION</strong><br>' +
+      '<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+        '<div><div class="label">Emergency Contact / Phone</div><div class="value">' + (j.emergencyContact||'—') + '</div></div>' +
+        '<div><div class="label">Nearest Hospital</div><div class="value">' + (j.hospital||'—') + '</div></div>' +
+      '</div>' +
+      (j.emergencyProc ? '<div style="margin-top:8px;"><div class="label">Emergency Procedures</div><div>' + j.emergencyProc + '</div></div>' : '') +
+    '</div>' +
+    '<h3 style="font-size:14px;margin-bottom:6px;">Crew Acknowledgment</h3>' +
+    '<table class="sig-table"><thead><tr><th>Name</th><th>Signature</th><th>Date</th></tr></thead><tbody>' +
+    [1,2,3,4,5].map(function() { return '<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>'; }).join('') +
+    '</tbody></table>' +
+    '<div class="cert-block">' +
+      '<strong>Supervisor Certification</strong><br>' +
+      '<p style="font-size:12px;margin:8px 0;">I certify that this JHA has been reviewed with the crew and all identified hazards have been addressed with appropriate controls.</p>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:16px;">' +
+        '<div>Supervisor Signature: ___________________<br><small>Date: _______________</small></div>' +
+        '<div>Printed Name: ___________________<br><small>Title: _______________</small></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="footer">Reference: OSHA 29 CFR 1926 — Construction Industry Standards | Generated by Oncor Concrete Estimator — ' + new Date().toLocaleString() + '</div>' +
+    '<script>window.print();<\/script></body></html>');
+  win.document.close();
+};
+
+// Sidebar button for JHA
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn = document.createElement('button');
+    btn.id = 'oncor-jha-btn';
+    btn.innerHTML = '📋 Hazard Analysis';
+    btn.title = 'Pre-Task Hazard Analysis / JHA (Ctrl+Alt+E)';
+    btn.onclick = openJHAModal;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(245,158,11,0.3)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(245,158,11,0.15)'; };
+    var prodBtn = document.getElementById('oncor-productivity-btn');
+    if (prodBtn && prodBtn.parentNode) {
+      prodBtn.parentNode.insertBefore(btn, prodBtn.nextSibling);
+    } else {
+      var allBtns = document.querySelectorAll('button');
+      var safetyBtn = null;
+      allBtns.forEach(function(b) {
+        if (b.textContent.indexOf('Safety Permit') !== -1 || b.textContent.indexOf('🦺') !== -1) safetyBtn = b;
+      });
+      if (safetyBtn && safetyBtn.parentNode) {
+        safetyBtn.parentNode.insertBefore(btn, safetyBtn.nextSibling);
+      } else {
+        btn.style.cssText += 'position:fixed;bottom:140px;right:20px;z-index:9000;width:auto;';
+        document.body.appendChild(btn);
+      }
+    }
+  }, 9100);
+});
+
+// ==================== END JHA / HAZARD ANALYSIS ====================
+
+
+// ==================== PROJECT SCORECARD — Ctrl+Alt+F ====================
+
+var SCORECARD_NOTES_KEY = 'oncor_scorecard_notes_v1';
+
+function scorecardLoadNotes() {
+  try { return JSON.parse(localStorage.getItem(SCORECARD_NOTES_KEY) || '{}'); } catch(e) { return {}; }
+}
+function scorecardSaveNotes(obj) { localStorage.setItem(SCORECARD_NOTES_KEY, JSON.stringify(obj)); }
+
+function gradeToNum(g) {
+  var map = { A:4, B:3, C:2, D:1, F:0 };
+  return (g in map) ? map[g] : null;
+}
+function numToGrade(n) {
+  if (n >= 3.5) return 'A';
+  if (n >= 2.5) return 'B';
+  if (n >= 1.5) return 'C';
+  if (n >= 0.5) return 'D';
+  return 'F';
+}
+function gradeColor(g) {
+  var map = { A:'#22c55e', B:'#14b8a6', C:'#f59e0b', D:'#f97316', F:'#ef4444', 'N/A':'#64748b' };
+  return map[g] || '#64748b';
+}
+function gradeBg(g) {
+  var map = { A:'rgba(34,197,94,0.15)', B:'rgba(20,184,166,0.15)', C:'rgba(245,158,11,0.15)', D:'rgba(249,115,22,0.15)', F:'rgba(239,68,68,0.15)', 'N/A':'rgba(100,116,139,0.1)' };
+  return map[g] || 'rgba(100,116,139,0.1)';
+}
+
+function calcFinancialGrade() {
+  try {
+    var ctc = JSON.parse(localStorage.getItem('oncor_ctc_v1') || 'null');
+    if (!ctc) return 'N/A';
+    var margin = null;
+    if (ctc.projectedMarginPct !== undefined) margin = parseFloat(ctc.projectedMarginPct);
+    else if (ctc.margin !== undefined) margin = parseFloat(ctc.margin);
+    else if (ctc.entries && ctc.entries.length) {
+      var totalRevenue = 0, totalCost = 0;
+      ctc.entries.forEach(function(e) { totalRevenue += parseFloat(e.revenue||e.contractAmount||0); totalCost += parseFloat(e.cost||e.ctcCost||0); });
+      if (totalRevenue > 0) margin = ((totalRevenue - totalCost) / totalRevenue) * 100;
+    }
+    if (margin === null || isNaN(margin)) return 'N/A';
+    if (margin > 15) return 'A';
+    if (margin >= 10) return 'B';
+    if (margin >= 5) return 'C';
+    if (margin >= 0) return 'D';
+    return 'F';
+  } catch(e) { return 'N/A'; }
+}
+
+function calcQualityGrade() {
+  try {
+    var allKeys = Object.keys(localStorage);
+    var qcKeys = allKeys.filter(function(k) { return k.indexOf('oncor_qc_log_v1') === 0; });
+    var totalBreaks = 0, totalPass = 0;
+    qcKeys.forEach(function(k) {
+      var data = JSON.parse(localStorage.getItem(k) || '[]');
+      if (!Array.isArray(data)) return;
+      data.forEach(function(b) {
+        if (b.breakResult !== undefined || b.result !== undefined || b.psi !== undefined) {
+          totalBreaks++;
+          var psi = parseFloat(b.psi || b.breakPsi || b.result || 0);
+          var req = parseFloat(b.requiredPsi || b.required || b.specPsi || 3000);
+          if (psi >= req) totalPass++;
+        }
+      });
+    });
+    if (totalBreaks === 0) return 'N/A';
+    var rate = (totalPass / totalBreaks) * 100;
+    if (rate > 90) return 'A';
+    if (rate >= 75) return 'B';
+    if (rate >= 60) return 'C';
+    if (rate >= 50) return 'D';
+    return 'F';
+  } catch(e) { return 'N/A'; }
+}
+
+function calcSafetyGrade() {
+  try {
+    var allKeys = Object.keys(localStorage);
+    var safetyKeys = allKeys.filter(function(k) { return k.indexOf('oncor_safety_v1') === 0; });
+    var totalRecordables = 0, hasRecentTBT = false, hasOpenIncidents = false;
+    var thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    safetyKeys.forEach(function(k) {
+      var data = JSON.parse(localStorage.getItem(k) || '[]');
+      if (!Array.isArray(data)) return;
+      data.forEach(function(entry) {
+        if (entry.type === 'incident' || entry.incidentType) {
+          if (entry.oshaRecordable || entry.recordable) totalRecordables++;
+          if (entry.status === 'Open' || entry.open) hasOpenIncidents = true;
+        }
+        if (entry.type === 'toolbox' || entry.tbtDate || entry.talkType) {
+          var d = new Date(entry.date || entry.tbtDate || '2000-01-01');
+          if (d >= thirtyDaysAgo) hasRecentTBT = true;
+        }
+      });
+    });
+    if (safetyKeys.length === 0) return 'N/A';
+    if (hasOpenIncidents) return 'F';
+    if (totalRecordables === 0 && hasRecentTBT) return 'A';
+    if (totalRecordables === 0) return 'B';
+    if (totalRecordables === 1) return 'C';
+    return 'D';
+  } catch(e) { return 'N/A'; }
+}
+
+function calcScheduleGrade() {
+  try {
+    var allKeys = Object.keys(localStorage);
+    var logKeys = allKeys.filter(function(k) { return k.indexOf('oncor_field_log_v1') === 0; });
+    if (logKeys.length === 0) return 'N/A';
+    var hasEntries = false;
+    logKeys.forEach(function(k) {
+      var data = JSON.parse(localStorage.getItem(k) || '[]');
+      if (Array.isArray(data) && data.length > 0) hasEntries = true;
+    });
+    return hasEntries ? 'B' : 'C';
+  } catch(e) { return 'N/A'; }
+}
+
+function calcCollectionsGrade() {
+  try {
+    var allKeys = Object.keys(localStorage);
+    var arKeys = allKeys.filter(function(k) { return k.indexOf('oncor_ar_v1') === 0; });
+    if (arKeys.length === 0) return 'N/A';
+    var totalInvoiced = 0, totalCollected = 0;
+    arKeys.forEach(function(k) {
+      var data = JSON.parse(localStorage.getItem(k) || '[]');
+      if (!Array.isArray(data)) return;
+      data.forEach(function(inv) {
+        totalInvoiced += parseFloat(inv.amount || inv.invoiceAmount || inv.total || 0);
+        totalCollected += parseFloat(inv.paid || inv.collected || inv.amountPaid || 0);
+      });
+    });
+    if (totalInvoiced === 0) return 'N/A';
+    var ratio = (totalCollected / totalInvoiced) * 100;
+    if (ratio > 90) return 'A';
+    if (ratio >= 75) return 'B';
+    if (ratio >= 50) return 'C';
+    if (ratio >= 25) return 'D';
+    return 'F';
+  } catch(e) { return 'N/A'; }
+}
+
+function calcProcurementGrade() {
+  try {
+    var allKeys = Object.keys(localStorage);
+    var poKeys = allKeys.filter(function(k) { return k.indexOf('oncor_po_v1') === 0; });
+    if (poKeys.length === 0) return 'N/A';
+    var totalOrders = 0, deliveredOrders = 0, overdueCount = 0;
+    var today = new Date();
+    poKeys.forEach(function(k) {
+      var data = JSON.parse(localStorage.getItem(k) || '[]');
+      if (!Array.isArray(data)) return;
+      data.forEach(function(po) {
+        totalOrders++;
+        if (po.status === 'Delivered' || po.delivered) deliveredOrders++;
+        if (po.dueDate && new Date(po.dueDate) < today && po.status !== 'Delivered') overdueCount++;
+      });
+    });
+    if (totalOrders === 0) return 'N/A';
+    var ratio = (deliveredOrders / totalOrders) * 100;
+    var grade;
+    if (ratio > 90) grade = 'A';
+    else if (ratio >= 75) grade = 'B';
+    else if (ratio >= 50) grade = 'C';
+    else grade = 'D';
+    // Penalize for overdue
+    if (overdueCount >= 3) {
+      var n = gradeToNum(grade);
+      if (n !== null && n > 0) grade = numToGrade(n - 1);
+    }
+    return grade;
+  } catch(e) { return 'N/A'; }
+}
+
+function calcDocumentationGrade() {
+  try {
+    var DOC_KEY_FRAGMENTS = ['oncor_ar_v1','oncor_rfi_v1','oncor_submit','oncor_change_order','oncor_punch','oncor_meeting','oncor_lien','oncor_po_v1'];
+    var allKeys = Object.keys(localStorage);
+    var count = 0;
+    DOC_KEY_FRAGMENTS.forEach(function(frag) {
+      var found = allKeys.some(function(k) {
+        if (k.indexOf(frag) !== 0) return false;
+        try {
+          var data = JSON.parse(localStorage.getItem(k) || 'null');
+          return data && ((Array.isArray(data) && data.length > 0) || (typeof data === 'object' && Object.keys(data).length > 0));
+        } catch(e) { return false; }
+      });
+      if (found) count++;
+    });
+    if (count === 8) return 'A';
+    if (count >= 6) return 'B';
+    if (count >= 4) return 'C';
+    if (count >= 2) return 'D';
+    return 'F';
+  } catch(e) { return 'F'; }
+}
+
+function calcOverallGrade(grades) {
+  var nums = [];
+  Object.values(grades).forEach(function(g) {
+    var n = gradeToNum(g);
+    if (n !== null) nums.push(n);
+  });
+  if (nums.length === 0) return 'N/A';
+  var avg = nums.reduce(function(a,b) { return a+b; }, 0) / nums.length;
+  return numToGrade(avg);
+}
+
+function gradeToHealth(g) {
+  var map = { A:95, B:80, C:60, D:40, F:15, 'N/A':50 };
+  return map[g] || 50;
+}
+
+var SCORECARD_CATEGORIES = [
+  { key:'financial', label:'Financial', icon:'💰', desc:'Profit margin from CTC forecast', tip:'Review CTC forecast and reduce cost overruns.' },
+  { key:'quality', label:'Quality', icon:'🔬', desc:'Cylinder break pass rate', tip:'Ensure proper cure times and spec compliance.' },
+  { key:'safety', label:'Safety', icon:'🦺', desc:'Recordables + toolbox talks', tip:'Hold weekly toolbox talks and document incidents.' },
+  { key:'schedule', label:'Schedule', icon:'📅', desc:'Field log activity vs pours', tip:'Log daily field reports to track progress.' },
+  { key:'collections', label:'Collections', icon:'💵', desc:'A/R collected vs invoiced', tip:'Follow up on aging invoices > 30 days.' },
+  { key:'procurement', label:'Procurement', icon:'📦', desc:'PO delivery rate', tip:'Track PO due dates and follow up on delays.' },
+  { key:'documentation', label:'Documentation', icon:'📁', desc:'8 key modules populated', tip:'Fill in AR, RFI, Submittals, Change Orders, Punch List, Meetings, Lien, Procurement.' }
+];
+
+function calcAllGrades() {
+  return {
+    financial: calcFinancialGrade(),
+    quality: calcQualityGrade(),
+    safety: calcSafetyGrade(),
+    schedule: calcScheduleGrade(),
+    collections: calcCollectionsGrade(),
+    procurement: calcProcurementGrade(),
+    documentation: calcDocumentationGrade()
+  };
+}
+
+function openScorecardModal() {
+  var existing = document.getElementById('oncor-scorecard-modal');
+  if (existing) { existing.style.display = 'flex'; renderScorecardModal(); return; }
+
+  var modal = document.createElement('div');
+  modal.id = 'oncor-scorecard-modal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;';
+  modal.innerHTML = '<div id="scorecard-inner" style="background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:12px;width:100%;max-width:1100px;padding:24px;color:#f1f5f9;font-family:sans-serif;position:relative;">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">' +
+      '<h2 style="margin:0;font-size:22px;">🏆 Project Scorecard</h2>' +
+      '<div style="display:flex;gap:10px;">' +
+        '<button onclick="window.scorecardRefresh()" style="background:rgba(255,255,255,0.08);color:#f1f5f9;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px;">🔄 Refresh</button>' +
+        '<button onclick="window.scorecardPrint()" style="background:#7c3aed;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px;">🖨️ Print</button>' +
+        '<button onclick="document.getElementById(\'oncor-scorecard-modal\').style.display=\'none\'" style="background:rgba(255,255,255,0.1);color:#f1f5f9;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:20px;">✕</button>' +
+      '</div>' +
+    '</div>' +
+    '<div id="scorecard-body"></div>' +
+  '</div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.style.display = 'none'; });
+  renderScorecardModal();
+}
+
+function renderScorecardModal() {
+  var grades = calcAllGrades();
+  var overall = calcOverallGrade(grades);
+  var notes = scorecardLoadNotes();
+  var now = new Date().toLocaleString();
+
+  var allGradesForHealth = Object.assign({}, grades, { overall: overall });
+  var healthNums = [];
+  Object.values(grades).forEach(function(g) {
+    var n = gradeToNum(g);
+    if (n !== null) healthNums.push(n);
+  });
+  var healthPct = healthNums.length > 0 ? Math.round((healthNums.reduce(function(a,b){return a+b;},0) / (healthNums.length * 4)) * 100) : 50;
+  var healthColor = healthPct >= 75 ? '#22c55e' : healthPct >= 50 ? '#f59e0b' : '#ef4444';
+
+  var body = document.getElementById('scorecard-body');
+  if (!body) return;
+
+  body.innerHTML =
+    // Overall grade card
+    '<div style="background:' + gradeBg(overall) + ';border:2px solid ' + gradeColor(overall) + ';border-radius:12px;padding:20px;margin-bottom:24px;display:flex;align-items:center;gap:24px;">' +
+      '<div style="font-size:72px;font-weight:900;color:' + gradeColor(overall) + ';line-height:1;">' + overall + '</div>' +
+      '<div style="flex:1;">' +
+        '<div style="font-size:22px;font-weight:700;">Overall Project Grade</div>' +
+        '<div style="font-size:13px;color:#94a3b8;margin:6px 0;">Based on ' + healthNums.length + ' of 7 KPI categories with data</div>' +
+        '<div style="margin-top:10px;">' +
+          '<div style="display:flex;justify-content:space-between;font-size:12px;color:#94a3b8;margin-bottom:4px;"><span>Project Health</span><span>' + healthPct + '%</span></div>' +
+          '<div style="background:rgba(255,255,255,0.1);border-radius:6px;height:12px;overflow:hidden;">' +
+            '<div style="background:' + healthColor + ';width:' + healthPct + '%;height:100%;border-radius:6px;transition:width 0.5s;"></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="font-size:12px;color:#64748b;text-align:right;">Last updated<br>' + now + '</div>' +
+    '</div>' +
+
+    // 7 KPI cards in 2-col grid
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">' +
+    SCORECARD_CATEGORIES.map(function(cat) {
+      var g = grades[cat.key];
+      return '<div style="background:' + gradeBg(g) + ';border:1px solid ' + gradeColor(g) + ';border-radius:10px;padding:16px;">' +
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">' +
+          '<div style="font-size:48px;font-weight:900;color:' + gradeColor(g) + ';line-height:1;">' + g + '</div>' +
+          '<div>' +
+            '<div style="font-size:16px;font-weight:700;">' + cat.icon + ' ' + cat.label + '</div>' +
+            '<div style="font-size:12px;color:#94a3b8;">' + cat.desc + '</div>' +
+          '</div>' +
+        '</div>' +
+        (g === 'N/A' ? '' : '<div style="font-size:12px;color:#94a3b8;margin-bottom:10px;">💡 ' + cat.tip + '</div>') +
+        '<textarea data-cat="' + cat.key + '" onchange="window.scorecardSaveNote(\'' + cat.key + '\', this.value)" placeholder="Add context notes..." rows="2" style="width:100%;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);border-radius:5px;padding:6px;color:#f1f5f9;font-size:11px;resize:vertical;box-sizing:border-box;">' + escHtml(notes[cat.key]||'') + '</textarea>' +
+      '</div>';
+    }).join('') +
+    '</div>';
+}
+
+window.scorecardRefresh = function() { renderScorecardModal(); };
+
+window.scorecardSaveNote = function(key, val) {
+  var notes = scorecardLoadNotes();
+  notes[key] = val;
+  scorecardSaveNotes(notes);
+};
+
+window.scorecardPrint = function() {
+  var grades = calcAllGrades();
+  var overall = calcOverallGrade(grades);
+  var notes = scorecardLoadNotes();
+  var healthNums = [];
+  Object.values(grades).forEach(function(g) { var n = gradeToNum(g); if (n !== null) healthNums.push(n); });
+  var healthPct = healthNums.length > 0 ? Math.round((healthNums.reduce(function(a,b){return a+b;},0) / (healthNums.length * 4)) * 100) : 50;
+
+  var win = window.open('', '_blank');
+  win.document.write('<!DOCTYPE html><html><head><title>Project Scorecard — Oncor</title><style>' +
+    'body{font-family:Arial,sans-serif;margin:30px;color:#111;font-size:13px;}' +
+    'h1{font-size:20px;color:#7c3aed;margin-bottom:2px;}' +
+    '.grade-table{width:100%;border-collapse:collapse;margin:16px 0;}' +
+    '.grade-table th{background:#f5f3ff;padding:8px;text-align:left;border:1px solid #ccc;}' +
+    '.grade-table td{padding:8px;border:1px solid #ddd;vertical-align:top;}' +
+    '.big-grade{font-size:32px;font-weight:900;text-align:center;}' +
+    '.overall-box{border:2px solid #7c3aed;border-radius:8px;padding:16px;margin:16px 0;text-align:center;}' +
+    '.sig-block{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:20px 0;}' +
+    '.sig-line{border-top:1px solid #666;padding-top:6px;font-size:11px;color:#666;}' +
+    '.health-bar{background:#e5e7eb;border-radius:6px;height:16px;overflow:hidden;margin:8px 0;}' +
+    '.health-fill{height:100%;border-radius:6px;}' +
+    '@media print{button{display:none!important;}}' +
+  '</style></head><body>' +
+    '<h1>🏆 Project Scorecard — Oncor Concrete</h1>' +
+    '<p style="color:#666;">Generated: ' + new Date().toLocaleString() + '</p>' +
+    '<div class="overall-box">' +
+      '<div style="font-size:64px;font-weight:900;color:#7c3aed;">' + overall + '</div>' +
+      '<div style="font-size:18px;font-weight:700;">Overall Project Grade</div>' +
+      '<div style="font-size:13px;color:#666;">Project Health: ' + healthPct + '%</div>' +
+      '<div class="health-bar"><div class="health-fill" style="width:' + healthPct + '%;background:' + (healthPct>=75?'#22c55e':healthPct>=50?'#f59e0b':'#ef4444') + ';"></div></div>' +
+    '</div>' +
+    '<table class="grade-table"><thead><tr><th>Category</th><th>Grade</th><th>Description</th><th>Tip</th><th>Notes</th></tr></thead><tbody>' +
+    SCORECARD_CATEGORIES.map(function(cat) {
+      var g = grades[cat.key];
+      return '<tr><td>' + cat.icon + ' ' + cat.label + '</td><td class="big-grade" style="color:' + (g==='A'?'#16a34a':g==='B'?'#0891b2':g==='C'?'#d97706':g==='D'?'#ea580c':g==='F'?'#dc2626':'#64748b') + ';">' + g + '</td><td>' + cat.desc + '</td><td style="font-size:11px;color:#666;">' + cat.tip + '</td><td style="font-size:11px;">' + (notes[cat.key]||'') + '</td></tr>';
+    }).join('') +
+    '</tbody></table>' +
+    '<div class="sig-block">' +
+      '<div><div style="height:50px;"></div><div class="sig-line">Project Manager Signature / Date</div></div>' +
+      '<div><div style="height:50px;"></div><div class="sig-line">Owner / GC Signature / Date</div></div>' +
+    '</div>' +
+    '<script>window.print();<\/script></body></html>');
+  win.document.close();
+};
+
+// Sidebar button for Scorecard
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn = document.createElement('button');
+    btn.id = 'oncor-scorecard-btn';
+    btn.innerHTML = '🏆 Project Scorecard';
+    btn.title = 'Project Scorecard (Ctrl+Alt+F)';
+    btn.onclick = openScorecardModal;
+    btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 14px;background:rgba(124,58,237,0.15);color:#a78bfa;border:1px solid rgba(124,58,237,0.3);border-radius:8px;cursor:pointer;font-size:13px;margin-top:4px;transition:background 0.2s;';
+    btn.onmouseenter = function() { this.style.background = 'rgba(124,58,237,0.3)'; };
+    btn.onmouseleave = function() { this.style.background = 'rgba(124,58,237,0.15)'; };
+    var jhaBtn = document.getElementById('oncor-jha-btn');
+    if (jhaBtn && jhaBtn.parentNode) {
+      jhaBtn.parentNode.insertBefore(btn, jhaBtn.nextSibling);
+    } else {
+      var prodBtn = document.getElementById('oncor-productivity-btn');
+      if (prodBtn && prodBtn.parentNode) {
+        prodBtn.parentNode.insertBefore(btn, prodBtn.nextSibling);
+      } else {
+        btn.style.cssText += 'position:fixed;bottom:100px;right:20px;z-index:9000;width:auto;';
+        document.body.appendChild(btn);
+      }
+    }
+  }, 9200);
+});
+
+// ==================== END PROJECT SCORECARD ====================
+
+
+// ==================== KEYBOARD SHORTCUTS — Session #93 ====================
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.altKey) {
+    if (e.key === 'd' || e.key === 'D') { e.preventDefault(); openProductivityDash(); }
+    if (e.key === 'e' || e.key === 'E') { e.preventDefault(); openJHAModal(); }
+    if (e.key === 'f' || e.key === 'F') { e.preventDefault(); openScorecardModal(); }
+  }
+});
+// ==================== END KEYBOARD SHORTCUTS ====================
+
+})();
+// ==================== END SESSION #93 — Zeus ⚡ Productivity Dashboard + JHA + Project Scorecard ====================
 </script>
