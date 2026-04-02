@@ -1,5 +1,421 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 2, 2026 - 07:19 UTC (Overnight Cron #94)
+**Status:** ✅ THREE NEW FEATURES added (+437 lines total)
+
+### What Was Added:
+
+---
+
+### 📊 Material Waste Analysis Dashboard (Ctrl+Alt+G) — +145 lines
+- New `📊 Waste Analysis` button injected in sidebar below Project Scorecard
+- `Ctrl+Alt+G` keyboard shortcut opens/toggles the modal
+- **Purpose:** Pull data from Alt+V (Waste & Volume Log) and visualize waste rates, costs, and causes — both for the current project and across all saved projects.
+
+**Features:**
+- 4-card KPI: Est. Volume, Ordered, Waste yd³, Waste Cost
+- Large waste % with ACI 304R benchmark status (✅ <4%, ⚠️ 4-8%, 🔴 >8%)
+- Waste by Cause table: groups events by cause (form blowout, pump waste, grade low spots, etc.) with event count, volume, and share %
+- Cross-Project Waste Comparison table: all saved projects side-by-side with est yd³ / ordered / waste / rate / cost
+- Printable waste analysis report
+- Ties directly into Alt+V Waste & Volume Log data
+
+---
+
+### 🎯 Pour Quality Scorecard (Ctrl+Alt+H) — +180 lines
+- New `🎯 Pour Quality Score` button injected in sidebar below Waste Analysis
+- `Ctrl+Alt+H` keyboard shortcut opens/toggles the modal
+- **Purpose:** Auto-score each pour A–F (0–100) based on data from QC log, delivery tickets, and pre-pour checklist. No more guessing — instant quality grade per pour.
+
+**Scoring Algorithm (100 pts, deducted for issues):**
+- -20 for 28-day cylinder FAIL (ACI 318-19 §26.12.3)
+- -10/-8 for low average / low min cylinder strength
+- -5 for over-slump load
+- -5 for water added on-site (ASTM C94 §11.8)
+- -3 for high concrete temp >90°F (ACI 305R) or low temp <50°F (ACI 306R)
+- -10 per rejected load
+- -3 per delivery ticket with water added
+- -3 per over-slump delivery ticket
+- -20 for pre-pour checklist <80% complete
+- -5 for pre-pour checklist <100%
+
+**Grade Scale:** A (90–100) · B (80–89) · C (70–79) · D (60–69) · F (<60)
+
+**Display:**
+- 4-card header: Pours Scored, Avg Score, Grade A Count, Failing Pours
+- Per-pour card with letter grade badge, numeric score, issues listed as color-coded pills
+- Data sources listed (QC tests count, delivery tickets count)
+
+---
+
+### 🤝 Subcontractor Performance Tracker (Ctrl+Alt+I) — +112 lines
+- New `🤝 Sub Performance` button injected in sidebar below Pour Quality Score
+- `Ctrl+Alt+I` keyboard shortcut opens/toggles the modal
+- **Purpose:** Two-panel view: current project sub status (COI health, payment %, outstanding) + cross-project history (who you've used before, how many jobs, volume, payment rate, issue count).
+
+**Features:**
+- Current project subs: payment progress bars, COI status (GL/WC/Auto — green ✓ or red EXPIRED), pay status, lien waiver status, outstanding balance
+- Cross-project history table: top 20 subs by volume across all saved projects — company, scope, jobs count, total contract volume, payment %, issues (expired COIs + disputes)
+- "Issues" metric flags risky subs to avoid rehiring
+- Complements Ctrl+Shift+U (Subcontractor Management) with analytics layer
+
+**Commits:**
+- c7b9bf2: 📊🎯🤝 Waste Analysis (Ctrl+Alt+G) + Pour Quality Score (Ctrl+Alt+H) + Sub Performance (Ctrl+Alt+I) (+437 lines) [Session #94]
+
+**Total Lines:** ~168,980 | **New Shortcuts:** Ctrl+Alt+G, Ctrl+Alt+H, Ctrl+Alt+I
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 04:45 UTC (Overnight Cron #92)
+**Status:** ✅ THREE NEW FEATURES added (+718 lines total)
+
+### What Was Added:
+
+---
+
+### 🏦 Loan Draw Request Tracker (Alt+0) — +290 lines
+- New `🏦 Loan Draws` button injected in sidebar
+- `Alt+0` keyboard shortcut opens/toggles the modal
+- **Purpose:** Track construction loan draw requests, inspections, and fund disbursements
+
+**Features:**
+- Loan setup: total amount, lender name, inspector, retainage %
+- Draw progress bar showing % of loan drawn
+- 9 draw statuses: Draft → Submitted → Inspection → Approved → Funded
+- Per-draw: amount requested, retainage, net disbursement, % complete, period dates
+- Auto-calculates retainage from configurable %
+- Lender notes tracking per draw
+- Stats: total funded, retainage held, remaining balance, pending draws
+- Printable Construction Loan Draw Summary with KPI grid
+
+---
+
+### 📊 Project Comparison Matrix (Ctrl+Alt+C) — +230 lines
+- New `📊 Compare Projects` button injected in sidebar
+- `Ctrl+Alt+C` keyboard shortcut opens/toggles the modal
+- **Purpose:** Side-by-side comparison of up to 4 saved projects
+
+**Features:**
+- Auto-loads 4 most recent saved projects
+- Comparison table: project name, client, status, total bid, yd³, $/yd³, measurements, overhead/profit %, concrete cost, labor rate
+- Color-coded columns per project
+- Best-value highlighting (highest bid, most yd³, lowest $/yd³)
+- Visual bid comparison bar chart
+- Printable Project Comparison Matrix
+
+---
+
+### 🔒 Daily Safety Permit Log (Ctrl+Alt+S) — +198 lines
+- New `🔒 Safety Permits` button injected in sidebar
+- `Ctrl+Alt+S` keyboard shortcut opens/toggles the modal
+- **Purpose:** Document safety permits per OSHA 29 CFR 1926 — hot work, confined space, LOTO, excavation
+
+**Features:**
+- 14 permit types: Hot Work (1926.352), Confined Space (1926.1203), LOTO (1910.147), Excavation (1926.652), Crane/Critical Lift, Scaffolding (1926.450), and more
+- Per-permit: date, start/end time, location, issuer, workers covered, hazards, controls
+- Color-coded by permit type
+- Active/Completed/Expired status tracking
+- Printable Safety Permit Log with OSHA regulation references
+- Stats: total permits, active, completed, today's permits
+
+**Commits:**
+- c3243e4: 🏦📊🔒 Loan Draw Tracker (Alt+0) + Project Comparison (Ctrl+Alt+C) + Safety Permits (Ctrl+Alt+S) (+718 lines) [Session #92]
+
+**Total Lines:** ~167,439 | **New Shortcuts:** Alt+0, Ctrl+Alt+C, Ctrl+Alt+S
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 04:45 UTC (Overnight Cron #91)
+**Status:** ✅ THREE NEW FEATURES added (+721 lines total)
+
+### What Was Added:
+
+---
+
+### 📋 Project Close-Out Report Generator (Alt+7) — +230 lines
+- New `📋 Close-Out Report` button injected in sidebar
+- `Alt+7` keyboard shortcut opens the generator
+- **Purpose:** Generate comprehensive project summary for job files — pulls data from all project modules
+
+**Report Sections:**
+- Project Overview (name, client, PM)
+- Financial Summary (original contract, COs, revised contract, billed, paid, outstanding)
+- Scope & Production (estimated vs actual yd³, variance, pour days, measurements)
+- Project Metrics (COs, pay apps, RFIs, punch items, QC tests, safety talks)
+- Change Order Log (top 10 COs with status)
+- Close-Out Checklist (punch items, retainage, as-builts, O&M, warranty, lien release)
+- Dual Signature Block (PM + Owner/GC)
+
+**Features:**
+- Auto-compiles data from all project localStorage modules
+- PDF-ready print output with professional formatting
+- One-click generation
+
+---
+
+### 🔧 Equipment Maintenance & Service Log (Alt+8) — +290 lines
+- New `🔧 Equip Maintenance` button injected in sidebar
+- `Alt+8` keyboard shortcut opens/toggles the modal
+- **Purpose:** Track maintenance on company-owned equipment — service history, costs, next service dates
+
+**Features:**
+- 24 equipment types (vibrators, trowels, saws, skid steers, trailers, etc.)
+- 16 service types (oil change, filter, blade, hydraulic, electrical, etc.)
+- Per-equipment tracking: serial #, year, purchase date/price, location
+- Service history log with dates, types, costs, vendor, notes
+- Next service date with overdue/due-soon alerts
+- Stats: total equipment, total services, total maintenance cost
+- Printable Equipment Maintenance Log
+
+---
+
+### 📞 Vendor Call Log (Alt+9) — +200 lines
+- New `📞 Vendor Calls` button injected in sidebar
+- `Alt+9` keyboard shortcut opens/toggles the modal
+- **Purpose:** Quick log for vendor calls with notes, follow-ups, outcomes
+
+**Features:**
+- 15 call types (quote request, delivery scheduling, pricing discussion, etc.)
+- 11 vendor types (batch plant, rebar supplier, pump company, etc.)
+- Fields: date, time, vendor, contact, phone, call type, notes, outcome, follow-up date
+- Quick Log mode for fast entry
+- Calls grouped by date with follow-up due alerts
+- Printable Vendor Call Log
+
+**Commits:**
+- 4b156c0: 📋🔧📞 Close-Out Report (Alt+7) + Equipment Maintenance (Alt+8) + Vendor Call Log (Alt+9) (+721 lines) [Session #91]
+
+**Total Lines:** ~166,721 | **New Alt+ Shortcuts:** Alt+7, Alt+8, Alt+9
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 04:45 UTC (Overnight Cron #90)
+**Status:** ✅ THREE NEW FEATURES added (+1,030 lines total)
+
+### What Was Added:
+
+---
+
+### 📐 Rebar & Mesh Estimator (Alt+4) — +430 lines
+- New `📐 Rebar Estimator` button injected in sidebar
+- `Alt+4` keyboard shortcut opens/toggles the modal
+- **Purpose:** Auto-calculate rebar quantities, weight, and cost from element dimensions
+
+**Features:**
+- Supports Slabs, Footings, Grade Beams, Walls, Columns
+- Rebar: bar sizes #3-#11 with accurate lb/ft weights
+- Wire mesh: 6x6, 4x4 variants with lb/100SF
+- Calculates: linear feet, weight (lbs/tons), material cost, labor cost, total
+- Configurable: bar spacing, lap splice factor, price/lb, labor/ton
+- Import from Takeoff: auto-populates from current measurements
+- Printable Rebar & Mesh Estimate
+
+---
+
+### 💼 GC Prequalification Tracker (Alt+5) — +380 lines
+- New `💼 GC Preqal` button injected in sidebar
+- `Alt+5` keyboard shortcut opens/toggles the modal
+- **Purpose:** Track prequalification submissions to General Contractors
+
+**Features:**
+- 9 status options: Not Started → Approved → Expired
+- 18 standard required documents checklist (license, COIs, W-9, safety, EMR, financials, etc.)
+- Per-GC tracking: contact info, job limits, bonding capacity, EMR rate
+- Renewal date tracking with due-soon/expired alerts
+- Document completion progress bar
+- Printable GC Prequalification Status report
+
+---
+
+### 🗓️ Cross-Project Deadline Digest (Alt+6) — +220 lines
+- New `🗓️ Deadline Digest` button injected in sidebar
+- `Alt+6` keyboard shortcut opens/toggles the modal
+- **Purpose:** See ALL critical deadlines across ALL saved projects in one view
+
+**Features:**
+- Configurable window: 7/14/30/60/90 days
+- Pulls deadlines from: AR invoices, AP bills, Lien notices, Permits, Inspections, Punch list, Meeting action items, Equipment returns, Quote expiries, Cylinder breaks, GC preqal renewals
+- Color-coded by urgency: Overdue (red), Today (orange), Next 7 days (amber), Upcoming
+- Cross-project visibility — all projects in one digest
+- Printable Deadline Digest report
+
+**Commits:**
+- 2571eef: 📐💼🗓️ Rebar & Mesh Estimator (Alt+4) + GC Preqal Tracker (Alt+5) + Deadline Digest (Alt+6) (+1,030 lines) [Session #90]
+
+**Total Lines:** ~166,000 | **New Alt+ Shortcuts:** Alt+4, Alt+5, Alt+6
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 03:26 UTC (Overnight Cron #89)
+**Status:** ✅ THREE MAJOR FEATURES added (+1,358 lines total)
+
+### What Was Added:
+
+---
+
+### 📋 Quick Estimate Templates Library (Alt+1) — +430 lines
+- New `📋 Estimate Templates` button injected in sidebar below Job Flash Report
+- `Alt+1` keyboard shortcut opens/toggles the modal
+- **Purpose:** Pre-built measurement sets for common concrete job types. Load templates to jump-start new estimates. Save current project as a reusable template.
+
+**8 Built-In Templates (El Paso calibrated):**
+1. **Gas Station / Convenience Store** — 15 measurements, ~185 yd³, $45K-$65K
+2. **Small Warehouse / Flex Space** — 11 measurements, ~280 yd³, $70K-$95K
+3. **Strip Mall / Retail Center** — 12 measurements, ~320 yd³, $85K-$120K
+4. **Restaurant / QSR Pad** — 11 measurements, ~175 yd³, $42K-$58K
+5. **Residential Foundation (Slab-on-Grade)** — 8 measurements, ~55 yd³, $12K-$18K
+6. **Express Car Wash** — 8 measurements, ~165 yd³, $50K-$70K
+7. **Medical Office Building** — 8 measurements, ~290 yd³, $75K-$100K
+8. **Self-Storage Facility** — 6 measurements, ~240 yd³, $55K-$75K
+
+**Features:**
+- Card grid layout with category badges, yd³ counts, typical bid ranges
+- Load templates to ADD measurements (non-destructive)
+- Save current project as reusable template
+- Tab switching: Built-In vs My Saved Templates
+- localStorage persistence
+
+---
+
+### 🎯 Bid Comparison & Competitor Analysis (Alt+2) — +505 lines
+- New `🎯 Competitor Analysis` button injected in sidebar
+- `Alt+2` keyboard shortcut opens/toggles the modal
+- **Purpose:** Track competitor bids, analyze win/loss patterns, build competitive intelligence
+
+**3 Tabs:**
+- 📊 Bid Comparisons — log each bid with outcome, prices, other bidders
+- 🏢 Competitor Directory — auto-populated from bid logs, tracks wins against you
+- 💡 Win/Loss Insights — pricing analysis, top competitors, strategic recommendations
+
+**Bid Entry Fields:**
+- Project name, client/GC, bid date
+- Outcome: Pending/Won/Lost/No Bid/Withdrawn
+- Our bid ($), winning bid ($), winner name
+- Project type: Commercial/Industrial/Residential/Municipal/Infrastructure
+- Other bidders (multi-line), notes
+
+**Insights Tab:**
+- Avg bid, avg winning bid when lost, price variance analysis
+- Top 5 competitors (beat us most)
+- Win rate by project type
+- Auto-generated strategic recommendations
+
+---
+
+### 👷 Crew Productivity Tracker (Alt+3) — +423 lines
+- New `👷 Crew Productivity` button injected in sidebar
+- `Alt+3` keyboard shortcut opens/toggles the modal
+- **Purpose:** Track actual vs estimated labor hours to improve future estimates
+
+**3 Tabs:**
+- 📋 Projects — log completed jobs with actual/estimated hours
+- 📊 Productivity Rates — yd³/hour by work type, efficiency %
+- 👥 Crew Directory — track foremen and crew members
+
+**Project Entry:**
+- Project name, work type (14 types)
+- yd³ poured, estimated hours, actual hours
+- Crew size, foreman, notes
+
+**Productivity Rates:**
+- Groups by work type (Flatwork, Footings, Walls, etc.)
+- Shows yd³/hour rate for each type
+- Efficiency % per type
+- Overall average across all work types
+
+**Purpose:** Build historical productivity data so estimates become more accurate over time
+
+---
+
+**Commits:**
+- 54f6c38: 📋 Quick Estimate Templates Library (Alt+1) (+430 lines)
+- 17a20da: 🎯 Bid Comparison & Competitor Analysis (Alt+2) (+505 lines)
+- b07ca9b: 👷 Crew Productivity Tracker (Alt+3) (+423 lines)
+
+**Total Lines:** ~164,970 | **New Alt+ Shortcuts:** Alt+1, Alt+2, Alt+3
+
+---
+
+## ✅ SESSION: Apr 2, 2026 - 01:13 UTC (Overnight Cron #87)
+**Status:** ✅ PROJECT RISK REGISTER added (+557 lines)
+
+### What Was Added:
+
+**⚠️ Project Risk Register (Alt+G):**
+- New `⚠️ Risk Register` button injected in sidebar below Unit Prices
+- `Alt+G` keyboard shortcut opens/toggles the modal
+- **Purpose:** Identify, score, and track every project risk with mitigation plans. ISO 31000-aligned 5×5 likelihood-impact matrix. 18 pre-loaded concrete sub risk templates. Critical risk visibility for commercial jobs.
+
+**Stats Bar (live):**
+- Total Risks / Open+Monitoring (red when any) / Critical (score ≥20) / High (score 12-16) / Realized / Total Cost Exposure ($)
+
+**Risk Matrix:**
+- Score = Likelihood (1-5) × Impact (1-5) = 1-25
+- 🔴 CRITICAL: 20-25 | 🟠 HIGH: 12-16 | 🟡 MEDIUM: 6-9 | 🟢 LOW: 1-4
+- Likelihood scale: Rare / Unlikely / Possible / Likely / Almost Certain
+- Impact scale: Negligible / Minor / Moderate / Major / Catastrophic
+
+**Risk Entry Form (10 fields):**
+- Risk Title (required)
+- Category (14 options: Scope & Design, Concrete & Materials, Labor & Crew, Schedule, Financial, Safety & OSHA, Weather & Environmental, Subcontractor, Owner/GC, Legal & Contract, Equipment, Site Conditions, Quality/QC, Other)
+- Likelihood (1-5) + Impact (1-5) with live score preview
+- Status (6: Open / Monitoring / Mitigated / Accepted / Closed / Realized)
+- Response Type (Mitigate / Transfer / Accept / Avoid / Monitor)
+- Risk Owner (PM / Foreman / Estimator)
+- Review Date
+- Cost Exposure ($)
+- Mitigation Plan / Controls
+- Notes / Trigger Events
+
+**Risk List View:**
+- Sorted: Open/Monitoring first, then by score (highest first)
+- Color-coded card border by severity (red = critical, orange = high, etc.)
+- Per-card: title + score badge + status badge / category + likelihood×impact description + response + owner + cost exposure / Mitigation plan (green left-border box) / Notes/trigger events
+- Filter by category, status, Open/High only, search text
+- **REALIZED badge** on risks that became actual problems (lesson learned tracking)
+- Edit / Delete per risk
+
+**📋 Load Concrete Templates button:**
+- 18 pre-loaded risks for concrete subcontractors:
+  1. Concrete price escalation (Possible × Moderate = 9)
+  2. Hot weather pour ACI 305R (Likely × Moderate = 12)
+  3. Batch plant short load / delay (Possible × Major = 12)
+  4. Rebar not delivered on time (Possible × Major = 12)
+  5. Pump truck unavailable / breakdown (Unlikely × Major = 8)
+  6. Labor no-shows on pour day (Possible × Major = 12)
+  7. Failed 28-day cylinder break (Unlikely × Catastrophic = 10)
+  8. GC delays — crew standby cost (Likely × Moderate = 12)
+  9. Lien deadline missed (Unlikely × Catastrophic = 10)
+  10. Subcontractor COI expired (Possible × Moderate = 9)
+  11. Form blowout during pour (Unlikely × Catastrophic = 10)
+  12. Rejected concrete load (Unlikely × Moderate = 6)
+  13. Rain during pour/curing (Possible × Major = 12)
+  14. Scope creep without CO (Likely × Moderate = 12)
+  15. Retainage withheld beyond completion (Possible × Moderate = 9)
+  16. OSHA inspection / citation (Unlikely × Major = 8)
+  17. Differing site conditions underground (Unlikely × Major = 8)
+  18. Drawing conflict / design error (Possible × Moderate = 9)
+
+**Printable Risk Register Report:**
+- Company header + PROJECT RISK REGISTER badge
+- 5-card KPI stats (Total / Open / Critical / High / Cost Exposure)
+- Full risk table sorted by score (highest first): # / Risk / Category / Likelihood / Impact / Score / Response / Status / Owner / Mitigation Plan
+- Dual signature block (Prepared By + Reviewed By)
+- ISO 31000 / 5×5 matrix footer note
+- CONFIDENTIAL — INTERNAL USE ONLY
+
+**Integration:**
+- `window._getRRStats()` exposed for Project Status Card
+- Returns: total, open, critical, totalCostExposure
+- localStorage per project: `oncor_rr_v1_[projectname]`
+
+**Commits:**
+- a6c364f: ⚠️ Project Risk Register (Alt+G) (+557 lines) [Session #87]
+
+**Total Lines:** ~162,916 | **New Alt+ Shortcuts:** Alt+G (Risk Register)
+
+---
+
 ## ✅ SESSION: Apr 2, 2026 - 00:00 UTC (Overnight Cron #86)
 **Status:** ✅ UNIT PRICE REFERENCE added (+295 lines)
 
@@ -3363,3 +3779,66 @@ Project Start, Project Completion, Pour Day, Inspection, Pay Application Due, Li
 - 41604ca: 📅 Project Calendar & Milestone Tracker (Alt+L) (+441 lines) [Session #76]
 
 **Total Lines:** ~158,248 | **New Alt+ Shortcuts:** Alt+L (Calendar & Milestones)
+
+---
+
+## ⚡ SESSION: Apr 2, 2026 - 02:18 UTC (Overnight Cron #88)
+**Status:** ✅ JOB FLASH REPORT & MORNING BRIEFING added (+338 lines)
+
+### What Was Added:
+
+**⚡ Job Flash Report & Morning Briefing (Alt+Z):**
+- New `⚡ Job Flash Report` button injected in sidebar below Risk Register
+- `Alt+Z` keyboard shortcut opens/toggles the modal
+- **Purpose:** The "command center morning briefing" — opens and shows the entire project health at a glance. Pulls live data from ALL 25+ project modules in one view. Every red/amber alert surfaces immediately. No more clicking through 25 different modals to know where the project stands.
+
+**18 Module Status Checks (one card per module):**
+1. 📄 **AR / Invoices** — overdue invoices, outstanding balance, retainage held
+2. 💳 **Accounts Payable** — overdue bills, due-in-7d bills, outstanding balance
+3. 📊 **Cost-to-Complete** — budget vs EAC, burn rate, over-budget warning
+4. 📝 **Change Orders** — pending signature COs, total value, signed vs pending
+5. ⚖️ **TX Lien Deadlines** — overdue (MISSED!) vs upcoming deadlines (NTO / Lien Affidavit / Bond Claim)
+6. 🏗️ **Inspections** — failed inspections, upcoming scheduled in 7 days
+7. 📄 **Permits** — expired permits, expiring in 30 days
+8. 🧫 **Cylinder Breaks** — failed cylinder sets, upcoming breaks due in 7 days
+9. 🚚 **Delivery Tickets** — total yd³ placed, rejected loads
+10. ❓ **RFIs** — overdue responses, open count
+11. 📋 **Submittals** — Revise & Resubmit items, pending count
+12. ✅ **Punch List** — overdue items, % complete
+13. 📅 **Meeting Action Items** — overdue and open cross-meeting actions
+14. 🔧 **Equipment Rentals** — overdue returns, returns due in 7 days
+15. 📦 **Material Procurement** — POs past need date, pending deliveries
+16. 🤝 **Subcontractor COIs** — expired insurance certificates
+17. 🦺 **Safety** — OSHA recordable incidents, open incident count, days since last toolbox talk
+18. ⚠️ **Risk Register** — Critical risks (score ≥20), open risk count, total cost exposure
+
+**Total Alert Count:**
+- Header shows the total number of alerts (red = critical, amber = watch)
+- Color: green (≤0), amber (1-5), red (6+)
+
+**Card Format (per module):**
+- Green border + ✅ OK → module is clean
+- Amber border + ⚠️ warning → needs attention (upcoming/open items)
+- Red border + 🔴 alert → immediate action required (overdue/failed/expired)
+- Detail line below showing key metrics
+
+**Printable Morning Briefing:**
+- Full table: Area / Module / Status / Detail
+- Color-coded rows: red = 🔴 immediate action, amber = ⚠️ monitor, green = ✅ OK
+- Amber summary box: "X items need attention today"
+- Company header + project + date
+- Print/PDF button
+
+**Integration:**
+- Reads from 25 localStorage keys across all modules
+- No external API calls — pure client-side
+- Always shows current state
+
+**Alt+Z — the only remaining shortcut, now used for the master dashboard**
+
+**Why this matters:** With 25+ project management modules in the tool, JFS needs a morning briefing he can open in one click. Alt+Z shows everything — finances, legal deadlines, field issues, admin, resources, compliance. The red/amber/green system makes the critical path obvious: "Today I have 3 red alerts (overdue AR invoice, failed inspection, expired permit) and 5 amber warnings. Here's exactly what needs attention." The printable version is the daily project status report to bring to the site or a GC meeting.
+
+**Commits:**
+- a4eeddb: ⚡ Job Flash Report & Morning Briefing (Alt+Z) (+338 lines) [Session #88]
+
+**Total Lines:** ~163,612 | **Alt+ Shortcuts:** All 26 (A-Z) now used ✅ COMPLETE
