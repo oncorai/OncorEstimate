@@ -174050,3 +174050,497 @@ document.addEventListener('keydown', function(e) {
 })();
 // ==================== END SESSION #102 — Zeus ⚡ Calendar & Milestones (Ctrl+Alt+6) + Inspection Scheduler (Ctrl+Alt+7) + Daily Manpower (Ctrl+Alt+8) ====================
 </script>
+
+<script>
+// ==================== SESSION #103 — Zeus ⚡ Concrete Yield Tracker (Ctrl+Alt+9) + Action Item Log (Ctrl+Alt+A) + Meeting Notes (Ctrl+Alt+B) ====================
+(function() {
+'use strict';
+
+// =====================================================================
+// SHARED HELPERS
+// =====================================================================
+function _escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _fmt$(n){ return '$'+(parseFloat(n)||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+function _fmtDate(d){ if(!d) return '—'; var dt=new Date(d); return isNaN(dt)?d:dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+function _fmtTS(ts){ var dt=new Date(ts); return dt.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+dt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); }
+function _todayISO(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+// =====================================================================
+// FEATURE 1: Concrete Yield Tracker (Ctrl+Alt+9) — ~180 lines
+// =====================================================================
+function _getYieldKey(){
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'__global__';
+  return 'oncor_yield_v1_'+proj.replace(/\s+/g,'_');
+}
+function _loadYield(){ return JSON.parse(localStorage.getItem(_getYieldKey())||'[]'); }
+function _saveYield(arr){ localStorage.setItem(_getYieldKey(),JSON.stringify(arr)); }
+
+window.openYieldModal = function(){
+  var existing=document.getElementById('oncor-yield-modal');
+  if(existing){ existing.style.display=existing.style.display==='none'?'flex':'none'; _renderYield(); return; }
+  var overlay=document.createElement('div');
+  overlay.id='oncor-yield-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:11000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+  overlay.innerHTML='<div style="background:#1e293b;border-radius:12px;width:100%;max-width:900px;padding:24px;color:#e2e8f0;position:relative;">'+
+    '<button onclick="this.closest(\'#oncor-yield-modal\').style.display=\'none\'" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+      '<div><div style="font-size:16pt;font-weight:700;color:#14b8a6;">📐 Concrete Yield Tracker</div>'+
+      '<div style="font-size:10pt;color:#94a3b8;">Compare estimated vs. ordered vs. placed for each pour — calculate yield % and over/under order variance</div></div>'+
+      '<button onclick="window.printYieldReport()" style="background:rgba(20,184,166,0.15);color:#14b8a6;border:1px solid rgba(20,184,166,0.3);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨️ Print</button>'+
+    '</div>'+
+    '<div id="oncor-yield-form" style="background:rgba(255,255,255,0.04);border-radius:8px;padding:14px;margin-bottom:16px;">'+
+      '<div style="font-size:11pt;font-weight:600;color:#14b8a6;margin-bottom:10px;">+ Log Pour Yield</div>'+
+      '<div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 1fr auto;gap:10px;align-items:end;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Pour Name / Area *</label>'+
+        '<input id="yield-pour" placeholder="e.g. Slab A-D" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Date</label>'+
+        '<input type="date" id="yield-date" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Est. yd³ *</label>'+
+        '<input type="number" id="yield-est" placeholder="50" step="0.1" min="0" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Ordered yd³ *</label>'+
+        '<input type="number" id="yield-ordered" placeholder="55" step="0.1" min="0" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Placed yd³</label>'+
+        '<input type="number" id="yield-placed" placeholder="53" step="0.1" min="0" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+        '<button onclick="window._yieldAdd()" style="background:rgba(20,184,166,0.2);color:#14b8a6;border:1px solid rgba(20,184,166,0.4);border-radius:6px;padding:9px 16px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Add</button>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Price / yd³</label>'+
+        '<input type="number" id="yield-price" placeholder="190" step="1" min="0" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Notes (waste reason, etc.)</label>'+
+        '<input id="yield-notes" placeholder="Form blowout, pump waste, etc." style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+      '</div>'+
+    '</div>'+
+    '<div id="oncor-yield-stats" style="margin-bottom:12px;"></div>'+
+    '<div id="oncor-yield-list"></div>'+
+  '</div>';
+  overlay.addEventListener('click',function(e){ if(e.target===overlay) overlay.style.display='none'; });
+  document.body.appendChild(overlay);
+  var dEl=document.getElementById('yield-date'); if(dEl) dEl.value=_todayISO();
+  _renderYield();
+};
+
+window._yieldAdd = function(){
+  var pour=(document.getElementById('yield-pour')||{}).value||'';
+  var est=parseFloat((document.getElementById('yield-est')||{}).value)||0;
+  var ordered=parseFloat((document.getElementById('yield-ordered')||{}).value)||0;
+  if(!pour.trim()||!est||!ordered){ alert('Pour name, estimated, and ordered yd³ are required.'); return; }
+  var placed=parseFloat((document.getElementById('yield-placed')||{}).value)||ordered;
+  var price=parseFloat((document.getElementById('yield-price')||{}).value)||0;
+  var arr=_loadYield();
+  arr.push({ id:Date.now(), pour:pour.trim(), date:(document.getElementById('yield-date')||{}).value||'', est:est, ordered:ordered, placed:placed, price:price, notes:(document.getElementById('yield-notes')||{}).value||'', added:Date.now() });
+  _saveYield(arr);
+  ['yield-pour','yield-notes'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  ['yield-est','yield-ordered','yield-placed','yield-price'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  _renderYield();
+};
+
+window._yieldDelete = function(id){
+  if(!confirm('Delete this yield entry?')) return;
+  _saveYield(_loadYield().filter(function(y){ return y.id!==id; }));
+  _renderYield();
+};
+
+window._renderYield = function(){
+  var list=document.getElementById('oncor-yield-list');
+  var statsEl=document.getElementById('oncor-yield-stats');
+  if(!list) return;
+  var arr=_loadYield();
+  var totEst=0,totOrdered=0,totPlaced=0,totWasteCost=0;
+  arr.forEach(function(y){ totEst+=y.est; totOrdered+=y.ordered; totPlaced+=y.placed; if(y.price) totWasteCost+=(y.ordered-y.placed)*y.price; });
+  var overOrder=totOrdered-totEst;
+  var waste=totOrdered-totPlaced;
+  var yieldPct=totOrdered>0?((totPlaced/totOrdered)*100):100;
+  if(statsEl){
+    var wasteColor=waste>0?'#f87171':'#22c55e';
+    statsEl.innerHTML='<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;"><div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#94a3b8;">Est. yd³</div><div style="font-size:14pt;font-weight:700;color:#60a5fa;">'+totEst.toFixed(1)+'</div></div><div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#94a3b8;">Ordered yd³</div><div style="font-size:14pt;font-weight:700;color:#f59e0b;">'+totOrdered.toFixed(1)+'</div></div><div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#94a3b8;">Placed yd³</div><div style="font-size:14pt;font-weight:700;color:#14b8a6;">'+totPlaced.toFixed(1)+'</div></div><div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#94a3b8;">Yield %</div><div style="font-size:14pt;font-weight:700;color:'+(yieldPct>=95?'#22c55e':(yieldPct>=90?'#f59e0b':'#ef4444'))+';">'+yieldPct.toFixed(1)+'%</div></div><div style="background:rgba('+wasteColor.replace('#','')+',0.1);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:'+wasteColor+';">Waste yd³</div><div style="font-size:14pt;font-weight:700;color:'+wasteColor+';">'+waste.toFixed(1)+'</div></div></div>'+(totWasteCost>0?'<div style="margin-top:10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:8px 12px;font-size:11pt;color:#f87171;">💸 Estimated waste cost: '+_fmt$(totWasteCost)+' (based on entered prices)</div>':'');
+  }
+  arr.sort(function(a,b){ return new Date(b.date||b.added)-new Date(a.date||a.added); });
+  if(!arr.length){ list.innerHTML='<div style="text-align:center;padding:30px;color:#64748b;">No yield data yet. Log each pour\'s estimated vs. ordered vs. placed to track concrete efficiency.</div>'; return; }
+  var html='<div style="font-size:10pt;color:#64748b;margin-bottom:10px;">'+arr.length+' pour'+(arr.length!==1?'s':'')+' logged</div>';
+  arr.forEach(function(y){
+    var overPct=y.est>0?(((y.ordered-y.est)/y.est)*100):0;
+    var wastePct=y.ordered>0?(((y.ordered-y.placed)/y.ordered)*100):0;
+    var wasteCost=y.price?(y.ordered-y.placed)*y.price:0;
+    var overColor=overPct>10?'#f59e0b':(overPct>5?'#eab308':'#22c55e');
+    var wasteColor=wastePct>8?'#ef4444':(wastePct>4?'#f59e0b':'#22c55e');
+    html+='<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-left:3px solid #14b8a6;border-radius:6px;padding:10px 12px;margin-bottom:8px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+        '<div style="flex:1;">'+
+          '<div style="display:flex;gap:10px;align-items:center;margin-bottom:4px;">'+
+            '<span style="font-size:12pt;font-weight:700;color:#e2e8f0;">'+_escH(y.pour)+'</span>'+
+            (y.date?'<span style="font-size:10pt;color:#64748b;">'+_fmtDate(y.date)+'</span>':'')+
+          '</div>'+
+          '<div style="display:grid;grid-template-columns:repeat(4,auto);gap:16px;font-size:11pt;margin-top:6px;">'+
+            '<div><span style="color:#94a3b8;">Est:</span> <strong style="color:#60a5fa;">'+y.est.toFixed(1)+' yd³</strong></div>'+
+            '<div><span style="color:#94a3b8;">Ordered:</span> <strong style="color:#f59e0b;">'+y.ordered.toFixed(1)+' yd³</strong> <span style="color:'+overColor+';font-size:10pt;">(+'+overPct.toFixed(1)+'%)</span></div>'+
+            '<div><span style="color:#94a3b8;">Placed:</span> <strong style="color:#14b8a6;">'+y.placed.toFixed(1)+' yd³</strong></div>'+
+            '<div><span style="color:#94a3b8;">Waste:</span> <strong style="color:'+wasteColor+';">'+(y.ordered-y.placed).toFixed(1)+' yd³</strong> <span style="color:'+wasteColor+';font-size:10pt;">('+wastePct.toFixed(1)+'%)</span></div>'+
+          '</div>'+
+          (wasteCost>0?'<div style="font-size:10pt;color:#f87171;margin-top:4px;">Waste cost: '+_fmt$(wasteCost)+'</div>':'')+
+          (y.notes?'<div style="font-size:10pt;color:#64748b;margin-top:4px;">'+_escH(y.notes)+'</div>':'')+
+        '</div>'+
+        '<button onclick="window._yieldDelete('+y.id+')" style="margin-left:10px;background:none;border:none;color:#475569;cursor:pointer;font-size:14px;">🗑</button>'+
+      '</div>'+
+    '</div>';
+  });
+  list.innerHTML=html;
+};
+
+window.printYieldReport = function(){
+  var arr=_loadYield().sort(function(a,b){ return new Date(a.date||a.added)-new Date(b.date||b.added); });
+  var comp=(document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var totEst=0,totOrdered=0,totPlaced=0;
+  arr.forEach(function(y){ totEst+=y.est; totOrdered+=y.ordered; totPlaced+=y.placed; });
+  var rows=arr.map(function(y){
+    var overPct=y.est>0?(((y.ordered-y.est)/y.est)*100):0;
+    var wastePct=y.ordered>0?(((y.ordered-y.placed)/y.ordered)*100):0;
+    return '<tr><td style="padding:5px 8px;">'+_fmtDate(y.date)+'</td><td style="padding:5px 8px;">'+_escH(y.pour)+'</td><td style="padding:5px 8px;text-align:right;">'+y.est.toFixed(1)+'</td><td style="padding:5px 8px;text-align:right;">'+y.ordered.toFixed(1)+'</td><td style="padding:5px 8px;text-align:right;">'+overPct.toFixed(1)+'%</td><td style="padding:5px 8px;text-align:right;">'+y.placed.toFixed(1)+'</td><td style="padding:5px 8px;text-align:right;font-weight:600;color:'+(wastePct>8?'red':(wastePct>4?'#b45309':'green'))+';">'+(y.ordered-y.placed).toFixed(1)+' ('+wastePct.toFixed(1)+'%)</td><td style="padding:5px 8px;font-size:9pt;">'+_escH(y.notes)+'</td></tr>';
+  }).join('');
+  rows+='<tr style="background:#f1f5f9;font-weight:700;"><td colspan="2" style="padding:6px 8px;">TOTALS</td><td style="padding:6px 8px;text-align:right;">'+totEst.toFixed(1)+'</td><td style="padding:6px 8px;text-align:right;">'+totOrdered.toFixed(1)+'</td><td></td><td style="padding:6px 8px;text-align:right;">'+totPlaced.toFixed(1)+'</td><td style="padding:6px 8px;text-align:right;">'+(totOrdered-totPlaced).toFixed(1)+'</td><td></td></tr>';
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Yield Report</title><style>body{font-family:Arial;font-size:10pt;padding:20px;}table{width:100%;border-collapse:collapse;}th{background:#0d9488;color:#fff;padding:6px 8px;text-align:left;font-size:9pt;}td{border-bottom:1px solid #e5e7eb;} @media print{button{display:none;}}</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;border-bottom:2px solid #0d9488;padding-bottom:10px;margin-bottom:14px;"><div><strong style="font-size:14pt;">'+_escH(comp)+'</strong><br><span>CONCRETE YIELD REPORT — '+_escH(proj)+'</span></div><div style="text-align:right;font-size:9pt;color:#555;">'+arr.length+' Pours<br>Yield: '+((totPlaced/totOrdered)*100).toFixed(1)+'%</div></div>'+
+    '<table><tr><th>Date</th><th>Pour</th><th style="text-align:right;">Est yd³</th><th style="text-align:right;">Ordered</th><th style="text-align:right;">Over %</th><th style="text-align:right;">Placed</th><th style="text-align:right;">Waste</th><th>Notes</th></tr>'+rows+'</table>'+
+    '<div style="margin-top:16px;text-align:center;font-size:8pt;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px;">ACI 304R Benchmark: 3-8% acceptable waste | CONFIDENTIAL</div>'+
+    '<br><button onclick="window.print()">🖨️ Print / Save PDF</button></body></html>';
+  var w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// FEATURE 2: Action Item Log (Ctrl+Alt+A) — ~175 lines
+// =====================================================================
+function _getAIKey(){
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'__global__';
+  return 'oncor_actionitems_v1_'+proj.replace(/\s+/g,'_');
+}
+function _loadAI(){ return JSON.parse(localStorage.getItem(_getAIKey())||'[]'); }
+function _saveAI(arr){ localStorage.setItem(_getAIKey(),JSON.stringify(arr)); }
+
+window.openActionItemsModal = function(){
+  var existing=document.getElementById('oncor-actionitems-modal');
+  if(existing){ existing.style.display=existing.style.display==='none'?'flex':'none'; _renderAI(); return; }
+  var overlay=document.createElement('div');
+  overlay.id='oncor-actionitems-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:11000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+  overlay.innerHTML='<div style="background:#1e293b;border-radius:12px;width:100%;max-width:900px;padding:24px;color:#e2e8f0;position:relative;">'+
+    '<button onclick="this.closest(\'#oncor-actionitems-modal\').style.display=\'none\'" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+      '<div><div style="font-size:16pt;font-weight:700;color:#f472b6;">📋 Action Item Log</div>'+
+      '<div style="font-size:10pt;color:#94a3b8;">Track all open tasks, assignments, and follow-ups — who owes what by when</div></div>'+
+      '<button onclick="window.printActionItemsReport()" style="background:rgba(244,114,182,0.15);color:#f472b6;border:1px solid rgba(244,114,182,0.3);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨️ Print</button>'+
+    '</div>'+
+    '<div id="oncor-ai-form" style="background:rgba(255,255,255,0.04);border-radius:8px;padding:14px;margin-bottom:16px;">'+
+      '<div style="font-size:11pt;font-weight:600;color:#f472b6;margin-bottom:10px;">+ Add Action Item</div>'+
+      '<div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:10px;align-items:end;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Action / Task *</label>'+
+        '<input id="ai-task" placeholder="e.g. Submit mix design to GC" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Assigned To *</label>'+
+        '<input id="ai-assigned" placeholder="JFS, Mike, etc." style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Due Date *</label>'+
+        '<input type="date" id="ai-due" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<button onclick="window._aiAdd()" style="background:rgba(244,114,182,0.2);color:#f472b6;border:1px solid rgba(244,114,182,0.4);border-radius:6px;padding:9px 16px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Add</button>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;">Priority</label>'+
+        '<select id="ai-priority" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"><option>Normal</option><option>High</option><option>Critical</option><option>Low</option></select></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;">Source / From Meeting</label>'+
+        '<input id="ai-source" placeholder="Pre-con mtg, OAC, etc." style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+      '</div>'+
+    '</div>'+
+    '<div id="oncor-ai-stats" style="margin-bottom:12px;"></div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:12px;">'+
+      '<select id="ai-filter" onchange="window._renderAI()" style="background:#0f172a;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:11pt;">'+
+        '<option value="">All Items</option><option value="Open">Open Only</option><option value="Overdue">Overdue Only</option><option value="Done">Done</option>'+
+      '</select>'+
+      '<input id="ai-search" oninput="window._renderAI()" placeholder="Search..." style="flex:1;background:#0f172a;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:11pt;">'+
+    '</div>'+
+    '<div id="oncor-ai-list"></div>'+
+  '</div>';
+  overlay.addEventListener('click',function(e){ if(e.target===overlay) overlay.style.display='none'; });
+  document.body.appendChild(overlay);
+  var dEl=document.getElementById('ai-due'); if(dEl){ var d=new Date(); d.setDate(d.getDate()+7); dEl.value=d.toISOString().split('T')[0]; }
+  _renderAI();
+};
+
+window._aiAdd = function(){
+  var task=(document.getElementById('ai-task')||{}).value||'';
+  var assigned=(document.getElementById('ai-assigned')||{}).value||'';
+  var due=(document.getElementById('ai-due')||{}).value||'';
+  if(!task.trim()||!assigned.trim()||!due){ alert('Task, assigned to, and due date are required.'); return; }
+  var arr=_loadAI();
+  arr.push({ id:Date.now(), task:task.trim(), assigned:assigned.trim(), due:due, priority:(document.getElementById('ai-priority')||{}).value||'Normal', source:(document.getElementById('ai-source')||{}).value||'', status:'Open', added:Date.now() });
+  _saveAI(arr);
+  ['ai-task','ai-assigned','ai-source'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  _renderAI();
+};
+
+window._aiToggle = function(id){
+  var arr=_loadAI().map(function(a){ if(a.id===id) a.status=a.status==='Done'?'Open':'Done'; return a; });
+  _saveAI(arr); _renderAI();
+};
+
+window._aiDelete = function(id){
+  if(!confirm('Delete this action item?')) return;
+  _saveAI(_loadAI().filter(function(a){ return a.id!==id; }));
+  _renderAI();
+};
+
+var _aiPriorityColors={'Critical':'#ef4444','High':'#f59e0b','Normal':'#3b82f6','Low':'#64748b'};
+
+window._renderAI = function(){
+  var list=document.getElementById('oncor-ai-list');
+  var statsEl=document.getElementById('oncor-ai-stats');
+  if(!list) return;
+  var arr=_loadAI();
+  var today=new Date(); today.setHours(0,0,0,0);
+  var open=arr.filter(function(a){ return a.status==='Open'; }).length;
+  var overdue=arr.filter(function(a){ return a.status==='Open'&&new Date(a.due)<today; }).length;
+  var done=arr.filter(function(a){ return a.status==='Done'; }).length;
+  if(statsEl){
+    statsEl.innerHTML='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;"><div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#94a3b8;">Total</div><div style="font-size:14pt;font-weight:700;color:#e2e8f0;">'+arr.length+'</div></div><div style="background:rgba(59,130,246,0.1);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#3b82f6;">Open</div><div style="font-size:14pt;font-weight:700;color:#3b82f6;">'+open+'</div></div><div style="background:rgba(239,68,68,0.1);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#ef4444;">Overdue</div><div style="font-size:14pt;font-weight:700;color:#ef4444;">'+overdue+'</div></div><div style="background:rgba(34,197,94,0.1);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:9pt;color:#22c55e;">Done</div><div style="font-size:14pt;font-weight:700;color:#22c55e;">'+done+'</div></div></div>';
+  }
+  var filter=((document.getElementById('ai-filter')||{}).value||'');
+  var search=((document.getElementById('ai-search')||{}).value||'').toLowerCase();
+  if(filter==='Open') arr=arr.filter(function(a){ return a.status==='Open'; });
+  else if(filter==='Done') arr=arr.filter(function(a){ return a.status==='Done'; });
+  else if(filter==='Overdue') arr=arr.filter(function(a){ return a.status==='Open'&&new Date(a.due)<today; });
+  if(search) arr=arr.filter(function(a){ return (a.task+a.assigned+a.source).toLowerCase().indexOf(search)>=0; });
+  arr.sort(function(a,b){ if(a.status==='Done'&&b.status!=='Done') return 1; if(a.status!=='Done'&&b.status==='Done') return -1; return new Date(a.due)-new Date(b.due); });
+  if(!arr.length){ list.innerHTML='<div style="text-align:center;padding:30px;color:#64748b;">No action items found. Add tasks, assignments, and follow-ups above.</div>'; return; }
+  var html='';
+  arr.forEach(function(a){
+    var d=new Date(a.due); var isOverdue=a.status==='Open'&&d<today;
+    var prioColor=_aiPriorityColors[a.priority]||'#3b82f6';
+    html+='<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-left:3px solid '+(a.status==='Done'?'#22c55e':prioColor)+';border-radius:6px;padding:10px 12px;margin-bottom:8px;opacity:'+(a.status==='Done'?'0.5':'1')+';">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+        '<div style="flex:1;">'+
+          '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">'+
+            '<span style="background:'+prioColor+'22;color:'+prioColor+';border:1px solid '+prioColor+'44;border-radius:4px;padding:2px 7px;font-size:9pt;font-weight:600;">'+_escH(a.priority)+'</span>'+
+            '<span style="font-size:10pt;color:'+(isOverdue?'#ef4444':'#94a3b8')+';font-weight:'+(isOverdue?'700':'400')+';">Due: '+_fmtDate(a.due)+(isOverdue?' ⚠️ OVERDUE':'')+'</span>'+
+            (a.status==='Done'?'<span style="background:#22c55e33;color:#22c55e;border-radius:4px;padding:1px 6px;font-size:8pt;">✓ DONE</span>':'')+
+          '</div>'+
+          '<div style="font-size:12pt;font-weight:600;color:#e2e8f0;'+(a.status==='Done'?'text-decoration:line-through;':'')+'">'+_escH(a.task)+'</div>'+
+          '<div style="font-size:10pt;color:#94a3b8;margin-top:3px;">👤 '+_escH(a.assigned)+(a.source?' | From: '+_escH(a.source):'')+'</div>'+
+        '</div>'+
+        '<div style="display:flex;gap:6px;margin-left:10px;">'+
+          '<button onclick="window._aiToggle('+a.id+')" style="background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid rgba(34,197,94,0.2);border-radius:4px;padding:5px 10px;cursor:pointer;font-size:11px;">'+(a.status==='Done'?'↩':'✓')+'</button>'+
+          '<button onclick="window._aiDelete('+a.id+')" style="background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);border-radius:4px;padding:5px 10px;cursor:pointer;font-size:11px;">✕</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  });
+  list.innerHTML=html;
+};
+
+window.printActionItemsReport = function(){
+  var arr=_loadAI().sort(function(a,b){ return new Date(a.due)-new Date(b.due); });
+  var comp=(document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var today=new Date();
+  var rows=arr.map(function(a){
+    var isOverdue=a.status==='Open'&&new Date(a.due)<today;
+    return '<tr style="'+(a.status==='Done'?'opacity:0.5;':'')+(isOverdue?'background:#fee2e2;':'')+'"><td style="padding:5px 8px;font-weight:600;">'+_escH(a.priority)+'</td><td style="padding:5px 8px;">'+_escH(a.task)+'</td><td style="padding:5px 8px;">'+_escH(a.assigned)+'</td><td style="padding:5px 8px;">'+_fmtDate(a.due)+(isOverdue?' ⚠️':'')+'</td><td style="padding:5px 8px;">'+_escH(a.status)+'</td><td style="padding:5px 8px;font-size:9pt;">'+_escH(a.source)+'</td></tr>';
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Action Items</title><style>body{font-family:Arial;font-size:10pt;padding:20px;}table{width:100%;border-collapse:collapse;}th{background:#db2777;color:#fff;padding:6px 8px;text-align:left;font-size:9pt;}td{border-bottom:1px solid #e5e7eb;} @media print{button{display:none;}}</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;border-bottom:2px solid #db2777;padding-bottom:10px;margin-bottom:14px;"><div><strong style="font-size:14pt;">'+_escH(comp)+'</strong><br><span>ACTION ITEM LOG — '+_escH(proj)+'</span></div><div style="text-align:right;font-size:9pt;color:#555;">'+arr.length+' Items<br>'+new Date().toLocaleDateString()+'</div></div>'+
+    '<table><tr><th>Priority</th><th>Task</th><th>Assigned</th><th>Due</th><th>Status</th><th>Source</th></tr>'+rows+'</table>'+
+    '<div style="margin-top:16px;text-align:center;font-size:8pt;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px;">CONFIDENTIAL — INTERNAL USE ONLY</div>'+
+    '<br><button onclick="window.print()">🖨️ Print / Save PDF</button></body></html>';
+  var w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// FEATURE 3: Meeting Notes (Ctrl+Alt+B) — ~170 lines
+// =====================================================================
+function _getMNKey(){
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'__global__';
+  return 'oncor_meetings_v1_'+proj.replace(/\s+/g,'_');
+}
+function _loadMN(){ return JSON.parse(localStorage.getItem(_getMNKey())||'[]'); }
+function _saveMN(arr){ localStorage.setItem(_getMNKey(),JSON.stringify(arr)); }
+
+window.openMeetingNotesModal = function(){
+  var existing=document.getElementById('oncor-meetings-modal');
+  if(existing){ existing.style.display=existing.style.display==='none'?'flex':'none'; _renderMN(); return; }
+  var overlay=document.createElement('div');
+  overlay.id='oncor-meetings-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:11000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+  overlay.innerHTML='<div style="background:#1e293b;border-radius:12px;width:100%;max-width:900px;padding:24px;color:#e2e8f0;position:relative;">'+
+    '<button onclick="this.closest(\'#oncor-meetings-modal\').style.display=\'none\'" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+      '<div><div style="font-size:16pt;font-weight:700;color:#0ea5e9;">📝 Meeting Notes</div>'+
+      '<div style="font-size:10pt;color:#94a3b8;">Document pre-con meetings, OAC calls, coordination meetings — with attendees and notes</div></div>'+
+      '<button onclick="window.printMeetingNotesReport()" style="background:rgba(14,165,233,0.15);color:#0ea5e9;border:1px solid rgba(14,165,233,0.3);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;">🖨️ Print</button>'+
+    '</div>'+
+    '<div id="oncor-mn-form" style="background:rgba(255,255,255,0.04);border-radius:8px;padding:14px;margin-bottom:16px;">'+
+      '<div style="font-size:11pt;font-weight:600;color:#0ea5e9;margin-bottom:10px;">+ Log Meeting</div>'+
+      '<div style="display:grid;grid-template-columns:1.5fr 1fr 1fr auto;gap:10px;align-items:end;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Meeting Title *</label>'+
+        '<input id="mn-title" placeholder="e.g. Pre-Construction Meeting" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Type</label>'+
+        '<select id="mn-type" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;">'+
+          '<option>Pre-Construction</option><option>OAC Meeting</option><option>Coordination</option><option>Progress Meeting</option><option>Safety Meeting</option><option>Kick-off</option><option>Closeout</option><option>Phone Call</option><option>Site Visit</option><option>Other</option>'+
+        '</select></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;display:block;margin-bottom:3px;">Date *</label>'+
+        '<input type="date" id="mn-date" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:10pt;"></div>'+
+        '<button onclick="window._mnAdd()" style="background:rgba(14,165,233,0.2);color:#0ea5e9;border:1px solid rgba(14,165,233,0.4);border-radius:6px;padding:9px 16px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Add</button>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">'+
+        '<div><label style="font-size:9pt;color:#94a3b8;">Attendees</label>'+
+        '<input id="mn-attendees" placeholder="JFS, Mike (Beck GC), John (Inspector)" style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+        '<div><label style="font-size:9pt;color:#94a3b8;">Location</label>'+
+        '<input id="mn-location" placeholder="Job site, GC office, Zoom, etc." style="width:100%;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;"></div>'+
+      '</div>'+
+      '<div style="margin-top:10px;"><label style="font-size:9pt;color:#94a3b8;">Meeting Notes / Discussion</label>'+
+      '<textarea id="mn-notes" rows="3" placeholder="Key discussion points, decisions made, action items..." style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:8px;color:#e2e8f0;font-size:11pt;margin-top:3px;resize:vertical;"></textarea></div>'+
+    '</div>'+
+    '<div id="oncor-mn-list"></div>'+
+  '</div>';
+  overlay.addEventListener('click',function(e){ if(e.target===overlay) overlay.style.display='none'; });
+  document.body.appendChild(overlay);
+  var dEl=document.getElementById('mn-date'); if(dEl) dEl.value=_todayISO();
+  _renderMN();
+};
+
+window._mnAdd = function(){
+  var title=(document.getElementById('mn-title')||{}).value||'';
+  var dateVal=(document.getElementById('mn-date')||{}).value||'';
+  if(!title.trim()||!dateVal){ alert('Meeting title and date are required.'); return; }
+  var arr=_loadMN();
+  arr.push({ id:Date.now(), title:title.trim(), type:(document.getElementById('mn-type')||{}).value||'Other', date:dateVal, attendees:(document.getElementById('mn-attendees')||{}).value||'', location:(document.getElementById('mn-location')||{}).value||'', notes:(document.getElementById('mn-notes')||{}).value||'', added:Date.now() });
+  _saveMN(arr);
+  ['mn-title','mn-attendees','mn-location','mn-notes'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  _renderMN();
+};
+
+window._mnDelete = function(id){
+  if(!confirm('Delete this meeting record?')) return;
+  _saveMN(_loadMN().filter(function(m){ return m.id!==id; }));
+  _renderMN();
+};
+
+var _mnTypeColors={'Pre-Construction':'#22c55e','OAC Meeting':'#6366f1','Coordination':'#f59e0b','Progress Meeting':'#3b82f6','Safety Meeting':'#ef4444','Kick-off':'#8b5cf6','Closeout':'#14b8a6','Phone Call':'#64748b','Site Visit':'#ec4899','Other':'#64748b'};
+
+window._renderMN = function(){
+  var list=document.getElementById('oncor-mn-list');
+  if(!list) return;
+  var arr=_loadMN();
+  arr.sort(function(a,b){ return new Date(b.date)-new Date(a.date); });
+  if(!arr.length){ list.innerHTML='<div style="text-align:center;padding:30px;color:#64748b;">No meetings logged. Document pre-con meetings, OAC calls, coordination meetings above.</div>'; return; }
+  var html='<div style="font-size:10pt;color:#64748b;margin-bottom:10px;">'+arr.length+' meeting'+(arr.length!==1?'s':'')+' logged</div>';
+  arr.forEach(function(m){
+    var color=_mnTypeColors[m.type]||'#64748b';
+    html+='<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-left:3px solid '+color+';border-radius:6px;padding:12px 14px;margin-bottom:10px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+        '<div style="flex:1;">'+
+          '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">'+
+            '<span style="background:'+color+'22;color:'+color+';border:1px solid '+color+'44;border-radius:4px;padding:2px 7px;font-size:9pt;font-weight:600;">'+_escH(m.type)+'</span>'+
+            '<span style="font-size:10pt;color:#94a3b8;">'+_fmtDate(m.date)+'</span>'+
+            (m.location?'<span style="font-size:9pt;color:#64748b;">📍 '+_escH(m.location)+'</span>':'')+
+          '</div>'+
+          '<div style="font-size:13pt;font-weight:700;color:#e2e8f0;">'+_escH(m.title)+'</div>'+
+          (m.attendees?'<div style="font-size:10pt;color:#94a3b8;margin-top:3px;">👥 '+_escH(m.attendees)+'</div>':'')+
+          (m.notes?'<div style="font-size:11pt;color:#cbd5e1;margin-top:8px;white-space:pre-wrap;line-height:1.5;background:rgba(255,255,255,0.02);border-radius:4px;padding:8px;">'+_escH(m.notes)+'</div>':'')+
+        '</div>'+
+        '<div style="display:flex;gap:6px;margin-left:10px;">'+
+          '<button onclick="window._mnPrint('+m.id+')" style="background:rgba(14,165,233,0.1);color:#0ea5e9;border:1px solid rgba(14,165,233,0.2);border-radius:4px;padding:5px 10px;cursor:pointer;font-size:11px;">🖨️</button>'+
+          '<button onclick="window._mnDelete('+m.id+')" style="background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);border-radius:4px;padding:5px 10px;cursor:pointer;font-size:11px;">✕</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  });
+  list.innerHTML=html;
+};
+
+window._mnPrint = function(id){
+  var m=_loadMN().find(function(x){ return x.id===id; });
+  if(!m) return;
+  var comp=(document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Meeting Notes</title><style>body{font-family:Arial;font-size:10pt;padding:20px;} @media print{button{display:none;}}</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;border-bottom:2px solid #0ea5e9;padding-bottom:10px;margin-bottom:14px;"><div><strong style="font-size:14pt;">'+_escH(comp)+'</strong><br><span>MEETING NOTES — '+_escH(proj)+'</span></div><div style="text-align:right;font-size:9pt;color:#555;">'+_fmtDate(m.date)+'</div></div>'+
+    '<div style="margin-bottom:14px;"><strong style="font-size:13pt;">'+_escH(m.title)+'</strong> <span style="color:#555;">['+_escH(m.type)+']</span></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;font-size:10pt;">'+
+      '<div><strong>Attendees:</strong> '+_escH(m.attendees||'—')+'</div>'+
+      '<div><strong>Location:</strong> '+_escH(m.location||'—')+'</div>'+
+    '</div>'+
+    '<div style="border:1px solid #e5e7eb;border-radius:4px;padding:12px;white-space:pre-wrap;line-height:1.6;min-height:200px;">'+_escH(m.notes||'(No notes recorded)')+'</div>'+
+    '<div style="margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:20px;font-size:9pt;"><div><div style="border-bottom:1px solid #333;margin-bottom:4px;height:30px;"></div>Prepared By / Date</div><div><div style="border-bottom:1px solid #333;margin-bottom:4px;height:30px;"></div>Reviewed By / Date</div></div>'+
+    '<div style="margin-top:18px;text-align:center;font-size:8pt;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px;">CONFIDENTIAL — INTERNAL USE ONLY</div>'+
+    '<br><button onclick="window.print()">🖨️ Print / Save PDF</button></body></html>';
+  var w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+window.printMeetingNotesReport = function(){
+  var arr=_loadMN().sort(function(a,b){ return new Date(a.date)-new Date(b.date); });
+  var comp=(document.getElementById('company-name')||{}).value||'Oncor Construction';
+  var proj=(typeof activeProjectName!=='undefined'&&activeProjectName)?activeProjectName:'Project';
+  var rows=arr.map(function(m){ return '<tr><td style="padding:5px 8px;">'+_fmtDate(m.date)+'</td><td style="padding:5px 8px;font-weight:600;">'+_escH(m.type)+'</td><td style="padding:5px 8px;">'+_escH(m.title)+'</td><td style="padding:5px 8px;font-size:9pt;">'+_escH(m.attendees)+'</td><td style="padding:5px 8px;font-size:9pt;">'+_escH(m.location)+'</td></tr>'; }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Meeting Log</title><style>body{font-family:Arial;font-size:10pt;padding:20px;}table{width:100%;border-collapse:collapse;}th{background:#0284c7;color:#fff;padding:6px 8px;text-align:left;font-size:9pt;}td{border-bottom:1px solid #e5e7eb;} @media print{button{display:none;}}</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;border-bottom:2px solid #0284c7;padding-bottom:10px;margin-bottom:14px;"><div><strong style="font-size:14pt;">'+_escH(comp)+'</strong><br><span>MEETING LOG — '+_escH(proj)+'</span></div><div style="text-align:right;font-size:9pt;color:#555;">'+arr.length+' Meetings<br>'+new Date().toLocaleDateString()+'</div></div>'+
+    '<table><tr><th>Date</th><th>Type</th><th>Title</th><th>Attendees</th><th>Location</th></tr>'+rows+'</table>'+
+    '<div style="margin-top:16px;text-align:center;font-size:8pt;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px;">CONFIDENTIAL — INTERNAL USE ONLY</div>'+
+    '<br><button onclick="window.print()">🖨️ Print / Save PDF</button></body></html>';
+  var w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}
+};
+
+// =====================================================================
+// INJECT SIDEBAR BUTTONS
+// =====================================================================
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var btn9 = document.createElement('button');
+    btn9.id = 'oncor-yield-btn';
+    btn9.innerHTML = '📐 Yield Tracker';
+    btn9.title = 'Ctrl+Alt+9 — Concrete Yield Tracker';
+    btn9.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(20,184,166,0.10);color:#14b8a6;border:1px solid rgba(20,184,166,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btn9.onclick = window.openYieldModal;
+    btn9.onmouseover = function(){ this.style.background='rgba(20,184,166,0.20)'; };
+    btn9.onmouseout = function(){ this.style.background='rgba(20,184,166,0.10)'; };
+
+    var btnA = document.createElement('button');
+    btnA.id = 'oncor-actionitems-btn';
+    btnA.innerHTML = '📋 Action Items';
+    btnA.title = 'Ctrl+Alt+A — Action Item Log';
+    btnA.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(244,114,182,0.10);color:#f472b6;border:1px solid rgba(244,114,182,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btnA.onclick = window.openActionItemsModal;
+    btnA.onmouseover = function(){ this.style.background='rgba(244,114,182,0.20)'; };
+    btnA.onmouseout = function(){ this.style.background='rgba(244,114,182,0.10)'; };
+
+    var btnB = document.createElement('button');
+    btnB.id = 'oncor-meetings-btn';
+    btnB.innerHTML = '📝 Meeting Notes';
+    btnB.title = 'Ctrl+Alt+B — Meeting Notes';
+    btnB.style.cssText = 'display:block;width:100%;padding:9px 12px;margin-bottom:6px;background:rgba(14,165,233,0.10);color:#0ea5e9;border:1px solid rgba(14,165,233,0.25);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:0.2s;';
+    btnB.onclick = window.openMeetingNotesModal;
+    btnB.onmouseover = function(){ this.style.background='rgba(14,165,233,0.20)'; };
+    btnB.onmouseout = function(){ this.style.background='rgba(14,165,233,0.10)'; };
+
+    var anchor = document.getElementById('oncor-manpower-btn');
+    if (anchor && anchor.parentNode) {
+      anchor.parentNode.insertBefore(btn9, anchor.nextSibling);
+      btn9.parentNode.insertBefore(btnA, btn9.nextSibling);
+      btnA.parentNode.insertBefore(btnB, btnA.nextSibling);
+    } else {
+      [[btn9,520],[btnA,470],[btnB,420]].forEach(function(pair){
+        pair[0].style.cssText += ';position:fixed;bottom:'+pair[1]+'px;right:20px;z-index:9000;width:auto;';
+        document.body.appendChild(pair[0]);
+      });
+    }
+  }, 16400);
+});
+
+// =====================================================================
+// KEYBOARD SHORTCUTS — Session #103
+// =====================================================================
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.altKey) {
+    if (e.key === '9') { e.preventDefault(); window.openYieldModal(); }
+    if (e.key === 'a' || e.key === 'A') { e.preventDefault(); window.openActionItemsModal(); }
+    if (e.key === 'b' || e.key === 'B') { e.preventDefault(); window.openMeetingNotesModal(); }
+  }
+});
+
+})();
+// ==================== END SESSION #103 — Zeus ⚡ Yield Tracker (Ctrl+Alt+9) + Action Items (Ctrl+Alt+A) + Meeting Notes (Ctrl+Alt+B) ====================
+</script>
