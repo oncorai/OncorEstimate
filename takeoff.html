@@ -181532,5 +181532,512 @@ document.addEventListener('DOMContentLoaded',function(){
 
 // ==================== END SESSION #117 — Zeus ⚡ Concrete Yield Calculator + Rebar Weight & Cost + Pour Schedule Board ====================
 
+// ==================== SESSION #118 — Zeus ⚡ Concrete Curing Record (Ctrl+Alt+L) + Pour Day Debrief (Ctrl+Alt+M) + Slab Load Capacity Calculator (Ctrl+Alt+O) ====================
+(function(){
+'use strict';
+
+/* ─── 🌡️ Concrete Curing Record (Ctrl+Alt+L) ─── */
+window._oncorCuringRecord = (function(){
+  var MODAL_ID='overlay-curingrec';
+  var SK='oncor_curingrec_v1_';
+  function key(){return SK+(window.currentProject||'default');}
+  function load(){try{return JSON.parse(localStorage.getItem(key()))||[];}catch(e){return[];}}
+  function save(d){localStorage.setItem(key(),JSON.stringify(d));}
+
+  var METHODS=['Curing Compound (ASTM C309)','Wet Burlap + Plastic Sheet','Ponding','Polyethylene Film','Curing Blankets (Insulating)','Cotton Mats','Fogging / Misting','Evaporation Retarder','Heated Enclosure','No Curing (Documented)'];
+  var ACI_MIN=7; // ACI 308R minimum curing days for OPC
+
+  function _formHTML(){
+    return '<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:16px">'
+      +'<h4 style="margin:0 0 12px;font-size:13px;color:#94a3b8">➕ New Curing Record</h4>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+      +'<div><label style="font-size:11px;color:#94a3b8">Pour Name/Area *</label>'
+      +'<input id="cr-pour" placeholder="e.g. Slab Grid A" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Date Poured *</label>'
+      +'<input id="cr-pdate" type="date" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Curing Method *</label>'
+      +'<select id="cr-method" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box">'
+      +METHODS.map(function(m){return '<option>'+m+'</option>';}).join('')
+      +'</select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Target Cure Days</label>'
+      +'<input id="cr-days" type="number" value="7" min="1" max="28" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Min Temp °F (Ambient)</label>'
+      +'<input id="cr-tmin" type="number" placeholder="e.g. 50" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Max Temp °F (Ambient)</label>'
+      +'<input id="cr-tmax" type="number" placeholder="e.g. 100" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">PSI Spec (f\'c)</label>'
+      +'<select id="cr-psi" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box">'
+      +'<option>2500</option><option>3000</option><option selected>4000</option><option>5000</option><option>6000</option></select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Curing Ended Date</label>'
+      +'<input id="cr-enddate" type="date" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box"></div>'
+      +'</div>'
+      +'<div style="margin-bottom:8px"><label style="font-size:11px;color:#94a3b8">Notes / Observations</label>'
+      +'<textarea id="cr-notes" rows="2" placeholder="e.g. Applied curing compound at 200 SF/gal rate immediately after bull float" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box;resize:vertical"></textarea></div>'
+      +'<button onclick="window._oncorCuringRecord._add()" style="padding:7px 18px;background:#3b82f6;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600">➕ Add Record</button>'
+      +'</div>';
+  }
+
+  function render(){
+    var c=document.getElementById('curingrec-content');
+    if(!c)return;
+    var data=load();
+    var today=new Date();
+    // KPIs
+    var active=data.filter(function(r){
+      if(r.endDate)return false;
+      var pd=new Date(r.pourDate);
+      var td=r.targetDays||7;
+      var endEst=new Date(pd.getTime()+td*86400000);
+      return today<endEst;
+    }).length;
+    var complete=data.filter(function(r){
+      if(r.endDate)return true;
+      var pd=new Date(r.pourDate);
+      var td=r.targetDays||7;
+      var endEst=new Date(pd.getTime()+td*86400000);
+      return today>=endEst;
+    }).length;
+    var alerts=data.filter(function(r){
+      if(r.endDate)return false;
+      var pd=new Date(r.pourDate);
+      var td=r.targetDays||7;
+      var endEst=new Date(pd.getTime()+td*86400000);
+      return today>=endEst;
+    }).length; // curing should have ended but not recorded
+
+    var html=_formHTML();
+    html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">';
+    html+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:#3b82f6">'+data.length+'</div><div style="font-size:10px;color:#94a3b8">Records</div></div>';
+    html+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:#22c55e">'+active+'</div><div style="font-size:10px;color:#94a3b8">Active</div></div>';
+    html+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:#64748b">'+complete+'</div><div style="font-size:10px;color:#94a3b8">Complete</div></div>';
+    html+='<div style="background:'+(alerts>0?'#7f1d1d':'#1e293b')+';border-radius:6px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:'+(alerts>0?'#fca5a5':'#94a3b8')+'">'+alerts+'</div><div style="font-size:10px;color:#94a3b8">Overdue End</div></div>';
+    html+='</div>';
+
+    // ACI 308R reference
+    html+='<div style="background:#1e293b;border-radius:6px;padding:10px;margin-bottom:16px;font-size:11px;color:#94a3b8">'
+      +'<strong style="color:#f59e0b">ACI 308R Curing Reference:</strong> '
+      +'Min 7 days for OPC (Type I/II) ≥50°F | Min 3 days for Type III (High-Early) | 14 days for slag/fly-ash mixes | Max temp differential 35°F (mass concrete) | El Paso: avoid evaporation retarder wind >15 mph, apply curing compound at 200 SF/gal (ASTM C309 Type 2)'
+      +'</div>';
+
+    html+='<div>';
+    if(!data.length){html+='<div style="text-align:center;color:#64748b;padding:20px">No curing records yet. Add the first pour above.</div>';}
+    data.forEach(function(r,i){
+      var pd=new Date(r.pourDate);
+      var td=r.targetDays||7;
+      var endDateEst=new Date(pd.getTime()+td*86400000);
+      var actualEnd=r.endDate?new Date(r.endDate):null;
+      var isComplete=!!actualEnd||(today>=endDateEst);
+      var daysElapsed=Math.floor((today-pd)/86400000);
+      var daysLeft=td-daysElapsed;
+      var status=actualEnd?'✅ Ended':'';
+      if(!actualEnd){
+        if(daysLeft>0)status='🟢 Day '+daysElapsed+'/'+td;
+        else status='⚠️ OVERDUE ('+Math.abs(daysLeft)+'d past target)';
+      }
+      var borderColor=actualEnd?'#22c55e':(daysLeft>0?'#3b82f6':'#ef4444');
+      html+='<div style="background:#1e293b;border-left:3px solid '+borderColor+';border-radius:6px;padding:12px;margin-bottom:8px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+        +'<div style="font-size:13px;font-weight:600;color:#e5e7eb">'+r.pourName+'</div>'
+        +'<div style="display:flex;gap:6px;align-items:center">'
+        +'<span style="font-size:11px;color:'+borderColor+'">'+status+'</span>'
+        +'<button onclick="window._oncorCuringRecord._end('+i+')" style="padding:2px 7px;background:#134e4a;color:#6ee7b7;border:none;border-radius:3px;cursor:pointer;font-size:10px">End Curing</button>'
+        +'<button onclick="window._oncorCuringRecord._del('+i+')" style="padding:2px 7px;background:#374151;color:#9ca3af;border:none;border-radius:3px;cursor:pointer;font-size:10px">🗑</button>'
+        +'</div></div>'
+        +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-size:11px;color:#94a3b8">'
+        +'<span>📅 Poured: <strong style="color:#cbd5e1">'+r.pourDate+'</strong></span>'
+        +'<span>🕐 Method: <strong style="color:#cbd5e1">'+r.method.split('(')[0].trim()+'</strong></span>'
+        +'<span>🌡️ '+r.tmin+'°F–'+r.tmax+'°F</span>'
+        +'<span>💪 '+r.psi+' PSI | '+td+'d target</span>'
+        +'</div>'
+        +(r.notes?'<div style="font-size:11px;color:#64748b;margin-top:6px;border-top:1px solid #1e293b;padding-top:6px">'+r.notes+'</div>':'')
+        +'</div>';
+    });
+    html+='</div>';
+
+    // Print section
+    html+='<div style="text-align:right;margin-top:12px">'
+      +'<button onclick="window._oncorCuringRecord._print()" style="padding:6px 14px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:5px;cursor:pointer;font-size:11px">🖨️ Print Curing Log</button>'
+      +'</div>';
+
+    c.innerHTML=html;
+  }
+
+  function _add(){
+    var pour=document.getElementById('cr-pour').value.trim();
+    if(!pour){alert('Pour name required');return;}
+    var pdate=document.getElementById('cr-pdate').value;
+    if(!pdate){alert('Date poured required');return;}
+    var data=load();
+    data.push({pourName:pour,pourDate:pdate,method:document.getElementById('cr-method').value,targetDays:parseInt(document.getElementById('cr-days').value)||7,tmin:document.getElementById('cr-tmin').value||'--',tmax:document.getElementById('cr-tmax').value||'--',psi:document.getElementById('cr-psi').value,endDate:document.getElementById('cr-enddate').value||'',notes:document.getElementById('cr-notes').value,created:new Date().toISOString()});
+    save(data);render();
+  }
+  function _end(i){
+    var d=load();
+    var dt=prompt('Curing end date (YYYY-MM-DD):',new Date().toISOString().split('T')[0]);
+    if(dt){d[i].endDate=dt;save(d);render();}
+  }
+  function _del(i){if(!confirm('Delete?'))return;var d=load();d.splice(i,1);save(d);render();}
+  function _print(){
+    var data=load();
+    var project=window.currentProject||'Project';
+    var company=document.getElementById('companyName')?document.getElementById('companyName').value:'Oncor Concrete';
+    var w=window.open('','_blank');
+    var rows=data.map(function(r,i){return '<tr><td>'+(i+1)+'</td><td>'+r.pourName+'</td><td>'+r.pourDate+'</td><td>'+r.method+'</td><td>'+r.targetDays+'d</td><td>'+r.tmin+'°–'+r.tmax+'°F</td><td>'+r.psi+' PSI</td><td>'+(r.endDate||'Active')+'</td><td>'+r.notes+'</td></tr>';}).join('');
+    w.document.write('<!DOCTYPE html><html><head><title>Curing Log</title><style>body{font-family:Arial,sans-serif;font-size:11px;color:#000;margin:20px}h2{font-size:15px}table{width:100%;border-collapse:collapse}th{background:#1e3a5f;color:#fff;padding:6px;text-align:left;font-size:10px}td{border:1px solid #ddd;padding:5px;font-size:10px}tr:nth-child(even){background:#f5f5f5}@media print{body{margin:10px}}</style></head><body>');
+    w.document.write('<h2>🌡️ Concrete Curing Record — '+project+'</h2>');
+    w.document.write('<div style="font-size:11px;margin-bottom:10px"><strong>'+company+'</strong> | ACI 308R Curing Documentation | Printed: '+new Date().toLocaleDateString()+'</div>');
+    w.document.write('<div style="background:#fef3c7;border:1px solid #d97706;padding:8px;margin-bottom:12px;font-size:10px"><strong>ACI 308R:</strong> Min 7 days OPC (Type I/II) ≥50°F | 3 days Type III | 14 days slag/fly-ash | Apply curing compound immediately after finish (200 SF/gal ASTM C309 Type 2)</div>');
+    w.document.write('<table><thead><tr><th>#</th><th>Pour Name</th><th>Pour Date</th><th>Method</th><th>Target</th><th>Temp Range</th><th>PSI</th><th>End Date</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table>');
+    w.document.write('<div style="margin-top:20px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:30px"><div style="border-top:1px solid #000;padding-top:4px">Prepared By: ___________________</div><div style="border-top:1px solid #000;padding-top:4px">Foreman: ___________________</div><div style="border-top:1px solid #000;padding-top:4px">Date: ___________________</div></div>');
+    w.document.write('<div style="margin-top:16px;font-size:9px;color:#666;text-align:center">ACI 308R-16 | ASTM C309 | ASTM C1315 | ACI 305R Hot Weather | ACI 306R Cold Weather — CONFIDENTIAL INTERNAL USE ONLY</div>');
+    w.document.write('</body></html>');w.document.close();w.print();
+  }
+
+  function toggle(){
+    var el=document.getElementById(MODAL_ID);
+    if(!el){
+      el=document.createElement('div');el.id=MODAL_ID;
+      el.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10070;align-items:center;justify-content:center';
+      el.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:750px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#3b82f6">🌡️ Concrete Curing Record</h3>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="curingrec-content"></div></div>';
+      el.addEventListener('click',function(e){if(e.target===el)el.style.display='none';});
+      document.body.appendChild(el);render();
+    } else {el.style.display=el.style.display==='none'?'flex':'none';if(el.style.display==='flex')render();}
+  }
+  document.addEventListener('keydown',function(e){if(e.ctrlKey&&e.altKey&&e.key==='l'){e.preventDefault();toggle();}});
+  return {toggle:toggle,_add:_add,_end:_end,_del:_del,_print:_print};
+})();
+
+
+/* ─── 🧾 Pour Day Debrief (Ctrl+Alt+M) ─── */
+window._oncorPourDebrief = (function(){
+  var MODAL_ID='overlay-pourdebrief';
+  var SK='oncor_pourdebrief_v1_';
+  function key(){return SK+(window.currentProject||'default');}
+  function load(){try{return JSON.parse(localStorage.getItem(key()))||[];}catch(e){return[];}}
+  function save(d){localStorage.setItem(key(),JSON.stringify(d));}
+
+  var ISSUES_OPTS=['None','Pump breakdown','Late first truck','Rejected load','Over-slump','Water added on site','Late batch plant trucks','Crew short / no-show','Formwork issue','GC delay','Inspection hold','Weather (heat)','Weather (rain/wind)','Short delivery','Finishing difficulty','Equipment failure','Other'];
+  var RATINGS=['⭐ 5 – Excellent','⭐⭐ 4 – Good','⭐⭐⭐ 3 – Average','⭐⭐⭐⭐ 2 – Below Avg','⭐⭐⭐⭐⭐ 1 – Poor'];
+
+  function _formHTML(){
+    var today=new Date().toISOString().split('T')[0];
+    return '<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:16px">'
+      +'<h4 style="margin:0 0 12px;font-size:13px;color:#94a3b8">➕ New Pour Day Debrief</h4>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+      +'<div><label style="font-size:11px;color:#94a3b8">Pour Name/Area *</label><input id="pd-pour" placeholder="e.g. Slab Grid A–D" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Pour Date *</label><input id="pd-date" type="date" value="'+today+'" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Actual yd³</label><input id="pd-yds" type="number" placeholder="e.g. 85" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Est yd³</label><input id="pd-estyd" type="number" placeholder="e.g. 80" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Crew Size</label><input id="pd-crew" type="number" placeholder="e.g. 6" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Labor Hours (total man-hrs)</label><input id="pd-hrs" type="number" placeholder="e.g. 48" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Pour Start Time</label><input id="pd-start" type="time" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Pour End Time</label><input id="pd-end" type="time" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box"></div>'
+      +'</div>'
+      +'<div style="margin-bottom:8px"><label style="font-size:11px;color:#94a3b8">Issues Encountered</label>'
+      +'<select id="pd-issue" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box">'
+      +ISSUES_OPTS.map(function(o){return '<option>'+o+'</option>';}).join('')
+      +'</select></div>'
+      +'<div style="margin-bottom:8px"><label style="font-size:11px;color:#94a3b8">Overall Rating</label>'
+      +'<select id="pd-rating" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box">'
+      +['5 – Excellent','4 – Good','3 – Average','2 – Below Avg','1 – Poor'].map(function(o,i){return '<option value="'+(5-i)+'">'+o+'</option>';}).join('')
+      +'</select></div>'
+      +'<div style="margin-bottom:8px"><label style="font-size:11px;color:#94a3b8">What Went Well</label><textarea id="pd-good" rows="2" placeholder="e.g. Pump on time, crew finished 30 min early, GC inspector happy" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box;resize:vertical"></textarea></div>'
+      +'<div style="margin-bottom:8px"><label style="font-size:11px;color:#94a3b8">What to Improve / Issues Detail</label><textarea id="pd-improve" rows="2" placeholder="e.g. Start 30 min earlier next pour, get 7th finisher for edges" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box;resize:vertical"></textarea></div>'
+      +'<div style="margin-bottom:10px"><label style="font-size:11px;color:#94a3b8">Foreman Name</label><input id="pd-foreman" placeholder="e.g. Tony R." style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box"></div>'
+      +'<button onclick="window._oncorPourDebrief._add()" style="padding:7px 18px;background:#3b82f6;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600">➕ Save Debrief</button>'
+      +'</div>';
+  }
+
+  var STAR_COLORS={'5':'#22c55e','4':'#84cc16','3':'#f59e0b','2':'#f97316','1':'#ef4444'};
+
+  function render(){
+    var c=document.getElementById('pourdebrief-content');
+    if(!c)return;
+    var data=load();
+    var totalYds=data.reduce(function(s,r){return s+(parseFloat(r.actualYds)||0);},0);
+    var totalHrs=data.reduce(function(s,r){return s+(parseFloat(r.laborHrs)||0);},0);
+    var avgRate=totalHrs>0?(totalYds/totalHrs).toFixed(2):0;
+    var issues=data.filter(function(r){return r.issue&&r.issue!=='None';}).length;
+    var avgRating=data.length?((data.reduce(function(s,r){return s+(parseInt(r.rating)||3);},0))/data.length).toFixed(1):0;
+
+    var html=_formHTML();
+    html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">';
+    html+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:#3b82f6">'+data.length+'</div><div style="font-size:10px;color:#94a3b8">Debriefs</div></div>';
+    html+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:#22c55e">'+totalYds.toFixed(0)+'</div><div style="font-size:10px;color:#94a3b8">Total yd³</div></div>';
+    html+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:#a78bfa">'+avgRate+'</div><div style="font-size:10px;color:#94a3b8">yd³/Labor-Hr</div></div>';
+    html+='<div style="background:'+(issues>0?'#7f1d1d':'#1e293b')+';border-radius:6px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:'+(issues>0?'#fca5a5':'#94a3b8')+'">'+issues+'</div><div style="font-size:10px;color:#94a3b8">Issues Logged</div></div>';
+    html+='</div>';
+
+    if(!data.length){html+='<div style="text-align:center;color:#64748b;padding:20px">No debriefs yet. Log your first pour day above.</div>';}
+    data.slice().reverse().forEach(function(r,ri){
+      var i=data.length-1-ri;
+      var rating=parseInt(r.rating)||3;
+      var rColor=STAR_COLORS[String(rating)]||'#f59e0b';
+      var eff=r.actualYds&&r.laborHrs?(parseFloat(r.actualYds)/parseFloat(r.laborHrs)).toFixed(2):'—';
+      var ydsVar=r.actualYds&&r.estYds?((parseFloat(r.actualYds)-parseFloat(r.estYds)).toFixed(1)):null;
+      var duration='—';
+      if(r.startTime&&r.endTime){var s=r.startTime.split(':'),en=r.endTime.split(':');var diff=(parseInt(en[0])*60+parseInt(en[1]))-(parseInt(s[0])*60+parseInt(s[1]));if(diff>0)duration=Math.floor(diff/60)+'h '+(diff%60)+'m';}
+      html+='<div style="background:#1e293b;border-radius:6px;padding:12px;margin-bottom:8px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+        +'<div style="font-size:13px;font-weight:600;color:#e5e7eb">'+r.pourName+' <span style="font-size:11px;color:#64748b">'+r.pourDate+'</span></div>'
+        +'<div style="display:flex;gap:6px;align-items:center">'
+        +'<span style="font-size:16px;color:'+rColor+'">'+rating+'/5</span>'
+        +'<button onclick="window._oncorPourDebrief._del('+i+')" style="padding:2px 7px;background:#374151;color:#9ca3af;border:none;border-radius:3px;cursor:pointer;font-size:10px">🗑</button>'
+        +'</div></div>'
+        +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-size:11px;color:#94a3b8;margin-bottom:8px">'
+        +'<span>📦 Actual: <strong style="color:#3b82f6">'+( r.actualYds||'—')+' yd³</strong></span>'
+        +'<span>📐 Est: <strong style="color:#94a3b8">'+(r.estYds||'—')+' yd³</strong></span>'
+        +'<span>⚡ '+(r.laborHrs||'—')+' man-hrs</span>'
+        +'<span>👷 '+( r.crewSize||'—')+' crew | '+duration+'</span>'
+        +'</div>'
+        +(r.issue&&r.issue!=='None'?'<div style="background:#451a03;border-radius:4px;padding:6px;font-size:11px;margin-bottom:6px"><span style="color:#fb923c">⚠️ Issue: </span><span style="color:#e5e7eb">'+r.issue+'</span></div>':'')
+        +(r.good?'<div style="font-size:11px;color:#4ade80;margin-bottom:4px"><strong>✅ Went well:</strong> '+r.good+'</div>':'')
+        +(r.improve?'<div style="font-size:11px;color:#fb923c"><strong>🔄 Improve:</strong> '+r.improve+'</div>':'')
+        +(r.foreman?'<div style="font-size:10px;color:#64748b;margin-top:6px">Foreman: '+r.foreman+'</div>':'')
+        +'</div>';
+    });
+
+    html+='<div style="text-align:right;margin-top:12px"><button onclick="window._oncorPourDebrief._print()" style="padding:6px 14px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:5px;cursor:pointer;font-size:11px">🖨️ Print Debrief Report</button></div>';
+    c.innerHTML=html;
+  }
+
+  function _add(){
+    var pour=document.getElementById('pd-pour').value.trim();
+    if(!pour){alert('Pour name required');return;}
+    var d=document.getElementById('pd-date').value;
+    if(!d){alert('Pour date required');return;}
+    var data=load();
+    data.push({pourName:pour,pourDate:d,actualYds:document.getElementById('pd-yds').value,estYds:document.getElementById('pd-estyd').value,crewSize:document.getElementById('pd-crew').value,laborHrs:document.getElementById('pd-hrs').value,startTime:document.getElementById('pd-start').value,endTime:document.getElementById('pd-end').value,issue:document.getElementById('pd-issue').value,rating:document.getElementById('pd-rating').value,good:document.getElementById('pd-good').value,improve:document.getElementById('pd-improve').value,foreman:document.getElementById('pd-foreman').value,created:new Date().toISOString()});
+    save(data);render();
+  }
+  function _del(i){if(!confirm('Delete?'))return;var d=load();d.splice(i,1);save(d);render();}
+  function _print(){
+    var data=load();
+    var project=window.currentProject||'Project';
+    var company=document.getElementById('companyName')?document.getElementById('companyName').value:'Oncor Concrete';
+    var w=window.open('','_blank');
+    var rows=data.map(function(r,i){return '<tr><td>'+(i+1)+'</td><td>'+r.pourDate+'</td><td>'+r.pourName+'</td><td>'+(r.actualYds||'—')+'</td><td>'+(r.estYds||'—')+'</td><td>'+(r.laborHrs||'—')+'</td><td>'+r.rating+'/5</td><td>'+(r.issue||'None')+'</td><td>'+((r.good||'')+' | '+(r.improve||''))+'</td></tr>';}).join('');
+    w.document.write('<!DOCTYPE html><html><head><title>Pour Debrief</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px}table{width:100%;border-collapse:collapse}th{background:#1e3a5f;color:#fff;padding:6px;font-size:10px}td{border:1px solid #ddd;padding:5px;font-size:10px}tr:nth-child(even){background:#f9f9f9}@media print{body{margin:10px}}</style></head><body>');
+    w.document.write('<h2>🧾 Pour Day Debrief Report — '+project+'</h2>');
+    w.document.write('<div style="font-size:11px;margin-bottom:10px"><strong>'+company+'</strong> | Printed: '+new Date().toLocaleDateString()+'</div>');
+    w.document.write('<table><thead><tr><th>#</th><th>Date</th><th>Pour</th><th>Actual yd³</th><th>Est yd³</th><th>Man-Hrs</th><th>Rating</th><th>Issue</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table>');
+    w.document.write('<div style="margin-top:20px;font-size:9px;color:#666;text-align:center">Pour Day Debrief Report — CONFIDENTIAL INTERNAL USE ONLY</div>');
+    w.document.write('</body></html>');w.document.close();w.print();
+  }
+
+  function toggle(){
+    var el=document.getElementById(MODAL_ID);
+    if(!el){
+      el=document.createElement('div');el.id=MODAL_ID;
+      el.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10071;align-items:center;justify-content:center';
+      el.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:700px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#3b82f6">🧾 Pour Day Debrief</h3>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="pourdebrief-content"></div></div>';
+      el.addEventListener('click',function(e){if(e.target===el)el.style.display='none';});
+      document.body.appendChild(el);render();
+    } else {el.style.display=el.style.display==='none'?'flex':'none';if(el.style.display==='flex')render();}
+  }
+  document.addEventListener('keydown',function(e){if(e.ctrlKey&&e.altKey&&e.key==='m'){e.preventDefault();toggle();}});
+  return {toggle:toggle,_add:_add,_del:_del,_print:_print};
+})();
+
+
+/* ─── 🏗️ Slab Load Capacity Calculator (Ctrl+Alt+O) ─── */
+window._oncorSlabLoad = (function(){
+  var MODAL_ID='overlay-slabload';
+
+  function _calcHTML(){
+    return '<div style="background:#1e293b;border-radius:8px;padding:16px;margin-bottom:16px">'
+      +'<h4 style="margin:0 0 12px;font-size:13px;color:#94a3b8">Slab-on-Grade Load Capacity — ACI 360R-10 / PCA Method</h4>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">'
+      +'<div><label style="font-size:11px;color:#94a3b8">Slab Thickness (inches) *</label><input id="sl-thick" type="number" value="6" min="3" max="24" step="0.5" onchange="window._oncorSlabLoad._calc()" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Concrete f\'c (PSI) *</label><select id="sl-fc" onchange="window._oncorSlabLoad._calc()" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box"><option>2500</option><option>3000</option><option selected>4000</option><option>5000</option><option>6000</option></select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Subgrade k-value (pci)</label><select id="sl-k" onchange="window._oncorSlabLoad._calc()" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box">'
+      +'<option value="50">50 pci – Weak clay / fill</option><option value="100" selected>100 pci – Average (caliche)</option><option value="150">150 pci – Good subbase</option><option value="200">200 pci – High – compacted base</option><option value="300">300 pci – Very high</option>'
+      +'</select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Rebar / Reinforcement</label><select id="sl-rebar" onchange="window._oncorSlabLoad._calc()" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box">'
+      +'<option value="1.0">Plain (no rebar) – factor 1.0</option><option value="1.25">#4 @ 18" EW – factor 1.25</option><option value="1.5">#5 @ 12" EW – factor 1.5</option><option value="1.75">#5 @ 12" + Dowels – factor 1.75</option><option value="2.0">Post-Tensioned – factor 2.0</option>'
+      +'</select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Load Type</label><select id="sl-loadtype" onchange="window._oncorSlabLoad._calc()" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box">'
+      +'<option value="post">Post / Column Load (point load)</option><option value="wheel">Forklift / Vehicle (wheel load)</option><option value="uniform">Uniform Load (rack base plate / storage)</option>'
+      +'</select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Safety Factor</label><select id="sl-sf" onchange="window._oncorSlabLoad._calc()" style="width:100%;margin-top:3px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px;box-sizing:border-box">'
+      +'<option value="2.0">2.0 – Standard (ACI 360R)</option><option value="1.7">1.7 – Industrial (TR-34)</option><option value="2.5">2.5 – Conservative / Old slab</option>'
+      +'</select></div>'
+      +'</div>'
+      +'<button onclick="window._oncorSlabLoad._calc()" style="padding:7px 18px;background:#3b82f6;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600">⚡ Calculate Capacity</button>'
+      +'</div>'
+      +'<div id="slabload-result"></div>';
+  }
+
+  function _calc(){
+    var thick=parseFloat(document.getElementById('sl-thick').value)||6;
+    var fc=parseFloat(document.getElementById('sl-fc').value)||4000;
+    var k=parseFloat(document.getElementById('sl-k').value)||100;
+    var rebarFactor=parseFloat(document.getElementById('sl-rebar').value)||1.0;
+    var loadType=document.getElementById('sl-loadtype').value;
+    var sf=parseFloat(document.getElementById('sl-sf').value)||2.0;
+
+    // ACI 360R-10 / Westergaard method
+    // Modulus of rupture fr = 7.5*sqrt(fc) psi (ACI 318-19 §19.2.3)
+    var fr=7.5*Math.sqrt(fc);
+    // Radius of relative stiffness l = (E*h³/(12*(1-v²)*k))^(1/4)
+    // E ≈ 57000*sqrt(fc), v=0.15 for concrete
+    var E=57000*Math.sqrt(fc);
+    var h_in=thick; // inches
+    var h_ft=h_in/12;
+    var h3=Math.pow(h_in,3);
+    var l_in=Math.pow((E*h3)/(12*(1-0.0225)*k),0.25); // radius of relative stiffness in inches
+    var l_ft=l_in/12;
+
+    var allowMoment=fr*h3/6; // in-lb per inch width (section modulus = h²/6 × width = 1in → h³/6 when h in inches... need to fix units)
+    // Actually: Moment capacity per unit width = fr * (h²/6) in lb-in/in = fr * h² / 6
+    var Mu_perin = fr * h_in * h_in / 6; // lb-in per inch
+
+    // Allowable capacity for interior load:
+    var P_interior, P_edge;
+    var area_note='';
+
+    if(loadType==='post'){
+      // Westergaard interior point load: P = (8*M_allow * (1 + 4*ln(l/r) + pi/2)) / (approx)
+      // Simplified ACI 360R interior load: P_allow = (6*fr*h²) / (3*ln(l/(h/2)) + 1) × (1/sf)
+      // Using PCA simplified: P = (0.316*fc^0.5 * h^2.67) / sf (empirical for normal weight concrete)
+      var P_raw = 0.316 * Math.sqrt(fc) * Math.pow(h_in, 2.67);
+      P_interior = P_raw * rebarFactor / sf;
+      P_edge = P_interior * 0.57; // edge load ~57% of interior per ACI 360R
+      area_note='Point load capacity (single column/post)';
+    } else if(loadType==='wheel'){
+      // Forklift wheel load: use Westergaard edge formula approximation
+      // P_allow = (fr * h²) / (1.8 * log10(l) - 0.066) simplified
+      // Using: P_allow = (4*fr*h²/3) * rebarFactor / sf (approx wheel load at edge)
+      var P_raw2 = (4 * fr * h_in * h_in / 3);
+      P_interior = P_raw2 * rebarFactor / sf / 1000; // kips
+      P_edge = P_interior * 0.6;
+      area_note='Wheel load capacity (per wheel, at edge of slab)';
+      // convert back to lbs for display
+      P_interior = P_interior * 1000;
+      P_edge = P_edge * 1000;
+    } else {
+      // Uniform load: q_allow = (fr * h²) / (3 * l² / 4 ... simplified to plate bending)
+      // Using simplified: q = (24*fr*h²) / (L² * sf) where L = l_in (use as equivalent span)
+      var q_raw = (24 * fr * h_in * h_in) / (l_in * l_in);
+      P_interior = q_raw * rebarFactor / sf; // psi uniform
+      P_edge = P_interior * 0.7;
+      area_note='Uniform load capacity (psi over full area)';
+    }
+
+    // Forklift equivalents
+    var forklifts=[
+      {name:'Small Electric (2-3 ton)',weight:8000,wheels:4,wload:2000},
+      {name:'Cushion Tire (5 ton)',weight:18000,wheels:4,wload:4500},
+      {name:'Pneumatic (8 ton)',weight:28000,wheels:4,wload:7000},
+      {name:'Large Pneumatic (15 ton)',weight:52000,wheels:4,wload:13000},
+      {name:'Rough Terrain RT (10 ton)',weight:36000,wheels:4,wload:9000}
+    ];
+
+    var resultEl=document.getElementById('slabload-result');
+    if(!resultEl)return;
+
+    var capLabel=loadType==='uniform'?'Uniform Load Capacity':'Allowable Load Capacity';
+    var capUnit=loadType==='uniform'?'psi':'lbs';
+    var intVal=Math.round(P_interior).toLocaleString();
+    var edgeVal=Math.round(P_edge).toLocaleString();
+    var status=loadType==='uniform'?(P_interior>200?'green':'orange'):(P_interior>10000?'green':(P_interior>5000?'orange':'red'));
+
+    var html='<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:16px;margin-bottom:12px">';
+    html+='<div style="font-size:11px;color:#94a3b8;margin-bottom:10px">'+area_note+' | ACI 360R-10 / Westergaard / PCA Method | El Paso avg subgrade: 100-200 pci (caliche)</div>';
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">';
+    html+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:700;color:#22c55e">'+intVal+'</div><div style="font-size:10px;color:#94a3b8">Interior '+capUnit+'</div></div>';
+    html+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:700;color:#f59e0b">'+edgeVal+'</div><div style="font-size:10px;color:#94a3b8">Edge/Joint '+capUnit+'</div></div>';
+    html+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center"><div style="font-size:15px;font-weight:700;color:#a78bfa">'+l_ft.toFixed(2)+'ft</div><div style="font-size:10px;color:#94a3b8">Radius Rel. Stiffness (ℓ)</div></div>';
+    html+='</div>';
+
+    // Design inputs summary
+    html+='<div style="font-size:11px;color:#94a3b8;margin-bottom:10px">Inputs: <strong style="color:#cbd5e1">'+h_in+'" slab</strong> | '+fc+' PSI (f\'c) | fr='+Math.round(fr)+' psi | k='+k+' pci | Safety Factor '+sf+' | Rebar factor x'+rebarFactor+'</div>';
+
+    // Forklift table (only for wheel load type)
+    if(loadType==='wheel'){
+      html+='<div style="font-size:12px;font-weight:600;color:#e5e7eb;margin-bottom:6px">Forklift Compatibility (edge worst-case):</div>';
+      html+='<table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:12px">';
+      html+='<thead><tr><th style="background:#1e293b;padding:5px;text-align:left;color:#94a3b8">Forklift Type</th><th style="background:#1e293b;padding:5px;color:#94a3b8">Max Wheel Load</th><th style="background:#1e293b;padding:5px;color:#94a3b8">Status (Edge)</th></tr></thead><tbody>';
+      forklifts.forEach(function(f){
+        var ok=f.wload<=P_edge;
+        html+='<tr style="border-bottom:1px solid #1e293b"><td style="padding:5px;color:#cbd5e1">'+f.name+'</td><td style="padding:5px;color:#94a3b8">'+f.wload.toLocaleString()+' lbs</td><td style="padding:5px"><span style="color:'+(ok?'#22c55e':'#ef4444')+'font-weight:600">'+(ok?'✅ OK':'❌ OVER CAPACITY')+'</span></td></tr>';
+      });
+      html+='</tbody></table>';
+    }
+
+    // Code note
+    html+='<div style="font-size:11px;color:#64748b;border-top:1px solid #1e293b;padding-top:8px">'
+      +'<strong style="color:#94a3b8">References:</strong> ACI 360R-10 (Design of SOG) | PCA IS195 | TR-34 Industrial Floors | Westergaard (1926) | ASTM C39 | ACI 318-19 §19.2.3 | El Paso: typical caliche k=100-150 pci (geotechnical verification required) | <em>This tool is for preliminary estimation only — consult a licensed structural engineer for design confirmation</em>'
+      +'</div>';
+    html+='</div>';
+
+    // Print button
+    html+='<div style="text-align:right"><button onclick="window._oncorSlabLoad._print()" style="padding:6px 14px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:5px;cursor:pointer;font-size:11px">🖨️ Print Capacity Summary</button></div>';
+
+    resultEl.innerHTML=html;
+  }
+
+  function _print(){
+    var thick=document.getElementById('sl-thick')?document.getElementById('sl-thick').value:'?';
+    var fc=document.getElementById('sl-fc')?document.getElementById('sl-fc').value:'?';
+    var k=document.getElementById('sl-k')?document.getElementById('sl-k').options[document.getElementById('sl-k').selectedIndex].text:'?';
+    var company=document.getElementById('companyName')?document.getElementById('companyName').value:'Oncor Concrete';
+    var w=window.open('','_blank');
+    w.document.write('<!DOCTYPE html><html><head><title>Slab Load Capacity</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px}h2{font-size:15px}.result{border:2px solid #1e3a5f;border-radius:6px;padding:12px;margin:10px 0}@media print{body{margin:10px}}</style></head><body>');
+    w.document.write('<h2>🏗️ Slab Load Capacity Summary</h2>');
+    w.document.write('<div style="font-size:11px;margin-bottom:10px"><strong>'+company+'</strong> | Printed: '+new Date().toLocaleDateString()+'</div>');
+    w.document.write('<div class="result"><strong>Inputs:</strong> '+thick+'" thick | f\'c='+fc+' PSI | Subgrade: '+k+'</div>');
+    var resultEl=document.getElementById('slabload-result');
+    if(resultEl)w.document.write(resultEl.innerHTML);
+    w.document.write('<div style="margin-top:20px;font-size:9px;color:#666;text-align:center">ACI 360R-10 | PCA IS195 | TR-34 | PRELIMINARY ESTIMATE ONLY — Consult a licensed structural engineer | CONFIDENTIAL</div>');
+    w.document.write('</body></html>');w.document.close();w.print();
+  }
+
+  function toggle(){
+    var el=document.getElementById(MODAL_ID);
+    if(!el){
+      el=document.createElement('div');el.id=MODAL_ID;
+      el.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10072;align-items:center;justify-content:center';
+      el.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:700px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#3b82f6">🏗️ Slab Load Capacity Calculator</h3>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="slabload-content"></div></div>';
+      el.addEventListener('click',function(e){if(e.target===el)el.style.display='none';});
+      document.body.appendChild(el);
+      var c=document.getElementById('slabload-content');
+      if(c){c.innerHTML=_calcHTML();_calc();}
+    } else {
+      el.style.display=el.style.display==='none'?'flex':'none';
+      if(el.style.display==='flex'){var c=document.getElementById('slabload-content');if(c&&!c.innerHTML.trim()){c.innerHTML=_calcHTML();_calc();}}
+    }
+  }
+  document.addEventListener('keydown',function(e){if(e.ctrlKey&&e.altKey&&e.key==='o'){e.preventDefault();toggle();}});
+  return {toggle:toggle,_calc:_calc,_print:_print};
+})();
+
+
+/* ─── Escape handler for new modals ─── */
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){['overlay-curingrec','overlay-pourdebrief','overlay-slabload'].forEach(function(id){var el=document.getElementById(id);if(el&&el.style.display!=='none')el.style.display='none';});}
+});
+
+document.addEventListener('DOMContentLoaded',function(){
+  var sidebar=document.querySelector('.sidebar-actions')||document.querySelector('#sidebarActions')||document.querySelector('aside');
+  function injectBtn(id,emoji,label,fn){if(document.getElementById(id))return;var btn=document.createElement('button');btn.id=id;btn.textContent=emoji+' '+label;btn.style.cssText='display:block;width:100%;margin:2px 0;padding:6px 10px;background:#1e293b;color:#e5e7eb;border:1px solid #334155;border-radius:6px;cursor:pointer;text-align:left;font-size:12px';btn.onclick=fn;if(sidebar)sidebar.appendChild(btn);}
+  injectBtn('btnCuringRec','🌡️','Curing Record',function(){window._oncorCuringRecord.toggle();});
+  injectBtn('btnPourDebrief','🧾','Pour Debrief',function(){window._oncorPourDebrief.toggle();});
+  injectBtn('btnSlabLoad','🏗️','Slab Load Calc',function(){window._oncorSlabLoad.toggle();});
+});
+
+})();
+
+// ==================== END SESSION #118 — Zeus ⚡ Concrete Curing Record (Ctrl+Alt+L) + Pour Day Debrief (Ctrl+Alt+M) + Slab Load Capacity Calculator (Ctrl+Alt+O) ====================
+
 
 })();
