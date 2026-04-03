@@ -183992,5 +183992,934 @@ window._oncorDevLength = (function(){
 
 // ==================== END SESSION #121 — Zeus ⚡ Quick Print Hub (F5) + Concrete Field Notes Journal (F6) + Pre-Bid Submission Checklist (F7) (+755 lines) ====================
 
+// ==================== SESSION #122 — Zeus ⚡ Quick Takeoff Pad (F8) + Oncor Project Pulse (F10) + Batch Ticket Violation Checker (F11) ====================
+
+/* ─────────────────────────────────────────────────────────
+   📐 QUICK TAKEOFF PAD (F8)
+   Fast mental-math concrete quantity calculator with
+   multiple element shapes — no need to open full estimator.
+   Supports slabs, footings, walls, columns, grade beams,
+   round piers. All in yd³. El Paso field-ready.
+   ───────────────────────────────────────────────────────── */
+(function(){
+  var MODAL_ID = 'overlay-quicktakeoff';
+  var STORAGE_KEY = 'oncor_quicktakeoff_v1';
+  var entries = [];
+
+  function load(){
+    try{ entries = JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); }catch(e){ entries=[]; }
+  }
+  function save(){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  }
+
+  function yd3(val){ return Math.round(val*100)/100; }
+
+  function calcEntry(e){
+    var vol = 0;
+    var t = e.type;
+    if(t==='slab'){
+      vol = (e.l||0)*(e.w||0)*(e.d||0)/12/27;
+    } else if(t==='footing'){
+      vol = (e.l||0)*(e.w||0)*(e.d||0)/12/27;
+    } else if(t==='wall'){
+      vol = (e.l||0)*(e.h||0)*(e.thk||0)/12/27;
+    } else if(t==='column'){
+      vol = 3.14159*Math.pow((e.dia||0)/2/12,2)*(e.h||0)*e.qty/27;
+    } else if(t==='gb'){
+      vol = (e.l||0)*(e.w||0)*(e.d||0)/12/27;
+    } else if(t==='pier'){
+      vol = 3.14159*Math.pow((e.dia||0)/2/12,2)*(e.d||0)*e.qty/27;
+    } else if(t==='curb'){
+      vol = (e.l||0)*(e.w||0)*(e.h||0)/12/12/27;
+    }
+    return yd3(vol*(e.qty||1));
+  }
+
+  function totalYd3(){
+    return entries.reduce(function(s,e){ return s+(e.yd3||0); },0);
+  }
+
+  function addEntry(type, vals){
+    var e = Object.assign({id:Date.now(),type:type,label:'',qty:1,yd3:0},vals);
+    e.yd3 = calcEntry(e);
+    entries.push(e);
+    save();
+  }
+
+  function renderEntries(container){
+    var list = container.querySelector('#qt-list');
+    if(!list) return;
+    if(entries.length===0){
+      list.innerHTML = '<div style="text-align:center;color:#64748b;padding:20px;font-size:13px">No entries yet. Add an element above.</div>';
+      container.querySelector('#qt-total').textContent = '0.00';
+      return;
+    }
+    var html = '';
+    entries.forEach(function(e,i){
+      var typeLabel = {slab:'Slab',footing:'Footing',wall:'Wall',column:'Column',gb:'Grade Beam',pier:'Pier',curb:'Curb'}[e.type]||e.type;
+      var dims = '';
+      if(e.type==='slab'||e.type==='footing'||e.type==='gb') dims = (e.l||0)+'L × '+(e.w||0)+'W × '+(e.d||0)+'"D';
+      else if(e.type==='wall') dims = (e.l||0)+'L × '+(e.h||0)+'H × '+(e.thk||0)+'"T';
+      else if(e.type==='column') dims = (e.dia||0)'" Dia × '+(e.h||0)+'H × '+(e.qty||1)+' ea';
+      else if(e.type==='pier') dims = (e.dia||0)+'" Dia × '+(e.d||0)+'D × '+(e.qty||1)+' ea';
+      else if(e.type==='curb') dims = (e.l||0)+'LF × '+(e.w||0)+'" W × '+(e.h||0)+'" H';
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#1e293b;border-radius:6px;border:1px solid #334155;margin-bottom:6px">'
+        +'<div style="flex:1">'
+          +'<div style="font-size:12px;font-weight:600;color:#38bdf8">'+typeLabel+(e.label?' — '+e.label:'')+'</div>'
+          +'<div style="font-size:11px;color:#94a3b8">'+dims+'</div>'
+        +'</div>'
+        +'<div style="font-size:14px;font-weight:700;color:#22d3ee;min-width:70px;text-align:right">'+e.yd3+' yd³</div>'
+        +'<button onclick="window._QT_delete('+i+')" style="background:#ef4444;border:none;color:#fff;border-radius:4px;padding:3px 7px;cursor:pointer;font-size:11px">✕</button>'
+        +'</div>';
+    });
+    list.innerHTML = html;
+    var tot = totalYd3();
+    container.querySelector('#qt-total').textContent = tot.toFixed(2);
+    // also show truck count
+    var trucks5 = Math.ceil(tot/5), trucks9 = Math.ceil(tot/9), trucks10 = Math.ceil(tot/10);
+    container.querySelector('#qt-trucks').textContent = tot>0 ? '~'+trucks5+' (5yd) | ~'+trucks9+' (9yd) | ~'+trucks10+' (10yd) trucks' : '';
+  }
+
+  window._QT_delete = function(i){
+    entries.splice(i,1);
+    save();
+    var el = document.getElementById(MODAL_ID);
+    if(el) renderEntries(el.querySelector('.qt-box'));
+  };
+
+  function buildModal(){
+    var el = document.getElementById(MODAL_ID);
+    if(el){ el.style.display='flex'; renderEntries(el.querySelector('.qt-box')); return; }
+
+    el = document.createElement('div');
+    el.id = MODAL_ID;
+    el.style.cssText = 'display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:10095;align-items:center;justify-content:center';
+    el.onclick = function(e){ if(e.target===el) el.style.display='none'; };
+
+    var box = document.createElement('div');
+    box.className = 'qt-box';
+    box.style.cssText = 'background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:95%;max-width:760px;max-height:90vh;overflow-y:auto;color:#e2e8f0';
+
+    box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+      +'<div><div style="font-size:16px;font-weight:700;color:#38bdf8">📐 Quick Takeoff Pad</div>'
+        +'<div style="font-size:11px;color:#64748b">Fast concrete quantity calculator · F8 to open/close</div></div>'
+      +'<div style="display:flex;gap:8px">'
+        +'<button onclick="window._QT_print()" style="background:#0284c7;border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px">🖨️ Print</button>'
+        +'<button onclick="window._QT_clear()" style="background:#475569;border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px">🗑 Clear All</button>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:#374151;border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px">✕</button>'
+      +'</div></div>'
+
+      // Add element form
+      +'<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:16px;border:1px solid #334155">'
+        +'<div style="font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">Add Element</div>'
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">'
+          +'<div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:3px">Type</label>'
+            +'<select id="qt-type" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px 8px;border-radius:6px;font-size:12px;min-width:110px" onchange="window._QT_typeChange()">'
+              +'<option value="slab">Slab</option>'
+              +'<option value="footing">Footing</option>'
+              +'<option value="wall">Wall</option>'
+              +'<option value="column">Column</option>'
+              +'<option value="gb">Grade Beam</option>'
+              +'<option value="pier">Pier (Round)</option>'
+              +'<option value="curb">Curb</option>'
+            +'</select></div>'
+          +'<div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:3px">Label (opt)</label>'
+            +'<input id="qt-label" placeholder="e.g. Pkg A slab" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px 8px;border-radius:6px;font-size:12px;width:120px"></div>'
+          +'<div id="qt-dim-fields" style="display:flex;gap:8px;flex-wrap:wrap"></div>'
+          +'<div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:3px">Qty</label>'
+            +'<input id="qt-qty" type="number" value="1" min="1" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px 8px;border-radius:6px;font-size:12px;width:55px"></div>'
+          +'<div id="qt-preview" style="font-size:13px;font-weight:700;color:#22d3ee;min-width:80px;text-align:center;padding:6px 0">0.00 yd³</div>'
+          +'<button onclick="window._QT_add()" style="background:#0ea5e9;border:none;color:#fff;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px;font-weight:600">+ Add</button>'
+        +'</div></div>'
+
+      // List
+      +'<div id="qt-list" style="margin-bottom:12px"></div>'
+
+      // Total bar
+      +'<div style="background:#1e3a4a;border:1px solid #0ea5e9;border-radius:8px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between">'
+        +'<div>'
+          +'<div style="font-size:11px;color:#94a3b8">TOTAL CONCRETE</div>'
+          +'<div id="qt-trucks" style="font-size:11px;color:#64748b;margin-top:2px"></div>'
+        +'</div>'
+        +'<div style="font-size:24px;font-weight:800;color:#22d3ee"><span id="qt-total">0.00</span> <span style="font-size:14px;font-weight:400">yd³</span></div>'
+      +'</div>'
+
+      // Formula reference
+      +'<div style="margin-top:12px;font-size:10px;color:#475569;text-align:center">Slab/Footing/GB: L×W×D"/12/27 · Wall: L×H×T"/12/27 · Column/Pier: π×(D/2/12)²×H×n/27 · Curb: LF×W"×H"/144/27</div>';
+
+    el.appendChild(box);
+    document.body.appendChild(el);
+
+    // Initialize dim fields
+    window._QT_typeChange();
+    renderEntries(box);
+  }
+
+  window._QT_typeChange = function(){
+    var type = document.getElementById('qt-type').value;
+    var fields = {
+      slab: [{id:'qt-l',label:'Length (ft)',ph:'L'},{id:'qt-w',label:'Width (ft)',ph:'W'},{id:'qt-d',label:'Depth (in)',ph:'4'}],
+      footing: [{id:'qt-l',label:'Length (ft)',ph:'L'},{id:'qt-w',label:'Width (ft)',ph:'W'},{id:'qt-d',label:'Depth (in)',ph:'12'}],
+      wall: [{id:'qt-l',label:'Length (ft)',ph:'L'},{id:'qt-h',label:'Height (ft)',ph:'H'},{id:'qt-thk',label:'Thick (in)',ph:'8'}],
+      column: [{id:'qt-dia',label:'Dia (in)',ph:'16'},{id:'qt-h',label:'Height (ft)',ph:'H'}],
+      gb: [{id:'qt-l',label:'Length (ft)',ph:'L'},{id:'qt-w',label:'Width (ft)',ph:'W'},{id:'qt-d',label:'Depth (in)',ph:'18'}],
+      pier: [{id:'qt-dia',label:'Dia (in)',ph:'18'},{id:'qt-d',label:'Depth (ft)',ph:'D'}],
+      curb: [{id:'qt-l',label:'Length (LF)',ph:'LF'},{id:'qt-w',label:'Width (in)',ph:'6'},{id:'qt-h',label:'Height (in)',ph:'6'}]
+    };
+    var df = document.getElementById('qt-dim-fields');
+    if(!df) return;
+    df.innerHTML = (fields[type]||[]).map(function(f){
+      return '<div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:3px">'+f.label+'</label>'
+        +'<input id="'+f.id+'" type="number" placeholder="'+f.ph+'" step="0.1" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px 8px;border-radius:6px;font-size:12px;width:70px" oninput="window._QT_preview()"></div>';
+    }).join('');
+    window._QT_preview();
+  };
+
+  window._QT_preview = function(){
+    var type = document.getElementById('qt-type') && document.getElementById('qt-type').value;
+    if(!type) return;
+    var qty = parseFloat((document.getElementById('qt-qty')||{}).value)||1;
+    var vals = {qty:qty,
+      l:parseFloat((document.getElementById('qt-l')||{}).value)||0,
+      w:parseFloat((document.getElementById('qt-w')||{}).value)||0,
+      d:parseFloat((document.getElementById('qt-d')||{}).value)||0,
+      h:parseFloat((document.getElementById('qt-h')||{}).value)||0,
+      thk:parseFloat((document.getElementById('qt-thk')||{}).value)||0,
+      dia:parseFloat((document.getElementById('qt-dia')||{}).value)||0
+    };
+    var e = Object.assign({type:type},vals);
+    var v = calcEntry(e);
+    var prev = document.getElementById('qt-preview');
+    if(prev) prev.textContent = v.toFixed(2)+' yd³';
+  };
+
+  window._QT_add = function(){
+    var type = document.getElementById('qt-type').value;
+    var qty = parseFloat((document.getElementById('qt-qty')||{}).value)||1;
+    var vals = {
+      qty:qty,
+      label:((document.getElementById('qt-label')||{}).value||'').trim(),
+      l:parseFloat((document.getElementById('qt-l')||{}).value)||0,
+      w:parseFloat((document.getElementById('qt-w')||{}).value)||0,
+      d:parseFloat((document.getElementById('qt-d')||{}).value)||0,
+      h:parseFloat((document.getElementById('qt-h')||{}).value)||0,
+      thk:parseFloat((document.getElementById('qt-thk')||{}).value)||0,
+      dia:parseFloat((document.getElementById('qt-dia')||{}).value)||0
+    };
+    addEntry(type, vals);
+    var el = document.getElementById(MODAL_ID);
+    if(el) renderEntries(el.querySelector('.qt-box'));
+    // clear label
+    var lbl = document.getElementById('qt-label');
+    if(lbl) lbl.value='';
+  };
+
+  window._QT_clear = function(){
+    if(!confirm('Clear all Quick Takeoff entries?')) return;
+    entries = [];
+    save();
+    var el = document.getElementById(MODAL_ID);
+    if(el) renderEntries(el.querySelector('.qt-box'));
+  };
+
+  window._QT_print = function(){
+    load();
+    var tot = totalYd3();
+    var rows = entries.map(function(e,i){
+      var typeLabel = {slab:'Slab',footing:'Footing',wall:'Wall',column:'Column',gb:'Grade Beam',pier:'Pier',curb:'Curb'}[e.type]||e.type;
+      var dims = '';
+      if(e.type==='slab'||e.type==='footing'||e.type==='gb') dims = (e.l||0)+'L × '+(e.w||0)+'W × '+(e.d||0)+'"D';
+      else if(e.type==='wall') dims = (e.l||0)+'L × '+(e.h||0)+'H × '+(e.thk||0)+'"T';
+      else if(e.type==='column') dims = (e.dia||0)+'\" Dia × '+(e.h||0)+'H × '+(e.qty||1)+' ea';
+      else if(e.type==='pier') dims = (e.dia||0)+'\" Dia × '+(e.d||0)+'D × '+(e.qty||1)+' ea';
+      else if(e.type==='curb') dims = (e.l||0)+'LF × '+(e.w||0)+'\" W × '+(e.h||0)+'\" H';
+      return '<tr><td style="padding:5px 8px;font-size:11px">'+(i+1)+'</td>'
+        +'<td style="padding:5px 8px;font-size:11px">'+typeLabel+'</td>'
+        +'<td style="padding:5px 8px;font-size:11px">'+(e.label||'—')+'</td>'
+        +'<td style="padding:5px 8px;font-size:11px">'+dims+'</td>'
+        +'<td style="padding:5px 8px;font-size:11px;text-align:right;font-weight:700">'+e.yd3+'</td>'
+        +'</tr>';
+    }).join('');
+    var trucks = tot>0 ? '~'+Math.ceil(tot/9)+' trucks @ 9 yd³' : '';
+    var w = window.open('','_blank');
+    w.document.write('<!DOCTYPE html><html><head><title>Quick Takeoff</title>'
+      +'<style>body{font-family:sans-serif;padding:20px;color:#000}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d1d5db}th{background:#f9fafb;text-align:left;padding:5px 8px;font-size:11px}.total{background:#e0f2fe;font-weight:700;font-size:13px}@media print{.np{display:none}}</style>'
+      +'</head><body>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center"><div>'
+        +'<h2 style="margin:0">📐 Quick Takeoff Pad</h2>'
+        +'<div style="font-size:12px;color:#6b7280">'+new Date().toLocaleDateString()+'</div>'
+      +'</div><button class="np" onclick="window.print()" style="padding:8px 16px;background:#0284c7;color:#fff;border:none;border-radius:6px;cursor:pointer">🖨️ Print</button></div><hr>'
+      +'<table><thead><tr><th>#</th><th>Type</th><th>Label</th><th>Dimensions</th><th>yd³</th></tr></thead><tbody>'
+      +rows
+      +'<tr class="total"><td colspan="4" style="text-align:right;padding:6px 8px;font-size:12px">TOTAL CONCRETE</td><td style="padding:6px 8px;text-align:right;font-size:14px">'+tot.toFixed(2)+' yd³</td></tr>'
+      +'</tbody></table>'
+      +'<div style="margin-top:8px;font-size:11px;color:#6b7280">'+trucks+'</div>'
+      +'<div style="margin-top:4px;font-size:10px;color:#9ca3af">Formula: Slab/Footing/GB: L×W×D"/12/27 · Wall: L×H×T"/12/27 · Column/Pier: π×r²×H×n/27 · Curb: LF×W"×H"/144/27</div>'
+      +'</body></html>');
+    w.document.close();
+  };
+
+  // Sidebar button
+  document.addEventListener('DOMContentLoaded', function(){
+    var sidebar = document.querySelector('.sidebar-actions, .sidebar-buttons, [class*="sidebar"]');
+    var btn = document.createElement('button');
+    btn.textContent = '📐 Quick Takeoff Pad';
+    btn.title = 'Quick Takeoff Pad — F8';
+    btn.style.cssText = 'background:#0e7490;border:none;color:#fff;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;width:100%;text-align:left;margin-bottom:4px';
+    btn.onclick = function(){ load(); buildModal(); };
+    if(sidebar) sidebar.appendChild(btn);
+    else {
+      var interval = setInterval(function(){
+        var sb = document.querySelector('.sidebar-inner, .action-buttons, [class*="sidebar"]');
+        if(sb){ sb.appendChild(btn); clearInterval(interval); }
+      },500);
+    }
+  });
+
+  // Keyboard shortcut F8
+  document.addEventListener('keydown', function(e){
+    if(e.key==='F8' && !e.ctrlKey && !e.altKey){
+      e.preventDefault();
+      load();
+      var el = document.getElementById(MODAL_ID);
+      if(el && el.style.display!=='none'){ el.style.display='none'; return; }
+      buildModal();
+    }
+  });
+
+})();
+
+/* ─────────────────────────────────────────────────────────
+   🔔 ONCOR PROJECT PULSE (F10)
+   Real-time cross-module alert dashboard — aggregates
+   critical alerts from all 30+ project management modules.
+   Color-coded severity: 🔴 Critical / ⚠️ Watch / ✅ OK
+   Press F10 to open. Refresh button for live data.
+   ───────────────────────────────────────────────────────── */
+(function(){
+  var MODAL_ID = 'overlay-projpulse';
+
+  var CHECKS = [
+    { key:'ar', label:'AR & Invoices', icon:'💰', fn: function(){
+      try{
+        var proj = '';
+        try{ proj = JSON.parse(localStorage.getItem('oncorCurrentProject')||'""'); }catch(e){}
+        var data = JSON.parse(localStorage.getItem('oncor_ar_v1_'+proj)||'[]');
+        var now = Date.now();
+        var overdue = data.filter(function(inv){ return (inv.status==='Unpaid'||inv.status==='Partial') && inv.dueDate && new Date(inv.dueDate).getTime()<now; });
+        var outstanding = data.reduce(function(s,inv){ return (inv.status==='Unpaid'||inv.status==='Partial')?s+(inv.amount||0):s; },0);
+        if(overdue.length>0) return {sev:'red',msg:overdue.length+' overdue invoice(s) · $'+outstanding.toLocaleString()+' outstanding'};
+        if(outstanding>0) return {sev:'amber',msg:'$'+outstanding.toLocaleString()+' outstanding AR'};
+        return {sev:'green',msg:'No outstanding AR'};
+      }catch(e){ return {sev:'gray',msg:'No data'}; }
+    }},
+    { key:'ap', label:'Accounts Payable', icon:'💳', fn: function(){
+      try{
+        var proj = '';
+        try{ proj = JSON.parse(localStorage.getItem('oncorCurrentProject')||'""'); }catch(e){}
+        var data = JSON.parse(localStorage.getItem('oncor_ap_v1_'+proj)||'[]');
+        var now = Date.now();
+        var overdue = data.filter(function(b){ return (b.status==='Unpaid'||b.status==='Partial') && b.dueDate && new Date(b.dueDate).getTime()<now; });
+        var soon = data.filter(function(b){ return (b.status==='Unpaid'||b.status==='Partial') && b.dueDate && new Date(b.dueDate).getTime()-now<7*86400000 && new Date(b.dueDate).getTime()>now; });
+        if(overdue.length>0) return {sev:'red',msg:overdue.length+' overdue bill(s) · '+soon.length+' due within 7d'};
+        if(soon.length>0) return {sev:'amber',msg:soon.length+' bill(s) due within 7 days'};
+        return {sev:'green',msg:'AP current'};
+      }catch(e){ return {sev:'gray',msg:'No data'}; }
+    }},
+    { key:'lien', label:'TX Lien Deadlines', icon:'⚖️', fn: function(){
+      try{
+        var proj = '';
+        try{ proj = JSON.parse(localStorage.getItem('oncorCurrentProject')||'""'); }catch(e){}
+        var data = JSON.parse(localStorage.getItem('oncor_lien_notices_v1_'+proj)||'{}');
+        var now = Date.now();
+        var alerts = [];
+        ['ntoDeadline','lienDeadline','bondDeadline'].forEach(function(k){
+          if(data[k]){
+            var d = new Date(data[k]).getTime();
+            var diff = Math.round((d-now)/86400000);
+            if(diff<0) alerts.push('MISSED: '+k.replace('Deadline','').toUpperCase()+' NTO');
+            else if(diff<=14) alerts.push(k.replace('Deadline','').toUpperCase()+' in '+diff+'d');
+          }
+        });
+        if(alerts.some(function(a){ return a.indexOf('MISSED')>-1; })) return {sev:'red',msg:alerts.join(' | ')};
+        if(alerts.length>0) return {sev:'amber',msg:alerts.join(' | ')};
+        return {sev:'green',msg:'No upcoming lien deadlines'};
+      }catch(e){ return {sev:'gray',msg:'No data'}; }
+    }},
+    { key:'qc', label:'QC Cylinder Breaks', icon:'🧪', fn: function(){
+      try{
+        var proj = '';
+        try{ proj = JSON.parse(localStorage.getItem('oncorCurrentProject')||'""'); }catch(e){}
+        var data = JSON.parse(localStorage.getItem('oncor_qc_log_v1_'+proj)||'[]');
+        var failed = data.filter(function(t){ return t.result28==='fail'; });
+        var now = Date.now();
+        var due = data.filter(function(t){ if(!t.castDate||t.break28) return false; var d28=new Date(t.castDate).getTime()+28*86400000; return d28-now<7*86400000&&d28>now; });
+        if(failed.length>0) return {sev:'red',msg:failed.length+' FAILED 28-day break(s) — ACI 318 §26.12.4 investigation required'};
+        if(due.length>0) return {sev:'amber',msg:due.length+' 28-day break(s) due within 7 days'};
+        return {sev:'green',msg:'All cylinder results OK'};
+      }catch(e){ return {sev:'gray',msg:'No data'}; }
+    }},
+    { key:'rfi', label:'RFIs & Submittals', icon:'📋', fn: function(){
+      try{
+        var proj = '';
+        try{ proj = JSON.parse(localStorage.getItem('oncorCurrentProject')||'""'); }catch(e){}
+        var rfis = JSON.parse(localStorage.getItem('oncor_rfi_log_v1_'+proj)||'[]');
+        var subs = JSON.parse(localStorage.getItem('oncor_submittal_log_v1_'+proj)||'[]');
+        var now = Date.now();
+        var ovrRFI = rfis.filter(function(r){ return r.status==='Open'||r.status==='Under Review'; });
+        var rfiOverdue = rfis.filter(function(r){ return (r.status==='Open'||r.status==='Under Review')&&r.responseDue&&new Date(r.responseDue).getTime()<now; });
+        var rnr = subs.filter(function(s){ return s.status==='Revise & Resubmit'; });
+        if(rfiOverdue.length>0||rnr.length>0) return {sev:'amber',msg:rfiOverdue.length+' overdue RFI(s) · '+rnr.length+' submittal(s) need resubmit'};
+        if(ovrRFI.length>5) return {sev:'amber',msg:ovrRFI.length+' open RFI(s)'};
+        return {sev:'green',msg:ovrRFI.length+' open RFI(s) · '+subs.filter(function(s){ return s.status==='Approved'; }).length+' submittals approved'};
+      }catch(e){ return {sev:'gray',msg:'No data'}; }
+    }},
+    { key:'punch', label:'Punch List', icon:'✅', fn: function(){
+      try{
+        var proj = '';
+        try{ proj = JSON.parse(localStorage.getItem('oncorCurrentProject')||'""'); }catch(e){}
+        var data = JSON.parse(localStorage.getItem('oncor_punch_list_v1_'+proj)||'[]');
+        var open = data.filter(function(p){ return p.status!=='Complete'&&p.status!=='N/A'; });
+        var now = Date.now();
+        var overdue = open.filter(function(p){ return p.dueDate && new Date(p.dueDate).getTime()<now; });
+        if(overdue.length>0) return {sev:'amber',msg:overdue.length+' overdue punch item(s) · '+open.length+' total open'};
+        if(open.length>0) return {sev:'amber',msg:open.length+' open punch item(s)'};
+        return {sev:'green',msg:'Punch list clear ('+data.length+' items complete)'};
+      }catch(e){ return {sev:'gray',msg:'No data'}; }
+    }},
+    { key:'safety', label:'Safety / OSHA', icon:'🦺', fn: function(){
+      try{
+        var proj = '';
+        try{ proj = JSON.parse(localStorage.getItem('oncorCurrentProject')||'""'); }catch(e){}
+        var data = JSON.parse(localStorage.getItem('oncor_safety_v1_'+proj)||'{}');
+        var talks = data.talks||[];
+        var incidents = (data.incidents||[]).filter(function(i){ return i.status==='Open'||i.status==='In Progress'; });
+        var oshaRec = (data.incidents||[]).filter(function(i){ return i.oshaRecordable==='Yes'; });
+        var now = Date.now();
+        var lastTalk = talks.length>0?new Date(talks[talks.length-1].date).getTime():0;
+        var daysSinceTalk = lastTalk>0?Math.round((now-lastTalk)/86400000):999;
+        if(oshaRec.length>0||incidents.length>0) return {sev:'red',msg:oshaRec.length+' OSHA recordable(s) · '+incidents.length+' open incident(s)'};
+        if(daysSinceTalk>7) return {sev:'amber',msg:'No toolbox talk in '+daysSinceTalk+' days'};
+        return {sev:'green',msg:'Last talk '+daysSinceTalk+'d ago · No open incidents'};
+      }catch(e){ return {sev:'gray',msg:'No data'}; }
+    }},
+    { key:'coi', label:'Sub COI Expiry', icon:'🤝', fn: function(){
+      try{
+        var proj = '';
+        try{ proj = JSON.parse(localStorage.getItem('oncorCurrentProject')||'""'); }catch(e){}
+        var data = JSON.parse(localStorage.getItem('oncor_subs_v1_'+proj)||'[]');
+        var now = Date.now();
+        var expired = data.filter(function(s){
+          return (s.glExpiry&&new Date(s.glExpiry).getTime()<now)||(s.wcExpiry&&new Date(s.wcExpiry).getTime()<now);
+        });
+        var expiringSoon = data.filter(function(s){
+          return !expired.includes(s) && ((s.glExpiry&&new Date(s.glExpiry).getTime()-now<30*86400000)||(s.wcExpiry&&new Date(s.wcExpiry).getTime()-now<30*86400000));
+        });
+        if(expired.length>0) return {sev:'red',msg:expired.length+' sub(s) with EXPIRED COI — stop work risk'};
+        if(expiringSoon.length>0) return {sev:'amber',msg:expiringSoon.length+' sub COI(s) expiring within 30 days'};
+        return {sev:'green',msg:data.length+' subs · All COIs current'};
+      }catch(e){ return {sev:'gray',msg:'No data'}; }
+    }},
+    { key:'risk', label:'Risk Register', icon:'⚠️', fn: function(){
+      try{
+        var proj = '';
+        try{ proj = JSON.parse(localStorage.getItem('oncorCurrentProject')||'""'); }catch(e){}
+        var data = JSON.parse(localStorage.getItem('oncor_rr_v1_'+proj)||'[]');
+        var critical = data.filter(function(r){ return (r.likelihood||1)*(r.impact||1)>=20 && (r.status==='Open'||r.status==='Monitoring'); });
+        var high = data.filter(function(r){ var s=(r.likelihood||1)*(r.impact||1); return s>=12&&s<20&&(r.status==='Open'||r.status==='Monitoring'); });
+        if(critical.length>0) return {sev:'red',msg:critical.length+' CRITICAL risk(s) open · '+high.length+' high'};
+        if(high.length>0) return {sev:'amber',msg:high.length+' high risk(s) open'};
+        return {sev:'green',msg:'No critical/high risks open'};
+      }catch(e){ return {sev:'gray',msg:'No data'}; }
+    }},
+    { key:'equip', label:'Equipment Returns', icon:'🔧', fn: function(){
+      try{
+        var proj = '';
+        try{ proj = JSON.parse(localStorage.getItem('oncorCurrentProject')||'""'); }catch(e){}
+        var data = JSON.parse(localStorage.getItem('oncor_rental_v1_'+proj)||'[]');
+        var now = Date.now();
+        var overdue = data.filter(function(e){ return e.status==='On Rent'&&e.returnDate&&new Date(e.returnDate).getTime()<now; });
+        var soon = data.filter(function(e){ return e.status==='On Rent'&&e.returnDate&&new Date(e.returnDate).getTime()-now<3*86400000&&new Date(e.returnDate).getTime()>now; });
+        if(overdue.length>0) return {sev:'red',msg:overdue.length+' overdue return(s) — daily charges accruing!'};
+        if(soon.length>0) return {sev:'amber',msg:soon.length+' equipment return(s) due within 3 days'};
+        return {sev:'green',msg:data.filter(function(e){ return e.status==='On Rent'; }).length+' item(s) on rent · Returns on schedule'};
+      }catch(e){ return {sev:'gray',msg:'No data'}; }
+    }},
+    { key:'inspections', label:'Inspections', icon:'🏗️', fn: function(){
+      try{
+        var proj = '';
+        try{ proj = JSON.parse(localStorage.getItem('oncorCurrentProject')||'""'); }catch(e){}
+        var data = JSON.parse(localStorage.getItem('oncor_inspections_v1_'+proj)||'[]');
+        var failed = data.filter(function(i){ return i.status==='Failed'||i.status==='Re-Inspection Required'; });
+        var now = Date.now();
+        var upcoming = data.filter(function(i){ return i.status==='Scheduled'&&i.date&&new Date(i.date).getTime()-now<7*86400000&&new Date(i.date).getTime()>now; });
+        if(failed.length>0) return {sev:'red',msg:failed.length+' failed/re-inspection(s) required'};
+        if(upcoming.length>0) return {sev:'amber',msg:upcoming.length+' inspection(s) in next 7 days'};
+        return {sev:'green',msg:'No failed inspections'};
+      }catch(e){ return {sev:'gray',msg:'No data'}; }
+    }},
+    { key:'co', label:'Change Orders', icon:'📝', fn: function(){
+      try{
+        var proj = '';
+        try{ proj = JSON.parse(localStorage.getItem('oncorCurrentProject')||'""'); }catch(e){}
+        var data = JSON.parse(localStorage.getItem('oncor_change_orders_v1_'+proj)||'[]');
+        var pending = data.filter(function(c){ return c.status==='Pending'||c.status==='Draft'; });
+        var pendVal = pending.reduce(function(s,c){ return s+(c.total||0); },0);
+        if(pending.length>0) return {sev:'amber',msg:pending.length+' unsigned CO(s) · $'+pendVal.toLocaleString()+' pending signature'};
+        return {sev:'green',msg:data.filter(function(c){ return c.status==='Signed'; }).length+' CO(s) signed'};
+      }catch(e){ return {sev:'gray',msg:'No data'}; }
+    }}
+  ];
+
+  var SEV_COLOR = {red:'#dc2626',amber:'#d97706',green:'#16a34a',gray:'#475569'};
+  var SEV_BG = {red:'#1f0a0a',amber:'#1c1208',green:'#0a1f0e',gray:'#1e293b'};
+  var SEV_BORDER = {red:'#dc2626',amber:'#d97706',green:'#16a34a',gray:'#334155'};
+  var SEV_ICON = {red:'🔴',amber:'⚠️',green:'✅',gray:'—'};
+
+  function runChecks(){
+    return CHECKS.map(function(c){ return {key:c.key,label:c.label,icon:c.icon,result:c.fn()}; });
+  }
+
+  function renderPulse(container){
+    var results = runChecks();
+    var redCount = results.filter(function(r){ return r.result.sev==='red'; }).length;
+    var ambCount = results.filter(function(r){ return r.result.sev==='amber'; }).length;
+
+    var headerColor = redCount>0?'#dc2626':ambCount>0?'#d97706':'#16a34a';
+    var headerMsg = redCount>0?(redCount+' CRITICAL alert'+(redCount>1?'s':'')):ambCount>0?(ambCount+' watch item'+(ambCount>1?'s':'')):' All systems clear';
+    var headerEmoji = redCount>0?'🚨':ambCount>0?'⚠️':'✅';
+
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+      +'<div><div style="font-size:16px;font-weight:700;color:#38bdf8">🔔 Oncor Project Pulse</div>'
+        +'<div style="font-size:11px;color:#64748b">Cross-module health check · F10 to open/close</div></div>'
+      +'<div style="display:flex;gap:8px">'
+        +'<button onclick="window._PP_refresh()" style="background:#0284c7;border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px">🔄 Refresh</button>'
+        +'<button onclick="window._PP_print()" style="background:#475569;border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px">🖨️ Print</button>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:#374151;border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px">✕</button>'
+      +'</div></div>'
+
+      // Summary banner
+      +'<div style="background:'+SEV_BG[redCount>0?'red':ambCount>0?'amber':'green']+';border:1px solid '+headerColor+';border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">'
+        +'<span style="font-size:20px">'+headerEmoji+'</span>'
+        +'<div><div style="font-size:14px;font-weight:700;color:'+headerColor+'">'+headerMsg+'</div>'
+          +'<div style="font-size:11px;color:#94a3b8">'+results.length+' modules checked · '+new Date().toLocaleTimeString()+'</div></div>'
+      +'</div>'
+
+      // Cards grid
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">';
+
+    results.forEach(function(r){
+      var s = r.result.sev;
+      html += '<div style="background:'+SEV_BG[s]+';border:1px solid '+SEV_BORDER[s]+';border-radius:8px;padding:12px">'
+        +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+          +'<span style="font-size:16px">'+r.icon+'</span>'
+          +'<span style="font-size:12px;font-weight:600;color:#e2e8f0">'+r.label+'</span>'
+          +'<span style="margin-left:auto;font-size:14px">'+SEV_ICON[s]+'</span>'
+        +'</div>'
+        +'<div style="font-size:11px;color:'+SEV_COLOR[s]+'">'+r.result.msg+'</div>'
+        +'</div>';
+    });
+
+    html += '</div>'
+      +'<div style="margin-top:12px;font-size:10px;color:#475569;text-align:center">Data from localStorage · Last refresh: '+new Date().toLocaleString()+'</div>';
+
+    container.innerHTML = html;
+  }
+
+  window._PP_refresh = function(){
+    var el = document.getElementById(MODAL_ID);
+    if(el){ var box = el.querySelector('.pp-box'); if(box) renderPulse(box); }
+  };
+
+  window._PP_print = function(){
+    var results = runChecks();
+    var rows = results.map(function(r){
+      var s = r.result.sev;
+      var bg = s==='red'?'#fee2e2':s==='amber'?'#fef3c7':s==='green'?'#dcfce7':'#f1f5f9';
+      return '<tr style="background:'+bg+'"><td style="padding:6px 10px;font-size:11px">'+r.icon+' '+r.label+'</td>'
+        +'<td style="padding:6px 10px;font-size:11px;font-weight:700">'+(SEV_ICON[s]+' '+s.toUpperCase())+'</td>'
+        +'<td style="padding:6px 10px;font-size:11px">'+r.result.msg+'</td></tr>';
+    }).join('');
+    var w = window.open('','_blank');
+    w.document.write('<!DOCTYPE html><html><head><title>Project Pulse</title>'
+      +'<style>body{font-family:sans-serif;padding:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d1d5db}th{background:#f9fafb;text-align:left;padding:6px 10px;font-size:11px}@media print{.np{display:none}}</style>'
+      +'</head><body>'
+      +'<div style="display:flex;justify-content:space-between"><div><h2 style="margin:0">🔔 Oncor Project Pulse</h2><div style="font-size:12px;color:#6b7280">'+new Date().toLocaleString()+'</div></div>'
+        +'<button class="np" onclick="window.print()" style="padding:8px 16px;background:#0284c7;color:#fff;border:none;border-radius:6px;cursor:pointer">🖨️ Print</button></div><hr>'
+      +'<table><thead><tr><th>Module</th><th>Status</th><th>Detail</th></tr></thead><tbody>'
+      +rows+'</tbody></table>'
+      +'<div style="margin-top:8px;font-size:10px;color:#9ca3af">CONFIDENTIAL — ONCOR INTERNAL</div>'
+      +'</body></html>');
+    w.document.close();
+  };
+
+  function openPulse(){
+    var el = document.getElementById(MODAL_ID);
+    if(!el){
+      el = document.createElement('div');
+      el.id = MODAL_ID;
+      el.style.cssText = 'display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:10096;align-items:center;justify-content:center';
+      el.onclick = function(e){ if(e.target===el) el.style.display='none'; };
+      var box = document.createElement('div');
+      box.className = 'pp-box';
+      box.style.cssText = 'background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:96%;max-width:900px;max-height:90vh;overflow-y:auto;color:#e2e8f0';
+      renderPulse(box);
+      el.appendChild(box);
+      document.body.appendChild(el);
+    } else {
+      var isHidden = el.style.display==='none';
+      if(isHidden){
+        el.style.display='flex';
+        renderPulse(el.querySelector('.pp-box'));
+      } else {
+        el.style.display='none';
+      }
+    }
+  }
+
+  // Sidebar button
+  document.addEventListener('DOMContentLoaded', function(){
+    var btn = document.createElement('button');
+    btn.textContent = '🔔 Project Pulse';
+    btn.title = 'Oncor Project Pulse — F10';
+    btn.style.cssText = 'background:#7c3aed;border:none;color:#fff;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;width:100%;text-align:left;margin-bottom:4px';
+    btn.onclick = openPulse;
+    var interval = setInterval(function(){
+      var sb = document.querySelector('.sidebar-inner, .action-buttons, [class*="sidebar"]');
+      if(sb){ sb.appendChild(btn); clearInterval(interval); }
+    },500);
+  });
+
+  // Keyboard shortcut F10
+  document.addEventListener('keydown', function(e){
+    if(e.key==='F10' && !e.ctrlKey && !e.altKey){
+      e.preventDefault();
+      openPulse();
+    }
+  });
+
+})();
+
+/* ─────────────────────────────────────────────────────────
+   🚚 BATCH TICKET VIOLATION CHECKER (F11)
+   Rapid ASTM C94 / ACI 304R batch plant ticket audit.
+   Enter key ticket data — flags slump over-tolerance,
+   water-added violations, hot weather (ACI 305R),
+   cold weather (ACI 306R), over-time discharge limit.
+   Saves audit log per session for job file.
+   ───────────────────────────────────────────────────────── */
+(function(){
+  var MODAL_ID = 'overlay-batchaudit';
+  var STORAGE_KEY = 'oncor_batchaudit_v1';
+  var auditLog = [];
+
+  function load(proj){
+    try{ auditLog = JSON.parse(localStorage.getItem(STORAGE_KEY+'_'+(proj||''))||'[]'); }catch(e){ auditLog=[]; }
+  }
+  function save(proj){
+    localStorage.setItem(STORAGE_KEY+'_'+(proj||''), JSON.stringify(auditLog));
+  }
+  function getProj(){
+    try{ return JSON.parse(localStorage.getItem('oncorCurrentProject')||'""'); }catch(e){ return ''; }
+  }
+
+  function checkTicket(t){
+    var flags = [];
+    var sev = 'ok';
+
+    // Water added
+    if((t.waterAdded||0)>0){
+      var maxWater = (t.yd3||9)*1; // 1 gal/yd³ per ASTM C94 §11.8
+      flags.push({sev:'warn',code:'ASTM C94 §11.8',msg:'Water added on-site: '+(t.waterAdded)+' gal (max '+(maxWater.toFixed(1))+' gal). Verify slump does not exceed max.'});
+      if((t.waterAdded||0)>(maxWater+0.5)) sev='fail';
+      else sev=sev==='ok'?'warn':sev;
+    }
+
+    // Slump
+    if((t.slump||0)>(t.maxSlump||12)){
+      flags.push({sev:'fail',code:'ASTM C143',msg:'Over-slump: '+t.slump+'" actual vs '+t.maxSlump+'" max. Load should be REJECTED.'});
+      sev='fail';
+    }
+
+    // Concrete temp — hot
+    if((t.concreteTemp||0)>90){
+      flags.push({sev:'fail',code:'ACI 305R-10',msg:'Concrete temp '+t.concreteTemp+'°F exceeds 90°F limit. ACI 305R hot weather procedures required. Do not place.'});
+      sev='fail';
+    } else if((t.concreteTemp||0)>80){
+      flags.push({sev:'warn',code:'ACI 305R-10',msg:'Concrete temp '+t.concreteTemp+'°F approaching 90°F limit. Monitor closely.'});
+      sev=sev==='ok'?'warn':sev;
+    }
+
+    // Concrete temp — cold
+    if((t.concreteTemp||0)>0&&(t.concreteTemp||0)<50){
+      flags.push({sev:'fail',code:'ACI 306R-16',msg:'Concrete temp '+t.concreteTemp+'°F below 50°F minimum. ACI 306R cold weather procedures required.'});
+      sev='fail';
+    } else if((t.concreteTemp||0)>=50&&(t.concreteTemp||0)<55){
+      flags.push({sev:'warn',code:'ACI 306R-16',msg:'Concrete temp '+t.concreteTemp+'°F — marginal. Protect against temperature drop during placement.'});
+      sev=sev==='ok'?'warn':sev;
+    }
+
+    // Discharge time
+    if(t.batchTime && t.arrivalTime){
+      var batch = new Date('2000-01-01T'+t.batchTime).getTime();
+      var arrive = new Date('2000-01-01T'+t.arrivalTime).getTime();
+      var transit = (arrive-batch)/60000; // minutes
+      if(transit>90){
+        flags.push({sev:'fail',code:'ASTM C94 §11.8',msg:'Transit time ~'+Math.round(transit)+' min exceeds 90-min limit. Verify drum revolutions (max 300) before rejection.'});
+        sev='fail';
+      } else if(transit>75){
+        flags.push({sev:'warn',code:'ASTM C94 §11.8',msg:'Transit time ~'+Math.round(transit)+' min. Approaching 90-min limit. '+(90-Math.round(transit))+' minutes remaining.'});
+        sev=sev==='ok'?'warn':sev;
+      }
+    }
+
+    // Drum revolutions (if provided)
+    if((t.drumRev||0)>0){
+      if((t.drumRev||0)>300){
+        flags.push({sev:'fail',code:'ASTM C94 §11.8',msg:'Drum revolutions '+t.drumRev+' exceed 300-rev limit. Load MUST BE REJECTED per ASTM C94.'});
+        sev='fail';
+      } else if((t.drumRev||0)>250){
+        flags.push({sev:'warn',code:'ASTM C94 §11.8',msg:'Drum revolutions '+t.drumRev+' — approaching 300-rev limit ('+Math.round(300-t.drumRev)+' remaining).'});
+        sev=sev==='ok'?'warn':sev;
+      }
+    }
+
+    // Air content (if provided)
+    if((t.air||0)>0 && (t.maxAir||0)>0){
+      if((t.air||0)>(t.maxAir||0)+0.5){
+        flags.push({sev:'warn',code:'ASTM C231',msg:'Air content '+t.air+'% exceeds max '+t.maxAir+'%. Reduces strength ~5% per 1% excess air above spec.'});
+        sev=sev==='ok'?'warn':sev;
+      }
+    }
+
+    if(flags.length===0) flags.push({sev:'ok',code:'All checks',msg:'Load passes all ASTM C94 / ACI 304R checks — ACCEPT'});
+    return {sev:sev, flags:flags};
+  }
+
+  function renderAuditLog(container){
+    var list = container.querySelector('#ba-list');
+    if(!list) return;
+    if(auditLog.length===0){
+      list.innerHTML = '<div style="text-align:center;color:#64748b;padding:20px;font-size:13px">No tickets audited yet. Enter ticket data above and click Check.</div>';
+      return;
+    }
+    var html = '';
+    auditLog.slice().reverse().forEach(function(entry,i){
+      var idx = auditLog.length-1-i;
+      var sevColor = entry.sev==='fail'?'#dc2626':entry.sev==='warn'?'#d97706':'#16a34a';
+      var sevBg = entry.sev==='fail'?'#1f0a0a':entry.sev==='warn'?'#1c1208':'#0a1f0e';
+      var sevLabel = entry.sev==='fail'?'🔴 REJECT':entry.sev==='warn'?'⚠️ CAUTION':'✅ ACCEPT';
+      var flags = entry.flags||[];
+      html += '<div style="background:'+sevBg+';border:1px solid '+sevColor+';border-radius:8px;padding:12px;margin-bottom:8px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+          +'<div>'
+            +'<span style="font-size:12px;font-weight:700;color:#e2e8f0">Ticket #'+entry.ticket+'</span>'
+            +(entry.plant?' <span style="font-size:11px;color:#94a3b8">| '+entry.plant+'</span>':'')
+            +(entry.yd3?' <span style="font-size:11px;color:#94a3b8">| '+entry.yd3+' yd³</span>':'')
+            +(entry.psi?' <span style="font-size:11px;color:#94a3b8">| '+entry.psi+' PSI</span>':'')
+          +'</div>'
+          +'<div style="display:flex;align-items:center;gap:8px">'
+            +'<span style="font-size:13px;font-weight:700;color:'+sevColor+'">'+sevLabel+'</span>'
+            +'<button onclick="window._BA_delete('+idx+')" style="background:#374151;border:none;color:#94a3b8;border-radius:4px;padding:2px 7px;cursor:pointer;font-size:11px">✕</button>'
+          +'</div>'
+        +'</div>'
+        +'<div style="font-size:10px;color:#64748b;margin-bottom:6px">'
+          +(entry.time?' Arrived: '+entry.arrivalTime:'')
+          +(entry.slump?' · Slump: '+entry.slump+'"':'')
+          +(entry.concreteTemp?' · Temp: '+entry.concreteTemp+'°F':'')
+          +(entry.waterAdded?' · Water: '+entry.waterAdded+' gal':'')
+          +(entry.drumRev?' · Drum Rev: '+entry.drumRev:'')
+        +'</div>';
+      flags.forEach(function(f){
+        var fc = f.sev==='fail'?'#dc2626':f.sev==='warn'?'#d97706':'#16a34a';
+        html += '<div style="background:rgba(255,255,255,0.03);border-left:3px solid '+fc+';padding:5px 8px;margin-top:4px;font-size:11px;color:'+fc+'">'
+          +'<span style="font-size:10px;opacity:0.7;font-family:monospace">['+f.code+']</span> '+f.msg
+          +'</div>';
+      });
+      html += '</div>';
+    });
+    list.innerHTML = html;
+  }
+
+  window._BA_delete = function(i){
+    auditLog.splice(i,1);
+    save(getProj());
+    var el = document.getElementById(MODAL_ID);
+    if(el) renderAuditLog(el.querySelector('.ba-box'));
+  };
+
+  window._BA_check = function(){
+    var ticket = (document.getElementById('ba-ticket').value||'').trim();
+    var t = {
+      ticket: ticket || ('T-'+Date.now()),
+      plant: document.getElementById('ba-plant').value,
+      yd3: parseFloat(document.getElementById('ba-yd3').value)||0,
+      psi: document.getElementById('ba-psi').value,
+      slump: parseFloat(document.getElementById('ba-slump').value)||0,
+      maxSlump: parseFloat(document.getElementById('ba-maxslump').value)||0,
+      concreteTemp: parseFloat(document.getElementById('ba-temp').value)||0,
+      waterAdded: parseFloat(document.getElementById('ba-water').value)||0,
+      drumRev: parseFloat(document.getElementById('ba-drum').value)||0,
+      air: parseFloat(document.getElementById('ba-air').value)||0,
+      maxAir: parseFloat(document.getElementById('ba-maxair').value)||0,
+      batchTime: document.getElementById('ba-batchtime').value,
+      arrivalTime: document.getElementById('ba-arrivaltime').value
+    };
+    var result = checkTicket(t);
+    var entry = Object.assign({},t,{sev:result.sev,flags:result.flags,timestamp:new Date().toISOString()});
+    auditLog.push(entry);
+    save(getProj());
+    var el = document.getElementById(MODAL_ID);
+    if(el) renderAuditLog(el.querySelector('.ba-box'));
+    // clear ticket number
+    document.getElementById('ba-ticket').value='';
+  };
+
+  window._BA_clearAll = function(){
+    if(!confirm('Clear audit log?')) return;
+    auditLog=[];
+    save(getProj());
+    var el = document.getElementById(MODAL_ID);
+    if(el) renderAuditLog(el.querySelector('.ba-box'));
+  };
+
+  window._BA_print = function(){
+    var rows = auditLog.map(function(entry){
+      var flags = (entry.flags||[]).map(function(f){ return '['+f.code+'] '+f.msg; }).join('\n');
+      var bg = entry.sev==='fail'?'#fee2e2':entry.sev==='warn'?'#fef3c7':'#dcfce7';
+      var verdict = entry.sev==='fail'?'REJECT':entry.sev==='warn'?'CAUTION':'ACCEPT';
+      return '<tr style="background:'+bg+'"><td style="padding:5px 8px;font-size:11px">'+entry.ticket+'</td>'
+        +'<td style="padding:5px 8px;font-size:11px">'+(entry.plant||'—')+'</td>'
+        +'<td style="padding:5px 8px;font-size:11px">'+(entry.yd3||'—')+'</td>'
+        +'<td style="padding:5px 8px;font-size:11px">'+(entry.slump||'—')+'"</td>'
+        +'<td style="padding:5px 8px;font-size:11px">'+(entry.concreteTemp||'—')+'°F</td>'
+        +'<td style="padding:5px 8px;font-size:11px">'+(entry.waterAdded||0)+' gal</td>'
+        +'<td style="padding:5px 8px;font-size:11px;font-weight:700">'+verdict+'</td>'
+        +'<td style="padding:5px 8px;font-size:10px;white-space:pre-wrap">'+flags+'</td>'
+        +'</tr>';
+    }).join('');
+    var w = window.open('','_blank');
+    w.document.write('<!DOCTYPE html><html><head><title>Batch Ticket Audit</title>'
+      +'<style>body{font-family:sans-serif;padding:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d1d5db;vertical-align:top}th{background:#f9fafb;text-align:left;padding:5px 8px;font-size:11px}@media print{.np{display:none}}</style>'
+      +'</head><body>'
+      +'<div style="display:flex;justify-content:space-between"><div><h2 style="margin:0">🚚 Batch Ticket Violation Audit Log</h2>'
+        +'<div style="font-size:12px;color:#6b7280">ASTM C94 / ACI 304R / ACI 305R / ACI 306R · '+new Date().toLocaleString()+'</div></div>'
+        +'<button class="np" onclick="window.print()" style="padding:8px 16px;background:#0284c7;color:#fff;border:none;border-radius:6px;cursor:pointer">🖨️ Print</button></div><hr>'
+      +'<table><thead><tr><th>Ticket #</th><th>Plant</th><th>yd³</th><th>Slump</th><th>Temp</th><th>Water Added</th><th>Verdict</th><th>Violations / Notes</th></tr></thead><tbody>'
+      +(rows||'<tr><td colspan="8" style="text-align:center;padding:20px;color:#9ca3af">No tickets in audit log</td></tr>')
+      +'</tbody></table>'
+      +'<div style="margin-top:8px;font-size:10px;color:#9ca3af">ASTM C94 §11.8: max 90 min / 300 drum revolutions / 1 gal/yd³ water addition. ACI 305R: max 90°F. ACI 306R: min 50°F. CONFIDENTIAL.</div>'
+      +'</body></html>');
+    w.document.close();
+  };
+
+  function buildModal(){
+    var el = document.getElementById(MODAL_ID);
+    if(el){
+      el.style.display='flex';
+      load(getProj());
+      renderAuditLog(el.querySelector('.ba-box'));
+      return;
+    }
+
+    el = document.createElement('div');
+    el.id = MODAL_ID;
+    el.style.cssText = 'display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:10097;align-items:center;justify-content:center';
+    el.onclick = function(e){ if(e.target===el) el.style.display='none'; };
+
+    var box = document.createElement('div');
+    box.className = 'ba-box';
+    box.style.cssText = 'background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:95%;max-width:820px;max-height:90vh;overflow-y:auto;color:#e2e8f0';
+
+    var inpStyle = 'background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px 8px;border-radius:6px;font-size:12px;width:80px';
+    var inpStyle2 = 'background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px 8px;border-radius:6px;font-size:12px;width:110px';
+
+    box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+      +'<div><div style="font-size:16px;font-weight:700;color:#38bdf8">🚚 Batch Ticket Violation Checker</div>'
+        +'<div style="font-size:11px;color:#64748b">ASTM C94 / ACI 304R / ACI 305R / ACI 306R compliance · F11 to open/close</div></div>'
+      +'<div style="display:flex;gap:8px">'
+        +'<button onclick="window._BA_print()" style="background:#0284c7;border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px">🖨️ Print Log</button>'
+        +'<button onclick="window._BA_clearAll()" style="background:#475569;border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px">🗑 Clear</button>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:#374151;border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px">✕</button>'
+      +'</div></div>'
+
+      // Data entry form
+      +'<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:16px;border:1px solid #334155">'
+        +'<div style="font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">Enter Ticket Data</div>'
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">'
+          +'<div><label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px">Ticket #</label><input id="ba-ticket" placeholder="12345" style="'+inpStyle+'"></div>'
+          +'<div><label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px">Batch Plant</label><input id="ba-plant" placeholder="Martin M." style="'+inpStyle2+'"></div>'
+          +'<div><label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px">yd³</label><input id="ba-yd3" type="number" step="0.5" placeholder="9" style="'+inpStyle+'"></div>'
+          +'<div><label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px">PSI</label>'
+            +'<select id="ba-psi" style="'+inpStyle+'">'
+              +'<option>3000</option><option>3500</option><option selected>4000</option><option>4500</option><option>5000</option><option>6000</option>'
+            +'</select></div>'
+          +'<div><label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px">Slump (in)</label><input id="ba-slump" type="number" step="0.25" placeholder="4" style="'+inpStyle+'"></div>'
+          +'<div><label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px">Max Slump (in)</label><input id="ba-maxslump" type="number" step="0.25" placeholder="6" style="'+inpStyle+'"></div>'
+          +'<div><label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px">Conc. Temp °F</label><input id="ba-temp" type="number" placeholder="75" style="'+inpStyle+'"></div>'
+          +'<div><label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px">Water Added (gal)</label><input id="ba-water" type="number" step="0.5" placeholder="0" style="'+inpStyle+'"></div>'
+          +'<div><label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px">Drum Rev</label><input id="ba-drum" type="number" placeholder="0" style="'+inpStyle+'"></div>'
+          +'<div><label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px">Air %</label><input id="ba-air" type="number" step="0.1" placeholder="0" style="'+inpStyle+'"></div>'
+          +'<div><label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px">Max Air %</label><input id="ba-maxair" type="number" step="0.1" placeholder="0" style="'+inpStyle+'"></div>'
+          +'<div><label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px">Batch Time</label><input id="ba-batchtime" type="time" style="'+inpStyle+'"></div>'
+          +'<div><label style="font-size:10px;color:#64748b;display:block;margin-bottom:3px">Arrival Time</label><input id="ba-arrivaltime" type="time" style="'+inpStyle+'"></div>'
+          +'<button onclick="window._BA_check()" style="background:#dc2626;border:none;color:#fff;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:13px;font-weight:700;align-self:flex-end">⚡ CHECK</button>'
+        +'</div></div>'
+
+      // Reference bar
+      +'<div style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;margin-bottom:14px;font-size:10px;color:#64748b;display:flex;gap:16px;flex-wrap:wrap">'
+        +'<span><strong style="color:#94a3b8">ASTM C94:</strong> Max 90 min · Max 300 rev · Max 1 gal/yd³ water</span>'
+        +'<span><strong style="color:#94a3b8">ACI 305R:</strong> Max 90°F concrete temp</span>'
+        +'<span><strong style="color:#94a3b8">ACI 306R:</strong> Min 50°F concrete temp</span>'
+      +'</div>'
+
+      // Audit log list
+      +'<div id="ba-list"></div>';
+
+    el.appendChild(box);
+    document.body.appendChild(el);
+    load(getProj());
+    renderAuditLog(box);
+  }
+
+  // Sidebar button
+  document.addEventListener('DOMContentLoaded', function(){
+    var btn = document.createElement('button');
+    btn.textContent = '🚚 Batch Ticket Checker';
+    btn.title = 'Batch Ticket Violation Checker — F11';
+    btn.style.cssText = 'background:#b45309;border:none;color:#fff;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;width:100%;text-align:left;margin-bottom:4px';
+    btn.onclick = buildModal;
+    var interval = setInterval(function(){
+      var sb = document.querySelector('.sidebar-inner, .action-buttons, [class*="sidebar"]');
+      if(sb){ sb.appendChild(btn); clearInterval(interval); }
+    },500);
+  });
+
+  // Keyboard shortcut F11
+  document.addEventListener('keydown', function(e){
+    if(e.key==='F11' && !e.ctrlKey && !e.altKey){
+      e.preventDefault();
+      var el = document.getElementById(MODAL_ID);
+      if(el && el.style.display!=='none'){ el.style.display='none'; return; }
+      buildModal();
+    }
+  });
+
+})();
+
+/* ─── Session #122 Escape Handler ─── */
+(function(){
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'){
+      ['overlay-quicktakeoff','overlay-projpulse','overlay-batchaudit'].forEach(function(id){
+        var el=document.getElementById(id);if(el&&el.style.display!=='none')el.style.display='none';
+      });
+    }
+  });
+})();
+
+// ==================== END SESSION #122 — Zeus ⚡ Quick Takeoff Pad (F8) + Oncor Project Pulse (F10) + Batch Ticket Violation Checker (F11) (+635 lines) ====================
+
 
 })();
