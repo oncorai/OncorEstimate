@@ -177620,4 +177620,465 @@ document.addEventListener('keydown', function(e) {
 
 // ==================== END SESSION #109 — Zeus ⚡ Daily Dispatch Board + Labor Burden Calculator + Concrete Price Tracker ====================
 
+
+// ==================== SESSION #110 — Zeus ⚡ Punch Clock & Shift Timer + Bid Margin Sensitivity Analyzer + Subgrade Prep Estimator ====================
+(function(){
+'use strict';
+
+function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ⏱ PUNCH CLOCK & SHIFT TIMER
+   Purpose: Track when crew clocks in/out, calculate shift duration and labor cost.
+   Real-time elapsed timer on active shifts. Perfect for T&M jobs and timecard audits.
+   Ctrl+Alt+P to open.
+═══════════════════════════════════════════════════════════════════════════ */
+window._oncorPunchClock = (function(){
+  var KEY = 'oncor_punchclock_v1';
+  var MODAL_ID = 'overlay-punchclock';
+  var timerInterval = null;
+
+  var TRADES = [
+    {label:'Foreman',rate:90},{label:'Concrete Finisher',rate:78},{label:'Laborer',rate:52},
+    {label:'Form Setter',rate:65},{label:'Rebar Placer',rate:68},{label:'Pump Operator',rate:88},
+    {label:'Saw Cutter',rate:72},{label:'Equipment Operator',rate:85},{label:'Helper',rate:46},{label:'Other',rate:60}
+  ];
+
+  function load(){ try{ return JSON.parse(localStorage.getItem(KEY))||{workers:[],history:[]}; }catch(e){ return {workers:[],history:[]}; } }
+  function save(d){ localStorage.setItem(KEY,JSON.stringify(d)); }
+  function fmt(d){ return d ? new Date(d).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '—'; }
+  function fmtDate(d){ return d ? new Date(d).toLocaleDateString([],{month:'short',day:'numeric'}) : '—'; }
+  function elapsed(start){ var ms = Date.now()-new Date(start).getTime(); var h=Math.floor(ms/3600000); var m=Math.floor((ms%3600000)/60000); return h+'h '+m+'m'; }
+  function elapsedHrs(start,end){ return Math.round(((end?new Date(end).getTime():Date.now())-new Date(start).getTime())/360000)/10; }
+
+  function clockIn(name,trade,rate){
+    var d = load();
+    var already = d.workers.filter(function(w){ return w.name===name && !w.out; })[0];
+    if(already){ alert(name+' is already clocked in!'); return; }
+    d.workers.push({name:name,trade:trade,rate:parseFloat(rate)||60,in:new Date().toISOString(),out:null});
+    save(d); render();
+  }
+
+  function clockOut(idx){
+    var d = load();
+    var w = d.workers[idx];
+    if(!w||w.out) return;
+    w.out = new Date().toISOString();
+    var hrs = elapsedHrs(w.in,w.out);
+    d.history.push({name:w.name,trade:w.trade,rate:w.rate,in:w.in,out:w.out,hrs:hrs,cost:hrs*w.rate,date:new Date(w.in).toDateString()});
+    d.workers.splice(idx,1);
+    save(d); render();
+  }
+
+  function clearAll(){ if(confirm('Clear all active clocks?')){ var d=load(); d.workers=[]; save(d); render(); } }
+  function clearHistory(){ if(confirm('Clear shift history?')){ var d=load(); d.history=[]; save(d); render(); } }
+
+  function render(){
+    var el = document.getElementById('punchclock-content'); if(!el) return;
+    var d = load();
+    var activeCost = d.workers.reduce(function(s,w){ return s+elapsedHrs(w.in,null)*w.rate; },0);
+    var histTotal = d.history.reduce(function(s,h){ return s+h.hrs; },0);
+    var histCost = d.history.reduce(function(s,h){ return s+h.cost; },0);
+
+    var html = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+      +'<div style="flex:1;min-width:90px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700;color:#22d3ee">'+d.workers.length+'</div><div style="font-size:11px;color:#94a3b8">On the Clock</div></div>'
+      +'<div style="flex:1;min-width:90px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div id="pc-active-cost" style="font-size:20px;font-weight:700;color:#f59e0b">$'+activeCost.toFixed(0)+'</div><div style="font-size:11px;color:#94a3b8">Running Cost</div></div>'
+      +'<div style="flex:1;min-width:90px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700;color:#4ade80">'+histTotal.toFixed(1)+'h</div><div style="font-size:11px;color:#94a3b8">Total Hrs</div></div>'
+      +'<div style="flex:1;min-width:90px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700;color:#a78bfa">$'+histCost.toFixed(0)+'</div><div style="font-size:11px;color:#94a3b8">Shift Cost</div></div>'
+      +'</div>';
+
+    html += '<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:12px">'
+      +'<div style="font-weight:600;margin-bottom:8px;color:#22d3ee">⏱ Clock In Worker</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px">'
+      +'<div><label style="font-size:11px;color:#94a3b8">Worker Name</label><input type="text" id="pc-name" placeholder="e.g. Carlos" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Trade</label><select id="pc-trade" onchange="document.getElementById('pc-rate').value=this.value.split('|')[1]" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb">'+TRADES.map(function(t){ return '<option value="'+t.label+'|'+t.rate+'">'+t.label+' ($'+t.rate+'/hr)</option>'; }).join('')+'</select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Rate $/hr</label><input type="number" id="pc-rate" value="90" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;box-sizing:border-box"></div>'
+      +'</div>'
+      +'<button onclick="(function(){ var n=document.getElementById('pc-name').value.trim(),ts=document.getElementById('pc-trade').value.split('|'),r=document.getElementById('pc-rate').value; if(!n){alert('Enter worker name');return;} window._oncorPunchClock._clockIn(n,ts[0],r); document.getElementById('pc-name').value=''; })()" style="margin-top:10px;padding:8px 20px;background:#22d3ee;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:700">⏱ Clock In</button>'
+      +'</div>';
+
+    if(d.workers.length){
+      html += '<div style="font-weight:600;margin-bottom:8px;color:#4ade80">🟢 Currently Clocked In</div>';
+      d.workers.forEach(function(w,i){
+        html += '<div style="background:#1e293b;border:1px solid #22d3ee;border-radius:8px;padding:10px;margin-bottom:8px;display:flex;align-items:center;gap:12px">'
+          +'<div style="flex:1"><div style="font-weight:700">'+_esc(w.name)+'</div><div style="font-size:12px;color:#94a3b8">'+_esc(w.trade)+' &middot; $'+w.rate+'/hr</div>'
+          +'<div style="font-size:12px;color:#f59e0b;margin-top:2px">In: '+fmt(w.in)+' &middot; <span class="pc-elapsed" data-in="'+_esc(w.in)+'">'+elapsed(w.in)+'</span></div></div>'
+          +'<button onclick="window._oncorPunchClock._clockOut('+i+')" style="padding:8px 14px;background:#dc2626;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700">Clock Out</button>'
+          +'</div>';
+      });
+      html += '<button onclick="window._oncorPunchClock._clearAll()" style="margin-bottom:12px;padding:5px 10px;background:#475569;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">Clear All Clocks</button>';
+    } else {
+      html += '<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:12px;text-align:center;color:#64748b">No workers currently clocked in.</div>';
+    }
+
+    if(d.history.length){
+      var grouped = {};
+      d.history.forEach(function(h){ if(!grouped[h.date]) grouped[h.date]=[]; grouped[h.date].push(h); });
+      var dates = Object.keys(grouped).sort(function(a,b){ return new Date(b)-new Date(a); });
+      html += '<div style="font-weight:600;margin-bottom:8px;color:#a78bfa">📋 Shift History</div>';
+      html += '<button onclick="window._oncorPunchClock._print()" style="padding:5px 10px;background:#475569;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;margin-bottom:8px;margin-right:6px">🖨️ Print Report</button>';
+      html += '<button onclick="window._oncorPunchClock._clearHistory()" style="padding:5px 10px;background:#7f1d1d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;margin-bottom:8px">🗑 Clear History</button>';
+      dates.forEach(function(date){
+        var shifts = grouped[date];
+        var dayTotal = shifts.reduce(function(s,h){ return s+h.hrs; },0);
+        var dayCost = shifts.reduce(function(s,h){ return s+h.cost; },0);
+        html += '<div style="background:#1e293b;border-radius:8px;margin-bottom:8px">'
+          +'<div style="padding:8px 10px;border-bottom:1px solid #334155;display:flex;justify-content:space-between"><span style="font-weight:600;color:#94a3b8">'+_esc(date)+'</span><span style="color:#f59e0b">'+dayTotal.toFixed(1)+'h &middot; $'+dayCost.toFixed(2)+'</span></div>'
+          +'<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:#64748b"><th style="padding:5px 8px;text-align:left">Worker</th><th style="padding:5px 8px;text-align:left">Trade</th><th style="padding:5px 8px;text-align:center">In</th><th style="padding:5px 8px;text-align:center">Out</th><th style="padding:5px 8px;text-align:right">Hrs</th><th style="padding:5px 8px;text-align:right">Cost</th></tr></thead><tbody>';
+        shifts.forEach(function(h){
+          html += '<tr style="border-bottom:1px solid #0f172a"><td style="padding:5px 8px">'+_esc(h.name)+'</td><td style="padding:5px 8px;color:#94a3b8">'+_esc(h.trade)+'</td><td style="padding:5px 8px;text-align:center">'+fmt(h.in)+'</td><td style="padding:5px 8px;text-align:center">'+fmt(h.out)+'</td><td style="padding:5px 8px;text-align:right">'+h.hrs.toFixed(1)+'</td><td style="padding:5px 8px;text-align:right;color:#4ade80">$'+h.cost.toFixed(2)+'</td></tr>';
+        });
+        html += '</tbody></table></div>';
+      });
+    }
+
+    el.innerHTML = html;
+    if(timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(function(){
+      document.querySelectorAll('.pc-elapsed').forEach(function(span){
+        span.textContent = elapsed(span.getAttribute('data-in'));
+      });
+      var d2 = load();
+      var c = d2.workers.reduce(function(s,w){ return s+elapsedHrs(w.in,null)*w.rate; },0);
+      var cc = document.getElementById('pc-active-cost');
+      if(cc) cc.textContent = '$'+c.toFixed(0);
+    }, 30000);
+  }
+
+  function _print(){
+    var d = load();
+    var allHrs = d.history.reduce(function(s,h){ return s+h.hrs; },0);
+    var allCost = d.history.reduce(function(s,h){ return s+h.cost; },0);
+    var proj = (document.getElementById('projectName')||{value:''}).value||'Project';
+    var rows = d.history.slice().sort(function(a,b){ return new Date(b.in)-new Date(a.in); }).map(function(h){
+      return '<tr><td>'+fmtDate(h.in)+'</td><td>'+_esc(h.name)+'</td><td>'+_esc(h.trade)+'</td><td>$'+h.rate+'</td><td>'+fmt(h.in)+'</td><td>'+fmt(h.out)+'</td><td>'+h.hrs.toFixed(1)+'</td><td>$'+h.cost.toFixed(2)+'</td></tr>';
+    }).join('');
+    var html = '<html><head><title>Punch Clock Report</title><style>body{font-family:Arial,sans-serif;margin:20px;font-size:12px}table{width:100%;border-collapse:collapse}th{background:#1e293b;color:#fff;padding:6px}td{padding:5px;border-bottom:1px solid #e5e7eb}.total{font-weight:700;background:#f9fafb}@media print{.np{display:none}}</style></head><body>'
+      +'<h2>⏱ Punch Clock Report — '+_esc(proj)+'</h2>'
+      +'<p>Printed: '+new Date().toLocaleString()+'</p>'
+      +'<div style="display:flex;gap:20px;margin-bottom:16px"><div style="border:1px solid #ccc;padding:10px;border-radius:4px"><strong>Shifts</strong><div style="font-size:20px">'+d.history.length+'</div></div><div style="border:1px solid #ccc;padding:10px;border-radius:4px"><strong>Total Hours</strong><div style="font-size:20px">'+allHrs.toFixed(1)+'</div></div><div style="border:1px solid #ccc;padding:10px;border-radius:4px"><strong>Labor Cost</strong><div style="font-size:20px">$'+allCost.toFixed(2)+'</div></div></div>'
+      +'<table><thead><tr><th>Date</th><th>Worker</th><th>Trade</th><th>Rate</th><th>In</th><th>Out</th><th>Hrs</th><th>Cost</th></tr></thead><tbody>'+rows
+      +'<tr class="total"><td colspan="6">TOTAL</td><td>'+allHrs.toFixed(1)+'</td><td>$'+allCost.toFixed(2)+'</td></tr></tbody></table>'
+      +'<p style="color:#666;font-size:10px;margin-top:20px">CONFIDENTIAL — INTERNAL USE ONLY</p>'
+      +'<button class="np" onclick="window.print()" style="margin:10px;padding:8px 20px;background:#1e293b;color:#fff;border:none;border-radius:4px;cursor:pointer">🖨️ Print</button></body></html>';
+    var win = window.open('','_blank','width=800,height=700'); win.document.write(html); win.document.close();
+  }
+
+  function toggle(){
+    var el = document.getElementById(MODAL_ID);
+    if(!el){
+      el = document.createElement('div');
+      el.id = MODAL_ID;
+      el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:10010;display:flex;align-items:center;justify-content:center';
+      el.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:720px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#22d3ee">⏱ Punch Clock &amp; Shift Timer</h3>'
+        +'<button onclick="document.getElementById(''+MODAL_ID+'').style.display='none'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="punchclock-content"></div></div>';
+      el.addEventListener('click',function(e){ if(e.target===el) el.style.display='none'; });
+      document.body.appendChild(el);
+      render();
+    } else {
+      el.style.display = el.style.display==='none' ? 'flex' : 'none';
+      if(el.style.display==='flex') render();
+    }
+  }
+
+  document.addEventListener('keydown',function(e){ if(e.ctrlKey&&e.altKey&&e.key==='p'){ e.preventDefault(); toggle(); } });
+  return { toggle:toggle, _clockIn:clockIn, _clockOut:clockOut, _clearAll:clearAll, _clearHistory:clearHistory, _print:_print };
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   📉 BID MARGIN SENSITIVITY ANALYZER
+   Purpose: See how gross margin % shifts as concrete price, labor rate, or other
+   costs swing ±5%–±20%. Know your exposure BEFORE submitting a bid.
+   Uses current lastEstimate data. Ctrl+Alt+M to open.
+═══════════════════════════════════════════════════════════════════════════ */
+window._oncorMarginSensitivity = (function(){
+  var MODAL_ID = 'overlay-marginsense';
+
+  function getEst(){
+    try{ return window.lastEstimate||JSON.parse(localStorage.getItem('oncor_last_estimate')||'null'); }catch(e){ return null; }
+  }
+
+  function calcMargin(est, concreteDelta, laborDelta, materialDelta){
+    var base = est.totalBid||0;
+    var concrete = (est.concreteCost||0)*(1+concreteDelta);
+    var labor = (est.laborCost||0)*(1+laborDelta);
+    var matBase = (est.rebarCost||0)+(est.meshCost||0)+(est.fiberCost||0)+(est.baseCourse||0)+(est.vaporBarrier||0);
+    var materials = matBase*(1+materialDelta);
+    var other = (est.pumpCost||0)+(est.sawCutCost||0)+(est.mobilization||0)+(est.misc||0)+(est.formworkCost||0)+(est.finishCost||0);
+    var overhead = est.overhead||0;
+    var total = concrete+labor+materials+other+overhead;
+    var profit = base-total;
+    var margin = base>0 ? (profit/base)*100 : 0;
+    return {total:total, profit:profit, margin:margin};
+  }
+
+  function colorM(m){ return m>=20?'#4ade80':m>=15?'#86efac':m>=10?'#fbbf24':m>=5?'#f97316':'#ef4444'; }
+
+  function render(){
+    var el = document.getElementById('marginsense-content'); if(!el) return;
+    var est = getEst();
+    if(!est||!est.totalBid){
+      el.innerHTML = '<div style="text-align:center;padding:30px;color:#64748b"><div style="font-size:32px">📉</div><div style="margin-top:8px">Run a bid estimate first (load a project and Recalculate), then open this analyzer.</div></div>';
+      return;
+    }
+    var base = calcMargin(est,0,0,0);
+    var deltas = [-0.20,-0.15,-0.10,-0.05,0,0.05,0.10,0.15,0.20];
+    var pctLabels = ['-20%','-15%','-10%','-5%','0% (Base)','+5%','+10%','+15%','+20%'];
+
+    function tableRows(label, concDelta, labDelta){
+      var rows = '';
+      deltas.forEach(function(d,i){
+        var r = label==='concrete' ? calcMargin(est,d,0,0) : calcMargin(est,0,d,0);
+        var isBase = d===0;
+        rows += '<tr style="border-bottom:1px solid #334155'+(isBase?';background:#1e3a5f':'')+'">'
+          +'<td style="padding:5px 6px;color:'+(d>0?'#f87171':d<0?'#4ade80':'#94a3b8')+'">'+pctLabels[i]+'</td>'
+          +'<td style="padding:5px 6px;text-align:right">$'+Math.round(label==='concrete'?(est.concreteCost||0)*(1+d):(est.laborCost||0)*(1+d)).toLocaleString()+'</td>'
+          +'<td style="padding:5px 6px;text-align:right">$'+Math.round(r.total).toLocaleString()+'</td>'
+          +'<td style="padding:5px 6px;text-align:right;'+(r.profit>=0?'color:#4ade80':'color:#ef4444')+'">$'+Math.round(r.profit).toLocaleString()+'</td>'
+          +'<td style="padding:5px 6px;text-align:right;font-weight:700;color:'+colorM(r.margin)+'">'+r.margin.toFixed(1)+'%</td>'
+          +'</tr>';
+      });
+      return rows;
+    }
+
+    var html = '<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:14px;display:flex;gap:16px;flex-wrap:wrap">'
+      +'<div><span style="font-size:11px;color:#94a3b8">Base Bid</span><div style="font-size:18px;font-weight:700;color:#22d3ee">$'+(est.totalBid||0).toLocaleString()+'</div></div>'
+      +'<div><span style="font-size:11px;color:#94a3b8">Base Margin</span><div style="font-size:18px;font-weight:700;color:'+colorM(base.margin)+'">'+base.margin.toFixed(1)+'%</div></div>'
+      +'<div><span style="font-size:11px;color:#94a3b8">Concrete Cost</span><div style="font-size:14px;color:#f59e0b">$'+(est.concreteCost||0).toLocaleString()+'</div></div>'
+      +'<div><span style="font-size:11px;color:#94a3b8">Labor Cost</span><div style="font-size:14px;color:#a78bfa">$'+(est.laborCost||0).toLocaleString()+'</div></div>'
+      +'</div>';
+
+    html += '<div style="margin-bottom:14px"><div style="font-weight:600;margin-bottom:8px;color:#f59e0b">📦 Concrete Price Sensitivity</div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#1e293b"><th style="padding:6px;text-align:left">Change</th><th style="padding:6px;text-align:right">Concrete Cost</th><th style="padding:6px;text-align:right">Total Cost</th><th style="padding:6px;text-align:right">Profit</th><th style="padding:6px;text-align:right">Margin %</th></tr></thead><tbody>'+tableRows('concrete')+'</tbody></table></div>';
+
+    html += '<div style="margin-bottom:14px"><div style="font-weight:600;margin-bottom:8px;color:#a78bfa">👷 Labor Rate Sensitivity</div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#1e293b"><th style="padding:6px;text-align:left">Change</th><th style="padding:6px;text-align:right">Labor Cost</th><th style="padding:6px;text-align:right">Total Cost</th><th style="padding:6px;text-align:right">Profit</th><th style="padding:6px;text-align:right">Margin %</th></tr></thead><tbody>'+tableRows('labor')+'</tbody></table></div>';
+
+    var worst = calcMargin(est,0.15,0.10,0.05);
+    html += '<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:10px"><div style="font-weight:600;margin-bottom:8px;color:#f87171">⚠️ Worst Case (Concrete +15%, Labor +10%, Materials +5%)</div>'
+      +'<div style="display:flex;gap:16px;flex-wrap:wrap">'
+      +'<div><span style="font-size:11px;color:#94a3b8">Total Cost</span><div style="font-size:16px;font-weight:700;color:#ef4444">$'+Math.round(worst.total).toLocaleString()+'</div></div>'
+      +'<div><span style="font-size:11px;color:#94a3b8">Profit</span><div style="font-size:16px;font-weight:700;color:'+(worst.profit>=0?'#4ade80':'#ef4444')+'">$'+Math.round(worst.profit).toLocaleString()+'</div></div>'
+      +'<div><span style="font-size:11px;color:#94a3b8">Margin</span><div style="font-size:16px;font-weight:700;color:'+colorM(worst.margin)+'">'+worst.margin.toFixed(1)+'%</div></div>'
+      +'</div>';
+    if(worst.margin<10) html += '<div style="margin-top:8px;padding:8px;background:#450a0a;border-radius:4px;font-size:12px;color:#fca5a5">⚠️ Margin drops below 10% in worst case. Add a concrete price escalation clause in your contract.</div>';
+    html += '</div>';
+
+    html += '<button onclick="window._oncorMarginSensitivity._print()" style="padding:7px 16px;background:#475569;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">🖨️ Print Analysis</button>';
+    el.innerHTML = html;
+  }
+
+  function _print(){
+    var est = getEst(); if(!est){ alert('No estimate loaded.'); return; }
+    var base = calcMargin(est,0,0,0);
+    var deltas = [-0.20,-0.15,-0.10,-0.05,0,0.05,0.10,0.15,0.20];
+    var pctLabels = ['-20%','-15%','-10%','-5%','0% (Base)','+5%','+10%','+15%','+20%'];
+    var proj = (document.getElementById('projectName')||{value:''}).value||'Project';
+    var cRows='', lRows='';
+    deltas.forEach(function(d,i){
+      var rc = calcMargin(est,d,0,0), rl = calcMargin(est,0,d,0);
+      cRows += '<tr><td>'+pctLabels[i]+'</td><td>$'+Math.round((est.concreteCost||0)*(1+d)).toLocaleString()+'</td><td>$'+Math.round(rc.total).toLocaleString()+'</td><td style="color:'+(rc.profit>=0?'green':'red')+'">$'+Math.round(rc.profit).toLocaleString()+'</td><td style="font-weight:700">'+rc.margin.toFixed(1)+'%</td></tr>';
+      lRows += '<tr><td>'+pctLabels[i]+'</td><td>$'+Math.round((est.laborCost||0)*(1+d)).toLocaleString()+'</td><td>$'+Math.round(rl.total).toLocaleString()+'</td><td style="color:'+(rl.profit>=0?'green':'red')+'">$'+Math.round(rl.profit).toLocaleString()+'</td><td style="font-weight:700">'+rl.margin.toFixed(1)+'%</td></tr>';
+    });
+    var html = '<html><head><title>Margin Sensitivity</title><style>body{font-family:Arial,sans-serif;font-size:12px;margin:20px}table{width:100%;border-collapse:collapse;margin-bottom:16px}th{background:#1e293b;color:#fff;padding:6px}td{padding:5px;border-bottom:1px solid #e5e7eb}@media print{.np{display:none}}</style></head><body>'
+      +'<h2>📉 Bid Margin Sensitivity Analysis — '+_esc(proj)+'</h2>'
+      +'<p>Base Bid: <strong>$'+(est.totalBid||0).toLocaleString()+'</strong> &nbsp; Base Margin: <strong>'+base.margin.toFixed(1)+'%</strong></p>'
+      +'<h3>Concrete Price Sensitivity</h3><table><thead><tr><th>Change</th><th>Concrete Cost</th><th>Total Cost</th><th>Profit</th><th>Margin %</th></tr></thead><tbody>'+cRows+'</tbody></table>'
+      +'<h3>Labor Rate Sensitivity</h3><table><thead><tr><th>Change</th><th>Labor Cost</th><th>Total Cost</th><th>Profit</th><th>Margin %</th></tr></thead><tbody>'+lRows+'</tbody></table>'
+      +'<p style="color:#666;font-size:10px">CONFIDENTIAL — Generated '+new Date().toLocaleString()+'</p>'
+      +'<button class="np" onclick="window.print()" style="padding:8px 20px;background:#1e293b;color:#fff;border:none;border-radius:4px;cursor:pointer">🖨️ Print</button></body></html>';
+    var win = window.open('','_blank','width=800,height=700'); win.document.write(html); win.document.close();
+  }
+
+  function toggle(){
+    var el = document.getElementById(MODAL_ID);
+    if(!el){
+      el = document.createElement('div');
+      el.id = MODAL_ID;
+      el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:10010;display:flex;align-items:center;justify-content:center';
+      el.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:800px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#f59e0b">📉 Bid Margin Sensitivity Analyzer</h3>'
+        +'<button onclick="document.getElementById(''+MODAL_ID+'').style.display='none'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="marginsense-content"></div></div>';
+      el.addEventListener('click',function(e){ if(e.target===el) el.style.display='none'; });
+      document.body.appendChild(el);
+      render();
+    } else {
+      el.style.display = el.style.display==='none' ? 'flex' : 'none';
+      if(el.style.display==='flex') render();
+    }
+  }
+
+  document.addEventListener('keydown',function(e){ if(e.ctrlKey&&e.altKey&&e.key==='m'){ e.preventDefault(); toggle(); } });
+  return { toggle:toggle, _print:_print };
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   🗺️ SUBGRADE PREPARATION ESTIMATOR
+   Purpose: Estimate subbase prep costs — proof roll, lime/cement stabilization,
+   flex base, caliche base, geotextile, compaction testing, fine grading.
+   El Paso 2025 rates. TxDOT Items 110/216/247/260/265. ASTM D698/D6938.
+   Ctrl+Alt+S to open.
+═══════════════════════════════════════════════════════════════════════════ */
+window._oncorSubgradeEst = (function(){
+  var MODAL_ID = 'overlay-subgrade';
+  var items = [];
+
+  var PREP = [
+    {id:'proofroll',label:'Proof Roll',unit:'SF',rate:0.08,desc:'TxDOT Item 216. Loaded dump truck passes to verify compaction. Required before most slab pours.'},
+    {id:'lime',label:'Lime Stabilization (6")',unit:'SF',rate:1.85,desc:'TxDOT Item 260. Hydrated lime @ 4-6% by weight, 6" depth. Best for expansive clays/caliche.'},
+    {id:'cement',label:'Cement Stabilization (6")',unit:'SF',rate:1.55,desc:'TxDOT Item 265. Portland cement @ 3-5%, 6" depth. Good for sandy/silty subgrades.'},
+    {id:'flex4',label:'Flex Base 4" (TxDOT 247)',unit:'SF',rate:0.75,desc:'Crushed limestone, 4" compacted. TxDOT Item 247. El Paso $38-48/ton delivered.'},
+    {id:'flex6',label:'Flex Base 6" (TxDOT 247)',unit:'SF',rate:1.05,desc:'Crushed limestone, 6" compacted. Heavy traffic or poor subgrade. TxDOT Item 247.'},
+    {id:'caliche',label:'Caliche Base (4")',unit:'SF',rate:0.45,desc:'Local caliche, 4" compacted. Cheaper but variable quality. El Paso / Hudspeth Co. material.'},
+    {id:'geo',label:'Geotextile Fabric',unit:'SF',rate:0.28,desc:'Non-woven geotextile separator. AASHTO M288 Class 2. Placed under base course.'},
+    {id:'nuclear',label:'Compaction Test (Nuclear)',unit:'test',rate:95,desc:'ASTM D6938. One test per 10,000 SF or per lift. Required on commercial jobs.'},
+    {id:'sandcone',label:'Compaction Test (Sand Cone)',unit:'test',rate:110,desc:'ASTM D1556. More accurate than nuclear for materials with high organics.'},
+    {id:'grading',label:'Fine Grading & Trim',unit:'SF',rate:0.12,desc:'Laser-controlled final trim to grade. ACI 302.1R tolerances. Includes clean-up.'},
+    {id:'moisture',label:'Moisture Conditioning',unit:'SF',rate:0.08,desc:'Pre-wet dry subgrade to optimum moisture. Critical in El Paso arid climate (RH 15-30%).'},
+    {id:'remove',label:'Remove Unsuitable Material',unit:'CY',rate:24,desc:'Excavate and haul soft/organic/unstable subgrade. TxDOT Item 110. Disposal included.'},
+    {id:'fill',label:'Structural Fill (Import)',unit:'CY',rate:32,desc:'Import, place, and compact select fill. ASTM D698 min 95% Modified Proctor.'},
+  ];
+
+  function fmt$(n){ return '$'+(parseFloat(n)||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+  function render(){
+    var el = document.getElementById('subgrade-content'); if(!el) return;
+    var totalCost = items.reduce(function(s,item){ var p=PREP.find(function(t){ return t.id===item.type; }); return s+(p?item.qty*(parseFloat(item.rate)||p.rate):0); },0);
+
+    var html = '<div style="background:#1e293b;padding:10px;border-radius:8px;margin-bottom:14px;font-size:12px;color:#94a3b8">'
+      +'<strong style="color:#4ade80">El Paso 2025 Rates.</strong> TxDOT Items 110, 216, 247, 260, 265. ASTM D698/D6938. Verify rates with current supplier quotes.'
+      +'</div>';
+
+    html += '<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:14px">'
+      +'<div style="font-weight:600;margin-bottom:8px">⚡ Add Prep Item</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">'
+      +'<div><label style="font-size:11px;color:#94a3b8">Prep Type</label><select id="sg-type" style="padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;max-width:280px">'+PREP.map(function(t){ return '<option value="'+t.id+'">'+t.label+' ($'+t.rate+'/'+t.unit+')</option>'; }).join('')+'</select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Quantity</label><input type="number" id="sg-qty" placeholder="SF or CY or count" style="width:120px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+      +'<button onclick="window._oncorSubgradeEst._add()" style="padding:6px 14px;background:#4ade80;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:700">+ Add</button>'
+      +'</div></div>';
+
+    if(items.length){
+      html += '<div style="font-weight:600;margin-bottom:8px">📋 Estimate Items</div>';
+      html += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px"><thead><tr style="background:#1e293b"><th style="padding:6px;text-align:left">Prep Type</th><th style="padding:6px;text-align:center">Qty</th><th style="padding:6px;text-align:center">Unit</th><th style="padding:6px;text-align:right">Rate $</th><th style="padding:6px;text-align:right">Total</th><th style="padding:6px"></th></tr></thead><tbody>';
+      items.forEach(function(item,i){
+        var p = PREP.find(function(t){ return t.id===item.type; })||PREP[0];
+        var rate = parseFloat(item.rate)||p.rate;
+        var total = item.qty*rate;
+        html += '<tr style="border-bottom:1px solid #334155"><td style="padding:5px 6px"><div style="font-weight:600">'+_esc(p.label)+'</div><div style="font-size:10px;color:#64748b">'+_esc(p.desc.substring(0,70))+'</div></td>'
+          +'<td style="padding:5px 6px;text-align:center"><input type="number" value="'+item.qty+'" onchange="window._oncorSubgradeEst._qty('+i+',this.value)" style="width:80px;padding:4px;background:#0f172a;border:1px solid #475569;border-radius:3px;color:#e5e7eb;text-align:center"></td>'
+          +'<td style="padding:5px 6px;text-align:center;color:#94a3b8">'+p.unit+'</td>'
+          +'<td style="padding:5px 6px;text-align:right"><input type="number" value="'+rate.toFixed(2)+'" onchange="window._oncorSubgradeEst._rate('+i+',this.value)" style="width:70px;padding:4px;background:#0f172a;border:1px solid #475569;border-radius:3px;color:#e5e7eb;text-align:right" step="0.01"></td>'
+          +'<td style="padding:5px 6px;text-align:right;font-weight:700;color:#4ade80">'+fmt$(total)+'</td>'
+          +'<td style="padding:5px 6px;text-align:center"><button onclick="window._oncorSubgradeEst._del('+i+')" style="padding:2px 6px;background:#dc2626;color:#fff;border:none;border-radius:3px;cursor:pointer">×</button></td></tr>';
+      });
+      html += '<tr style="background:#1e293b;font-weight:700"><td colspan="4" style="padding:8px 6px">TOTAL SUBGRADE PREP</td><td style="padding:8px 6px;text-align:right;color:#4ade80;font-size:16px">'+fmt$(totalCost)+'</td><td></td></tr></tbody></table>';
+      html += '<div style="display:flex;gap:8px"><button onclick="window._oncorSubgradeEst._print()" style="padding:7px 16px;background:#475569;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">🖨️ Print Estimate</button>'
+        +'<button onclick="window._oncorSubgradeEst._clear()" style="padding:7px 14px;background:#7f1d1d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">🗑 Clear All</button></div>';
+    } else {
+      html += '<div style="background:#1e293b;padding:20px;border-radius:8px;text-align:center;color:#64748b">Add prep items above to build your subgrade estimate.</div>';
+    }
+
+    html += '<details style="margin-top:16px"><summary style="cursor:pointer;color:#94a3b8;font-size:12px">📋 All Prep Types &amp; Rates Reference</summary>'
+      +'<div style="background:#1e293b;padding:10px;border-radius:6px;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+      +'<thead><tr style="color:#64748b"><th style="padding:5px;text-align:left">Type</th><th style="padding:5px;text-align:center">Unit</th><th style="padding:5px;text-align:right">Default Rate</th><th style="padding:5px;text-align:left">Notes</th></tr></thead><tbody>';
+    PREP.forEach(function(t){
+      html += '<tr style="border-bottom:1px solid #334155"><td style="padding:4px 5px">'+_esc(t.label)+'</td><td style="padding:4px 5px;text-align:center">'+t.unit+'</td><td style="padding:4px 5px;text-align:right;color:#f59e0b">$'+t.rate+'</td><td style="padding:4px 5px;color:#64748b;font-size:11px">'+_esc(t.desc)+'</td></tr>';
+    });
+    html += '</tbody></table></div></details>';
+    el.innerHTML = html;
+  }
+
+  function _add(){
+    var type = (document.getElementById('sg-type')||{value:''}).value;
+    var qty = parseFloat((document.getElementById('sg-qty')||{value:'0'}).value)||0;
+    if(!qty){ alert('Enter a quantity.'); return; }
+    var p = PREP.find(function(t){ return t.id===type; })||PREP[0];
+    items.push({type:type,qty:qty,rate:p.rate});
+    render();
+  }
+  function _qty(i,v){ items[i].qty=parseFloat(v)||0; render(); }
+  function _rate(i,v){ items[i].rate=parseFloat(v)||0; render(); }
+  function _del(i){ items.splice(i,1); render(); }
+  function _clear(){ if(confirm('Clear all items?')){ items=[]; render(); } }
+
+  function _print(){
+    var totalCost = items.reduce(function(s,item){ var p=PREP.find(function(t){ return t.id===item.type; }); return s+(p?item.qty*(parseFloat(item.rate)||p.rate):0); },0);
+    var proj = (document.getElementById('projectName')||{value:''}).value||'Project';
+    var rows = items.map(function(item){
+      var p = PREP.find(function(t){ return t.id===item.type; })||PREP[0];
+      var rate = parseFloat(item.rate)||p.rate;
+      var total = item.qty*rate;
+      return '<tr><td><strong>'+_esc(p.label)+'</strong></td><td style="color:#666;font-size:11px">'+_esc(p.desc)+'</td><td>'+item.qty.toLocaleString()+'</td><td>'+p.unit+'</td><td>$'+rate.toFixed(2)+'</td><td style="font-weight:700">$'+total.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td></tr>';
+    }).join('');
+    var html = '<html><head><title>Subgrade Prep Estimate</title><style>body{font-family:Arial,sans-serif;font-size:12px;margin:20px}table{width:100%;border-collapse:collapse}th{background:#1e293b;color:#fff;padding:7px}td{padding:6px;border-bottom:1px solid #e5e7eb}.total{font-weight:700;background:#f9fafb}@media print{.np{display:none}}</style></head><body>'
+      +'<h2>🗺️ Subgrade Preparation Estimate — '+_esc(proj)+'</h2>'
+      +'<p>Date: '+new Date().toLocaleDateString()+' | El Paso 2025 Rates | TxDOT Items 110, 216, 247, 260, 265 | ASTM D698/D6938</p>'
+      +'<p style="color:#c00;font-size:11px"><strong>Note:</strong> Rates are estimates based on El Paso 2025 market data. Verify with current supplier quotes before bidding.</p>'
+      +'<table><thead><tr><th>Prep Type</th><th>Description</th><th>Qty</th><th>Unit</th><th>Rate</th><th>Total</th></tr></thead><tbody>'+rows
+      +'<tr class="total"><td colspan="5">TOTAL SUBGRADE PREP</td><td>$'+totalCost.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td></tr></tbody></table>'
+      +'<p style="color:#666;font-size:10px;margin-top:20px">CONFIDENTIAL — INTERNAL USE ONLY</p>'
+      +'<button class="np" onclick="window.print()" style="margin:10px;padding:8px 20px;background:#1e293b;color:#fff;border:none;border-radius:4px;cursor:pointer">🖨️ Print</button></body></html>';
+    var win = window.open('','_blank','width=800,height=700'); win.document.write(html); win.document.close();
+  }
+
+  function toggle(){
+    var el = document.getElementById(MODAL_ID);
+    if(!el){
+      el = document.createElement('div');
+      el.id = MODAL_ID;
+      el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:10010;display:flex;align-items:center;justify-content:center';
+      el.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:780px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#4ade80">🗺️ Subgrade Prep Estimator</h3>'
+        +'<button onclick="document.getElementById(''+MODAL_ID+'').style.display='none'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="subgrade-content"></div></div>';
+      el.addEventListener('click',function(e){ if(e.target===el) el.style.display='none'; });
+      document.body.appendChild(el);
+      render();
+    } else {
+      el.style.display = el.style.display==='none' ? 'flex' : 'none';
+      if(el.style.display==='flex') render();
+    }
+  }
+
+  document.addEventListener('keydown',function(e){ if(e.ctrlKey&&e.altKey&&e.key==='s'){ e.preventDefault(); toggle(); } });
+  return { toggle:toggle, _add:_add, _qty:_qty, _rate:_rate, _del:_del, _clear:_clear, _print:_print };
+})();
+
+
+/* ─── Escape closes all Session #110 modals ─── */
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){
+    ['overlay-punchclock','overlay-marginsense','overlay-subgrade'].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el && el.style.display!=='none') el.style.display='none';
+    });
+  }
+});
+
+/* ─── Sidebar buttons ─── */
+document.addEventListener('DOMContentLoaded',function(){
+  var sidebar = document.querySelector('.sidebar-actions')||document.querySelector('#sidebarActions')||document.querySelector('aside');
+  function injectBtn(id,emoji,label,fn){
+    if(document.getElementById(id)) return;
+    var btn = document.createElement('button');
+    btn.id=id; btn.textContent=emoji+' '+label;
+    btn.style.cssText='display:block;width:100%;margin:2px 0;padding:6px 10px;background:#1e293b;color:#e5e7eb;border:1px solid #334155;border-radius:6px;cursor:pointer;text-align:left;font-size:12px';
+    btn.onclick=fn;
+    if(sidebar) sidebar.appendChild(btn);
+  }
+  injectBtn('btnPunchClock','⏱','Punch Clock',function(){ window._oncorPunchClock.toggle(); });
+  injectBtn('btnMarginSense','📉','Margin Sensitivity',function(){ window._oncorMarginSensitivity.toggle(); });
+  injectBtn('btnSubgrade','🗺️','Subgrade Prep',function(){ window._oncorSubgradeEst.toggle(); });
+});
+
+})();
+
+// ==================== END SESSION #110 — Zeus ⚡ Punch Clock & Shift Timer + Bid Margin Sensitivity Analyzer + Subgrade Prep Estimator ====================
+
+
 })();
