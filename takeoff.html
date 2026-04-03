@@ -186238,5 +186238,732 @@ window._oncorDevLength = (function(){
 
 // ==================== END SESSION #124 — Zeus ⚡ Job Viability Scorer (F1) + Bid Price Reverse Calculator (F2) + Pour Day Timeline Generator (F3) ====================
 
+// ==================== SESSION #125 — Zeus ⚡ Concrete Mix Cost Optimizer (Shift+F1) + Footing & Foundation Volume Calculator (Shift+F2) + Crew Shift Cost Summary (Shift+F3) ====================
+
+/* ─── Shift+F1 ─── 🧪 Concrete Mix Cost Optimizer ─── */
+(function(){
+  var MODAL_ID='overlay-mixcostopt';
+  var STORE_KEY='oncor_mixcostopt_v1';
+
+  function getProj(){return (window.projectName&&window.projectName.trim())||'default';}
+  function load(){try{var d=localStorage.getItem(STORE_KEY+'_'+getProj());return d?JSON.parse(d):{mixes:[]};}catch(e){return{mixes:[]};}}
+  function save(d){try{localStorage.setItem(STORE_KEY+'_'+getProj(),JSON.stringify(d));}catch(e){}}
+
+  // Baseline ingredient costs (El Paso 2025)
+  var defaults = {
+    cementCostPerBag: 14.50,   // per 94-lb bag Type I/II
+    flyAshCostPerLb: 0.08,
+    slagCostPerLb: 0.10,
+    silicaCostPerLb: 0.45,
+    sandCostPerTon: 28,
+    coarseAggCostPerTon: 32,
+    waterCostPerGal: 0.005,
+    wrmadmixCostPerGal: 18,   // water reducer
+    hrwrCostPerGal: 32,        // HRWR/super
+    retarderCostPerGal: 22,
+    accCostPerGal: 24,
+    fiberCostPerLb: 1.85,      // synthetic macro
+    airCostPerGal: 16,
+    otherAdmixCostPerGal: 20
+  };
+
+  function calcMixCost(m){
+    // Convert lbs/CY inputs to costs
+    // Cement: lbs/CY / 94 lbs/bag * cost/bag
+    var cementCost = (m.cement/94) * m.cementCostPerBag;
+    var flyAshCost = m.flyAsh * m.flyAshCostPerLb;
+    var slagCost = m.slag * m.slagCostPerLb;
+    var silicaCost = m.silica * m.silicaCostPerLb;
+    // Aggregates: lbs/CY / 2000 * cost/ton
+    var sandCost = (m.sand/2000) * m.sandCostPerTon;
+    var coarseCost = (m.coarseAgg/2000) * m.coarseAggCostPerTon;
+    var waterCost = m.water * m.waterCostPerGal;
+    // Admixtures: oz/CY / 128 oz/gal * cost/gal
+    var wrCost = (m.wrAdmix/128) * m.wrmadmixCostPerGal;
+    var hrwrCost = (m.hrwrAdmix/128) * m.hrwrCostPerGal;
+    var retCost = (m.retarder/128) * m.retarderCostPerGal;
+    var accCost = (m.accelerator/128) * m.accCostPerGal;
+    var airCost = (m.airAgent/128) * m.airCostPerGal;
+    var otherCost = (m.otherAdmix/128) * m.otherAdmixCostPerGal;
+    var fiberCost = m.fiber * m.fiberCostPerLb;
+    var total = cementCost+flyAshCost+slagCost+silicaCost+sandCost+coarseCost+waterCost+wrCost+hrwrCost+retCost+accCost+airCost+otherCost+fiberCost;
+    return {cementCost,flyAshCost,slagCost,silicaCost,sandCost,coarseCost,waterCost,wrCost,hrwrCost,retCost,accCost,airCost,otherCost,fiberCost,total};
+  }
+
+  function wcm(m){
+    var cm = m.cement + m.flyAsh*0.7 + m.slag*0.9 + m.silica*1.0; // k-factors ACI 318-19
+    return cm>0 ? (m.water/cm).toFixed(3) : 'N/A';
+  }
+
+  function buildModal(){
+    if(document.getElementById(MODAL_ID)){document.getElementById(MODAL_ID).style.display='flex';renderList();return;}
+    var overlay=document.createElement('div');
+    overlay.id=MODAL_ID;
+    overlay.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+    overlay.innerHTML=`
+<div style="background:#1e293b;border-radius:12px;width:min(96vw,860px);max-height:90vh;overflow-y:auto;padding:24px;color:#e2e8f0">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+    <div>
+      <div style="font-size:20px;font-weight:700;color:#38bdf8">🧪 Concrete Mix Cost Optimizer</div>
+      <div style="font-size:12px;color:#94a3b8">Compare mix designs by total material cost per CY · ACI 211.1 · Shift+F1</div>
+    </div>
+    <button onclick="document.getElementById('${MODAL_ID}').style.display='none'" style="background:#475569;border:none;color:#fff;width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px">✕</button>
+  </div>
+
+  <!-- Add Mix Form -->
+  <div style="background:#0f172a;border-radius:10px;padding:16px;margin-bottom:20px">
+    <div style="font-weight:600;color:#f1f5f9;margin-bottom:12px;font-size:14px">➕ Add Mix Design for Cost Comparison</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div><label style="font-size:11px;color:#94a3b8">Mix Name / ID</label><input id="mco-name" placeholder="e.g. 4000 PSI Type I" style="width:100%;padding:6px 8px;background:#1e293b;border:1px solid #475569;border-radius:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+      <div><label style="font-size:11px;color:#94a3b8">Design f'c (PSI)</label><select id="mco-psi" style="width:100%;padding:6px 8px;background:#1e293b;border:1px solid #475569;border-radius:6px;color:#e2e8f0;font-size:12px"><option>2500</option><option>3000</option><option selected>4000</option><option>4500</option><option>5000</option><option>6000</option></select></div>
+    </div>
+    <div style="font-size:11px;color:#64748b;margin-bottom:8px;font-weight:600">CEMENTITIOUS (lbs/CY)</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
+      <div><label style="font-size:11px;color:#94a3b8">Cement</label><input id="mco-cement" type="number" value="564" min="0" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+      <div><label style="font-size:11px;color:#94a3b8">Fly Ash</label><input id="mco-flyash" type="number" value="0" min="0" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+      <div><label style="font-size:11px;color:#94a3b8">Slag</label><input id="mco-slag" type="number" value="0" min="0" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+      <div><label style="font-size:11px;color:#94a3b8">Silica Fume</label><input id="mco-silica" type="number" value="0" min="0" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+    </div>
+    <div style="font-size:11px;color:#64748b;margin-bottom:8px;font-weight:600">AGGREGATES (lbs/CY)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div><label style="font-size:11px;color:#94a3b8">Fine Agg (Sand)</label><input id="mco-sand" type="number" value="1200" min="0" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+      <div><label style="font-size:11px;color:#94a3b8">Coarse Agg</label><input id="mco-coarse" type="number" value="1800" min="0" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div><label style="font-size:11px;color:#94a3b8">Mix Water (gal/CY)</label><input id="mco-water" type="number" value="32" min="0" step="0.5" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+      <div><label style="font-size:11px;color:#94a3b8">Fiber (lbs/CY)</label><input id="mco-fiber" type="number" value="0" min="0" step="0.5" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+    </div>
+    <div style="font-size:11px;color:#64748b;margin-bottom:8px;font-weight:600">ADMIXTURES (oz/CY)</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+      <div><label style="font-size:11px;color:#94a3b8">WR/Mid-Range</label><input id="mco-wr" type="number" value="0" min="0" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+      <div><label style="font-size:11px;color:#94a3b8">HRWR/Super</label><input id="mco-hrwr" type="number" value="0" min="0" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+      <div><label style="font-size:11px;color:#94a3b8">Retarder</label><input id="mco-ret" type="number" value="0" min="0" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+      <div><label style="font-size:11px;color:#94a3b8">Accelerator</label><input id="mco-acc" type="number" value="0" min="0" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px">
+      <div><label style="font-size:11px;color:#94a3b8">Air-Entraining (oz/CY)</label><input id="mco-air" type="number" value="0" min="0" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+      <div><label style="font-size:11px;color:#94a3b8">Other Admix (oz/CY)</label><input id="mco-other" type="number" value="0" min="0" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+    </div>
+    <div style="font-size:11px;color:#64748b;margin-bottom:8px;font-weight:600">UNIT PRICES (override defaults)</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
+      <div><label style="font-size:11px;color:#94a3b8">Cement ($/94-lb bag)</label><input id="mco-pc" type="number" value="${defaults.cementCostPerBag}" step="0.25" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+      <div><label style="font-size:11px;color:#94a3b8">Sand ($/ton)</label><input id="mco-ps" type="number" value="${defaults.sandCostPerTon}" step="0.5" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+      <div><label style="font-size:11px;color:#94a3b8">Coarse Agg ($/ton)</label><input id="mco-pg" type="number" value="${defaults.coarseAggCostPerTon}" step="0.5" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+    </div>
+    <button onclick="addMix()" style="background:#0ea5e9;border:none;color:#fff;padding:9px 22px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">➕ Add Mix to Comparison</button>
+  </div>
+
+  <!-- Mix List -->
+  <div id="mco-list"></div>
+</div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.style.display='none';});
+
+    window.addMix=function(){
+      var d=load();
+      var m={
+        id:Date.now(),
+        name:document.getElementById('mco-name').value||'Mix '+(d.mixes.length+1),
+        psi:document.getElementById('mco-psi').value,
+        cement:+document.getElementById('mco-cement').value,
+        flyAsh:+document.getElementById('mco-flyash').value,
+        slag:+document.getElementById('mco-slag').value,
+        silica:+document.getElementById('mco-silica').value,
+        sand:+document.getElementById('mco-sand').value,
+        coarseAgg:+document.getElementById('mco-coarse').value,
+        water:+document.getElementById('mco-water').value,
+        fiber:+document.getElementById('mco-fiber').value,
+        wrAdmix:+document.getElementById('mco-wr').value,
+        hrwrAdmix:+document.getElementById('mco-hrwr').value,
+        retarder:+document.getElementById('mco-ret').value,
+        accelerator:+document.getElementById('mco-acc').value,
+        airAgent:+document.getElementById('mco-air').value,
+        otherAdmix:+document.getElementById('mco-other').value,
+        cementCostPerBag:+document.getElementById('mco-pc').value,
+        sandCostPerTon:+document.getElementById('mco-ps').value,
+        coarseAggCostPerTon:+document.getElementById('mco-pg').value,
+        flyAshCostPerLb:defaults.flyAshCostPerLb,
+        slagCostPerLb:defaults.slagCostPerLb,
+        silicaCostPerLb:defaults.silicaCostPerLb,
+        waterCostPerGal:defaults.waterCostPerGal,
+        wrmadmixCostPerGal:defaults.wrmadmixCostPerGal,
+        hrwrCostPerGal:defaults.hrwrCostPerGal,
+        retarderCostPerGal:defaults.retarderCostPerGal,
+        accCostPerGal:defaults.accCostPerGal,
+        fiberCostPerLb:defaults.fiberCostPerLb,
+        airCostPerGal:defaults.airCostPerGal,
+        otherAdmixCostPerGal:defaults.otherAdmixCostPerGal
+      };
+      d.mixes.push(m);save(d);renderList();
+    };
+
+    window.deleteMix=function(id){
+      var d=load();d.mixes=d.mixes.filter(function(m){return m.id!==id;});save(d);renderList();
+    };
+
+    window.printMixOpt=function(){
+      var d=load();
+      if(!d.mixes.length){alert('No mixes to print.');return;}
+      var rows='';
+      d.mixes.forEach(function(m,i){
+        var c=calcMixCost(m);
+        rows+=`<tr style="background:${i%2?'#f8fafc':'#fff'}"><td>${m.name}</td><td>${m.psi}</td>
+          <td>${wcm(m)}</td><td>${m.cement+(m.flyAsh||0)+(m.slag||0)+(m.silica||0)}</td>
+          <td>$${c.cementCost.toFixed(2)}</td><td>$${(c.flyAshCost+c.slagCost+c.silicaCost).toFixed(2)}</td>
+          <td>$${(c.sandCost+c.coarseCost).toFixed(2)}</td><td>$${c.fiberCost.toFixed(2)}</td>
+          <td>$${(c.wrCost+c.hrwrCost+c.retCost+c.accCost+c.airCost+c.otherCost).toFixed(2)}</td>
+          <td style="font-weight:700;color:#0369a1">$${c.total.toFixed(2)}</td></tr>`;
+      });
+      var w=window.open('','_blank','width=900,height=600');
+      w.document.write(`<html><head><title>Mix Cost Comparison</title>
+        <style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px}h2{color:#0369a1}
+        table{width:100%;border-collapse:collapse}th,td{padding:5px 7px;border:1px solid #ddd;text-align:left}
+        th{background:#0369a1;color:#fff}@media print{body{margin:0.5in}}</style></head>
+        <body><h2>🧪 Concrete Mix Cost Comparison</h2>
+        <p>Project: ${getProj()} · Generated: ${new Date().toLocaleString()}</p>
+        <table><thead><tr><th>Mix Name</th><th>f'c PSI</th><th>w/cm</th><th>Total Cem (lbs)</th>
+        <th>Cement Cost</th><th>SCM Cost</th><th>Agg Cost</th><th>Fiber</th><th>Admix</th><th>Total $/CY</th></tr></thead>
+        <tbody>${rows}</tbody></table>
+        <p style="font-size:9px;color:#9ca3af">ACI 211.1 · El Paso 2025 material costs · CONFIDENTIAL — INTERNAL USE ONLY</p>
+        <button onclick="window.print()" style="margin-top:12px;padding:6px 18px;background:#0369a1;color:#fff;border:none;border-radius:5px;cursor:pointer">🖨 Print / Save PDF</button>
+        </body></html>`);
+      w.document.close();
+    };
+
+    renderList();
+  }
+
+  function renderList(){
+    var el=document.getElementById('mco-list');if(!el)return;
+    var d=load();
+    if(!d.mixes.length){el.innerHTML='<div style="text-align:center;color:#64748b;padding:24px;font-size:13px">No mixes added yet. Add your first mix design above to compare costs.</div>';return;}
+    // Find cheapest
+    var costs=d.mixes.map(function(m){return calcMixCost(m).total;});
+    var minCost=Math.min.apply(null,costs);
+    var html='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+    html+='<div style="font-size:14px;font-weight:600;color:#f1f5f9">📊 Mix Cost Comparison ('+d.mixes.length+' mix'+(d.mixes.length>1?'es':'')+')</div>';
+    html+='<button onclick="printMixOpt()" style="background:#0369a1;border:none;color:#fff;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px">🖨 Print Report</button>';
+    html+='</div>';
+    // Table
+    html+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+    html+='<thead><tr style="background:#0f172a"><th style="padding:8px;text-align:left;color:#94a3b8">Mix Name</th><th style="padding:8px;color:#94a3b8">f\'c</th><th style="padding:8px;color:#94a3b8">w/cm</th><th style="padding:8px;color:#94a3b8">Cement lbs</th><th style="padding:8px;color:#94a3b8">Cem $</th><th style="padding:8px;color:#94a3b8">SCM $</th><th style="padding:8px;color:#94a3b8">Agg $</th><th style="padding:8px;color:#94a3b8">Admix $</th><th style="padding:8px;color:#94a3b8">Fiber $</th><th style="padding:8px;color:#38bdf8;font-weight:700">Total $/CY</th><th style="padding:8px;color:#94a3b8"></th></tr></thead><tbody>';
+    d.mixes.forEach(function(m,i){
+      var c=calcMixCost(m);
+      var isCheap=(c.total===minCost&&d.mixes.length>1);
+      var admixTotal=c.wrCost+c.hrwrCost+c.retCost+c.accCost+c.airCost+c.otherCost;
+      html+='<tr style="background:'+(i%2?'#1e293b':'#0f172a')+';border-bottom:1px solid #334155">';
+      html+='<td style="padding:8px;font-weight:600;color:#f1f5f9">'+m.name+(isCheap?' <span style="background:#15803d;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px">CHEAPEST</span>':'')+'</td>';
+      html+='<td style="padding:8px;color:#94a3b8">'+m.psi+' PSI</td>';
+      html+='<td style="padding:8px;color:#cbd5e1">'+wcm(m)+'</td>';
+      html+='<td style="padding:8px;color:#cbd5e1">'+(m.cement+(m.flyAsh||0)+(m.slag||0)+(m.silica||0))+'</td>';
+      html+='<td style="padding:8px;color:#fbbf24">$'+c.cementCost.toFixed(2)+'</td>';
+      html+='<td style="padding:8px;color:#a78bfa">$'+(c.flyAshCost+c.slagCost+c.silicaCost).toFixed(2)+'</td>';
+      html+='<td style="padding:8px;color:#6ee7b7">$'+(c.sandCost+c.coarseCost).toFixed(2)+'</td>';
+      html+='<td style="padding:8px;color:#93c5fd">$'+admixTotal.toFixed(2)+'</td>';
+      html+='<td style="padding:8px;color:#86efac">$'+c.fiberCost.toFixed(2)+'</td>';
+      html+='<td style="padding:8px;font-size:15px;font-weight:700;color:'+(isCheap?'#34d399':'#38bdf8')+'">$'+c.total.toFixed(2)+'</td>';
+      html+='<td style="padding:8px"><button onclick="deleteMix('+m.id+')" style="background:#7f1d1d;border:none;color:#fca5a5;width:24px;height:24px;border-radius:4px;cursor:pointer;font-size:13px">✕</button></td>';
+      html+='</tr>';
+    });
+    html+='</tbody></table></div>';
+    // Cost breakdown visual
+    if(d.mixes.length>1){
+      html+='<div style="margin-top:16px;background:#0f172a;border-radius:8px;padding:14px">';
+      html+='<div style="font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:8px">Cost per CY — Visual Comparison</div>';
+      var maxCost=Math.max.apply(null,costs);
+      d.mixes.forEach(function(m,i){
+        var c=calcMixCost(m);
+        var pct=maxCost>0?(c.total/maxCost*100):100;
+        var col=c.total===minCost?'#34d399':'#60a5fa';
+        html+='<div style="margin-bottom:6px"><div style="display:flex;justify-content:space-between;font-size:11px;color:#cbd5e1;margin-bottom:2px"><span>'+m.name+'</span><span style="font-weight:700;color:'+col+'">$'+c.total.toFixed(2)+'/CY</span></div>';
+        html+='<div style="height:12px;background:#1e293b;border-radius:4px"><div style="height:12px;background:'+col+';border-radius:4px;width:'+pct+'%"></div></div></div>';
+      });
+      html+='</div>';
+    }
+    el.innerHTML=html;
+  }
+
+  function buildBtn(){
+    var btn=document.createElement('button');
+    btn.textContent='🧪 Mix Cost Optimizer';
+    btn.title='Concrete Mix Cost Optimizer — Shift+F1';
+    btn.style.cssText='background:#0369a1;border:none;color:#fff;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;width:100%;text-align:left;margin-bottom:4px';
+    btn.onclick=buildModal;
+    var interval=setInterval(function(){
+      var sb=document.querySelector('.sidebar-inner,.action-buttons,[class*="sidebar"]');
+      if(sb){sb.appendChild(btn);clearInterval(interval);}
+    },500);
+  }
+
+  document.addEventListener('DOMContentLoaded',buildBtn);
+  document.addEventListener('keydown',function(e){
+    if(e.key==='F1'&&e.shiftKey&&!e.ctrlKey&&!e.altKey){
+      e.preventDefault();
+      var el=document.getElementById(MODAL_ID);
+      if(el&&el.style.display!=='none'){el.style.display='none';return;}
+      buildModal();
+    }
+  });
+})();
+
+/* ─── Shift+F2 ─── 📐 Footing & Foundation Volume Calculator ─── */
+(function(){
+  var MODAL_ID='overlay-footvol';
+  var items=[];
+
+  var TYPES=[
+    {id:'cont',label:'Continuous Footing (Strip)',fields:['len','wid','dep']},
+    {id:'sq',label:'Square Isolated Footing',fields:['wid','dep','qty']},
+    {id:'rect',label:'Rectangular Isolated Footing',fields:['len','wid','dep','qty']},
+    {id:'grade',label:'Grade Beam',fields:['len','wid','dep']},
+    {id:'drilled',label:'Drilled Pier (Round)',fields:['dia','dep','qty']},
+    {id:'wallftg',label:'Wall Footing + Stem',fields:['len','fwid','fdep','swid','shgt']},
+    {id:'mat',label:'Mat / Raft Foundation',fields:['len','wid','dep']},
+    {id:'pile_cap',label:'Pile Cap',fields:['len','wid','dep','qty']}
+  ];
+
+  function calcVol(type,f){
+    var yd=0;
+    if(type==='cont'||type==='grade'||type==='mat'){
+      yd=(f.len*f.wid*(f.dep/12))/27;
+    } else if(type==='sq'){
+      yd=(f.wid*f.wid*(f.dep/12)/27)*(f.qty||1);
+    } else if(type==='rect'||type==='pile_cap'){
+      yd=(f.len*f.wid*(f.dep/12)/27)*(f.qty||1);
+    } else if(type==='drilled'){
+      var r=f.dia/2/12;
+      yd=(Math.PI*r*r*f.dep/27)*(f.qty||1);
+    } else if(type==='wallftg'){
+      var ftgVol=(f.len*(f.fwid/12)*(f.fdep/12)/27);
+      var stemVol=(f.len*(f.swid/12)*(f.shgt/12)/27);
+      yd=ftgVol+stemVol;
+    }
+    return Math.max(0,yd);
+  }
+
+  function buildModal(){
+    if(document.getElementById(MODAL_ID)){document.getElementById(MODAL_ID).style.display='flex';return;}
+    var overlay=document.createElement('div');
+    overlay.id=MODAL_ID;
+    overlay.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+    overlay.innerHTML=`
+<div style="background:#1e293b;border-radius:12px;width:min(96vw,820px);max-height:90vh;overflow-y:auto;padding:24px;color:#e2e8f0">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+    <div>
+      <div style="font-size:20px;font-weight:700;color:#a78bfa">📐 Footing & Foundation Volume Calculator</div>
+      <div style="font-size:12px;color:#94a3b8">8 foundation types · all dimensions in ft/in · total with waste factor · Shift+F2</div>
+    </div>
+    <button onclick="document.getElementById('${MODAL_ID}').style.display='none'" style="background:#475569;border:none;color:#fff;width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px">✕</button>
+  </div>
+
+  <!-- Type Selector + Form -->
+  <div style="background:#0f172a;border-radius:10px;padding:16px;margin-bottom:20px">
+    <div style="font-weight:600;color:#f1f5f9;margin-bottom:12px;font-size:14px">➕ Add Foundation Element</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div><label style="font-size:11px;color:#94a3b8">Foundation Type</label>
+        <select id="fv-type" onchange="updateFvFields()" style="width:100%;padding:6px 8px;background:#1e293b;border:1px solid #475569;border-radius:6px;color:#e2e8f0;font-size:12px">
+          ${TYPES.map(function(t,i){return '<option value="'+t.id+'"'+(i===0?' selected':'')+'>'+t.label+'</option>';}).join('')}
+        </select>
+      </div>
+      <div><label style="font-size:11px;color:#94a3b8">Label / Area Ref</label><input id="fv-label" placeholder="e.g. Footing Line A" style="width:100%;padding:6px 8px;background:#1e293b;border:1px solid #475569;border-radius:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+    </div>
+    <div id="fv-fields" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:12px"></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div><label style="font-size:11px;color:#94a3b8">Waste Factor %</label><input id="fv-waste" type="number" value="5" min="0" max="30" style="width:70px;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px"></div>
+      <div><label style="font-size:11px;color:#94a3b8">PSI Spec</label><select id="fv-psi" style="padding:5px 8px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px"><option>2500</option><option>3000</option><option selected>4000</option><option>4500</option><option>5000</option></select></div>
+      <button onclick="addFvItem()" style="background:#7c3aed;border:none;color:#fff;padding:9px 20px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;margin-top:12px">➕ Add Element</button>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div id="fv-summary" style="display:none;background:#0f172a;border-radius:8px;padding:14px;margin-bottom:16px">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center">
+      <div><div style="font-size:11px;color:#94a3b8">Elements</div><div id="fvs-count" style="font-size:22px;font-weight:700;color:#a78bfa">0</div></div>
+      <div><div style="font-size:11px;color:#94a3b8">Net yd³</div><div id="fvs-net" style="font-size:22px;font-weight:700;color:#38bdf8">0.00</div></div>
+      <div><div style="font-size:11px;color:#94a3b8">With Waste</div><div id="fvs-waste" style="font-size:22px;font-weight:700;color:#34d399">0.00</div></div>
+      <div><div style="font-size:11px;color:#94a3b8">Trucks (10 yd³)</div><div id="fvs-trucks" style="font-size:22px;font-weight:700;color:#fbbf24">0</div></div>
+    </div>
+  </div>
+
+  <!-- Item List -->
+  <div id="fv-list"></div>
+  <div style="margin-top:12px;text-align:right"><button onclick="printFvReport()" style="background:#7c3aed;border:none;color:#fff;padding:8px 20px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600">🖨 Print Foundation Volume Report</button></div>
+</div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.style.display='none';});
+
+    window.updateFvFields=function(){
+      var type=document.getElementById('fv-type').value;
+      var el=document.getElementById('fv-fields');
+      var fieldDefs={
+        len:{label:'Length (ft)',id:'fv-len',def:'20',step:'0.25'},
+        wid:{label:'Width (ft)',id:'fv-wid',def:'2',step:'0.25'},
+        dep:{label:'Depth (in)',id:'fv-dep',def:'12',step:'1'},
+        qty:{label:'Quantity',id:'fv-qty',def:'1',step:'1'},
+        dia:{label:'Diameter (in)',id:'fv-dia',def:'18',step:'1'},
+        fwid:{label:'Ftg Width (in)',id:'fv-fwid',def:'24',step:'1'},
+        fdep:{label:'Ftg Depth (in)',id:'fv-fdep',def:'12',step:'1'},
+        swid:{label:'Stem Width (in)',id:'fv-swid',def:'8',step:'1'},
+        shgt:{label:'Stem Height (ft)',id:'fv-shgt',def:'3',step:'0.25'}
+      };
+      var typeFieldMap={
+        cont:['len','wid','dep'],sq:['wid','dep','qty'],rect:['len','wid','dep','qty'],
+        grade:['len','wid','dep'],drilled:['dia','dep','qty'],
+        wallftg:['len','fwid','fdep','swid','shgt'],mat:['len','wid','dep'],pile_cap:['len','wid','dep','qty']
+      };
+      var fields=typeFieldMap[type]||[];
+      el.innerHTML=fields.map(function(f){
+        var fd=fieldDefs[f];
+        return '<div><label style="font-size:11px;color:#94a3b8">'+fd.label+'</label><input id="'+fd.id+'" type="number" value="'+fd.def+'" step="'+fd.step+'" style="width:100%;padding:5px 7px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>';
+      }).join('');
+    };
+
+    window.addFvItem=function(){
+      var type=document.getElementById('fv-type').value;
+      var label=document.getElementById('fv-label').value||document.querySelector('[value="'+type+'"]')&&TYPES.find(function(t){return t.id===type;}).label;
+      var waste=+document.getElementById('fv-waste').value||5;
+      var psi=document.getElementById('fv-psi').value;
+      var getV=function(id){var el=document.getElementById(id);return el?+el.value:0;};
+      var f={
+        len:getV('fv-len'),wid:getV('fv-wid'),dep:getV('fv-dep'),
+        qty:getV('fv-qty'),dia:getV('fv-dia'),
+        fwid:getV('fv-fwid'),fdep:getV('fv-fdep'),
+        swid:getV('fv-swid'),shgt:getV('fv-shgt')
+      };
+      var vol=calcVol(type,f);
+      items.push({id:Date.now(),type:type,label:label,fields:f,vol:vol,waste:waste,psi:psi,typeLabel:TYPES.find(function(t){return t.id===type;}).label});
+      renderFvList();
+    };
+
+    window.deleteFvItem=function(id){items=items.filter(function(x){return x.id!==id;});renderFvList();};
+
+    window.printFvReport=function(){
+      if(!items.length){alert('No elements to print.');return;}
+      var totalNet=items.reduce(function(s,i){return s+i.vol;},0);
+      var rows=items.map(function(it,i){
+        var wasted=it.vol*(1+it.waste/100);
+        return '<tr style="background:'+(i%2?'#f8fafc':'#fff')+'"><td>'+it.label+'</td><td>'+it.typeLabel+'</td><td>'+it.psi+' PSI</td><td>'+it.vol.toFixed(2)+'</td><td>'+it.waste+'%</td><td style="font-weight:700">'+wasted.toFixed(2)+'</td></tr>';
+      }).join('');
+      var w=window.open('','_blank','width=850,height=600');
+      w.document.write('<html><head><title>Foundation Volume Report</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px}h2{color:#7c3aed}table{width:100%;border-collapse:collapse}th,td{padding:5px 8px;border:1px solid #ddd}th{background:#7c3aed;color:#fff}tfoot td{font-weight:700;background:#f1f5f9}@media print{body{margin:0.5in}}</style></head><body>'
+        +'<h2>📐 Footing & Foundation Volume Report</h2><p>Generated: '+new Date().toLocaleString()+'</p>'
+        +'<table><thead><tr><th>Element</th><th>Type</th><th>PSI</th><th>Net yd³</th><th>Waste%</th><th>Order yd³</th></tr></thead>'
+        +'<tbody>'+rows+'</tbody>'
+        +'<tfoot><tr><td colspan="3">TOTALS</td><td>'+totalNet.toFixed(2)+'</td><td>—</td><td>'+(items.reduce(function(s,i){return s+i.vol*(1+i.waste/100);},0)).toFixed(2)+'</td></tr></tfoot>'
+        +'</table><p style="font-size:9px;color:#9ca3af">ACI 318-19 · Volumes in cubic yards · 1 CY = 27 CF · CONFIDENTIAL — INTERNAL USE ONLY</p>'
+        +'<button onclick="window.print()" style="margin-top:12px;padding:6px 18px;background:#7c3aed;color:#fff;border:none;border-radius:5px;cursor:pointer">🖨 Print / Save PDF</button></body></html>');
+      w.document.close();
+    };
+
+    updateFvFields();
+  }
+
+  function renderFvList(){
+    var el=document.getElementById('fv-list');if(!el)return;
+    var sumEl=document.getElementById('fv-summary');
+    if(!items.length){if(sumEl)sumEl.style.display='none';el.innerHTML='<div style="text-align:center;color:#64748b;padding:20px;font-size:13px">Add foundation elements above to calculate volumes.</div>';return;}
+    var totalNet=items.reduce(function(s,i){return s+i.vol;},0);
+    var totalWaste=items.reduce(function(s,i){return s+i.vol*(1+i.waste/100);},0);
+    if(sumEl){
+      sumEl.style.display='block';
+      document.getElementById('fvs-count').textContent=items.length;
+      document.getElementById('fvs-net').textContent=totalNet.toFixed(2);
+      document.getElementById('fvs-waste').textContent=totalWaste.toFixed(2);
+      document.getElementById('fvs-trucks').textContent=Math.ceil(totalWaste/10);
+    }
+    var html='<div style="display:flex;flex-direction:column;gap:8px">';
+    items.forEach(function(it){
+      var wasted=it.vol*(1+it.waste/100);
+      html+='<div style="background:#0f172a;border-radius:8px;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">';
+      html+='<div><div style="font-weight:600;color:#e2e8f0;font-size:13px">'+it.label+'</div>';
+      html+='<div style="font-size:11px;color:#64748b">'+it.typeLabel+' · '+it.psi+' PSI · '+it.waste+'% waste</div></div>';
+      html+='<div style="display:flex;gap:20px;align-items:center">';
+      html+='<div style="text-align:center"><div style="font-size:10px;color:#64748b">Net yd³</div><div style="font-size:18px;font-weight:700;color:#38bdf8">'+it.vol.toFixed(2)+'</div></div>';
+      html+='<div style="text-align:center"><div style="font-size:10px;color:#64748b">Order yd³</div><div style="font-size:18px;font-weight:700;color:#34d399">'+wasted.toFixed(2)+'</div></div>';
+      html+='<button onclick="deleteFvItem('+it.id+')" style="background:#7f1d1d;border:none;color:#fca5a5;width:26px;height:26px;border-radius:5px;cursor:pointer">✕</button>';
+      html+='</div></div>';
+    });
+    html+='</div>';
+    el.innerHTML=html;
+  }
+
+  function buildBtn(){
+    var btn=document.createElement('button');
+    btn.textContent='📐 Foundation Volume Calc';
+    btn.title='Footing & Foundation Volume Calculator — Shift+F2';
+    btn.style.cssText='background:#6d28d9;border:none;color:#fff;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;width:100%;text-align:left;margin-bottom:4px';
+    btn.onclick=buildModal;
+    var interval=setInterval(function(){
+      var sb=document.querySelector('.sidebar-inner,.action-buttons,[class*="sidebar"]');
+      if(sb){sb.appendChild(btn);clearInterval(interval);}
+    },500);
+  }
+
+  document.addEventListener('DOMContentLoaded',buildBtn);
+  document.addEventListener('keydown',function(e){
+    if(e.key==='F2'&&e.shiftKey&&!e.ctrlKey&&!e.altKey){
+      e.preventDefault();
+      var el=document.getElementById(MODAL_ID);
+      if(el&&el.style.display!=='none'){el.style.display='none';return;}
+      buildModal();
+    }
+  });
+})();
+
+/* ─── Shift+F3 ─── 💰 Crew Shift Cost Summary ─── */
+(function(){
+  var MODAL_ID='overlay-shiftcost';
+  var STORE_KEY='oncor_shiftcost_v1';
+
+  var TRADES=[
+    {name:'Foreman',rate:90},
+    {name:'Concrete Finisher (Journey)',rate:78},
+    {name:'Concrete Finisher (Apprentice)',rate:54},
+    {name:'Laborer',rate:52},
+    {name:'Pump Operator',rate:88},
+    {name:'Saw Cutter',rate:72},
+    {name:'Rebar Placer',rate:68},
+    {name:'Form Setter',rate:65},
+    {name:'Screed Operator',rate:70},
+    {name:'Trowel Operator',rate:72},
+    {name:'Equipment Operator',rate:85},
+    {name:'Helper / Tender',rate:46},
+    {name:'Custom',rate:0}
+  ];
+
+  function load(){try{var d=localStorage.getItem(STORE_KEY);return d?JSON.parse(d):{shifts:[]};}catch(e){return{shifts:[]};}}
+  function save(d){try{localStorage.setItem(STORE_KEY,JSON.stringify(d));}catch(e){}}
+
+  function buildModal(){
+    if(document.getElementById(MODAL_ID)){document.getElementById(MODAL_ID).style.display='flex';renderShiftList();return;}
+    var overlay=document.createElement('div');
+    overlay.id=MODAL_ID;
+    overlay.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+    overlay.innerHTML=`
+<div style="background:#1e293b;border-radius:12px;width:min(96vw,780px);max-height:90vh;overflow-y:auto;padding:24px;color:#e2e8f0">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+    <div>
+      <div style="font-size:20px;font-weight:700;color:#34d399">💰 Crew Shift Cost Summary</div>
+      <div style="font-size:12px;color:#94a3b8">Plan a pour day crew — calculate total shift labor cost · El Paso 2025 rates · Shift+F3</div>
+    </div>
+    <button onclick="document.getElementById('${MODAL_ID}').style.display='none'" style="background:#475569;border:none;color:#fff;width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px">✕</button>
+  </div>
+
+  <!-- New Shift Form -->
+  <div style="background:#0f172a;border-radius:10px;padding:16px;margin-bottom:20px">
+    <div style="font-weight:600;color:#f1f5f9;margin-bottom:12px;font-size:14px">📋 Plan a Shift</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+      <div><label style="font-size:11px;color:#94a3b8">Shift Name / Pour</label><input id="sc-name" placeholder="e.g. Slab Pour - Grid A" style="width:100%;padding:6px 8px;background:#1e293b;border:1px solid #475569;border-radius:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+      <div><label style="font-size:11px;color:#94a3b8">Date</label><input id="sc-date" type="date" style="width:100%;padding:6px 8px;background:#1e293b;border:1px solid #475569;border-radius:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+      <div><label style="font-size:11px;color:#94a3b8">Estimated yd³</label><input id="sc-yds" type="number" value="0" min="0" step="5" style="width:100%;padding:6px 8px;background:#1e293b;border:1px solid #475569;border-radius:6px;color:#e2e8f0;font-size:12px;box-sizing:border-box"></div>
+    </div>
+
+    <!-- Crew Builder -->
+    <div style="font-size:11px;color:#64748b;font-weight:600;margin-bottom:8px">CREW BUILDER</div>
+    <div id="sc-crew-rows" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+      <div class="sc-row" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 40px;gap:6px;align-items:end">
+        <div><label style="font-size:10px;color:#94a3b8">Trade</label>
+          <select class="sc-trade" onchange="scTradeChange(this)" style="width:100%;padding:5px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:11px">
+            ${TRADES.map(function(t){return '<option value="'+t.rate+'">'+t.name+'</option>';}).join('')}
+          </select>
+        </div>
+        <div><label style="font-size:10px;color:#94a3b8">Rate $/hr</label><input class="sc-rate" type="number" value="90" step="0.5" style="width:100%;padding:5px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:11px;box-sizing:border-box"></div>
+        <div><label style="font-size:10px;color:#94a3b8">Reg Hrs</label><input class="sc-reg" type="number" value="8" min="0" step="0.5" style="width:100%;padding:5px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:11px;box-sizing:border-box"></div>
+        <div><label style="font-size:10px;color:#94a3b8">OT Hrs</label><input class="sc-ot" type="number" value="0" min="0" step="0.5" style="width:100%;padding:5px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:11px;box-sizing:border-box"></div>
+        <div style="display:flex;align-items:flex-end"><button onclick="removeScRow(this)" style="background:#7f1d1d;border:none;color:#fca5a5;width:30px;height:30px;border-radius:5px;cursor:pointer;font-size:14px;margin-bottom:1px">✕</button></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button onclick="addScRow()" style="background:#374151;border:none;color:#9ca3af;padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px">+ Add Worker</button>
+      <button onclick="saveShift()" style="background:#15803d;border:none;color:#fff;padding:8px 20px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600">💾 Save Shift</button>
+      <div id="sc-live-total" style="margin-left:auto;font-size:16px;font-weight:700;color:#34d399;display:flex;align-items:center"></div>
+    </div>
+  </div>
+
+  <!-- Saved Shifts List -->
+  <div id="sc-list"></div>
+</div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.style.display='none';});
+
+    // Live total update
+    overlay.addEventListener('input',calcLive);
+
+    window.scTradeChange=function(sel){
+      var rate=+sel.value;
+      if(rate>0) sel.closest('.sc-row').querySelector('.sc-rate').value=rate;
+    };
+
+    window.addScRow=function(){
+      var container=document.getElementById('sc-crew-rows');
+      var div=document.createElement('div');
+      div.className='sc-row';
+      div.style.cssText='display:grid;grid-template-columns:2fr 1fr 1fr 1fr 40px;gap:6px;align-items:end';
+      div.innerHTML='<div><label style="font-size:10px;color:#94a3b8">Trade</label><select class="sc-trade" onchange="scTradeChange(this)" style="width:100%;padding:5px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:11px">'
+        +TRADES.map(function(t){return '<option value="'+t.rate+'">'+t.name+'</option>';}).join('')
+        +'</select></div>'
+        +'<div><label style="font-size:10px;color:#94a3b8">Rate $/hr</label><input class="sc-rate" type="number" value="52" step="0.5" style="width:100%;padding:5px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:11px;box-sizing:border-box"></div>'
+        +'<div><label style="font-size:10px;color:#94a3b8">Reg Hrs</label><input class="sc-reg" type="number" value="8" min="0" step="0.5" style="width:100%;padding:5px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:11px;box-sizing:border-box"></div>'
+        +'<div><label style="font-size:10px;color:#94a3b8">OT Hrs</label><input class="sc-ot" type="number" value="0" min="0" step="0.5" style="width:100%;padding:5px;background:#1e293b;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:11px;box-sizing:border-box"></div>'
+        +'<div style="display:flex;align-items:flex-end"><button onclick="removeScRow(this)" style="background:#7f1d1d;border:none;color:#fca5a5;width:30px;height:30px;border-radius:5px;cursor:pointer;font-size:14px;margin-bottom:1px">✕</button></div>';
+      container.appendChild(div);
+      calcLive();
+    };
+
+    window.removeScRow=function(btn){
+      var rows=document.querySelectorAll('#sc-crew-rows .sc-row');
+      if(rows.length<=1){alert('Need at least one worker.');return;}
+      btn.closest('.sc-row').remove();
+      calcLive();
+    };
+
+    function calcLive(){
+      var rows=document.querySelectorAll('#sc-crew-rows .sc-row');
+      var total=0;
+      rows.forEach(function(row){
+        var rate=+row.querySelector('.sc-rate').value||0;
+        var reg=+row.querySelector('.sc-reg').value||0;
+        var ot=+row.querySelector('.sc-ot').value||0;
+        total+=rate*reg+rate*1.5*ot;
+      });
+      var el=document.getElementById('sc-live-total');
+      if(el)el.textContent='Shift Cost: $'+total.toFixed(2);
+    }
+
+    window.saveShift=function(){
+      var name=document.getElementById('sc-name').value||'Shift '+(load().shifts.length+1);
+      var date=document.getElementById('sc-date').value||new Date().toISOString().split('T')[0];
+      var yds=+document.getElementById('sc-yds').value||0;
+      var crew=[];
+      var rows=document.querySelectorAll('#sc-crew-rows .sc-row');
+      var totalCost=0,totalHrs=0,totalOT=0;
+      rows.forEach(function(row){
+        var trade=row.querySelector('.sc-trade');
+        var tradeName=trade.options[trade.selectedIndex].text;
+        var rate=+row.querySelector('.sc-rate').value||0;
+        var reg=+row.querySelector('.sc-reg').value||0;
+        var ot=+row.querySelector('.sc-ot').value||0;
+        var cost=rate*reg+rate*1.5*ot;
+        totalCost+=cost;totalHrs+=reg+ot;totalOT+=ot;
+        crew.push({trade:tradeName,rate:rate,reg:reg,ot:ot,cost:cost});
+      });
+      var d=load();
+      d.shifts.push({id:Date.now(),name:name,date:date,yds:yds,crew:crew,totalCost:totalCost,totalHrs:totalHrs,totalOT:totalOT});
+      save(d);renderShiftList();
+    };
+
+    window.deleteShift=function(id){var d=load();d.shifts=d.shifts.filter(function(s){return s.id!==id;});save(d);renderShiftList();};
+
+    window.printShiftReport=function(){
+      var d=load();
+      if(!d.shifts.length){alert('No shifts saved.');return;}
+      var shiftHTML=d.shifts.map(function(s,i){
+        var crewRows=s.crew.map(function(c){
+          return '<tr><td>'+c.trade+'</td><td>$'+c.rate+'</td><td>'+c.reg+'</td><td>'+c.ot+'</td><td>$'+c.cost.toFixed(2)+'</td></tr>';
+        }).join('');
+        var productivity=s.yds>0&&s.totalHrs>0?(s.yds/s.totalHrs).toFixed(2)+' yd³/hr':'N/A';
+        return '<div style="margin-bottom:20px;border:1px solid #ddd;border-radius:6px;overflow:hidden">'
+          +'<div style="background:#15803d;color:#fff;padding:8px 12px;font-weight:700">'+s.name+' — '+s.date+'</div>'
+          +'<div style="padding:8px 12px;display:flex;gap:30px;font-size:11px">'
+          +'<span>Total Cost: <strong>$'+s.totalCost.toFixed(2)+'</strong></span>'
+          +'<span>Total Hours: <strong>'+s.totalHrs.toFixed(1)+'</strong></span>'
+          +'<span>OT Hours: <strong>'+s.totalOT.toFixed(1)+'</strong></span>'
+          +(s.yds>0?'<span>yd³: <strong>'+s.yds+'</strong></span>':'')
+          +'<span>Productivity: <strong>'+productivity+'</strong></span>'
+          +'</div>'
+          +'<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="background:#f1f5f9"><th style="padding:5px 8px;text-align:left">Trade</th><th>Rate</th><th>Reg Hrs</th><th>OT Hrs</th><th>Cost</th></tr></thead><tbody>'+crewRows+'</tbody></table></div>';
+      }).join('');
+      var totalAll=d.shifts.reduce(function(s,x){return s+x.totalCost;},0);
+      var w=window.open('','_blank','width=800,height=650');
+      w.document.write('<html><head><title>Crew Shift Cost Summary</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px}h2{color:#15803d}@media print{body{margin:0.5in}}</style></head><body>'
+        +'<h2>💰 Crew Shift Cost Summary</h2><p>Generated: '+new Date().toLocaleString()+' · '+d.shifts.length+' shift(s) · Total Labor: <strong>$'+totalAll.toFixed(2)+'</strong></p>'
+        +shiftHTML
+        +'<p style="font-size:9px;color:#9ca3af">El Paso 2025 prevailing wage rates · OT = 1.5× over 40hrs (FLSA) · CONFIDENTIAL — INTERNAL USE ONLY</p>'
+        +'<button onclick="window.print()" style="margin-top:12px;padding:6px 18px;background:#15803d;color:#fff;border:none;border-radius:5px;cursor:pointer">🖨 Print / Save PDF</button></body></html>');
+      w.document.close();
+    };
+
+    calcLive();
+    renderShiftList();
+  }
+
+  function renderShiftList(){
+    var el=document.getElementById('sc-list');if(!el)return;
+    var d=load();
+    if(!d.shifts.length){el.innerHTML='<div style="text-align:center;color:#64748b;padding:20px;font-size:13px">No shifts saved yet. Plan and save a shift above.</div>';return;}
+    var totalCost=d.shifts.reduce(function(s,x){return s+x.totalCost;},0);
+    var totalHrs=d.shifts.reduce(function(s,x){return s+x.totalHrs;},0);
+    var totalYds=d.shifts.reduce(function(s,x){return s+x.yds;},0);
+    var html='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;text-align:center">';
+    html+='<div style="background:#0f172a;border-radius:8px;padding:12px"><div style="font-size:11px;color:#94a3b8">Total Shifts</div><div style="font-size:24px;font-weight:700;color:#34d399">'+d.shifts.length+'</div></div>';
+    html+='<div style="background:#0f172a;border-radius:8px;padding:12px"><div style="font-size:11px;color:#94a3b8">Total Labor Cost</div><div style="font-size:24px;font-weight:700;color:#fbbf24">$'+totalCost.toFixed(2)+'</div></div>';
+    html+='<div style="background:#0f172a;border-radius:8px;padding:12px"><div style="font-size:11px;color:#94a3b8">Avg yd³/hr</div><div style="font-size:24px;font-weight:700;color:#38bdf8">'+(totalHrs>0&&totalYds>0?(totalYds/totalHrs).toFixed(2):'—')+'</div></div>';
+    html+='</div>';
+    html+='<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button onclick="printShiftReport()" style="background:#15803d;border:none;color:#fff;padding:7px 18px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">🖨 Print Shift Report</button></div>';
+    html+='<div style="display:flex;flex-direction:column;gap:8px">';
+    d.shifts.forEach(function(s){
+      var productivity=s.yds>0&&s.totalHrs>0?(s.yds/s.totalHrs).toFixed(2)+' yd³/hr':'—';
+      var laborPerYd=s.yds>0?('$'+(s.totalCost/s.yds).toFixed(2)+'/yd³'):'—';
+      html+='<div style="background:#0f172a;border-radius:8px;padding:12px">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">';
+      html+='<div><div style="font-weight:600;color:#f1f5f9">'+s.name+'</div><div style="font-size:11px;color:#64748b">'+s.date+(s.yds?' · '+s.yds+' yd³':'')+'</div></div>';
+      html+='<div style="display:flex;gap:8px;align-items:center"><span style="font-size:18px;font-weight:700;color:#34d399">$'+s.totalCost.toFixed(2)+'</span><button onclick="deleteShift('+s.id+')" style="background:#7f1d1d;border:none;color:#fca5a5;width:24px;height:24px;border-radius:4px;cursor:pointer;font-size:12px">✕</button></div>';
+      html+='</div>';
+      html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:11px;margin-bottom:8px">';
+      html+='<div style="color:#94a3b8">Crew: <span style="color:#e2e8f0;font-weight:600">'+s.crew.length+' workers</span></div>';
+      html+='<div style="color:#94a3b8">Total Hrs: <span style="color:#e2e8f0;font-weight:600">'+s.totalHrs.toFixed(1)+'</span></div>';
+      html+='<div style="color:#94a3b8">OT Hrs: <span style="color:'+(s.totalOT>0?'#fbbf24':'#94a3b8')+'">'+s.totalOT.toFixed(1)+'</span></div>';
+      html+='</div>';
+      html+='<div style="display:flex;gap:16px;font-size:11px">';
+      html+='<div style="color:#94a3b8">Productivity: <span style="color:#38bdf8">'+productivity+'</span></div>';
+      html+='<div style="color:#94a3b8">Labor/yd³: <span style="color:#a78bfa">'+laborPerYd+'</span></div>';
+      html+='</div>';
+      // Crew breakdown
+      html+='<div style="margin-top:8px;border-top:1px solid #1e293b;padding-top:8px;display:flex;flex-wrap:wrap;gap:6px">';
+      s.crew.forEach(function(c){
+        html+='<span style="background:#1e293b;border-radius:4px;padding:2px 8px;font-size:10px;color:#cbd5e1">'+c.trade+' · '+c.reg+'h'+(c.ot?' +'+c.ot+'ot':'')+'</span>';
+      });
+      html+='</div></div>';
+    });
+    html+='</div>';
+    el.innerHTML=html;
+  }
+
+  function buildBtn(){
+    var btn=document.createElement('button');
+    btn.textContent='💰 Crew Shift Cost';
+    btn.title='Crew Shift Cost Summary — Shift+F3';
+    btn.style.cssText='background:#15803d;border:none;color:#fff;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;width:100%;text-align:left;margin-bottom:4px';
+    btn.onclick=buildModal;
+    var interval=setInterval(function(){
+      var sb=document.querySelector('.sidebar-inner,.action-buttons,[class*="sidebar"]');
+      if(sb){sb.appendChild(btn);clearInterval(interval);}
+    },500);
+  }
+
+  document.addEventListener('DOMContentLoaded',buildBtn);
+  document.addEventListener('keydown',function(e){
+    if(e.key==='F3'&&e.shiftKey&&!e.ctrlKey&&!e.altKey){
+      e.preventDefault();
+      var el=document.getElementById(MODAL_ID);
+      if(el&&el.style.display!=='none'){el.style.display='none';return;}
+      buildModal();
+    }
+  });
+})();
+
+/* ─── Session #125 Escape Handler ─── */
+(function(){
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'){
+      ['overlay-mixcostopt','overlay-footvol','overlay-shiftcost'].forEach(function(id){
+        var el=document.getElementById(id);if(el&&el.style.display!=='none')el.style.display='none';
+      });
+    }
+  });
+})();
+
+// ==================== END SESSION #125 — Zeus ⚡ Concrete Mix Cost Optimizer (Shift+F1) + Footing & Foundation Volume Calculator (Shift+F2) + Crew Shift Cost Summary (Shift+F3) ====================
+
 
 })();
