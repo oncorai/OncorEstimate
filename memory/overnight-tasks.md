@@ -1,5 +1,125 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 3, 2026 - 04:49 UTC (Overnight Cron #111)
+**Status:** ✅ THREE NEW FEATURES added (+457 lines)
+
+### What Was Added:
+
+---
+
+### 🌡️ Weather Alert System (Ctrl+Alt+W) — ~150 lines
+- New `🌡️ Weather Alert` button in sidebar
+- `Ctrl+Alt+W` keyboard shortcut opens/toggles the modal
+- **Purpose:** Real-time weather check for El Paso. Flags ACI 305R (hot weather >90°F) and ACI 306R (cold weather <40°F) conditions automatically. Determines pour status.
+
+**Features:**
+- Fetches live weather from wttr.in (no API key required)
+- Current conditions: temperature, humidity, wind speed, description, feels-like, UV index
+- **Pour Status badge:** ✅ GOOD / ⚡ OK / ⚠️ CAUTION / 🚫 NO POUR
+- **Auto-generated alerts:** Hot weather, cold weather, high wind, high evaporation risk, rain/storm detection
+- 3-day forecast with rain probability
+- Quick reference panel: ACI 305R/306R procedures (ice water, retarders, insulating blankets, etc.)
+- 10-minute cache to avoid repeated API calls
+
+---
+
+### 👷 Crew Roster Manager (Ctrl+Alt+R) — ~170 lines
+- New `👷 Crew Roster` button in sidebar
+- `Ctrl+Alt+R` keyboard shortcut opens/toggles the modal
+- **Purpose:** Manage crew contacts, emergency info, certifications, trade/rate. Print roster for field trailer.
+
+**Features:**
+- 3-card KPI: Crew Members / Top Trade count / Workers with Certs
+- Per-worker entry: Name, Trade (10 types), Phone, Rate $/hr, Emergency Contact, Certifications, Notes
+- Click-to-call phone numbers
+- Edit / Delete crew members
+- **Printable Crew Roster** — professional table for field trailer posting
+- localStorage per project: `oncor_crew_roster_v1_[project]`
+
+---
+
+### 🧮 Overtime Calculator (Ctrl+Alt+O) — ~170 lines
+- New `🧮 Overtime Calc` button in sidebar
+- `Ctrl+Alt+O` keyboard shortcut opens/toggles the modal
+- **Purpose:** Calculate weekly pay with FLSA overtime (1.5x over 40 hrs). Supports optional double-time threshold.
+
+**Features:**
+- 4-card KPI: Workers / Regular Pay / OT Pay / Total Pay
+- Per-worker entry: Name, Hours Worked, Rate $/hr, DT Threshold (optional)
+- Auto-calculates: Regular hours (≤40), OT hours (40+), DT hours (over threshold)
+- Breakdown table showing reg/OT/DT pay per worker
+- Running totals row
+- **Printable Payroll Report** with FLSA reference (29 USC 207)
+- FLSA rules reference panel: OT = 1.5x over 40 hrs/week, Texas follows federal law
+
+**Commits:**
+- 554e9cf: 🌡️👷🧮 Weather Alert System (Ctrl+Alt+W) + Crew Roster Manager (Ctrl+Alt+R) + Overtime Calculator (Ctrl+Alt+O) (+457 lines) [Session #111]
+
+**Total Lines:** ~178,540 | **New Shortcuts:** Ctrl+Alt+W (Weather), Ctrl+Alt+R (Crew Roster), Ctrl+Alt+O (Overtime Calc)
+
+---
+
+## ✅ SESSION: Apr 3, 2026 - 04:49 UTC (Overnight Cron #110)
+**Status:** ✅ THREE NEW FEATURES added (+461 lines)
+
+### What Was Added:
+
+---
+
+### ⏱ Punch Clock & Shift Timer (Ctrl+Alt+P) — ~160 lines
+- New `⏱ Punch Clock` button in sidebar
+- `Ctrl+Alt+P` keyboard shortcut opens/toggles the modal
+- **Purpose:** Track when crew clocks in/out, calculate shift duration and labor cost in real-time. Perfect for T&M jobs and timecard audits.
+
+**Features:**
+- 4-card KPI: On the Clock / Running Cost (live) / Total Hours / Shift Cost
+- Clock In form: Worker Name, Trade (10 types with default rates), Rate $/hr
+- Live elapsed timer updates every 30 seconds
+- One-click Clock Out calculates hours + cost
+- Shift history grouped by date with daily totals
+- **Printable Punch Clock Report** — full shift log with totals
+- localStorage: `oncor_punchclock_v1`
+
+---
+
+### 📉 Bid Margin Sensitivity Analyzer (Ctrl+Alt+M) — ~150 lines
+- New `📉 Margin Sensitivity` button in sidebar
+- `Ctrl+Alt+M` keyboard shortcut opens/toggles the modal
+- **Purpose:** See how gross margin % shifts as concrete price, labor rate, or material costs swing ±5% to ±20%. Know your exposure BEFORE submitting a bid.
+
+**Features:**
+- Pulls data from current lastEstimate
+- Base bid, base margin, concrete cost, labor cost summary cards
+- **Concrete Price Sensitivity Table:** -20% to +20% with total cost, profit, margin %
+- **Labor Rate Sensitivity Table:** -20% to +20% with total cost, profit, margin %
+- Color-coded margin (green ≥20%, yellow ≥15%, amber ≥10%, red <10%)
+- **Worst-Case Scenario:** Combined +15% concrete, +10% labor, +5% materials
+- Warning banner if margin drops below 10% in worst case
+- **Printable Analysis Report**
+
+---
+
+### 🗺️ Subgrade Prep Estimator (Ctrl+Alt+S) — ~180 lines
+- New `🗺️ Subgrade Prep` button in sidebar
+- `Ctrl+Alt+S` keyboard shortcut opens/toggles the modal
+- **Purpose:** Estimate subbase prep costs — proof roll, lime/cement stabilization, flex base, caliche, geotextile, compaction testing, fine grading.
+
+**Features:**
+- El Paso 2025 market rates (TxDOT Items 110/216/247/260/265, ASTM D698/D6938)
+- 13 prep types: Proof Roll, Lime Stabilization, Cement Stabilization, Flex Base 4"/6", Caliche Base, Geotextile, Nuclear/Sand Cone Testing, Fine Grading, Moisture Conditioning, Remove Unsuitable, Structural Fill
+- Quick add form: select prep type + quantity
+- Editable rate per item (override default with supplier quote)
+- Running total with line-item breakdown
+- Reference table with all prep types and descriptions
+- **Printable Subgrade Prep Estimate**
+
+**Commits:**
+- 72255ed: ⏱📉🗺️ Punch Clock & Shift Timer (Ctrl+Alt+P) + Bid Margin Sensitivity Analyzer (Ctrl+Alt+M) + Subgrade Prep Estimator (Ctrl+Alt+S) (+461 lines) [Session #110]
+
+**Total Lines:** ~178,083 | **New Shortcuts:** Ctrl+Alt+P (Punch Clock), Ctrl+Alt+M (Margin Sensitivity), Ctrl+Alt+S (Subgrade Prep)
+
+---
+
 ## ✅ SESSION: Apr 3, 2026 - 03:35 UTC (Overnight Cron #109)
 **Status:** ✅ THREE NEW FEATURES added (+539 lines)
 
