@@ -178538,4 +178538,771 @@ document.addEventListener('DOMContentLoaded',function(){
 // ==================== END SESSION #111 — Zeus ⚡ Weather Alert System + Crew Roster Manager + Overtime Calculator ====================
 
 
+// ==================== SESSION #112 — Zeus ⚡ Concrete Pour Checklist Generator + Material Cost Tracker + Project Deadline Alerts ====================
+(function(){
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   📋 CONCRETE POUR CHECKLIST GENERATOR (Ctrl+Alt+X)
+   Purpose: Generate customizable pre-pour checklists that can be printed and 
+   taken to the field. Ensures nothing is missed before a pour.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+window._oncorPourChecklist = (function(){
+  var MODAL_ID = 'overlay-pourchecklist';
+  var STORAGE_KEY = 'oncor_pourchecklist_v1';
+  
+  function _esc(s){ return String(s||'').replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  
+  function getProjectName(){
+    var el = document.getElementById('projectNameInput') || document.querySelector('.project-name');
+    return el ? el.value || 'Project' : 'Project';
+  }
+  
+  function load(){
+    var key = STORAGE_KEY + '_' + getProjectName().replace(/\s+/g,'_');
+    try { return JSON.parse(localStorage.getItem(key)) || {}; } catch(e){ return {}; }
+  }
+  function save(data){
+    var key = STORAGE_KEY + '_' + getProjectName().replace(/\s+/g,'_');
+    localStorage.setItem(key, JSON.stringify(data));
+  }
+  
+  var DEFAULT_CHECKLIST = {
+    subgrade: [
+      {id:'sg1', text:'Subgrade compacted to spec (95% Proctor)', checked:false},
+      {id:'sg2', text:'Proof roll completed, no soft spots', checked:false},
+      {id:'sg3', text:'Vapor barrier installed per spec', checked:false},
+      {id:'sg4', text:'No standing water or mud', checked:false},
+      {id:'sg5', text:'Grade stakes set and verified', checked:false}
+    ],
+    formwork: [
+      {id:'fw1', text:'Forms set to correct dimensions', checked:false},
+      {id:'fw2', text:'Forms aligned and braced', checked:false},
+      {id:'fw3', text:'Form release agent applied', checked:false},
+      {id:'fw4', text:'Keyways/blockouts installed', checked:false},
+      {id:'fw5', text:'Sleeves and embeds secured', checked:false}
+    ],
+    rebar: [
+      {id:'rb1', text:'Rebar size and spacing per drawings', checked:false},
+      {id:'rb2', text:'Cover/chairs at correct height', checked:false},
+      {id:'rb3', text:'Lap splices per spec (40d min)', checked:false},
+      {id:'rb4', text:'Dowels installed and positioned', checked:false},
+      {id:'rb5', text:'Special inspection sign-off obtained', checked:false}
+    ],
+    concrete: [
+      {id:'cc1', text:'Mix design approved and on file', checked:false},
+      {id:'cc2', text:'Batch plant order confirmed', checked:false},
+      {id:'cc3', text:'Pump/delivery method confirmed', checked:false},
+      {id:'cc4', text:'Testing lab notified', checked:false},
+      {id:'cc5', text:'Cylinders/molds ready on site', checked:false}
+    ],
+    crew: [
+      {id:'cr1', text:'Crew count confirmed', checked:false},
+      {id:'cr2', text:'Vibrators tested and operational', checked:false},
+      {id:'cr3', text:'Finishing tools on site', checked:false},
+      {id:'cr4', text:'Curing materials available', checked:false},
+      {id:'cr5', text:'First aid kit accessible', checked:false}
+    ],
+    weather: [
+      {id:'wx1', text:'Weather forecast checked (no rain)', checked:false},
+      {id:'wx2', text:'ACI 305R precautions if >90°F', checked:false},
+      {id:'wx3', text:'ACI 306R precautions if <40°F', checked:false},
+      {id:'wx4', text:'Wind/evaporation rate acceptable', checked:false}
+    ],
+    notifications: [
+      {id:'nt1', text:'GC/Owner notified of pour time', checked:false},
+      {id:'nt2', text:'Inspector notified/scheduled', checked:false},
+      {id:'nt3', text:'Utility locate complete (if digging)', checked:false}
+    ]
+  };
+  
+  function render(){
+    var el = document.getElementById('pourchecklist-content');
+    if(!el) return;
+    
+    var data = load();
+    if(!data.checklist) data.checklist = JSON.parse(JSON.stringify(DEFAULT_CHECKLIST));
+    if(!data.pourInfo) data.pourInfo = { pourName:'', pourDate:'', firstTruck:'', yards:'', psi:'' };
+    
+    var totalItems = 0, checkedItems = 0;
+    Object.keys(data.checklist).forEach(function(cat){
+      data.checklist[cat].forEach(function(item){
+        totalItems++;
+        if(item.checked) checkedItems++;
+      });
+    });
+    var pct = totalItems>0 ? Math.round((checkedItems/totalItems)*100) : 0;
+    var pctColor = pct<60?'#ef4444' : pct<100?'#f59e0b' : '#22c55e';
+    
+    var html = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
+      +'<div style="flex:1;min-width:100px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:22px;font-weight:700;color:'+pctColor+'">'+pct+'%</div><div style="font-size:11px;color:#94a3b8">Complete</div></div>'
+      +'<div style="flex:1;min-width:100px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:22px;font-weight:700;color:#22d3ee">'+checkedItems+'</div><div style="font-size:11px;color:#94a3b8">Checked</div></div>'
+      +'<div style="flex:1;min-width:100px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:22px;font-weight:700;color:#94a3b8">'+(totalItems-checkedItems)+'</div><div style="font-size:11px;color:#94a3b8">Remaining</div></div>'
+      +'</div>';
+    
+    // Pour info form
+    html += '<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:14px">'
+      +'<div style="font-weight:600;margin-bottom:8px;font-size:13px">📝 Pour Information</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      +'<div><label style="font-size:11px;color:#94a3b8">Pour Name/Area</label><input type="text" id="pcl-pourname" value="'+_esc(data.pourInfo.pourName)+'" placeholder="e.g. SOG Grid A-D" style="width:150px;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px" onchange="window._oncorPourChecklist._saveInfo()"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Pour Date</label><input type="date" id="pcl-pourdate" value="'+_esc(data.pourInfo.pourDate)+'" style="width:130px;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px" onchange="window._oncorPourChecklist._saveInfo()"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">First Truck</label><input type="time" id="pcl-firsttruck" value="'+_esc(data.pourInfo.firstTruck)+'" style="width:100px;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px" onchange="window._oncorPourChecklist._saveInfo()"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">yd³</label><input type="number" id="pcl-yards" value="'+_esc(data.pourInfo.yards)+'" placeholder="e.g. 85" style="width:70px;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px" onchange="window._oncorPourChecklist._saveInfo()"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">PSI</label><input type="number" id="pcl-psi" value="'+_esc(data.pourInfo.psi)+'" placeholder="e.g. 4000" style="width:70px;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px" onchange="window._oncorPourChecklist._saveInfo()"></div>'
+      +'</div></div>';
+    
+    // Checklist sections
+    var categories = [
+      {key:'subgrade', title:'🏔️ Subgrade & Preparation', color:'#22d3ee'},
+      {key:'formwork', title:'📐 Formwork & Layout', color:'#a78bfa'},
+      {key:'rebar', title:'🔩 Rebar & Embedded Items', color:'#f59e0b'},
+      {key:'concrete', title:'🧪 Concrete & Delivery', color:'#22c55e'},
+      {key:'crew', title:'👷 Crew & Equipment', color:'#ec4899'},
+      {key:'weather', title:'🌤️ Weather & Environmental', color:'#38bdf8'},
+      {key:'notifications', title:'📞 Notifications', color:'#fbbf24'}
+    ];
+    
+    html += '<div style="max-height:360px;overflow-y:auto;padding-right:6px">';
+    categories.forEach(function(cat){
+      var items = data.checklist[cat.key] || [];
+      html += '<div style="background:#1e293b;border-radius:8px;margin-bottom:8px;padding:10px">'
+        +'<div style="font-weight:600;font-size:12px;color:'+cat.color+';margin-bottom:8px">'+cat.title+'</div>';
+      items.forEach(function(item,idx){
+        html += '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:12px">'
+          +'<input type="checkbox" '+(item.checked?'checked':'')+' onchange="window._oncorPourChecklist._toggle(\''+cat.key+'\','+idx+')" style="width:16px;height:16px;accent-color:'+cat.color+'">'
+          +'<span style="'+(item.checked?'text-decoration:line-through;color:#64748b':'color:#e5e7eb')+'">'+_esc(item.text)+'</span>'
+          +'</label>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+    
+    // Actions
+    html += '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
+      +'<button onclick="window._oncorPourChecklist._print()" style="padding:7px 14px;background:#22c55e;color:#000;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600">🖨️ Print Checklist</button>'
+      +'<button onclick="window._oncorPourChecklist._reset()" style="padding:7px 14px;background:#475569;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">↻ Reset All</button>'
+      +'<button onclick="window._oncorPourChecklist._checkAll()" style="padding:7px 14px;background:#334155;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">✓ Check All</button>'
+      +'</div>';
+    
+    el.innerHTML = html;
+  }
+  
+  function _toggle(cat, idx){
+    var data = load();
+    if(!data.checklist) data.checklist = JSON.parse(JSON.stringify(DEFAULT_CHECKLIST));
+    if(data.checklist[cat] && data.checklist[cat][idx]){
+      data.checklist[cat][idx].checked = !data.checklist[cat][idx].checked;
+      save(data);
+    }
+    render();
+  }
+  
+  function _saveInfo(){
+    var data = load();
+    if(!data.pourInfo) data.pourInfo = {};
+    data.pourInfo.pourName = (document.getElementById('pcl-pourname')||{value:''}).value;
+    data.pourInfo.pourDate = (document.getElementById('pcl-pourdate')||{value:''}).value;
+    data.pourInfo.firstTruck = (document.getElementById('pcl-firsttruck')||{value:''}).value;
+    data.pourInfo.yards = (document.getElementById('pcl-yards')||{value:''}).value;
+    data.pourInfo.psi = (document.getElementById('pcl-psi')||{value:''}).value;
+    save(data);
+  }
+  
+  function _reset(){
+    if(confirm('Reset all checklist items to unchecked?')){
+      var data = load();
+      data.checklist = JSON.parse(JSON.stringify(DEFAULT_CHECKLIST));
+      save(data);
+      render();
+    }
+  }
+  
+  function _checkAll(){
+    var data = load();
+    if(!data.checklist) data.checklist = JSON.parse(JSON.stringify(DEFAULT_CHECKLIST));
+    Object.keys(data.checklist).forEach(function(cat){
+      data.checklist[cat].forEach(function(item){ item.checked = true; });
+    });
+    save(data);
+    render();
+  }
+  
+  function _print(){
+    var data = load();
+    if(!data.checklist) data.checklist = JSON.parse(JSON.stringify(DEFAULT_CHECKLIST));
+    if(!data.pourInfo) data.pourInfo = {};
+    
+    var categories = [
+      {key:'subgrade', title:'Subgrade & Preparation'},
+      {key:'formwork', title:'Formwork & Layout'},
+      {key:'rebar', title:'Rebar & Embedded Items'},
+      {key:'concrete', title:'Concrete & Delivery'},
+      {key:'crew', title:'Crew & Equipment'},
+      {key:'weather', title:'Weather & Environmental'},
+      {key:'notifications', title:'Notifications'}
+    ];
+    
+    var html = '<html><head><title>Pre-Pour Checklist</title><style>'
+      +'body{font-family:Arial,sans-serif;margin:20px;font-size:12px}'
+      +'.header{text-align:center;margin-bottom:15px}'
+      +'.info-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px;padding:10px;background:#f9fafb;border-radius:6px}'
+      +'.info-item{text-align:center}.info-label{font-size:10px;color:#666}.info-value{font-weight:700}'
+      +'.section{margin-bottom:12px}.section-title{font-weight:700;margin-bottom:6px;padding:4px 8px;background:#1e293b;color:#fff;border-radius:4px}'
+      +'.item{display:flex;align-items:center;gap:8px;padding:3px 0;border-bottom:1px solid #eee}'
+      +'.checkbox{width:14px;height:14px;border:2px solid #333;border-radius:3px;display:inline-block}'
+      +'.checkbox.checked{background:#22c55e;border-color:#22c55e}'
+      +'.signature{margin-top:30px;display:flex;gap:40px}'
+      +'.sig-box{flex:1;border-top:1px solid #333;padding-top:5px;text-align:center;font-size:10px}'
+      +'@media print{.np{display:none}}'
+      +'</style></head><body>'
+      +'<div class="header"><h2>📋 PRE-POUR INSPECTION CHECKLIST</h2><p>'+_esc(getProjectName())+' | Printed: '+new Date().toLocaleString()+'</p></div>'
+      +'<div class="info-grid">'
+      +'<div class="info-item"><div class="info-label">Pour Name</div><div class="info-value">'+(data.pourInfo.pourName||'—')+'</div></div>'
+      +'<div class="info-item"><div class="info-label">Pour Date</div><div class="info-value">'+(data.pourInfo.pourDate||'—')+'</div></div>'
+      +'<div class="info-item"><div class="info-label">First Truck</div><div class="info-value">'+(data.pourInfo.firstTruck||'—')+'</div></div>'
+      +'<div class="info-item"><div class="info-label">Quantity</div><div class="info-value">'+(data.pourInfo.yards||'—')+' yd³</div></div>'
+      +'<div class="info-item"><div class="info-label">Spec PSI</div><div class="info-value">'+(data.pourInfo.psi||'—')+' PSI</div></div>'
+      +'</div>';
+    
+    categories.forEach(function(cat){
+      var items = data.checklist[cat.key] || [];
+      html += '<div class="section"><div class="section-title">'+cat.title+'</div>';
+      items.forEach(function(item){
+        html += '<div class="item"><span class="checkbox '+(item.checked?'checked':'')+'"></span> '+_esc(item.text)+'</div>';
+      });
+      html += '</div>';
+    });
+    
+    html += '<div class="signature">'
+      +'<div class="sig-box">Foreman / Superintendent<br>Date: ____________</div>'
+      +'<div class="sig-box">Inspector / QC<br>Date: ____________</div>'
+      +'<div class="sig-box">GC Rep (if required)<br>Date: ____________</div>'
+      +'</div>'
+      +'<p style="color:#666;font-size:10px;margin-top:20px;text-align:center">Per ACI 302.1R, ACI 305R, ACI 306R, ACI 318-19 | CONFIDENTIAL — INTERNAL USE ONLY</p>'
+      +'<button class="np" onclick="window.print()" style="margin:10px;padding:8px 20px;background:#1e293b;color:#fff;border:none;border-radius:4px;cursor:pointer">🖨️ Print</button>'
+      +'</body></html>';
+    
+    var win = window.open('','_blank','width=800,height=900');
+    win.document.write(html);
+    win.document.close();
+  }
+  
+  function toggle(){
+    var el = document.getElementById(MODAL_ID);
+    if(!el){
+      el = document.createElement('div');
+      el.id = MODAL_ID;
+      el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:10010;display:flex;align-items:center;justify-content:center';
+      el.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:700px;max-height:90vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#22c55e">📋 Pre-Pour Checklist Generator</h3>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="pourchecklist-content"></div></div>';
+      el.addEventListener('click',function(e){ if(e.target===el) el.style.display='none'; });
+      document.body.appendChild(el);
+      render();
+    } else {
+      el.style.display = el.style.display==='none' ? 'flex' : 'none';
+      if(el.style.display==='flex') render();
+    }
+  }
+  
+  document.addEventListener('keydown',function(e){ if(e.ctrlKey&&e.altKey&&e.key==='x'){ e.preventDefault(); toggle(); } });
+  return { toggle:toggle, _toggle:_toggle, _saveInfo:_saveInfo, _reset:_reset, _checkAll:_checkAll, _print:_print };
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   📊 MATERIAL COST TRACKER (Ctrl+Alt+T)
+   Purpose: Track actual material costs vs estimated for cost variance analysis.
+   Helps identify where jobs are running over/under budget on materials.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+window._oncorMaterialTracker = (function(){
+  var MODAL_ID = 'overlay-materialtracker';
+  var STORAGE_KEY = 'oncor_matcost_v1';
+  
+  function _esc(s){ return String(s||'').replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  
+  function getProjectName(){
+    var el = document.getElementById('projectNameInput') || document.querySelector('.project-name');
+    return el ? el.value || 'Project' : 'Project';
+  }
+  
+  function load(){
+    var key = STORAGE_KEY + '_' + getProjectName().replace(/\s+/g,'_');
+    try { return JSON.parse(localStorage.getItem(key)) || {materials:[]}; } catch(e){ return {materials:[]}; }
+  }
+  function save(data){
+    var key = STORAGE_KEY + '_' + getProjectName().replace(/\s+/g,'_');
+    localStorage.setItem(key, JSON.stringify(data));
+  }
+  
+  var MATERIAL_TYPES = [
+    'Ready-Mix Concrete', 'Rebar', 'Wire Mesh/WWR', 'Fiber Reinforcement',
+    'Formwork Lumber', 'Form Plywood', 'Base Course/Flex Base', 'Vapor Barrier',
+    'Curing Compound', 'Expansion Joint', 'Sealer/Coating', 'Admixture',
+    'Anchor Bolts/Embeds', 'Saw Blades', 'Misc Materials', 'Other'
+  ];
+  
+  function render(){
+    var el = document.getElementById('mattracker-content');
+    if(!el) return;
+    
+    var data = load();
+    var materials = data.materials || [];
+    
+    var totalBudget = 0, totalActual = 0;
+    materials.forEach(function(m){
+      totalBudget += parseFloat(m.budget) || 0;
+      totalActual += parseFloat(m.actual) || 0;
+    });
+    var variance = totalBudget - totalActual;
+    var varianceColor = variance>=0 ? '#22c55e' : '#ef4444';
+    var variancePct = totalBudget>0 ? Math.round((variance/totalBudget)*100) : 0;
+    
+    var html = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
+      +'<div style="flex:1;min-width:100px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700;color:#22d3ee">$'+totalBudget.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0})+'</div><div style="font-size:11px;color:#94a3b8">Budgeted</div></div>'
+      +'<div style="flex:1;min-width:100px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700;color:#f59e0b">$'+totalActual.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0})+'</div><div style="font-size:11px;color:#94a3b8">Actual Spent</div></div>'
+      +'<div style="flex:1;min-width:100px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700;color:'+varianceColor+'">'+(variance>=0?'+':'')+variance.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0})+'</div><div style="font-size:11px;color:#94a3b8">Variance ('+(variance>=0?'+':'')+variancePct+'%)</div></div>'
+      +'<div style="flex:1;min-width:100px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700;color:#a78bfa">'+materials.length+'</div><div style="font-size:11px;color:#94a3b8">Items Tracked</div></div>'
+      +'</div>';
+    
+    // Add material form
+    html += '<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:12px">'
+      +'<div style="font-weight:600;margin-bottom:8px;font-size:13px">➕ Add Material Cost</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">'
+      +'<div><label style="font-size:11px;color:#94a3b8">Material Type</label><select id="mt-type" style="width:160px;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px">';
+    MATERIAL_TYPES.forEach(function(t){ html += '<option value="'+t+'">'+t+'</option>'; });
+    html += '</select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Vendor</label><input type="text" id="mt-vendor" placeholder="e.g. Martin Marietta" style="width:140px;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Budget $</label><input type="number" id="mt-budget" placeholder="Est" style="width:80px;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px" step="0.01"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Actual $</label><input type="number" id="mt-actual" placeholder="Spent" style="width:80px;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px" step="0.01"></div>'
+      +'<button onclick="window._oncorMaterialTracker._add()" style="padding:5px 12px;background:#22d3ee;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:700;font-size:12px">+ Add</button>'
+      +'</div></div>';
+    
+    // Materials table
+    if(materials.length){
+      html += '<div style="max-height:300px;overflow-y:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#1e293b;position:sticky;top:0">'
+        +'<th style="padding:6px;text-align:left">Material</th>'
+        +'<th style="padding:6px;text-align:left">Vendor</th>'
+        +'<th style="padding:6px;text-align:right">Budget</th>'
+        +'<th style="padding:6px;text-align:right">Actual</th>'
+        +'<th style="padding:6px;text-align:right">Variance</th>'
+        +'<th style="padding:6px"></th></tr></thead><tbody>';
+      
+      materials.forEach(function(m,i){
+        var budget = parseFloat(m.budget)||0;
+        var actual = parseFloat(m.actual)||0;
+        var v = budget - actual;
+        var vColor = v>=0 ? '#22c55e' : '#ef4444';
+        var vPct = budget>0 ? Math.round((v/budget)*100) : 0;
+        html += '<tr style="border-bottom:1px solid #334155">'
+          +'<td style="padding:5px 6px;font-weight:600;color:#e5e7eb">'+_esc(m.type)+'</td>'
+          +'<td style="padding:5px 6px;color:#94a3b8">'+_esc(m.vendor||'—')+'</td>'
+          +'<td style="padding:5px 6px;text-align:right;color:#22d3ee">$'+budget.toLocaleString()+'</td>'
+          +'<td style="padding:5px 6px;text-align:right;color:#f59e0b">$'+actual.toLocaleString()+'</td>'
+          +'<td style="padding:5px 6px;text-align:right;color:'+vColor+';font-weight:600">'+(v>=0?'+':'')+v.toLocaleString()+' <span style="font-size:10px">('+(v>=0?'+':'')+vPct+'%)</span></td>'
+          +'<td style="padding:5px 6px;text-align:center"><button onclick="window._oncorMaterialTracker._del('+i+')" style="padding:2px 6px;background:#dc2626;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:11px">×</button></td>'
+          +'</tr>';
+      });
+      
+      html += '<tr style="background:#1e293b;font-weight:700">'
+        +'<td colspan="2" style="padding:8px 6px">TOTALS</td>'
+        +'<td style="padding:8px 6px;text-align:right;color:#22d3ee">$'+totalBudget.toLocaleString()+'</td>'
+        +'<td style="padding:8px 6px;text-align:right;color:#f59e0b">$'+totalActual.toLocaleString()+'</td>'
+        +'<td style="padding:8px 6px;text-align:right;color:'+varianceColor+'">'+(variance>=0?'+':'')+variance.toLocaleString()+' ('+(variance>=0?'+':'')+variancePct+'%)</td>'
+        +'<td></td></tr>';
+      html += '</tbody></table></div>';
+      
+      html += '<div style="display:flex;gap:8px;margin-top:12px">'
+        +'<button onclick="window._oncorMaterialTracker._print()" style="padding:7px 14px;background:#475569;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">🖨️ Print Report</button>'
+        +'<button onclick="window._oncorMaterialTracker._clear()" style="padding:7px 14px;background:#7f1d1d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">🗑 Clear All</button>'
+        +'</div>';
+    } else {
+      html += '<div style="text-align:center;color:#64748b;padding:30px;font-size:13px">No materials tracked yet. Add your first material cost above.</div>';
+    }
+    
+    el.innerHTML = html;
+  }
+  
+  function _add(){
+    var type = (document.getElementById('mt-type')||{value:''}).value;
+    var vendor = (document.getElementById('mt-vendor')||{value:''}).value.trim();
+    var budget = parseFloat((document.getElementById('mt-budget')||{value:'0'}).value)||0;
+    var actual = parseFloat((document.getElementById('mt-actual')||{value:'0'}).value)||0;
+    
+    if(!type){ alert('Select a material type.'); return; }
+    
+    var data = load();
+    data.materials.push({ type:type, vendor:vendor, budget:budget, actual:actual, date:new Date().toISOString() });
+    save(data);
+    
+    document.getElementById('mt-vendor').value = '';
+    document.getElementById('mt-budget').value = '';
+    document.getElementById('mt-actual').value = '';
+    render();
+  }
+  
+  function _del(i){
+    var data = load();
+    data.materials.splice(i,1);
+    save(data);
+    render();
+  }
+  
+  function _clear(){
+    if(confirm('Clear all material costs?')){
+      save({materials:[]});
+      render();
+    }
+  }
+  
+  function _print(){
+    var data = load();
+    var materials = data.materials || [];
+    var totalBudget = 0, totalActual = 0;
+    materials.forEach(function(m){
+      totalBudget += parseFloat(m.budget)||0;
+      totalActual += parseFloat(m.actual)||0;
+    });
+    var variance = totalBudget - totalActual;
+    var variancePct = totalBudget>0 ? Math.round((variance/totalBudget)*100) : 0;
+    
+    var rows = materials.map(function(m){
+      var b = parseFloat(m.budget)||0;
+      var a = parseFloat(m.actual)||0;
+      var v = b-a;
+      var vPct = b>0?Math.round((v/b)*100):0;
+      return '<tr><td>'+_esc(m.type)+'</td><td>'+_esc(m.vendor||'—')+'</td><td style="text-align:right">$'+b.toLocaleString()+'</td><td style="text-align:right">$'+a.toLocaleString()+'</td><td style="text-align:right;color:'+(v>=0?'#16a34a':'#dc2626')+'">'+(v>=0?'+':'')+v.toLocaleString()+' ('+(v>=0?'+':'')+vPct+'%)</td></tr>';
+    }).join('');
+    
+    var html = '<html><head><title>Material Cost Report</title><style>'
+      +'body{font-family:Arial,sans-serif;margin:20px;font-size:12px}'
+      +'.kpi{display:flex;gap:15px;margin-bottom:20px}.kpi-card{flex:1;text-align:center;padding:12px;background:#f9fafb;border-radius:6px}.kpi-value{font-size:20px;font-weight:700}.kpi-label{font-size:10px;color:#666}'
+      +'table{width:100%;border-collapse:collapse}th{background:#1e293b;color:#fff;padding:8px;text-align:left}td{padding:6px;border-bottom:1px solid #e5e7eb}'
+      +'.total{font-weight:700;background:#f3f4f6}'
+      +'@media print{.np{display:none}}'
+      +'</style></head><body>'
+      +'<h2>📊 Material Cost Variance Report</h2>'
+      +'<p>'+_esc(getProjectName())+' | Printed: '+new Date().toLocaleString()+'</p>'
+      +'<div class="kpi">'
+      +'<div class="kpi-card"><div class="kpi-value" style="color:#0891b2">$'+totalBudget.toLocaleString()+'</div><div class="kpi-label">BUDGETED</div></div>'
+      +'<div class="kpi-card"><div class="kpi-value" style="color:#d97706">$'+totalActual.toLocaleString()+'</div><div class="kpi-label">ACTUAL SPENT</div></div>'
+      +'<div class="kpi-card"><div class="kpi-value" style="color:'+(variance>=0?'#16a34a':'#dc2626')+'">'+(variance>=0?'+':'')+variance.toLocaleString()+'</div><div class="kpi-label">VARIANCE ('+(variance>=0?'+':'')+variancePct+'%)</div></div>'
+      +'</div>'
+      +'<table><thead><tr><th>Material</th><th>Vendor</th><th>Budget</th><th>Actual</th><th>Variance</th></tr></thead><tbody>'
+      +rows
+      +'<tr class="total"><td colspan="2">TOTALS</td><td style="text-align:right">$'+totalBudget.toLocaleString()+'</td><td style="text-align:right">$'+totalActual.toLocaleString()+'</td><td style="text-align:right;color:'+(variance>=0?'#16a34a':'#dc2626')+'">'+(variance>=0?'+':'')+variance.toLocaleString()+'</td></tr>'
+      +'</tbody></table>'
+      +'<p style="color:#666;font-size:10px;margin-top:20px">CONFIDENTIAL — INTERNAL USE ONLY</p>'
+      +'<button class="np" onclick="window.print()" style="margin:10px;padding:8px 20px;background:#1e293b;color:#fff;border:none;border-radius:4px;cursor:pointer">🖨️ Print</button>'
+      +'</body></html>';
+    
+    var win = window.open('','_blank','width=800,height=700');
+    win.document.write(html);
+    win.document.close();
+  }
+  
+  function toggle(){
+    var el = document.getElementById(MODAL_ID);
+    if(!el){
+      el = document.createElement('div');
+      el.id = MODAL_ID;
+      el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:10010;display:flex;align-items:center;justify-content:center';
+      el.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:800px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#f59e0b">📊 Material Cost Tracker</h3>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="mattracker-content"></div></div>';
+      el.addEventListener('click',function(e){ if(e.target===el) el.style.display='none'; });
+      document.body.appendChild(el);
+      render();
+    } else {
+      el.style.display = el.style.display==='none' ? 'flex' : 'none';
+      if(el.style.display==='flex') render();
+    }
+  }
+  
+  document.addEventListener('keydown',function(e){ if(e.ctrlKey&&e.altKey&&e.key==='t'){ e.preventDefault(); toggle(); } });
+  return { toggle:toggle, _add:_add, _del:_del, _clear:_clear, _print:_print };
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   🔔 PROJECT DEADLINE ALERTS (Ctrl+Alt+L)
+   Purpose: Visual dashboard of upcoming deadlines across all modules.
+   Aggregates deadlines from AR, inspections, permits, lien notices, etc.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+window._oncorDeadlineAlerts = (function(){
+  var MODAL_ID = 'overlay-deadlinealerts';
+  var STORAGE_KEY = 'oncor_deadlines_v1';
+  
+  function _esc(s){ return String(s||'').replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  
+  function getProjectName(){
+    var el = document.getElementById('projectNameInput') || document.querySelector('.project-name');
+    return el ? el.value || 'Project' : 'Project';
+  }
+  
+  function load(){
+    var key = STORAGE_KEY + '_' + getProjectName().replace(/\s+/g,'_');
+    try { return JSON.parse(localStorage.getItem(key)) || {deadlines:[]}; } catch(e){ return {deadlines:[]}; }
+  }
+  function save(data){
+    var key = STORAGE_KEY + '_' + getProjectName().replace(/\s+/g,'_');
+    localStorage.setItem(key, JSON.stringify(data));
+  }
+  
+  var DEADLINE_TYPES = [
+    {value:'invoice', label:'📄 Invoice Due', color:'#22d3ee'},
+    {value:'payment', label:'💵 Payment Due', color:'#22c55e'},
+    {value:'inspection', label:'🔍 Inspection', color:'#a78bfa'},
+    {value:'permit', label:'📋 Permit Expires', color:'#f59e0b'},
+    {value:'lien', label:'⚖️ Lien Notice', color:'#ef4444'},
+    {value:'submittal', label:'📑 Submittal Due', color:'#ec4899'},
+    {value:'rfi', label:'❓ RFI Response', color:'#6366f1'},
+    {value:'cylinder', label:'🧪 Cylinder Break', color:'#14b8a6'},
+    {value:'insurance', label:'🛡️ Insurance Renewal', color:'#8b5cf6'},
+    {value:'meeting', label:'📅 Meeting', color:'#0ea5e9'},
+    {value:'pour', label:'🚚 Pour Scheduled', color:'#f97316'},
+    {value:'other', label:'📌 Other', color:'#64748b'}
+  ];
+  
+  function getTypeInfo(type){
+    var found = DEADLINE_TYPES.find(function(t){ return t.value===type; });
+    return found || {label:'📌 Other', color:'#64748b'};
+  }
+  
+  function daysUntil(dateStr){
+    if(!dateStr) return 999;
+    var d = new Date(dateStr);
+    var today = new Date();
+    today.setHours(0,0,0,0);
+    d.setHours(0,0,0,0);
+    return Math.ceil((d-today)/(1000*60*60*24));
+  }
+  
+  function render(){
+    var el = document.getElementById('deadlinealerts-content');
+    if(!el) return;
+    
+    var data = load();
+    var deadlines = (data.deadlines || []).slice().sort(function(a,b){
+      return new Date(a.date) - new Date(b.date);
+    });
+    
+    var today = new Date().toISOString().split('T')[0];
+    var overdue = deadlines.filter(function(d){ return d.date < today && !d.complete; });
+    var upcoming7 = deadlines.filter(function(d){ var days = daysUntil(d.date); return days>=0 && days<=7 && !d.complete; });
+    var upcoming30 = deadlines.filter(function(d){ var days = daysUntil(d.date); return days>7 && days<=30 && !d.complete; });
+    
+    var html = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
+      +'<div style="flex:1;min-width:100px;padding:10px;background:'+(overdue.length>0?'#7f1d1d':'#0f172a')+';border-radius:6px;text-align:center"><div style="font-size:22px;font-weight:700;color:#ef4444">'+overdue.length+'</div><div style="font-size:11px;color:#94a3b8">🔴 Overdue</div></div>'
+      +'<div style="flex:1;min-width:100px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:22px;font-weight:700;color:#f59e0b">'+upcoming7.length+'</div><div style="font-size:11px;color:#94a3b8">⚠️ Next 7 Days</div></div>'
+      +'<div style="flex:1;min-width:100px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:22px;font-weight:700;color:#22d3ee">'+upcoming30.length+'</div><div style="font-size:11px;color:#94a3b8">📅 8-30 Days</div></div>'
+      +'<div style="flex:1;min-width:100px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:22px;font-weight:700;color:#a78bfa">'+deadlines.length+'</div><div style="font-size:11px;color:#94a3b8">Total Deadlines</div></div>'
+      +'</div>';
+    
+    // Alert banner
+    if(overdue.length>0){
+      html += '<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:6px;padding:10px;margin-bottom:12px">'
+        +'<div style="font-weight:700;color:#fca5a5">🚨 '+overdue.length+' OVERDUE DEADLINE'+(overdue.length>1?'S':'')+'!</div>'
+        +'<div style="font-size:12px;color:#fca5a5;margin-top:4px">'+overdue.map(function(d){ return _esc(d.title); }).join(' • ')+'</div>'
+        +'</div>';
+    }
+    
+    // Add deadline form
+    html += '<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:12px">'
+      +'<div style="font-weight:600;margin-bottom:8px;font-size:13px">➕ Add Deadline</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">'
+      +'<div><label style="font-size:11px;color:#94a3b8">Type</label><select id="dl-type" style="width:150px;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px">';
+    DEADLINE_TYPES.forEach(function(t){ html += '<option value="'+t.value+'">'+t.label+'</option>'; });
+    html += '</select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Title/Description</label><input type="text" id="dl-title" placeholder="e.g. Pay App #3 Due" style="width:180px;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Due Date</label><input type="date" id="dl-date" style="width:130px;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;font-size:12px"></div>'
+      +'<button onclick="window._oncorDeadlineAlerts._add()" style="padding:5px 12px;background:#22d3ee;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:700;font-size:12px">+ Add</button>'
+      +'</div></div>';
+    
+    // Deadlines list
+    if(deadlines.length){
+      html += '<div style="max-height:320px;overflow-y:auto">';
+      
+      var activeDeadlines = deadlines.filter(function(d){ return !d.complete; });
+      var completedDeadlines = deadlines.filter(function(d){ return d.complete; });
+      
+      if(activeDeadlines.length){
+        html += '<div style="font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:8px">ACTIVE DEADLINES</div>';
+        activeDeadlines.forEach(function(d,i){
+          var typeInfo = getTypeInfo(d.type);
+          var days = daysUntil(d.date);
+          var urgency = days<0 ? {bg:'#7f1d1d',text:'🔴 OVERDUE ('+Math.abs(days)+'d)'} :
+                        days===0 ? {bg:'#78350f',text:'⚠️ TODAY!'} :
+                        days<=3 ? {bg:'#713f12',text:'⚠️ '+days+' day'+(days>1?'s':'')} :
+                        days<=7 ? {bg:'#1e3a5f',text:'📅 '+days+' days'} :
+                        {bg:'#0f172a',text:'📅 '+days+' days'};
+          
+          var idx = deadlines.indexOf(d);
+          html += '<div style="background:'+urgency.bg+';border:1px solid #334155;border-left:4px solid '+typeInfo.color+';border-radius:6px;padding:10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">'
+            +'<div>'
+            +'<div style="font-weight:600;color:#e5e7eb">'+_esc(d.title)+'</div>'
+            +'<div style="font-size:11px;color:#94a3b8;margin-top:2px">'+typeInfo.label+' • '+d.date+' • <span style="font-weight:600">'+urgency.text+'</span></div>'
+            +'</div>'
+            +'<div style="display:flex;gap:6px">'
+            +'<button onclick="window._oncorDeadlineAlerts._complete('+idx+')" style="padding:4px 10px;background:#22c55e;color:#000;border:none;border-radius:4px;cursor:pointer;font-size:11px">✓ Done</button>'
+            +'<button onclick="window._oncorDeadlineAlerts._del('+idx+')" style="padding:4px 8px;background:#dc2626;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px">×</button>'
+            +'</div></div>';
+        });
+      }
+      
+      if(completedDeadlines.length){
+        html += '<details style="margin-top:12px"><summary style="cursor:pointer;font-size:12px;color:#64748b">✅ Completed ('+completedDeadlines.length+')</summary><div style="margin-top:8px">';
+        completedDeadlines.forEach(function(d){
+          var idx = deadlines.indexOf(d);
+          html += '<div style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:8px;margin-bottom:4px;opacity:0.7;display:flex;justify-content:space-between;align-items:center">'
+            +'<div style="text-decoration:line-through;color:#64748b">'+_esc(d.title)+' ('+d.date+')</div>'
+            +'<button onclick="window._oncorDeadlineAlerts._del('+idx+')" style="padding:2px 6px;background:#334155;color:#94a3b8;border:none;border-radius:3px;cursor:pointer;font-size:10px">×</button>'
+            +'</div>';
+        });
+        html += '</div></details>';
+      }
+      
+      html += '</div>';
+      
+      html += '<div style="display:flex;gap:8px;margin-top:12px">'
+        +'<button onclick="window._oncorDeadlineAlerts._print()" style="padding:7px 14px;background:#475569;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">🖨️ Print Report</button>'
+        +'</div>';
+    } else {
+      html += '<div style="text-align:center;color:#64748b;padding:30px;font-size:13px">No deadlines tracked yet. Add your first deadline above.</div>';
+    }
+    
+    el.innerHTML = html;
+  }
+  
+  function _add(){
+    var type = (document.getElementById('dl-type')||{value:''}).value;
+    var title = (document.getElementById('dl-title')||{value:''}).value.trim();
+    var date = (document.getElementById('dl-date')||{value:''}).value;
+    
+    if(!title){ alert('Enter a title/description.'); return; }
+    if(!date){ alert('Enter a due date.'); return; }
+    
+    var data = load();
+    data.deadlines.push({ type:type, title:title, date:date, complete:false, created:new Date().toISOString() });
+    save(data);
+    
+    document.getElementById('dl-title').value = '';
+    document.getElementById('dl-date').value = '';
+    render();
+  }
+  
+  function _del(i){
+    var data = load();
+    data.deadlines.splice(i,1);
+    save(data);
+    render();
+  }
+  
+  function _complete(i){
+    var data = load();
+    if(data.deadlines[i]){
+      data.deadlines[i].complete = true;
+      data.deadlines[i].completedDate = new Date().toISOString();
+      save(data);
+    }
+    render();
+  }
+  
+  function _print(){
+    var data = load();
+    var deadlines = (data.deadlines || []).filter(function(d){ return !d.complete; }).sort(function(a,b){
+      return new Date(a.date) - new Date(b.date);
+    });
+    
+    var today = new Date().toISOString().split('T')[0];
+    var rows = deadlines.map(function(d){
+      var typeInfo = getTypeInfo(d.type);
+      var days = daysUntil(d.date);
+      var status = days<0 ? '<span style="color:#dc2626;font-weight:700">🔴 OVERDUE</span>' :
+                   days===0 ? '<span style="color:#d97706;font-weight:700">⚠️ TODAY</span>' :
+                   days<=7 ? '<span style="color:#d97706">⚠️ '+days+'d</span>' :
+                   '<span style="color:#059669">'+days+'d</span>';
+      return '<tr><td>'+d.date+'</td><td>'+typeInfo.label+'</td><td>'+_esc(d.title)+'</td><td style="text-align:center">'+status+'</td></tr>';
+    }).join('');
+    
+    var html = '<html><head><title>Deadline Report</title><style>'
+      +'body{font-family:Arial,sans-serif;margin:20px;font-size:12px}'
+      +'table{width:100%;border-collapse:collapse}th{background:#1e293b;color:#fff;padding:8px;text-align:left}td{padding:6px;border-bottom:1px solid #e5e7eb}'
+      +'.overdue{background:#fef2f2}'
+      +'@media print{.np{display:none}}'
+      +'</style></head><body>'
+      +'<h2>🔔 Project Deadline Report</h2>'
+      +'<p>'+_esc(getProjectName())+' | Printed: '+new Date().toLocaleString()+'</p>'
+      +'<table><thead><tr><th>Due Date</th><th>Type</th><th>Description</th><th>Status</th></tr></thead><tbody>'
+      +rows
+      +'</tbody></table>'
+      +'<p style="color:#666;font-size:10px;margin-top:20px">CONFIDENTIAL — INTERNAL USE ONLY</p>'
+      +'<button class="np" onclick="window.print()" style="margin:10px;padding:8px 20px;background:#1e293b;color:#fff;border:none;border-radius:4px;cursor:pointer">🖨️ Print</button>'
+      +'</body></html>';
+    
+    var win = window.open('','_blank','width=800,height=600');
+    win.document.write(html);
+    win.document.close();
+  }
+  
+  function toggle(){
+    var el = document.getElementById(MODAL_ID);
+    if(!el){
+      el = document.createElement('div');
+      el.id = MODAL_ID;
+      el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:10010;display:flex;align-items:center;justify-content:center';
+      el.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:700px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#ef4444">🔔 Project Deadline Alerts</h3>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="deadlinealerts-content"></div></div>';
+      el.addEventListener('click',function(e){ if(e.target===el) el.style.display='none'; });
+      document.body.appendChild(el);
+      render();
+    } else {
+      el.style.display = el.style.display==='none' ? 'flex' : 'none';
+      if(el.style.display==='flex') render();
+    }
+  }
+  
+  document.addEventListener('keydown',function(e){ if(e.ctrlKey&&e.altKey&&e.key==='l'){ e.preventDefault(); toggle(); } });
+  return { toggle:toggle, _add:_add, _del:_del, _complete:_complete, _print:_print };
+})();
+
+
+/* ─── Escape closes all Session #112 modals ─── */
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){
+    ['overlay-pourchecklist','overlay-materialtracker','overlay-deadlinealerts'].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el && el.style.display!=='none') el.style.display='none';
+    });
+  }
+});
+
+/* ─── Sidebar buttons ─── */
+document.addEventListener('DOMContentLoaded',function(){
+  var sidebar = document.querySelector('.sidebar-actions')||document.querySelector('#sidebarActions')||document.querySelector('aside');
+  function injectBtn(id,emoji,label,fn){
+    if(document.getElementById(id)) return;
+    var btn = document.createElement('button');
+    btn.id=id; btn.textContent=emoji+' '+label;
+    btn.style.cssText='display:block;width:100%;margin:2px 0;padding:6px 10px;background:#1e293b;color:#e5e7eb;border:1px solid #334155;border-radius:6px;cursor:pointer;text-align:left;font-size:12px';
+    btn.onclick=fn;
+    if(sidebar) sidebar.appendChild(btn);
+  }
+  injectBtn('btnPourChecklist','📋','Pour Checklist',function(){ window._oncorPourChecklist.toggle(); });
+  injectBtn('btnMaterialTracker','📊','Material Costs',function(){ window._oncorMaterialTracker.toggle(); });
+  injectBtn('btnDeadlineAlerts','🔔','Deadline Alerts',function(){ window._oncorDeadlineAlerts.toggle(); });
+});
+
+})();
+
+// ==================== END SESSION #112 — Zeus ⚡ Concrete Pour Checklist Generator + Material Cost Tracker + Project Deadline Alerts ====================
+
+
 })();
