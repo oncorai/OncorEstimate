@@ -177081,4 +177081,543 @@ document.addEventListener('keydown', function(e) {
 
 // ==================== END SESSION #108 — Zeus ⚡ Material Delivery Planner + Pre-Bid Scope Checklist + Pour Performance Report ====================
 
+
+// ==================== SESSION #109 — Zeus ⚡ Daily Dispatch Board + Labor Burden Calculator + Concrete Price Tracker ====================
+// Three new tools for field operations, labor costing, and material cost tracking
+// Date: Apr 3, 2026 03:35 UTC
+
+(function(){
+  'use strict';
+  function _esc(s){ return String(s||'').replace(/[&<>"']/g,function(m){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];}); }
+  function _proj(){ return (document.getElementById('projectName')||{}).value||'Untitled'; }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     🚛 DAILY DISPATCH BOARD — Crew & equipment assignments for the day
+     Purpose: Morning dispatch view — who's going where, what equipment, what time
+  ═══════════════════════════════════════════════════════════════════════════ */
+  window._oncorDispatch = (function(){
+    var KEY = function(){ return 'oncor_dispatch_v1_'+_proj().replace(/\s+/g,'_'); };
+    function load(){ try{ return JSON.parse(localStorage.getItem(KEY()))||[]; }catch(e){ return []; } }
+    function save(d){ localStorage.setItem(KEY(),JSON.stringify(d)); }
+
+    var showForm = false, editIdx = null;
+    var dispatchTypes = ['Pour Crew','Prep/Form Crew','Rebar Crew','Finishing Crew','Saw Crew','Pump Setup','Delivery Receiving','Site Supervision','Equipment Move','Other'];
+    var equipmentList = ['Boom Pump','Line Pump','Vibrator(s)','Power Trowel','Walk-Behind Saw','Laser Screed','Forklift','Bobcat/Skid Steer','Concrete Buggy','Light Tower','Generator','Water Truck','None'];
+
+    function render(){
+      var el = document.getElementById('dispatch-content'); if(!el) return;
+      var data = load();
+      var today = new Date().toISOString().split('T')[0];
+      var todayData = data.filter(function(d){ return d.date===today; });
+      var otherData = data.filter(function(d){ return d.date!==today; }).sort(function(a,b){ return new Date(b.date)-new Date(a.date); });
+
+      var stats = { total: todayData.length, crew: 0, equip: 0 };
+      todayData.forEach(function(d){ stats.crew += parseInt(d.crewSize)||0; if(d.equipment&&d.equipment!=='None') stats.equip++; });
+
+      var html = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+        +'<div style="flex:1;min-width:100px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:22px;font-weight:700;color:#22d3ee">'+stats.total+'</div><div style="font-size:11px;color:#94a3b8">Today\'s Dispatches</div></div>'
+        +'<div style="flex:1;min-width:100px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:22px;font-weight:700;color:#4ade80">'+stats.crew+'</div><div style="font-size:11px;color:#94a3b8">Total Crew</div></div>'
+        +'<div style="flex:1;min-width:100px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:22px;font-weight:700;color:#f59e0b">'+stats.equip+'</div><div style="font-size:11px;color:#94a3b8">Equipment Assigned</div></div>'
+        +'</div>';
+
+      html += '<div style="display:flex;gap:8px;margin-bottom:12px">'
+        +'<button onclick="window._oncorDispatch._add()" style="padding:6px 12px;background:#22d3ee;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:600">+ New Dispatch</button>'
+        +'<button onclick="window._oncorDispatch._print()" style="padding:6px 12px;background:#475569;color:#fff;border:none;border-radius:4px;cursor:pointer">🖨️ Print Today</button>'
+        +'</div>';
+
+      if(showForm){
+        var f = editIdx!==null ? data[editIdx] : {};
+        html += '<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:12px">'
+          +'<div style="font-weight:600;margin-bottom:8px">'+(editIdx!==null?'Edit':'New')+' Dispatch</div>'
+          +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px">'
+          +'<div><label style="font-size:11px;color:#94a3b8">Date</label><input type="date" id="dsp-date" value="'+(f.date||today)+'" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+          +'<div><label style="font-size:11px;color:#94a3b8">Report Time</label><input type="time" id="dsp-time" value="'+(f.reportTime||'06:00')+'" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+          +'<div><label style="font-size:11px;color:#94a3b8">Type</label><select id="dsp-type" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb">'+dispatchTypes.map(function(t){ return '<option'+(f.type===t?' selected':'')+'>'+t+'</option>'; }).join('')+'</select></div>'
+          +'<div><label style="font-size:11px;color:#94a3b8">Location/Area</label><input type="text" id="dsp-location" value="'+_esc(f.location||'')+'" placeholder="Grid A-D, Slab 2..." style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+          +'<div><label style="font-size:11px;color:#94a3b8">Foreman</label><input type="text" id="dsp-foreman" value="'+_esc(f.foreman||'')+'" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+          +'<div><label style="font-size:11px;color:#94a3b8">Crew Size</label><input type="number" id="dsp-crew" value="'+(f.crewSize||'')+'" min="1" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+          +'<div><label style="font-size:11px;color:#94a3b8">Equipment</label><select id="dsp-equip" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb">'+equipmentList.map(function(e){ return '<option'+(f.equipment===e?' selected':'')+'>'+e+'</option>'; }).join('')+'</select></div>'
+          +'<div><label style="font-size:11px;color:#94a3b8">Est. Hours</label><input type="number" id="dsp-hours" value="'+(f.estHours||'')+'" step="0.5" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+          +'</div>'
+          +'<div style="margin-top:8px"><label style="font-size:11px;color:#94a3b8">Notes/Instructions</label><textarea id="dsp-notes" rows="2" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb">'+_esc(f.notes||'')+'</textarea></div>'
+          +'<div style="margin-top:10px;display:flex;gap:8px">'
+          +'<button onclick="window._oncorDispatch._save()" style="padding:6px 14px;background:#22d3ee;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:600">Save</button>'
+          +'<button onclick="window._oncorDispatch._cancel()" style="padding:6px 14px;background:#64748b;color:#fff;border:none;border-radius:4px;cursor:pointer">Cancel</button>'
+          +'</div></div>';
+      }
+
+      // Today's dispatches
+      if(todayData.length>0){
+        html += '<div style="font-weight:600;margin:12px 0 8px;color:#22d3ee">📅 Today\'s Dispatches ('+today+')</div>';
+        todayData.forEach(function(d,i){
+          var idx = data.indexOf(d);
+          html += '<div style="background:#1e293b;padding:10px;border-radius:6px;margin-bottom:8px;border-left:3px solid #22d3ee">'
+            +'<div style="display:flex;justify-content:space-between;align-items:center">'
+            +'<div><span style="font-weight:600">'+_esc(d.reportTime)+'</span> — <span style="background:#334155;padding:2px 6px;border-radius:4px;font-size:11px">'+_esc(d.type)+'</span></div>'
+            +'<div style="display:flex;gap:6px">'
+            +'<button onclick="window._oncorDispatch._edit('+idx+')" style="padding:3px 8px;background:#475569;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px">✏️</button>'
+            +'<button onclick="window._oncorDispatch._del('+idx+')" style="padding:3px 8px;background:#dc2626;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px">🗑️</button>'
+            +'</div></div>'
+            +'<div style="margin-top:6px;font-size:13px"><strong>📍</strong> '+_esc(d.location||'—')+' | <strong>👷</strong> '+_esc(d.foreman||'—')+' + '+(d.crewSize||'?')+' crew | <strong>🔧</strong> '+_esc(d.equipment||'None')+'</div>'
+            +(d.notes?'<div style="margin-top:4px;font-size:12px;color:#94a3b8;font-style:italic">'+_esc(d.notes)+'</div>':'')
+            +'</div>';
+        });
+      }
+
+      // Past dispatches
+      if(otherData.length>0){
+        html += '<details style="margin-top:12px"><summary style="cursor:pointer;color:#94a3b8;font-size:12px">📜 Past Dispatches ('+otherData.length+')</summary><div style="margin-top:8px">';
+        otherData.slice(0,10).forEach(function(d){
+          var idx = data.indexOf(d);
+          html += '<div style="background:#0f172a;padding:8px;border-radius:4px;margin-bottom:4px;font-size:12px">'
+            +'<span style="color:#64748b">'+_esc(d.date)+'</span> '+_esc(d.reportTime)+' — '+_esc(d.type)+' @ '+_esc(d.location||'—')+' ('+_esc(d.foreman)+' +'+_esc(d.crewSize)+')'
+            +' <button onclick="window._oncorDispatch._del('+idx+')" style="padding:1px 4px;background:#dc2626;color:#fff;border:none;border-radius:2px;cursor:pointer;font-size:10px;margin-left:6px">×</button>'
+            +'</div>';
+        });
+        html += '</div></details>';
+      }
+
+      el.innerHTML = html;
+    }
+
+    function createOverlay(){
+      if(document.getElementById('overlay-dispatch')) return;
+      var ov = document.createElement('div');
+      ov.id = 'overlay-dispatch';
+      ov.style.cssText = 'display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;overflow:auto;padding:20px;box-sizing:border-box';
+      ov.innerHTML = '<div style="max-width:700px;margin:0 auto;background:#0f172a;border-radius:12px;padding:20px;color:#e5e7eb;font-family:Arial,sans-serif">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+        +'<h2 style="margin:0;color:#22d3ee">🚛 Daily Dispatch Board</h2>'
+        +'<button onclick="document.getElementById(\'overlay-dispatch\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:24px;cursor:pointer">&times;</button>'
+        +'</div>'
+        +'<div id="dispatch-content"></div>'
+        +'</div>';
+      document.body.appendChild(ov);
+    }
+
+    return {
+      toggle: function(){ createOverlay(); var ov=document.getElementById('overlay-dispatch'); ov.style.display=ov.style.display==='none'?'block':'none'; if(ov.style.display==='block') render(); },
+      _add: function(){ showForm=true; editIdx=null; render(); },
+      _edit: function(i){ showForm=true; editIdx=i; render(); },
+      _cancel: function(){ showForm=false; editIdx=null; render(); },
+      _save: function(){
+        var d = {
+          date: document.getElementById('dsp-date').value,
+          reportTime: document.getElementById('dsp-time').value,
+          type: document.getElementById('dsp-type').value,
+          location: document.getElementById('dsp-location').value,
+          foreman: document.getElementById('dsp-foreman').value,
+          crewSize: document.getElementById('dsp-crew').value,
+          equipment: document.getElementById('dsp-equip').value,
+          estHours: document.getElementById('dsp-hours').value,
+          notes: document.getElementById('dsp-notes').value
+        };
+        var data = load();
+        if(editIdx!==null) data[editIdx]=d; else data.push(d);
+        save(data); showForm=false; editIdx=null; render();
+      },
+      _del: function(i){ if(!confirm('Delete this dispatch?')) return; var data=load(); data.splice(i,1); save(data); render(); },
+      _print: function(){
+        var data = load();
+        var today = new Date().toISOString().split('T')[0];
+        var todayData = data.filter(function(d){ return d.date===today; }).sort(function(a,b){ return (a.reportTime||'').localeCompare(b.reportTime||''); });
+        var rows = todayData.map(function(d){
+          return '<tr><td>'+_esc(d.reportTime)+'</td><td>'+_esc(d.type)+'</td><td>'+_esc(d.location||'—')+'</td><td>'+_esc(d.foreman||'—')+'</td><td>'+_esc(d.crewSize||'—')+'</td><td>'+_esc(d.equipment||'—')+'</td><td>'+_esc(d.notes||'')+'</td></tr>';
+        }).join('');
+        var w = window.open('','_blank','width=900,height=600');
+        w.document.write('<!DOCTYPE html><html><head><title>Daily Dispatch</title><style>body{font-family:Arial,sans-serif;margin:20px;font-size:13px}table{width:100%;border-collapse:collapse}th{background:#1e293b;color:#fff;padding:8px;text-align:left}td{padding:6px 8px;border-bottom:1px solid #ccc}@media print{button{display:none}}</style></head><body>'
+          +'<h2>🚛 Daily Dispatch Board</h2>'
+          +'<p>Project: '+_esc(_proj())+' — Date: '+today+'</p>'
+          +'<table><thead><tr><th>Time</th><th>Type</th><th>Location</th><th>Foreman</th><th>Crew</th><th>Equipment</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table>'
+          +'<br><button onclick="window.print()">🖨️ Print</button></body></html>');
+        w.document.close();
+      }
+    };
+  })();
+
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     💵 LABOR BURDEN CALCULATOR — True cost of labor including burden
+     Purpose: Calculate actual labor cost with taxes, insurance, benefits
+     References: IRS Publication 15, FUTA/SUTA rates, TX WC rates
+  ═══════════════════════════════════════════════════════════════════════════ */
+  window._oncorLaborBurden = (function(){
+    var KEY = 'oncor_labor_burden_v1';
+    function load(){ try{ return JSON.parse(localStorage.getItem(KEY))||getDefaults(); }catch(e){ return getDefaults(); } }
+    function save(d){ localStorage.setItem(KEY,JSON.stringify(d)); }
+    
+    function getDefaults(){
+      return {
+        // Base rates (El Paso 2025-2026)
+        rates: [
+          { title: 'Foreman', hourly: 38.00 },
+          { title: 'Finisher', hourly: 32.00 },
+          { title: 'Laborer', hourly: 22.00 },
+          { title: 'Form Carpenter', hourly: 30.00 },
+          { title: 'Rod Buster', hourly: 28.00 },
+          { title: 'Equipment Operator', hourly: 34.00 },
+          { title: 'Helper', hourly: 18.00 }
+        ],
+        // Burden percentages
+        fica: 7.65,        // Social Security 6.2% + Medicare 1.45%
+        futa: 0.60,        // Federal unemployment (0.6% on first $7k)
+        suta: 2.70,        // TX State unemployment (varies, avg 2.7%)
+        workersComp: 8.50, // TX Concrete work WC rate (~$8.50/$100)
+        glInsurance: 2.00, // General liability allocation
+        healthIns: 0,      // Per-hour health insurance cost (if offered)
+        retirement: 0,     // 401k match etc
+        pto: 0,            // PTO accrual %
+        training: 0.50,    // Safety/training allocation
+        other: 0           // Other burden
+      };
+    }
+
+    function calcBurden(hourly, cfg){
+      var burden = {
+        fica: hourly * (cfg.fica/100),
+        futa: hourly * (cfg.futa/100),
+        suta: hourly * (cfg.suta/100),
+        workersComp: hourly * (cfg.workersComp/100),
+        glInsurance: hourly * (cfg.glInsurance/100),
+        healthIns: parseFloat(cfg.healthIns)||0,
+        retirement: hourly * (cfg.retirement/100),
+        pto: hourly * (cfg.pto/100),
+        training: hourly * (cfg.training/100),
+        other: hourly * (cfg.other/100)
+      };
+      burden.total = Object.values(burden).reduce(function(a,b){ return a+b; },0);
+      burden.fullyBurdened = hourly + burden.total;
+      burden.burdenPct = (burden.total/hourly*100);
+      return burden;
+    }
+
+    function render(){
+      var el = document.getElementById('laborburden-content'); if(!el) return;
+      var cfg = load();
+
+      var html = '<div style="margin-bottom:12px;font-size:12px;color:#94a3b8">Calculate true labor cost including payroll taxes, insurance, and benefits. Essential for accurate bidding.</div>';
+
+      // Burden rate configuration
+      html += '<details open style="margin-bottom:12px"><summary style="cursor:pointer;font-weight:600;color:#f59e0b">⚙️ Burden Rate Configuration</summary>'
+        +'<div style="background:#1e293b;padding:12px;border-radius:8px;margin-top:8px">'
+        +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px">'
+        +'<div><label style="font-size:11px;color:#94a3b8">FICA (SS+Medicare) %</label><input type="number" id="lb-fica" value="'+cfg.fica+'" step="0.01" style="width:100%;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">FUTA %</label><input type="number" id="lb-futa" value="'+cfg.futa+'" step="0.01" style="width:100%;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">SUTA (TX) %</label><input type="number" id="lb-suta" value="'+cfg.suta+'" step="0.01" style="width:100%;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Workers Comp %</label><input type="number" id="lb-wc" value="'+cfg.workersComp+'" step="0.01" style="width:100%;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">GL Insurance %</label><input type="number" id="lb-gl" value="'+cfg.glInsurance+'" step="0.01" style="width:100%;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Health Ins $/hr</label><input type="number" id="lb-health" value="'+cfg.healthIns+'" step="0.01" style="width:100%;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Retirement %</label><input type="number" id="lb-retire" value="'+cfg.retirement+'" step="0.01" style="width:100%;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">PTO Accrual %</label><input type="number" id="lb-pto" value="'+cfg.pto+'" step="0.01" style="width:100%;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Training %</label><input type="number" id="lb-train" value="'+cfg.training+'" step="0.01" style="width:100%;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Other %</label><input type="number" id="lb-other" value="'+cfg.other+'" step="0.01" style="width:100%;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+        +'</div>'
+        +'<button onclick="window._oncorLaborBurden._saveCfg()" style="margin-top:10px;padding:6px 12px;background:#22d3ee;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:600">Save Configuration</button>'
+        +'</div></details>';
+
+      // Labor rate table with burden calculations
+      html += '<div style="font-weight:600;margin:12px 0 8px;color:#4ade80">👷 Burdened Labor Rates</div>';
+      html += '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+        +'<thead><tr style="background:#1e293b"><th style="padding:8px;text-align:left">Position</th><th style="padding:8px;text-align:right">Base $/hr</th><th style="padding:8px;text-align:right">Burden $/hr</th><th style="padding:8px;text-align:right">Burden %</th><th style="padding:8px;text-align:right;color:#4ade80">Fully Loaded</th><th style="padding:8px">Actions</th></tr></thead><tbody>';
+      
+      cfg.rates.forEach(function(r,i){
+        var b = calcBurden(r.hourly, cfg);
+        html += '<tr style="border-bottom:1px solid #334155">'
+          +'<td style="padding:6px 8px">'+_esc(r.title)+'</td>'
+          +'<td style="padding:6px 8px;text-align:right"><input type="number" value="'+r.hourly.toFixed(2)+'" step="0.50" onchange="window._oncorLaborBurden._updateRate('+i+',this.value)" style="width:70px;padding:4px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;text-align:right"></td>'
+          +'<td style="padding:6px 8px;text-align:right;color:#f59e0b">$'+b.total.toFixed(2)+'</td>'
+          +'<td style="padding:6px 8px;text-align:right;color:#94a3b8">'+b.burdenPct.toFixed(1)+'%</td>'
+          +'<td style="padding:6px 8px;text-align:right;font-weight:700;color:#4ade80">$'+b.fullyBurdened.toFixed(2)+'</td>'
+          +'<td style="padding:6px 8px;text-align:center"><button onclick="window._oncorLaborBurden._delRate('+i+')" style="padding:2px 6px;background:#dc2626;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:10px">×</button></td>'
+          +'</tr>';
+      });
+      html += '</tbody></table>';
+
+      // Add new rate
+      html += '<div style="margin-top:10px;display:flex;gap:8px;align-items:center">'
+        +'<input type="text" id="lb-new-title" placeholder="New position..." style="flex:1;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb">'
+        +'<input type="number" id="lb-new-rate" placeholder="$/hr" style="width:80px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb">'
+        +'<button onclick="window._oncorLaborBurden._addRate()" style="padding:6px 12px;background:#4ade80;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:600">+ Add</button>'
+        +'</div>';
+
+      // Quick calculator
+      html += '<div style="background:#1e293b;padding:12px;border-radius:8px;margin-top:16px">'
+        +'<div style="font-weight:600;margin-bottom:8px;color:#22d3ee">🧮 Quick Project Labor Cost</div>'
+        +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px">'
+        +'<div><label style="font-size:11px;color:#94a3b8">Position</label><select id="lb-calc-pos" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb">'+cfg.rates.map(function(r){ return '<option value="'+r.hourly+'">'+r.title+'</option>'; }).join('')+'</select></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Hours</label><input type="number" id="lb-calc-hrs" value="8" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Workers</label><input type="number" id="lb-calc-workers" value="1" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Days</label><input type="number" id="lb-calc-days" value="1" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+        +'</div>'
+        +'<button onclick="window._oncorLaborBurden._calc()" style="margin-top:10px;padding:6px 12px;background:#22d3ee;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:600">Calculate</button>'
+        +'<div id="lb-calc-result" style="margin-top:10px"></div>'
+        +'</div>';
+
+      el.innerHTML = html;
+    }
+
+    function createOverlay(){
+      if(document.getElementById('overlay-laborburden')) return;
+      var ov = document.createElement('div');
+      ov.id = 'overlay-laborburden';
+      ov.style.cssText = 'display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;overflow:auto;padding:20px;box-sizing:border-box';
+      ov.innerHTML = '<div style="max-width:800px;margin:0 auto;background:#0f172a;border-radius:12px;padding:20px;color:#e5e7eb;font-family:Arial,sans-serif">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+        +'<h2 style="margin:0;color:#f59e0b">💵 Labor Burden Calculator</h2>'
+        +'<button onclick="document.getElementById(\'overlay-laborburden\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:24px;cursor:pointer">&times;</button>'
+        +'</div>'
+        +'<div id="laborburden-content"></div>'
+        +'</div>';
+      document.body.appendChild(ov);
+    }
+
+    return {
+      toggle: function(){ createOverlay(); var ov=document.getElementById('overlay-laborburden'); ov.style.display=ov.style.display==='none'?'block':'none'; if(ov.style.display==='block') render(); },
+      _saveCfg: function(){
+        var cfg = load();
+        cfg.fica = parseFloat(document.getElementById('lb-fica').value)||0;
+        cfg.futa = parseFloat(document.getElementById('lb-futa').value)||0;
+        cfg.suta = parseFloat(document.getElementById('lb-suta').value)||0;
+        cfg.workersComp = parseFloat(document.getElementById('lb-wc').value)||0;
+        cfg.glInsurance = parseFloat(document.getElementById('lb-gl').value)||0;
+        cfg.healthIns = parseFloat(document.getElementById('lb-health').value)||0;
+        cfg.retirement = parseFloat(document.getElementById('lb-retire').value)||0;
+        cfg.pto = parseFloat(document.getElementById('lb-pto').value)||0;
+        cfg.training = parseFloat(document.getElementById('lb-train').value)||0;
+        cfg.other = parseFloat(document.getElementById('lb-other').value)||0;
+        save(cfg); render(); alert('Configuration saved!');
+      },
+      _updateRate: function(i,v){
+        var cfg = load();
+        cfg.rates[i].hourly = parseFloat(v)||0;
+        save(cfg); render();
+      },
+      _addRate: function(){
+        var title = document.getElementById('lb-new-title').value.trim();
+        var rate = parseFloat(document.getElementById('lb-new-rate').value);
+        if(!title||!rate){ alert('Enter position and rate'); return; }
+        var cfg = load();
+        cfg.rates.push({ title: title, hourly: rate });
+        save(cfg); render();
+      },
+      _delRate: function(i){
+        if(!confirm('Delete this rate?')) return;
+        var cfg = load();
+        cfg.rates.splice(i,1);
+        save(cfg); render();
+      },
+      _calc: function(){
+        var cfg = load();
+        var baseRate = parseFloat(document.getElementById('lb-calc-pos').value)||0;
+        var hrs = parseFloat(document.getElementById('lb-calc-hrs').value)||0;
+        var workers = parseFloat(document.getElementById('lb-calc-workers').value)||1;
+        var days = parseFloat(document.getElementById('lb-calc-days').value)||1;
+        var b = calcBurden(baseRate, cfg);
+        var totalHrs = hrs * workers * days;
+        var baseCost = baseRate * totalHrs;
+        var burdenCost = b.total * totalHrs;
+        var totalCost = b.fullyBurdened * totalHrs;
+        document.getElementById('lb-calc-result').innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap">'
+          +'<div style="flex:1;min-width:100px;padding:8px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:11px;color:#94a3b8">Total Hours</div><div style="font-size:16px;font-weight:700">'+totalHrs+'</div></div>'
+          +'<div style="flex:1;min-width:100px;padding:8px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:11px;color:#94a3b8">Base Cost</div><div style="font-size:16px;font-weight:700">$'+baseCost.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</div></div>'
+          +'<div style="flex:1;min-width:100px;padding:8px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:11px;color:#f59e0b">Burden Cost</div><div style="font-size:16px;font-weight:700;color:#f59e0b">$'+burdenCost.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</div></div>'
+          +'<div style="flex:1;min-width:100px;padding:8px;background:#16a34a;border-radius:6px;text-align:center"><div style="font-size:11px;color:#fff">TOTAL COST</div><div style="font-size:18px;font-weight:700;color:#fff">$'+totalCost.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</div></div>'
+          +'</div>';
+      }
+    };
+  })();
+
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     📈 CONCRETE PRICE TRACKER — Track ready-mix prices over time
+     Purpose: Monitor batch plant pricing trends, compare suppliers, forecast costs
+     El Paso 2025-2026 market baseline included
+  ═══════════════════════════════════════════════════════════════════════════ */
+  window._oncorPriceTracker = (function(){
+    var KEY = 'oncor_price_tracker_v1';
+    function load(){ try{ return JSON.parse(localStorage.getItem(KEY))||[]; }catch(e){ return []; } }
+    function save(d){ localStorage.setItem(KEY,JSON.stringify(d)); }
+
+    var showForm = false, editIdx = null;
+    var psiOptions = ['2500','3000','3500','4000','4500','5000','6000','Other'];
+    var suppliers = ['Martin Marietta','Cemex','Texas Concrete','Vulcan','Other'];
+
+    function render(){
+      var el = document.getElementById('pricetracker-content'); if(!el) return;
+      var data = load();
+
+      // Calculate stats
+      var stats = { entries: data.length, suppliers: [], avgPrice: 0, minPrice: 9999, maxPrice: 0 };
+      var priceSum = 0;
+      data.forEach(function(d){
+        if(stats.suppliers.indexOf(d.supplier)===-1) stats.suppliers.push(d.supplier);
+        var p = parseFloat(d.pricePerYd)||0;
+        if(p>0){ priceSum += p; if(p<stats.minPrice) stats.minPrice=p; if(p>stats.maxPrice) stats.maxPrice=p; }
+      });
+      stats.avgPrice = data.length>0 ? priceSum/data.length : 0;
+      if(stats.minPrice===9999) stats.minPrice = 0;
+
+      var html = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+        +'<div style="flex:1;min-width:90px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700;color:#22d3ee">'+stats.entries+'</div><div style="font-size:11px;color:#94a3b8">Price Records</div></div>'
+        +'<div style="flex:1;min-width:90px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700;color:#4ade80">'+stats.suppliers.length+'</div><div style="font-size:11px;color:#94a3b8">Suppliers</div></div>'
+        +'<div style="flex:1;min-width:90px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700;color:#f59e0b">$'+stats.avgPrice.toFixed(0)+'</div><div style="font-size:11px;color:#94a3b8">Avg $/yd³</div></div>'
+        +'<div style="flex:1;min-width:90px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700">$'+stats.minPrice.toFixed(0)+'-$'+stats.maxPrice.toFixed(0)+'</div><div style="font-size:11px;color:#94a3b8">Price Range</div></div>'
+        +'</div>';
+
+      html += '<div style="display:flex;gap:8px;margin-bottom:12px">'
+        +'<button onclick="window._oncorPriceTracker._add()" style="padding:6px 12px;background:#22d3ee;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:600">+ Log Price</button>'
+        +'<button onclick="window._oncorPriceTracker._print()" style="padding:6px 12px;background:#475569;color:#fff;border:none;border-radius:4px;cursor:pointer">🖨️ Print Report</button>'
+        +'</div>';
+
+      if(showForm){
+        var f = editIdx!==null ? data[editIdx] : {};
+        html += '<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:12px">'
+          +'<div style="font-weight:600;margin-bottom:8px">'+(editIdx!==null?'Edit':'Log')+' Price</div>'
+          +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px">'
+          +'<div><label style="font-size:11px;color:#94a3b8">Date</label><input type="date" id="pt-date" value="'+(f.date||new Date().toISOString().split('T')[0])+'" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+          +'<div><label style="font-size:11px;color:#94a3b8">Supplier</label><select id="pt-supplier" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb">'+suppliers.map(function(s){ return '<option'+(f.supplier===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></div>'
+          +'<div><label style="font-size:11px;color:#94a3b8">PSI</label><select id="pt-psi" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb">'+psiOptions.map(function(p){ return '<option'+(f.psi===p?' selected':'')+'>'+p+'</option>'; }).join('')+'</select></div>'
+          +'<div><label style="font-size:11px;color:#94a3b8">Price/yd³ ($)</label><input type="number" id="pt-price" value="'+(f.pricePerYd||'')+'" step="0.50" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+          +'<div><label style="font-size:11px;color:#94a3b8">Mix Code</label><input type="text" id="pt-mixcode" value="'+_esc(f.mixCode||'')+'" placeholder="e.g. 4K-3/4-F" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+          +'<div><label style="font-size:11px;color:#94a3b8">Fiber Adder $/yd³</label><input type="number" id="pt-fiber" value="'+(f.fiberAdder||'')+'" step="0.50" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+          +'</div>'
+          +'<div style="margin-top:8px"><label style="font-size:11px;color:#94a3b8">Notes (quote #, terms, delivery zone)</label><input type="text" id="pt-notes" value="'+_esc(f.notes||'')+'" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+          +'<div style="margin-top:10px;display:flex;gap:8px">'
+          +'<button onclick="window._oncorPriceTracker._save()" style="padding:6px 14px;background:#22d3ee;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:600">Save</button>'
+          +'<button onclick="window._oncorPriceTracker._cancel()" style="padding:6px 14px;background:#64748b;color:#fff;border:none;border-radius:4px;cursor:pointer">Cancel</button>'
+          +'</div></div>';
+      }
+
+      // Price history table
+      var sorted = data.slice().sort(function(a,b){ return new Date(b.date)-new Date(a.date); });
+      if(sorted.length>0){
+        html += '<div style="font-weight:600;margin:12px 0 8px;color:#4ade80">📊 Price History</div>';
+        html += '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+          +'<thead><tr style="background:#1e293b"><th style="padding:6px;text-align:left">Date</th><th style="padding:6px;text-align:left">Supplier</th><th style="padding:6px;text-align:center">PSI</th><th style="padding:6px;text-align:right">$/yd³</th><th style="padding:6px;text-align:right">Fiber</th><th style="padding:6px;text-align:left">Notes</th><th style="padding:6px"></th></tr></thead><tbody>';
+        sorted.forEach(function(d){
+          var idx = data.indexOf(d);
+          html += '<tr style="border-bottom:1px solid #334155">'
+            +'<td style="padding:5px 6px">'+_esc(d.date)+'</td>'
+            +'<td style="padding:5px 6px">'+_esc(d.supplier)+'</td>'
+            +'<td style="padding:5px 6px;text-align:center">'+_esc(d.psi)+'</td>'
+            +'<td style="padding:5px 6px;text-align:right;font-weight:700;color:#4ade80">$'+(parseFloat(d.pricePerYd)||0).toFixed(2)+'</td>'
+            +'<td style="padding:5px 6px;text-align:right;color:#f59e0b">'+(d.fiberAdder?'+$'+parseFloat(d.fiberAdder).toFixed(2):'—')+'</td>'
+            +'<td style="padding:5px 6px;color:#94a3b8;font-size:11px">'+_esc(d.notes||'')+'</td>'
+            +'<td style="padding:5px 6px;text-align:center">'
+            +'<button onclick="window._oncorPriceTracker._edit('+idx+')" style="padding:2px 5px;background:#475569;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:10px;margin-right:3px">✏️</button>'
+            +'<button onclick="window._oncorPriceTracker._del('+idx+')" style="padding:2px 5px;background:#dc2626;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:10px">×</button>'
+            +'</td></tr>';
+        });
+        html += '</tbody></table>';
+      }
+
+      // El Paso baseline reference
+      html += '<details style="margin-top:16px"><summary style="cursor:pointer;color:#94a3b8;font-size:12px">📋 El Paso 2025-2026 Baseline Prices (Reference)</summary>'
+        +'<div style="background:#1e293b;padding:10px;border-radius:6px;margin-top:8px;font-size:12px">'
+        +'<table style="width:100%;border-collapse:collapse">'
+        +'<tr><td style="padding:4px">3000 PSI</td><td style="text-align:right">$165-$175/yd³</td></tr>'
+        +'<tr><td style="padding:4px">3500 PSI</td><td style="text-align:right">$170-$180/yd³</td></tr>'
+        +'<tr><td style="padding:4px">4000 PSI</td><td style="text-align:right">$180-$195/yd³</td></tr>'
+        +'<tr><td style="padding:4px">5000 PSI</td><td style="text-align:right">$195-$215/yd³</td></tr>'
+        +'<tr><td style="padding:4px">Fiber Adder</td><td style="text-align:right">+$8-$12/yd³</td></tr>'
+        +'<tr><td style="padding:4px">Short Load (<5 yd³)</td><td style="text-align:right">+$75-$125 flat</td></tr>'
+        +'<tr><td style="padding:4px">Saturday Delivery</td><td style="text-align:right">+$15-$25/yd³</td></tr>'
+        +'</table>'
+        +'<div style="margin-top:8px;color:#64748b;font-size:11px">Source: El Paso ready-mix market Q4 2025</div>'
+        +'</div></details>';
+
+      el.innerHTML = html;
+    }
+
+    function createOverlay(){
+      if(document.getElementById('overlay-pricetracker')) return;
+      var ov = document.createElement('div');
+      ov.id = 'overlay-pricetracker';
+      ov.style.cssText = 'display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;overflow:auto;padding:20px;box-sizing:border-box';
+      ov.innerHTML = '<div style="max-width:800px;margin:0 auto;background:#0f172a;border-radius:12px;padding:20px;color:#e5e7eb;font-family:Arial,sans-serif">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+        +'<h2 style="margin:0;color:#4ade80">📈 Concrete Price Tracker</h2>'
+        +'<button onclick="document.getElementById(\'overlay-pricetracker\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:24px;cursor:pointer">&times;</button>'
+        +'</div>'
+        +'<div id="pricetracker-content"></div>'
+        +'</div>';
+      document.body.appendChild(ov);
+    }
+
+    return {
+      toggle: function(){ createOverlay(); var ov=document.getElementById('overlay-pricetracker'); ov.style.display=ov.style.display==='none'?'block':'none'; if(ov.style.display==='block') render(); },
+      _add: function(){ showForm=true; editIdx=null; render(); },
+      _edit: function(i){ showForm=true; editIdx=i; render(); },
+      _cancel: function(){ showForm=false; editIdx=null; render(); },
+      _save: function(){
+        var d = {
+          date: document.getElementById('pt-date').value,
+          supplier: document.getElementById('pt-supplier').value,
+          psi: document.getElementById('pt-psi').value,
+          pricePerYd: document.getElementById('pt-price').value,
+          mixCode: document.getElementById('pt-mixcode').value,
+          fiberAdder: document.getElementById('pt-fiber').value,
+          notes: document.getElementById('pt-notes').value
+        };
+        var data = load();
+        if(editIdx!==null) data[editIdx]=d; else data.push(d);
+        save(data); showForm=false; editIdx=null; render();
+      },
+      _del: function(i){ if(!confirm('Delete this price record?')) return; var data=load(); data.splice(i,1); save(data); render(); },
+      _print: function(){
+        var data = load().sort(function(a,b){ return new Date(b.date)-new Date(a.date); });
+        var rows = data.map(function(d){
+          return '<tr><td>'+_esc(d.date)+'</td><td>'+_esc(d.supplier)+'</td><td style="text-align:center">'+_esc(d.psi)+'</td><td style="text-align:right">$'+(parseFloat(d.pricePerYd)||0).toFixed(2)+'</td><td style="text-align:right">'+(d.fiberAdder?'+$'+parseFloat(d.fiberAdder).toFixed(2):'—')+'</td><td>'+_esc(d.mixCode||'')+'</td><td>'+_esc(d.notes||'')+'</td></tr>';
+        }).join('');
+        var w = window.open('','_blank','width=900,height=600');
+        w.document.write('<!DOCTYPE html><html><head><title>Concrete Price History</title><style>body{font-family:Arial,sans-serif;margin:20px;font-size:13px}table{width:100%;border-collapse:collapse}th{background:#1e293b;color:#fff;padding:8px;text-align:left}td{padding:6px 8px;border-bottom:1px solid #ccc}@media print{button{display:none}}</style></head><body>'
+          +'<h2>📈 Concrete Price History</h2>'
+          +'<p>Printed: '+new Date().toLocaleDateString()+' — '+data.length+' records</p>'
+          +'<table><thead><tr><th>Date</th><th>Supplier</th><th>PSI</th><th>$/yd³</th><th>Fiber</th><th>Mix Code</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table>'
+          +'<br><button onclick="window.print()">🖨️ Print</button></body></html>');
+        w.document.close();
+      }
+    };
+  })();
+
+
+  /* ─── Keyboard shortcuts ─── */
+  document.addEventListener('keydown', function(e){
+    if(e.ctrlKey && e.altKey){
+      if(e.key==='['){ e.preventDefault(); window._oncorDispatch.toggle(); }
+      if(e.key===']'){ e.preventDefault(); window._oncorLaborBurden.toggle(); }
+      if(e.key==='\\'){ e.preventDefault(); window._oncorPriceTracker.toggle(); }
+    }
+  });
+
+  /* ─── ESC to close ─── */
+  document.addEventListener('keydown', function(e){
+    if(e.key==='Escape'){
+      ['overlay-dispatch','overlay-laborburden','overlay-pricetracker'].forEach(function(id){
+        var el = document.getElementById(id);
+        if(el && el.style.display!=='none') el.style.display='none';
+      });
+    }
+  });
+
+  /* ─── Sidebar buttons ─── */
+  document.addEventListener('DOMContentLoaded', function(){
+    var sidebar = document.querySelector('.sidebar-actions')||document.querySelector('#sidebarActions')||document.querySelector('aside');
+    function injectBtn(id,emoji,label,fn){
+      if(document.getElementById(id)) return;
+      var btn = document.createElement('button');
+      btn.id = id; btn.textContent = emoji+' '+label;
+      btn.style.cssText = 'display:block;width:100%;margin:2px 0;padding:6px 10px;background:#1e293b;color:#e5e7eb;border:1px solid #334155;border-radius:6px;cursor:pointer;text-align:left;font-size:12px';
+      btn.onclick = fn;
+      if(sidebar) sidebar.appendChild(btn);
+    }
+    injectBtn('btnDispatch','🚛','Daily Dispatch',function(){ window._oncorDispatch.toggle(); });
+    injectBtn('btnLaborBurden','💵','Labor Burden',function(){ window._oncorLaborBurden.toggle(); });
+    injectBtn('btnPriceTracker','📈','Price Tracker',function(){ window._oncorPriceTracker.toggle(); });
+  });
+
+})();
+
+// ==================== END SESSION #109 — Zeus ⚡ Daily Dispatch Board + Labor Burden Calculator + Concrete Price Tracker ====================
+
 })();
