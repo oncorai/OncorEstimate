@@ -190192,3 +190192,676 @@ document.getElementById('ptc-modal').addEventListener('click', function(e) {
 
 })();
 // ==================== END SESSION #130 — Zeus ⚡ Slab Reinforcement Selector (Ctrl+F4) + Flatwork Production Rate Estimator (Ctrl+F5) + Project Turnover Checklist (Ctrl+F6) ====================
+
+// ==================== SESSION #131 — Zeus ⚡ Concrete Sustainability Scorecard (Ctrl+F7) + Partial Pour Volume Calculator (Ctrl+F8) + Crew Communication Log (Ctrl+F9) ====================
+(function(){
+'use strict';
+
+// ==================== 🌱 Concrete Sustainability Scorecard (Ctrl+F7) ====================
+// Purpose: Score a concrete mix/project on sustainability per LEED v4.1 MR Credits,
+// ASHRAE 189.1, and ACI 301-16. Tracks SCM usage, recycled content, local sourcing,
+// low-carbon cement, EPD availability, and carbon footprint estimate.
+
+var CSS_STYLE = `
+#css-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:20000;display:none;align-items:center;justify-content:center;padding:12px;box-sizing:border-box}
+#css-modal .css-box{background:#1a1a2e;border:1px solid #22c55e;border-radius:12px;max-width:840px;width:100%;max-height:92vh;overflow-y:auto;padding:20px;color:#e2e8f0;font-family:Arial,sans-serif;font-size:13px}
+.css-h1{font-size:17px;font-weight:700;color:#22c55e;margin-bottom:14px}
+.css-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.css-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px}
+.css-card{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px}
+.css-label{font-size:11px;color:#94a3b8;margin-bottom:4px}
+.css-val{font-size:18px;font-weight:700;color:#22c55e}
+.css-inp{width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:6px 8px;font-size:12px;box-sizing:border-box}
+.css-inp:focus{outline:none;border-color:#22c55e}
+.css-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.css-btn{background:#22c55e;color:#000;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-weight:600;font-size:12px}
+.css-btn:hover{background:#16a34a}
+.css-close{float:right;background:#374151;color:#fff;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:12px}
+.css-section{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;margin-bottom:10px}
+.css-section-h{font-size:13px;font-weight:700;color:#22c55e;margin-bottom:8px}
+.css-crit{color:#ef4444;font-size:11px;margin-left:4px}
+.css-ok{color:#22c55e;font-weight:700}
+.css-warn{color:#f59e0b;font-weight:700}
+.css-fail{color:#ef4444;font-weight:700}
+.css-bar-wrap{background:#1e293b;border-radius:4px;height:10px;width:100%;margin-top:4px}
+.css-bar{height:10px;border-radius:4px;transition:width 0.4s}
+.css-table{width:100%;border-collapse:collapse;font-size:11px}
+.css-table th{background:#1e293b;padding:5px 8px;text-align:left;color:#94a3b8;border-bottom:1px solid #334155}
+.css-table td{padding:5px 8px;border-bottom:1px solid #1e293b;vertical-align:top}
+.css-badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700}
+`;
+if(!document.getElementById('css-style')){var s=document.createElement('style');s.id='css-style';s.textContent=CSS_STYLE;document.head.appendChild(s);}
+
+// Scoring criteria
+var CSS_CRITERIA = [
+  {id:'scm', label:'SCM Replacement (%)', desc:'Fly ash, slag, silica fume substituting Portland cement', maxPts:20, unit:'%', ref:'LEED MR Credit; ACI 211.1'},
+  {id:'recycledAgg', label:'Recycled Coarse Agg (%)', desc:'Post-consumer or post-industrial recycled aggregate', maxPts:10, unit:'%', ref:'LEED v4.1 MR Credit 4'},
+  {id:'localCement', label:'Local Sourcing — Cement (miles)', desc:'Cement plant within 500 miles of project (lower = better)', maxPts:8, unit:'mi', ref:'LEED MR Credit 5 / 500-mi radius'},
+  {id:'localAgg', label:'Local Sourcing — Aggregate (miles)', desc:'Aggregate source within 500 miles', maxPts:5, unit:'mi', ref:'LEED MR Credit 5'},
+  {id:'epd', label:'EPD Available?', desc:'Environmental Product Declaration for ready-mix from batch plant', maxPts:10, unit:'bool', ref:'LEED v4.1 MR: Building Product Disclosure'},
+  {id:'lowCarbon', label:'Low-Carbon Cement?', desc:'Portland-limestone (Type IL), Geopolymer, or SCM ≥30%', maxPts:10, unit:'bool', ref:'ACI 301-16 / ASTM C595 Type IL'},
+  {id:'mixOpt', label:'Mix Optimization?', desc:'ACI 211.1 mix proportioning with w/cm ≤0.45 to minimize cement content', maxPts:8, unit:'bool', ref:'ACI 211.1 / ACI 301-16 §4'},
+  {id:'cureMethod', label:'Efficient Curing Method', desc:'Curing compound with reuse plan / wet cure preferred over open-air', maxPts:5, unit:'sel', options:['Open air (no cure)','Evaporation retarder only','Curing blankets / wet cure','Curing compound (ASTM C309)','White-pigmented + reflect','Liquid membrane + protection'], ref:'ACI 308R'},
+  {id:'pumpEff', label:'Pump Efficiency — Boom vs Line', desc:'Line pump = less waste/spill than boom; direct chute = best', maxPts:4, unit:'sel', options:['Direct chute (no pump)','Concrete buggy','Line pump','Boom pump 32m','Boom pump 42m+','Volumetric mixer'], ref:'ACI 304.2R'},
+  {id:'wasteRate', label:'Target Waste Rate (%)', desc:'Lower over-order buffer = less washout waste', maxPts:10, unit:'%', ref:'ACI 304R §3 (3-5% target)'},
+  {id:'noWaterSite', label:'No On-Site Water Addition', desc:'Water addition on-site increases w/cm and reduces strength (ASTM C94)', maxPts:5, unit:'bool', ref:'ASTM C94 §11.8'},
+  {id:'recycleWashout', label:'Concrete Washout Recycling', desc:'Reclaimer system at batch plant or on-site washout recycling', maxPts:5, unit:'bool', ref:'EPA SWPPP / TCEQ TXR150000'},
+];
+
+function cssScore(vals) {
+  var total = 0;
+  CSS_CRITERIA.forEach(function(c) {
+    var v = parseFloat(vals[c.id]) || 0;
+    var pts = 0;
+    if(c.unit === '%' && c.id === 'scm') {
+      // SCM: 0-10% = 0pts, 10-20% = 5, 20-30% = 10, 30-40% = 15, 40%+ = 20
+      if(v>=40) pts=20; else if(v>=30) pts=15; else if(v>=20) pts=10; else if(v>=10) pts=5;
+    } else if(c.unit === '%' && c.id === 'recycledAgg') {
+      // Recycled agg: 0=0, 10=3, 25=6, 50+=10
+      if(v>=50) pts=10; else if(v>=25) pts=6; else if(v>=10) pts=3;
+    } else if(c.unit === '%' && c.id === 'wasteRate') {
+      // Lower waste = more points. ≤3% = 10pts, ≤5% = 7, ≤8% = 4, >8% = 0
+      if(v<=3) pts=10; else if(v<=5) pts=7; else if(v<=8) pts=4;
+    } else if(c.unit === 'mi' && c.id === 'localCement') {
+      // Local cement: ≤100mi=8, ≤250mi=5, ≤500mi=2, >500mi=0
+      if(v>0 && v<=100) pts=8; else if(v<=250) pts=5; else if(v<=500) pts=2;
+    } else if(c.unit === 'mi' && c.id === 'localAgg') {
+      if(v>0 && v<=100) pts=5; else if(v<=250) pts=3; else if(v<=500) pts=1;
+    } else if(c.unit === 'bool') {
+      pts = (vals[c.id]==='1') ? c.maxPts : 0;
+    } else if(c.unit === 'sel' && c.id === 'cureMethod') {
+      // Better curing = more pts
+      var ci = parseInt(vals[c.id])||0;
+      if(ci===0) pts=0; else if(ci===1) pts=1; else if(ci===2) pts=4; else if(ci===3) pts=3; else if(ci===4) pts=5; else if(ci===5) pts=5;
+    } else if(c.unit === 'sel' && c.id === 'pumpEff') {
+      var pi = parseInt(vals[c.id])||0;
+      if(pi===0) pts=4; else if(pi===1) pts=4; else if(pi===2) pts=3; else if(pi===3) pts=2; else if(pi===4) pts=1; else pts=4; // volumetric = exact quantity
+    }
+    total += pts;
+  });
+  return total;
+}
+
+function cssGrade(score) {
+  if(score>=85) return {g:'PLATINUM ✨',c:'#22c55e'};
+  if(score>=70) return {g:'GOLD 🥇',c:'#f59e0b'};
+  if(score>=55) return {g:'SILVER 🥈',c:'#94a3b8'};
+  if(score>=40) return {g:'BRONZE 🥉',c:'#b45309'};
+  return {g:'BASELINE ⬜',c:'#64748b'};
+}
+
+// Carbon estimate (kg CO2e / yd3 based on Portland vs SCM mix)
+function cssCarbon(vals, yds) {
+  var scm = parseFloat(vals.scm)||0;
+  // Typical OPC mix ~370 kg CO2e/yd3; each 1% SCM reduces ~3.5 kg CO2e
+  var base = 370;
+  var perYd = base - (scm * 3.5);
+  var total = perYd * (yds||0);
+  return {perYd: Math.round(perYd), total: Math.round(total)};
+}
+
+var cssVals = {};
+var cssYds = 100;
+
+function cssGetVals() {
+  CSS_CRITERIA.forEach(function(c){
+    var el = document.getElementById('css-'+c.id);
+    if(el) cssVals[c.id] = el.value;
+  });
+  var yel = document.getElementById('css-yds');
+  if(yel) cssYds = parseFloat(yel.value)||100;
+}
+
+function cssRender() {
+  cssGetVals();
+  var score = cssScore(cssVals);
+  var maxScore = CSS_CRITERIA.reduce(function(a,c){return a+c.maxPts;},0);
+  var pct = Math.round(score/maxScore*100);
+  var gr = cssGrade(pct);
+  var carbon = cssCarbon(cssVals, cssYds);
+
+  var sd = document.getElementById('css-score-display');
+  if(sd) {
+    sd.innerHTML = `
+      <div class="css-grid3">
+        <div class="css-card"><div class="css-label">Sustainability Score</div><div class="css-val" style="color:${gr.c}">${score} / ${maxScore}</div><div class="css-bar-wrap"><div class="css-bar" style="width:${pct}%;background:${gr.c}"></div></div></div>
+        <div class="css-card"><div class="css-label">Sustainability Grade</div><div class="css-val" style="color:${gr.c}">${gr.g}</div><div style="font-size:11px;color:#64748b;margin-top:4px">${pct}% of max points</div></div>
+        <div class="css-card"><div class="css-label">CO₂e Estimate</div><div class="css-val" style="color:#f59e0b">${carbon.perYd} kg/yd³</div><div style="font-size:11px;color:#64748b">${carbon.total.toLocaleString()} kg total</div></div>
+      </div>`;
+  }
+  // Per-criterion breakdown
+  var breakdown = document.getElementById('css-breakdown');
+  if(breakdown) {
+    var rows = '';
+    CSS_CRITERIA.forEach(function(c){
+      var v = parseFloat(cssVals[c.id])||0;
+      var pts = cssScore(Object.assign({},cssVals,Object.fromEntries([[c.id,cssVals[c.id]]])));
+      // individual pts
+      var indPts = 0;
+      var testSingle = {};
+      CSS_CRITERIA.forEach(function(x){testSingle[x.id]=(x.id===c.id)?cssVals[c.id]:'0';});
+      if(c.unit==='bool') testSingle[c.id]='0';
+      if(c.unit==='sel') testSingle[c.id]='0';
+      indPts = cssScore(Object.assign({},testSingle,Object.fromEntries([[c.id,cssVals[c.id]]])));
+      var pbar = Math.round(indPts/c.maxPts*100);
+      var col = indPts>=c.maxPts*0.8?'#22c55e':indPts>0?'#f59e0b':'#ef4444';
+      rows += `<tr><td><b>${c.label}</b><br><span style="color:#64748b;font-size:10px">${c.desc}</span></td>
+        <td style="text-align:center"><span style="color:${col};font-weight:700">${indPts} / ${c.maxPts}</span><div class="css-bar-wrap" style="width:60px"><div class="css-bar" style="width:${pbar}%;background:${col}"></div></div></td>
+        <td style="color:#64748b;font-size:10px">${c.ref}</td></tr>`;
+    });
+    breakdown.innerHTML = `<table class="css-table"><tr><th>Criterion</th><th>Points</th><th>Reference</th></tr>${rows}</table>`;
+  }
+}
+
+function cssBuildModal() {
+  var m = document.createElement('div');
+  m.id = 'css-modal';
+  var inputs = '';
+  CSS_CRITERIA.forEach(function(c){
+    var inp = '';
+    if(c.unit==='%'||c.unit==='mi') {
+      inp = `<input id="css-${c.id}" class="css-inp" type="number" min="0" max="${c.unit==='%'?100:2000}" placeholder="0" oninput="window.cssRender&&cssRender()" style="width:90px"> <span style="color:#64748b">${c.unit}</span>`;
+    } else if(c.unit==='bool') {
+      inp = `<select id="css-${c.id}" class="css-inp" onchange="window.cssRender&&cssRender()" style="width:140px"><option value="0">No / Unknown</option><option value="1">Yes ✅</option></select>`;
+    } else if(c.unit==='sel') {
+      inp = `<select id="css-${c.id}" class="css-inp" onchange="window.cssRender&&cssRender()" style="width:240px">${c.options.map(function(o,i){return`<option value="${i}">${o}</option>`;}).join('')}</select>`;
+    }
+    inputs += `<div class="css-row"><div style="flex:1"><b style="font-size:12px">${c.label}</b> <span style="font-size:10px;color:#64748b">(max ${c.maxPts} pts)</span><br><span style="font-size:10px;color:#64748b">${c.desc}</span></div>${inp}</div>`;
+  });
+  m.innerHTML = `<div class="css-box"><button class="css-close" onclick="document.getElementById('css-modal').style.display='none'">✕ Close</button>
+    <div class="css-h1">🌱 Concrete Sustainability Scorecard</div>
+    <p style="color:#94a3b8;font-size:11px;margin-bottom:12px">Score your mix/project against LEED v4.1 MR Credits, ASHRAE 189.1, and ACI 301-16 sustainability criteria. Lower carbon, higher SCM, local sourcing, EPD disclosure.</p>
+    <div id="css-score-display"></div>
+    <div class="css-section"><div class="css-section-h">🔢 Inputs</div>
+    <div class="css-row"><label style="font-size:12px;color:#94a3b8">Total yd³ for Project:</label><input id="css-yds" class="css-inp" type="number" min="1" value="100" oninput="window.cssRender&&cssRender()" style="width:90px"></div>
+    ${inputs}</div>
+    <div class="css-section"><div class="css-section-h">📊 Criterion Breakdown</div><div id="css-breakdown"></div></div>
+    <div class="css-section" style="font-size:11px;color:#94a3b8">
+      <b style="color:#22c55e">Standards:</b> LEED v4.1 MR Credits (Building Product Disclosure, Recycled Content, Regional Materials) · ACI 301-16 §4 (SCM substitution) · ACI 211.1 (mix proportioning) · ASTM C595 (blended cements) · ACI 308R (curing) · EPA SWPPP · TCEQ TXR150000<br>
+      <b style="color:#22c55e">El Paso Note:</b> Martin Marietta and Cemex El Paso batch plants — contact for EPD availability. Type IL Portland-limestone cement available from some plants. Fly ash (Class C) from local power plants available seasonally. Local aggregate from Castner Range / Anthony quarries ≈40 miles.</div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="css-btn" onclick="window.cssPrint&&cssPrint()">🖨️ Print Report</button>
+      <button class="css-btn" style="background:#374151;color:#fff" onclick="document.getElementById('css-modal').style.display='none'">Close</button>
+    </div></div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click', function(e){if(e.target===this)this.style.display='none';});
+  window.cssRender = cssRender;
+  window.cssPrint = function(){
+    cssGetVals();
+    var score = cssScore(cssVals);
+    var maxScore = CSS_CRITERIA.reduce(function(a,c){return a+c.maxPts;},0);
+    var pct = Math.round(score/maxScore*100);
+    var gr = cssGrade(pct);
+    var carbon = cssCarbon(cssVals, cssYds);
+    var rows = '';
+    CSS_CRITERIA.forEach(function(c){
+      var testSingle = {};
+      CSS_CRITERIA.forEach(function(x){testSingle[x.id]='0';});
+      var indPts = cssScore(Object.assign({},testSingle,Object.fromEntries([[c.id,cssVals[c.id]]])));
+      rows += `<tr><td>${c.label}</td><td>${c.desc}</td><td style="text-align:center">${indPts} / ${c.maxPts}</td><td>${c.ref}</td></tr>`;
+    });
+    var w = window.open('','_blank');
+    w.document.write(`<!DOCTYPE html><html><head><title>Sustainability Scorecard</title><style>body{font-family:Arial,sans-serif;font-size:11px;max-width:850px;margin:20px auto}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:5px 7px}th{background:#f0f0f0}@media print{button{display:none}}</style></head><body>
+      <h2>🌱 Concrete Sustainability Scorecard</h2>
+      <table><tr><td><b>Sustainability Score</b></td><td>${score} / ${maxScore} (${pct}%)</td><td><b>Grade</b></td><td>${gr.g}</td></tr>
+      <tr><td><b>CO₂e Estimate</b></td><td>${carbon.perYd} kg/yd³ · ${carbon.total.toLocaleString()} kg total</td><td><b>Project yd³</b></td><td>${cssYds}</td></tr></table><br>
+      <table><tr><th>Criterion</th><th>Description</th><th>Points</th><th>Reference</th></tr>${rows}</table>
+      <p style="font-size:10px;color:#666;margin-top:12px">LEED v4.1 MR Credits · ACI 301-16 · ACI 211.1 · ASTM C595 · ACI 308R · EPA SWPPP · TCEQ TXR150000</p>
+      <button onclick="window.print()">🖨️ Print</button></body></html>`);
+    w.document.close();
+  };
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  cssBuildModal();
+  var sidebar = document.querySelector('.sidebar-actions,.sidebar,.action-panel');
+  if(sidebar){
+    var btn = document.createElement('button');
+    btn.textContent = '🌱 Sustainability Scorecard';
+    btn.title = 'Concrete Sustainability Scorecard — Ctrl+F7';
+    btn.style.cssText = 'background:#14532d;border:none;color:#bbf7d0;padding:8px 14px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;width:100%;margin-bottom:4px;text-align:left';
+    btn.onclick = function(){
+      var m = document.getElementById('css-modal');
+      if(m){var was=m.style.display;m.style.display=was==='none'?'flex':'none';if(was==='none')cssRender();}
+    };
+    sidebar.insertBefore(btn, sidebar.firstChild);
+  }
+});
+document.addEventListener('keydown', function(e){
+  if(e.ctrlKey&&!e.shiftKey&&!e.altKey&&e.key==='F7'){
+    e.preventDefault();
+    var m=document.getElementById('css-modal');
+    if(m){var was=m.style.display;m.style.display=was==='none'?'flex':'none';if(was==='none')cssRender();}
+  }
+});
+
+})();
+
+// ==================== 🧮 Partial Pour Volume Calculator (Ctrl+F8) ====================
+(function(){
+'use strict';
+// Purpose: Field tool to calculate concrete volume for irregular partial shapes —
+// tapered slabs, L-shapes, T-shapes, trapezoidal footings, wedge pours, curb returns.
+// When the simple L×W×D formula doesn't work.
+
+var PPVC_STYLE = `
+#ppvc-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:20000;display:none;align-items:center;justify-content:center;padding:12px;box-sizing:border-box}
+#ppvc-modal .ppvc-box{background:#1a1a2e;border:1px solid #8b5cf6;border-radius:12px;max-width:860px;width:100%;max-height:92vh;overflow-y:auto;padding:20px;color:#e2e8f0;font-family:Arial,sans-serif;font-size:13px}
+.ppvc-h1{font-size:17px;font-weight:700;color:#8b5cf6;margin-bottom:14px}
+.ppvc-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.ppvc-card{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px}
+.ppvc-label{font-size:11px;color:#94a3b8;margin-bottom:2px}
+.ppvc-val{font-size:20px;font-weight:700;color:#8b5cf6}
+.ppvc-inp{width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:6px 8px;font-size:12px;box-sizing:border-box}
+.ppvc-inp:focus{outline:none;border-color:#8b5cf6}
+.ppvc-sel{background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:6px 8px;font-size:12px}
+.ppvc-btn{background:#8b5cf6;color:#fff;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-weight:600;font-size:12px}
+.ppvc-btn:hover{background:#7c3aed}
+.ppvc-close{float:right;background:#374151;color:#fff;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:12px}
+.ppvc-section{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;margin-bottom:10px}
+.ppvc-section-h{font-size:13px;font-weight:700;color:#8b5cf6;margin-bottom:8px}
+.ppvc-row{display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+.ppvc-item{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+.ppvc-del{background:#ef4444;color:#fff;border:none;border-radius:4px;padding:2px 7px;cursor:pointer;font-size:11px}
+.ppvc-total{font-size:22px;font-weight:700;color:#8b5cf6}
+`;
+if(!document.getElementById('ppvc-style')){var s=document.createElement('style');s.id='ppvc-style';s.textContent=PPVC_STYLE;document.head.appendChild(s);}
+
+var PPVC_SHAPES = [
+  {id:'rect', label:'Rectangle / Slab', desc:'L × W × D', fields:['L (ft)','W (ft)','D (in)']},
+  {id:'trapSlab', label:'Trapezoid — Slab', desc:'(L1+L2)/2 × W × D', fields:['L1 (ft)','L2 (ft)','W (ft)','D (in)']},
+  {id:'lshape', label:'L-Shape Slab', desc:'Rectangle A + Rectangle B', fields:['L1 (ft)','W1 (ft)','L2 (ft)','W2 (ft)','D (in)']},
+  {id:'tshape', label:'T-Shape Slab', desc:'Stem + Flange', fields:['Flange L (ft)','Flange W (ft)','Stem L (ft)','Stem W (ft)','D (in)']},
+  {id:'wedge', label:'Wedge / Tapered Pour', desc:'Triangular prism: L × W × ½ × avg D', fields:['L (ft)','W (ft)','D1 (in)','D2 (in)']},
+  {id:'circSlab', label:'Circular Slab', desc:'π × r² × D / 27', fields:['Diameter (ft)','D (in)']},
+  {id:'annulus', label:'Annulus (Ring Slab)', desc:'π × (R²-r²) × D / 27', fields:['Outer Dia (ft)','Inner Dia (ft)','D (in)']},
+  {id:'trapFoot', label:'Trapezoidal Footing', desc:'((B1+B2)/2) × H × L / 27', fields:['Top Width B1 (ft)','Bottom Width B2 (ft)','Depth H (ft)','Length L (ft)']},
+  {id:'stepFoot', label:'Stepped Footing', desc:'Two-step footing: step1 + step2', fields:['L1 (ft)','W1 (ft)','D1 (in)','L2 (ft)','W2 (ft)','D2 (in)']},
+  {id:'curbRet', label:'Curb Return (quarter-circle)', desc:'Radius sweep at intersection', fields:['Radius (ft)','Width (ft)','Height (in)','Gutter W (ft)','Gutter D (in)']},
+  {id:'wallCone', label:'Wall with Tapered Top', desc:'Rectangular wall with triangular taper', fields:['Length (ft)','Base H (ft)','Taper H (ft)','Thickness (in)']},
+  {id:'pier', label:'Drilled Pier / Column', desc:'π × r² × H × qty / 27', fields:['Diameter (in)','Height (ft)','Qty']},
+];
+
+function ppvcCalcVol(shapeId, vals) {
+  var v = vals.map(parseFloat);
+  switch(shapeId) {
+    case 'rect': return (v[0]*v[1]*(v[2]/12))/27;
+    case 'trapSlab': return ((v[0]+v[1])/2*v[2]*(v[3]/12))/27;
+    case 'lshape': return (v[0]*v[1]*(v[4]/12)+v[2]*v[3]*(v[4]/12))/27;
+    case 'tshape': return ((v[0]*v[1]+v[2]*v[3])*(v[4]/12))/27;
+    case 'wedge': var avgD=((v[2]+v[3])/2)/12; return (v[0]*v[1]*avgD*0.5)/27;
+    case 'circSlab': var r=v[0]/2; return (Math.PI*r*r*(v[1]/12))/27;
+    case 'annulus': var R=v[0]/2,ri=v[1]/2; return (Math.PI*(R*R-ri*ri)*(v[2]/12))/27;
+    case 'trapFoot': return ((v[0]+v[1])/2*v[2]*v[3])/27;
+    case 'stepFoot': return (v[0]*v[1]*(v[2]/12)+v[3]*v[4]*(v[5]/12))/27;
+    case 'curbRet': {
+      var curb = 0.25*Math.PI*v[0]*v[1]*(v[2]/12); // quarter-circle ring
+      var gutter = (2*0.25*Math.PI*v[0] - v[0]*2)*v[3]*(v[4]/12); // approx gutter wing
+      return (curb+Math.max(gutter,0))/27;
+    }
+    case 'wallCone': return ((v[0]*v[1]*(v[3]/12))+(v[0]*v[2]*(v[3]/12)*0.5))/27;
+    case 'pier': var rp=(v[0]/2)/12; return (Math.PI*rp*rp*v[1]*(v[2]||1))/27;
+    default: return 0;
+  }
+}
+
+var ppvcItems = [];
+
+function ppvcRender() {
+  var list = document.getElementById('ppvc-list');
+  var total = document.getElementById('ppvc-total-val');
+  var trucks = document.getElementById('ppvc-trucks');
+  if(!list) return;
+  var totalYds = 0;
+  list.innerHTML = '';
+  ppvcItems.forEach(function(item, i){
+    totalYds += item.vol;
+    var div = document.createElement('div');
+    div.className = 'ppvc-item';
+    div.innerHTML = `<div><b style="color:#8b5cf6">${item.shapeLabel}</b> — ${item.label||('Element '+(i+1))} <span style="color:#64748b;font-size:11px">[${item.inputs.join(' | ')}]</span></div>
+      <div style="display:flex;align-items:center;gap:10px"><span style="color:#8b5cf6;font-weight:700;font-size:15px">${item.vol.toFixed(2)} yd³</span>
+      <button class="ppvc-del" onclick="window.ppvcDel(${i})">✕</button></div>`;
+    list.appendChild(div);
+  });
+  if(total) total.textContent = totalYds.toFixed(2);
+  if(trucks) trucks.textContent = '≈ '+(Math.ceil(totalYds/10))+' loads (10 yd³)';
+}
+
+window.ppvcDel = function(i){ ppvcItems.splice(i,1); ppvcRender(); };
+
+function ppvcAdd() {
+  var shapeId = document.getElementById('ppvc-shape-sel').value;
+  var shape = PPVC_SHAPES.find(function(s){return s.id===shapeId;});
+  if(!shape) return;
+  var vals = shape.fields.map(function(f,i){ return document.getElementById('ppvc-f'+i) ? document.getElementById('ppvc-f'+i).value : '0'; });
+  var v = ppvcCalcVol(shapeId, vals);
+  if(isNaN(v)||v<=0){alert('Enter all dimensions first');return;}
+  var label = (document.getElementById('ppvc-label').value||'').trim();
+  ppvcItems.push({shapeId:shapeId, shapeLabel:shape.label, vol:v, label:label, inputs:shape.fields.map(function(f,i){return f.replace(/\(.*\)/,'').trim()+': '+(vals[i]||'0');})});
+  ppvcRender();
+}
+
+function ppvcBuildFieldInputs() {
+  var shapeId = document.getElementById('ppvc-shape-sel').value;
+  var shape = PPVC_SHAPES.find(function(s){return s.id===shapeId;});
+  var cont = document.getElementById('ppvc-fields');
+  if(!cont||!shape) return;
+  cont.innerHTML = '<div style="color:#64748b;font-size:11px;margin-bottom:6px">'+shape.desc+'</div>';
+  shape.fields.forEach(function(f,i){
+    var d = document.createElement('div');
+    d.style.cssText = 'display:inline-flex;flex-direction:column;margin-right:8px;margin-bottom:6px';
+    d.innerHTML = '<label style="font-size:11px;color:#94a3b8">'+f+'</label><input id="ppvc-f'+i+'" class="ppvc-inp" type="number" min="0" step="0.01" style="width:90px">';
+    cont.appendChild(d);
+  });
+}
+
+function ppvcBuildModal(){
+  var m = document.createElement('div');
+  m.id = 'ppvc-modal';
+  var shapeOpts = PPVC_SHAPES.map(function(s){return`<option value="${s.id}">${s.label}</option>`;}).join('');
+  m.innerHTML = `<div class="ppvc-box"><button class="ppvc-close" onclick="document.getElementById('ppvc-modal').style.display='none'">✕ Close</button>
+    <div class="ppvc-h1">🧮 Partial Pour Volume Calculator</div>
+    <p style="color:#94a3b8;font-size:11px;margin-bottom:12px">Calculate concrete volumes for irregular shapes — L-shapes, trapezoids, wedges, tapered pours, curb returns, annuli, stepped footings. Sum multiple elements for total pour order.</p>
+    <div class="ppvc-section">
+      <div class="ppvc-section-h">➕ Add Element</div>
+      <div class="ppvc-row">
+        <label style="font-size:12px;color:#94a3b8">Shape:</label>
+        <select id="ppvc-shape-sel" class="ppvc-sel" onchange="window.ppvcBuildFields&&ppvcBuildFields()">${shapeOpts}</select>
+        <label style="font-size:12px;color:#94a3b8">Label:</label>
+        <input id="ppvc-label" class="ppvc-inp" type="text" placeholder="e.g. North L-Slab" style="width:160px">
+      </div>
+      <div id="ppvc-fields" style="margin:8px 0"></div>
+      <button class="ppvc-btn" onclick="window.ppvcAdd&&ppvcAdd()">➕ Add to List</button>
+    </div>
+    <div class="ppvc-section">
+      <div class="ppvc-section-h">📋 Element List</div>
+      <div id="ppvc-list"><div style="color:#64748b;font-size:11px">No elements yet. Add shapes above.</div></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:8px;border-top:1px solid #334155">
+        <div><div class="ppvc-label">Total Volume</div><div class="ppvc-total" id="ppvc-total-val">0.00</div> <span style="color:#8b5cf6;font-size:13px;font-weight:600">yd³</span></div>
+        <div style="text-align:right"><div class="ppvc-label">Truck Estimate</div><div style="color:#f59e0b;font-weight:700;font-size:14px" id="ppvc-trucks">—</div></div>
+      </div>
+    </div>
+    <div class="ppvc-section" style="font-size:10px;color:#64748b">
+      Formulas: Rectangle L×W×D/12/27 · Trapezoid (L1+L2)/2×W×D/12/27 · L-Shape = sum of rectangles · Circle π×r²×D/12/27 · Pier π×r²×H×n/27<br>
+      Curb return uses quarter-circle approximation — verify with field measurements. Wedge uses average depth. All results in cubic yards (yd³). ±2% accuracy typical.
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="ppvc-btn" onclick="window.ppvcPrint&&ppvcPrint()">🖨️ Print Volume Summary</button>
+      <button class="ppvc-btn" style="background:#374151;color:#fff" onclick="ppvcItems=[];ppvcRender()">🗑 Clear All</button>
+      <button class="ppvc-btn" style="background:#374151;color:#fff" onclick="document.getElementById('ppvc-modal').style.display='none'">Close</button>
+    </div></div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click',function(e){if(e.target===this)this.style.display='none';});
+  window.ppvcBuildFields = ppvcBuildFieldInputs;
+  window.ppvcAdd = ppvcAdd;
+  window.ppvcDel = window.ppvcDel;
+  window.ppvcPrint = function(){
+    var totalYds = ppvcItems.reduce(function(a,b){return a+b.vol;},0);
+    var rows = ppvcItems.map(function(item,i){
+      return `<tr><td>${i+1}</td><td>${item.shapeLabel}</td><td>${item.label||''}</td><td>${item.inputs.join(' · ')}</td><td style="text-align:right">${item.vol.toFixed(3)}</td></tr>`;
+    }).join('');
+    var w = window.open('','_blank');
+    w.document.write(`<!DOCTYPE html><html><head><title>Partial Pour Volume</title><style>body{font-family:Arial,sans-serif;font-size:11px;max-width:850px;margin:20px auto}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:5px}th{background:#f0f0f0}@media print{button{display:none}}</style></head><body>
+      <h2>🧮 Partial Pour Volume Calculator</h2>
+      <table><tr><th>#</th><th>Shape</th><th>Label</th><th>Dimensions</th><th>yd³</th></tr>${rows}
+      <tr><td colspan="4" style="text-align:right"><b>TOTAL</b></td><td style="text-align:right"><b>${totalYds.toFixed(3)} yd³</b></td></tr>
+      <tr><td colspan="4" style="text-align:right">Truck count (10 yd³)</td><td style="text-align:right">≈ ${Math.ceil(totalYds/10)} loads</td></tr></table>
+      <p style="font-size:10px;color:#666">All volumes in cubic yards. Formulas per ACI 318-19 and standard geometric methods. ±2% accuracy.</p>
+      <button onclick="window.print()">Print</button></body></html>`);
+    w.document.close();
+  };
+  ppvcBuildFieldInputs();
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  ppvcBuildModal();
+  var sidebar = document.querySelector('.sidebar-actions,.sidebar,.action-panel');
+  if(sidebar){
+    var btn = document.createElement('button');
+    btn.textContent = '🧮 Partial Pour Volume Calc';
+    btn.title = 'Partial Pour Volume Calculator — Ctrl+F8';
+    btn.style.cssText = 'background:#3b0764;border:none;color:#e9d5ff;padding:8px 14px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;width:100%;margin-bottom:4px;text-align:left';
+    btn.onclick = function(){
+      var m=document.getElementById('ppvc-modal');
+      if(m){var was=m.style.display;m.style.display=was==='none'?'flex':'none';}
+    };
+    sidebar.insertBefore(btn, sidebar.firstChild);
+  }
+});
+document.addEventListener('keydown',function(e){
+  if(e.ctrlKey&&!e.shiftKey&&!e.altKey&&e.key==='F8'){
+    e.preventDefault();
+    var m=document.getElementById('ppvc-modal');
+    if(m){var was=m.style.display;m.style.display=was==='none'?'flex':'none';}
+  }
+});
+
+})();
+
+// ==================== 📱 Crew Communication Log (Ctrl+F9) ====================
+(function(){
+'use strict';
+// Purpose: Log every field communication — foreman instructions, GC verbal directives,
+// owner requests, subcontractor coordination. Timestamped, categorized, printable.
+// Turns verbal conversations into documented written records.
+
+var CCL_STYLE = `
+#ccl-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:20000;display:none;align-items:center;justify-content:center;padding:12px;box-sizing:border-box}
+#ccl-modal .ccl-box{background:#1a1a2e;border:1px solid #ec4899;border-radius:12px;max-width:860px;width:100%;max-height:92vh;overflow-y:auto;padding:20px;color:#e2e8f0;font-family:Arial,sans-serif;font-size:13px}
+.ccl-h1{font-size:17px;font-weight:700;color:#ec4899;margin-bottom:14px}
+.ccl-grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.ccl-card{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px}
+.ccl-label{font-size:11px;color:#94a3b8;margin-bottom:2px}
+.ccl-val{font-size:18px;font-weight:700;color:#ec4899}
+.ccl-inp{width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:6px 8px;font-size:12px;box-sizing:border-box}
+.ccl-inp:focus{outline:none;border-color:#ec4899}
+.ccl-btn{background:#ec4899;color:#fff;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-weight:600;font-size:12px}
+.ccl-btn:hover{background:#db2777}
+.ccl-close{float:right;background:#374151;color:#fff;border:none;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:12px}
+.ccl-section{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;margin-bottom:10px}
+.ccl-section-h{font-size:13px;font-weight:700;color:#ec4899;margin-bottom:8px}
+.ccl-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;flex-wrap:wrap}
+.ccl-item{background:#1e293b;border-left:4px solid #ec4899;border-radius:6px;padding:10px 12px;margin-bottom:6px}
+.ccl-item-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.ccl-del{background:#ef4444;color:#fff;border:none;border-radius:4px;padding:2px 7px;cursor:pointer;font-size:11px}
+.ccl-badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700}
+.ccl-search{background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:5px;padding:6px 10px;font-size:12px;width:200px}
+`;
+if(!document.getElementById('ccl-style')){var s=document.createElement('style');s.id='ccl-style';s.textContent=CCL_STYLE;document.head.appendChild(s);}
+
+var CCL_TYPES = [
+  {id:'gc-dir', label:'GC Directive', color:'#ef4444'},
+  {id:'owner-req', label:'Owner Request', color:'#f97316'},
+  {id:'foreman-inst', label:'Foreman Instruction', color:'#22c55e'},
+  {id:'sub-coord', label:'Sub Coordination', color:'#3b82f6'},
+  {id:'field-change', label:'Field Change', color:'#f59e0b'},
+  {id:'verbal-co', label:'Verbal CO Request', color:'#a855f7'},
+  {id:'safety-stop', label:'Safety Stop / Hold', color:'#ef4444'},
+  {id:'delivery-note', label:'Delivery / Batch Plant', color:'#06b6d4'},
+  {id:'qc-issue', label:'QC / Spec Issue', color:'#f59e0b'},
+  {id:'general', label:'General Note', color:'#94a3b8'},
+];
+
+var CCL_KEY = 'oncor_ccl_v1';
+function cclLoad(){var d=localStorage.getItem(CCL_KEY+(window.currentProjectName||''));try{return d?JSON.parse(d):[];}catch(e){return [];}}
+function cclSave(logs){localStorage.setItem(CCL_KEY+(window.currentProjectName||''),JSON.stringify(logs));}
+
+function cclRender(filter){
+  var logs = cclLoad();
+  var list = document.getElementById('ccl-list');
+  var stats = document.getElementById('ccl-stats');
+  if(!list) return;
+
+  // Stats
+  if(stats){
+    var today = new Date().toISOString().slice(0,10);
+    var todayCount = logs.filter(function(l){return l.date===today;}).length;
+    var gcDirCount = logs.filter(function(l){return l.type==='gc-dir';}).length;
+    var verbalCO = logs.filter(function(l){return l.type==='verbal-co';}).length;
+    stats.innerHTML = `
+      <div class="ccl-card"><div class="ccl-label">Total Entries</div><div class="ccl-val">${logs.length}</div></div>
+      <div class="ccl-card"><div class="ccl-label">Today</div><div class="ccl-val">${todayCount}</div></div>
+      <div class="ccl-card"><div class="ccl-label">GC Directives</div><div class="ccl-val" style="color:#ef4444">${gcDirCount}</div></div>
+      <div class="ccl-card"><div class="ccl-label">Verbal CO Requests</div><div class="ccl-val" style="color:#a855f7">${verbalCO}</div></div>`;
+  }
+
+  var search = (filter||'').toLowerCase();
+  var filt = logs.filter(function(l){
+    if(!search) return true;
+    return (l.note||'').toLowerCase().includes(search)||(l.parties||'').toLowerCase().includes(search)||(l.location||'').toLowerCase().includes(search);
+  }).reverse(); // newest first
+
+  list.innerHTML = '';
+  if(!filt.length){list.innerHTML='<div style="color:#64748b;font-size:11px">No entries. Add your first field communication log below.</div>';return;}
+  filt.forEach(function(log){
+    var typeInfo = CCL_TYPES.find(function(t){return t.id===log.type;})||{label:log.type,color:'#94a3b8'};
+    var div = document.createElement('div');
+    div.className = 'ccl-item';
+    div.style.borderColor = typeInfo.color;
+    div.innerHTML = `<div class="ccl-item-head">
+      <span><span class="ccl-badge" style="background:${typeInfo.color}22;color:${typeInfo.color}">${typeInfo.label}</span>
+      ${log.followUp?'<span class="ccl-badge" style="background:#f59e0b22;color:#f59e0b;margin-left:4px">⚡ Follow-Up Required</span>':''}</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="color:#64748b;font-size:11px">${log.date} ${log.time||''}</span>
+        <button class="ccl-del" onclick="window.cclDel(${log.id})">✕</button>
+      </div></div>
+      <div style="font-size:13px;color:#e2e8f0;margin:4px 0">${log.note}</div>
+      ${log.parties?`<div style="font-size:11px;color:#94a3b8">👥 ${log.parties}</div>`:''}
+      ${log.location?`<div style="font-size:11px;color:#94a3b8">📍 ${log.location}</div>`:''}
+      ${log.action?`<div style="font-size:11px;color:#f59e0b;margin-top:4px">⚡ Action: ${log.action}</div>`:''}`;
+    list.appendChild(div);
+  });
+}
+
+window.cclDel = function(id){
+  var logs = cclLoad();
+  var newLogs = logs.filter(function(l){return l.id!==id;});
+  cclSave(newLogs);
+  cclRender();
+};
+
+function cclAdd(){
+  var typeEl = document.getElementById('ccl-type');
+  var noteEl = document.getElementById('ccl-note');
+  var partiesEl = document.getElementById('ccl-parties');
+  var locEl = document.getElementById('ccl-loc');
+  var actionEl = document.getElementById('ccl-action');
+  var fuEl = document.getElementById('ccl-followup');
+  if(!noteEl||!noteEl.value.trim()){alert('Enter a note first');return;}
+  var now = new Date();
+  var logs = cclLoad();
+  logs.push({
+    id: Date.now(),
+    date: now.toISOString().slice(0,10),
+    time: now.toTimeString().slice(0,5),
+    type: typeEl?typeEl.value:'general',
+    note: noteEl.value.trim(),
+    parties: partiesEl?partiesEl.value.trim():'',
+    location: locEl?locEl.value.trim():'',
+    action: actionEl?actionEl.value.trim():'',
+    followUp: fuEl?fuEl.checked:false,
+  });
+  cclSave(logs);
+  noteEl.value='';
+  if(partiesEl) partiesEl.value='';
+  if(locEl) locEl.value='';
+  if(actionEl) actionEl.value='';
+  if(fuEl) fuEl.checked=false;
+  cclRender();
+}
+
+function cclBuildModal(){
+  var m = document.createElement('div');
+  m.id = 'ccl-modal';
+  var typeOpts = CCL_TYPES.map(function(t){return`<option value="${t.id}">${t.label}</option>`;}).join('');
+  m.innerHTML = `<div class="ccl-box"><button class="ccl-close" onclick="document.getElementById('ccl-modal').style.display='none'">✕ Close</button>
+    <div class="ccl-h1">📱 Crew Communication Log</div>
+    <p style="color:#94a3b8;font-size:11px;margin-bottom:10px">Document every field communication — GC directives, owner requests, verbal COs, coordination calls. Timestamped, categorized, printable. Turns verbal conversations into written records.</p>
+    <div class="ccl-grid4" id="ccl-stats"></div>
+    <div class="ccl-section">
+      <div class="ccl-section-h">➕ Add Log Entry</div>
+      <div class="ccl-row">
+        <div style="flex:1;min-width:160px"><div class="ccl-label">Type</div>
+          <select id="ccl-type" class="ccl-inp">${typeOpts}</select></div>
+        <div style="flex:2;min-width:200px"><div class="ccl-label">Parties / People Involved</div>
+          <input id="ccl-parties" class="ccl-inp" type="text" placeholder="e.g. Mike (GC), Juan (Foreman)"></div>
+        <div style="flex:1;min-width:120px"><div class="ccl-label">Location / Area</div>
+          <input id="ccl-loc" class="ccl-inp" type="text" placeholder="e.g. Grid B, Slab 2"></div>
+      </div>
+      <div class="ccl-row">
+        <div style="flex:1;min-width:300px"><div class="ccl-label">Communication / Note <span style="color:#ef4444">*</span></div>
+          <textarea id="ccl-note" class="ccl-inp" rows="3" placeholder="What was said or decided? Be specific — this is your legal record."></textarea></div>
+      </div>
+      <div class="ccl-row">
+        <div style="flex:1;min-width:200px"><div class="ccl-label">Action Required / Next Step</div>
+          <input id="ccl-action" class="ccl-inp" type="text" placeholder="e.g. Submit written CO by Friday"></div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:14px">
+          <input type="checkbox" id="ccl-followup" style="cursor:pointer">
+          <label for="ccl-followup" style="font-size:12px;cursor:pointer">⚡ Follow-Up Required</label>
+        </div>
+        <div style="margin-top:14px"><button class="ccl-btn" onclick="window.cclAdd&&cclAdd()">➕ Log Entry</button></div>
+      </div>
+    </div>
+    <div class="ccl-section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div class="ccl-section-h" style="margin:0">📋 Communication Log</div>
+        <input class="ccl-search" id="ccl-search" placeholder="Search logs..." oninput="window.cclRender&&cclRender(this.value)">
+      </div>
+      <div id="ccl-list"></div>
+    </div>
+    <div class="ccl-section" style="font-size:11px;color:#64748b">
+      <b style="color:#ec4899">Why this matters:</b> Verbal GC directives are the #1 source of unpaid work. "He told me to do it" is not a change order. This log documents every instruction with timestamp, parties, and required action — creating the written record needed to back up a CO request, delay claim, or lien notice.<br>
+      Keep it factual. Quote exact words when possible. Note time, location, and who else was present.
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="ccl-btn" onclick="window.cclPrint&&cclPrint()">🖨️ Print Communication Log</button>
+      <button class="ccl-btn" style="background:#374151;color:#fff" onclick="document.getElementById('ccl-modal').style.display='none'">Close</button>
+    </div></div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click',function(e){if(e.target===this)this.style.display='none';});
+  window.cclAdd = cclAdd;
+  window.cclRender = cclRender;
+  window.cclPrint = function(){
+    var logs = cclLoad().slice().reverse();
+    var rows = logs.map(function(log,i){
+      var typeInfo = CCL_TYPES.find(function(t){return t.id===log.type;})||{label:log.type};
+      return `<tr><td>${i+1}</td><td>${log.date} ${log.time||''}</td><td>${typeInfo.label}</td><td>${log.note}</td><td>${log.parties||''}</td><td>${log.location||''}</td><td>${log.action||''}</td><td>${log.followUp?'⚡ Yes':''}</td></tr>`;
+    }).join('');
+    var w = window.open('','_blank');
+    var proj = window.currentProjectName||'Project';
+    w.document.write(`<!DOCTYPE html><html><head><title>Crew Communication Log</title><style>body{font-family:Arial,sans-serif;font-size:10px;max-width:1050px;margin:20px auto}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:4px 6px}th{background:#f0f0f0}@media print{button{display:none}}</style></head><body>
+      <h2>📱 Crew Communication Log — ${proj}</h2>
+      <p>Total Entries: ${logs.length} · Generated: ${new Date().toLocaleDateString()}</p>
+      <table><tr><th>#</th><th>Date/Time</th><th>Type</th><th>Communication</th><th>Parties</th><th>Location</th><th>Action Required</th><th>Follow-Up</th></tr>${rows}</table>
+      <p style="font-size:9px;color:#666;margin-top:12px">CONFIDENTIAL — INTERNAL USE ONLY. Documentation of verbal field communications for record-keeping and claim support purposes.</p>
+      <button onclick="window.print()">Print</button></body></html>`);
+    w.document.close();
+  };
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  cclBuildModal();
+  var sidebar = document.querySelector('.sidebar-actions,.sidebar,.action-panel');
+  if(sidebar){
+    var btn = document.createElement('button');
+    btn.textContent = '📱 Crew Communication Log';
+    btn.title = 'Crew Communication Log — Ctrl+F9';
+    btn.style.cssText = 'background:#500724;border:none;color:#fce7f3;padding:8px 14px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;width:100%;margin-bottom:4px;text-align:left';
+    btn.onclick = function(){
+      var m=document.getElementById('ccl-modal');
+      if(m){var was=m.style.display;m.style.display=was==='none'?'flex':'none';if(was==='none')cclRender();}
+    };
+    sidebar.insertBefore(btn, sidebar.firstChild);
+  }
+  cclRender();
+});
+document.addEventListener('keydown',function(e){
+  if(e.ctrlKey&&!e.shiftKey&&!e.altKey&&e.key==='F9'){
+    e.preventDefault();
+    var m=document.getElementById('ccl-modal');
+    if(m){var was=m.style.display;m.style.display=was==='none'?'flex':'none';if(was==='none')cclRender();}
+  }
+});
+
+})();
+// ==================== END SESSION #131 — Zeus ⚡ Concrete Sustainability Scorecard (Ctrl+F7) + Partial Pour Volume Calculator (Ctrl+F8) + Crew Communication Log (Ctrl+F9) ====================
