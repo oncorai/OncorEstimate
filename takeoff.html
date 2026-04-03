@@ -179304,5 +179304,325 @@ document.addEventListener('DOMContentLoaded',function(){
 
 // ==================== END SESSION #112 — Zeus ⚡ Concrete Pour Checklist Generator + Material Cost Tracker + Project Deadline Alerts ====================
 
+// ==================== SESSION #113 — Zeus ⚡ Site Logistics Planner + Daily Production Tracker + Equipment Pre-Use Inspection Log ====================
+
+(function(){
+'use strict';
+
+// ===== FEATURE 1: Site Logistics Planner (Ctrl+Alt+N) =====
+window._oncorSiteLogistics = (function(){
+  var MODAL_ID = 'overlay-sitelogistics';
+  var STORE = 'oncor_sitelogistics_v1';
+  function getProj(){ return (window.projectName||'').trim()||'default'; }
+  function load(){ try{ return JSON.parse(localStorage.getItem(STORE+'_'+getProj()))||{plans:[]}; }catch(e){ return {plans:[]}; } }
+  function save(d){ localStorage.setItem(STORE+'_'+getProj(), JSON.stringify(d)); }
+
+  var PLAN_TYPES = ['Truck Staging Area','Pump Placement','Crew Station','Material Drop Zone','Equipment Parking','Washout Zone','Safety Barrier','Access Route (Inbound)','Exit Route (Outbound)','Concrete Drop Zone','Generator Location','Restroom / Site Trailer','Other'];
+  var TYPE_COLORS = {'Truck Staging Area':'#3b82f6','Pump Placement':'#a855f7','Crew Station':'#10b981','Material Drop Zone':'#f59e0b','Equipment Parking':'#64748b','Washout Zone':'#06b6d4','Safety Barrier':'#ef4444','Access Route (Inbound)':'#22c55e','Exit Route (Outbound)':'#f97316','Concrete Drop Zone':'#6366f1','Generator Location':'#eab308','Restroom / Site Trailer':'#78716c','Other':'#475569'};
+
+  function render(){
+    var d=load(); var plans=d.plans||[];
+    var el=document.getElementById(MODAL_ID); if(!el) return;
+    var content=el.querySelector('#sitelogistics-content'); if(!content) return;
+    var confirmed=plans.filter(function(p){return p.status==='Confirmed';}).length;
+    var pending=plans.filter(function(p){return p.status==='Pending';}).length;
+    var pumps=plans.filter(function(p){return p.type==='Pump Placement';}).length;
+
+    var stats='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
+      +'<div style="background:#1e293b;border-radius:8px;padding:10px 14px;flex:1;min-width:70px"><div style="font-size:20px;font-weight:700;color:#60a5fa">'+plans.length+'</div><div style="font-size:11px;color:#94a3b8">Locations</div></div>'
+      +'<div style="background:#1e293b;border-radius:8px;padding:10px 14px;flex:1;min-width:70px"><div style="font-size:20px;font-weight:700;color:#10b981">'+confirmed+'</div><div style="font-size:11px;color:#94a3b8">Confirmed</div></div>'
+      +'<div style="background:#1e293b;border-radius:8px;padding:10px 14px;flex:1;min-width:70px"><div style="font-size:20px;font-weight:700;color:#f59e0b">'+pending+'</div><div style="font-size:11px;color:#94a3b8">Pending</div></div>'
+      +'<div style="background:#1e293b;border-radius:8px;padding:10px 14px;flex:1;min-width:70px"><div style="font-size:20px;font-weight:700;color:#a855f7">'+pumps+'</div><div style="font-size:11px;color:#94a3b8">Pump Spots</div></div>'
+      +'</div>';
+
+    var addForm='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:14px">'
+      +'<div style="font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:10px">+ Add Logistics Location</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+      +'<div><label style="font-size:11px;color:#94a3b8">Type</label><select id="sl-type" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px">'+PLAN_TYPES.map(function(t){return '<option>'+t+'</option>';}).join('')+'</select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Label *</label><input id="sl-label" placeholder="e.g. Boom Pump — Grid A NW" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Grid / Location</label><input id="sl-grid" placeholder="NW corner, Grid 3-5" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Responsible</label><input id="sl-resp" placeholder="Foreman / Operator" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Status</label><select id="sl-status" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px"><option>Pending</option><option>Confirmed</option><option>Active</option><option>Complete</option></select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Pour Date</label><input id="sl-date" type="date" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box"></div>'
+      +'</div>'
+      +'<div style="margin-bottom:8px"><label style="font-size:11px;color:#94a3b8">Notes</label><textarea id="sl-notes" rows="2" placeholder="Access/clearance notes..." style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box;resize:vertical"></textarea></div>'
+      +'<div style="display:flex;gap:8px"><button onclick="window._oncorSiteLogistics._add()" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:7px 16px;cursor:pointer;font-size:12px">+ Add</button>'
+      +'<button onclick="window._oncorSiteLogistics._print()" style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px">🖨️ Print</button></div></div>';
+
+    var list=plans.length===0?'<div style="color:#64748b;text-align:center;padding:20px;font-size:13px">No locations added yet.</div>':
+      plans.map(function(p,i){
+        var c=TYPE_COLORS[p.type]||'#475569';
+        var sc=p.status==='Confirmed'?'#10b981':p.status==='Active'?'#3b82f6':'#f59e0b';
+        return '<div style="background:#1e293b;border-left:3px solid '+c+';border-radius:6px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between">'
+          +'<div style="flex:1"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">'
+          +'<span style="background:'+c+'22;color:'+c+';border-radius:4px;padding:2px 7px;font-size:10px;font-weight:600">'+p.type+'</span>'
+          +'<span style="font-size:13px;font-weight:600;color:#e2e8f0">'+p.label+'</span>'
+          +'<span style="background:'+sc+'22;color:'+sc+';border-radius:4px;padding:2px 6px;font-size:10px">'+p.status+'</span></div>'
+          +(p.grid?'<div style="font-size:11px;color:#94a3b8">📍 '+p.grid+'</div>':'')
+          +(p.resp?'<div style="font-size:11px;color:#94a3b8">👷 '+p.resp+'</div>':'')
+          +(p.notes?'<div style="font-size:11px;color:#64748b;font-style:italic">'+p.notes+'</div>':'')
+          +'</div><button onclick="window._oncorSiteLogistics._del('+i+')" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:14px">✕</button></div>';
+      }).join('');
+    content.innerHTML=stats+addForm+list;
+  }
+
+  function _add(){
+    var lbl=(document.getElementById('sl-label')||{}).value||'';
+    if(!lbl.trim()){alert('Label required');return;}
+    var d=load();
+    d.plans.push({type:(document.getElementById('sl-type')||{}).value||'Other',label:lbl.trim(),grid:(document.getElementById('sl-grid')||{}).value||'',resp:(document.getElementById('sl-resp')||{}).value||'',status:(document.getElementById('sl-status')||{}).value||'Pending',date:(document.getElementById('sl-date')||{}).value||'',notes:(document.getElementById('sl-notes')||{}).value||''});
+    save(d);['sl-label','sl-grid','sl-resp','sl-notes'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});render();
+  }
+  function _del(i){var d=load();d.plans.splice(i,1);save(d);render();}
+  function _print(){
+    var d=load();var plans=d.plans||[];var proj=window.projectName||'Project';var co=window.companyName||'Oncor';
+    var rows=plans.map(function(p){return '<tr><td>'+p.type+'</td><td>'+p.label+'</td><td>'+(p.grid||'-')+'</td><td>'+(p.resp||'-')+'</td><td>'+p.status+'</td><td>'+(p.notes||'-')+'</td></tr>';}).join('');
+    var w=window.open('','_blank');
+    w.document.write('<!DOCTYPE html><html><head><title>Site Logistics — '+proj+'</title><style>body{font-family:Arial,sans-serif;font-size:12px;margin:20px}h1{font-size:16px}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #ccc;padding:5px 8px}th{background:#f0f0f0}@media print{button{display:none}}</style></head><body>'
+      +'<div style="display:flex;justify-content:space-between"><div><h1>🗺️ Site Logistics Plan</h1><div>'+co+' | '+proj+' | '+new Date().toLocaleDateString()+'</div></div><button onclick="window.print()" style="padding:6px 12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer">🖨️ Print</button></div>'
+      +'<table><thead><tr><th>Type</th><th>Label</th><th>Location</th><th>Responsible</th><th>Status</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      +'<div style="margin-top:12px;padding:8px;border:1px solid #ddd;border-radius:5px;font-size:11px;color:#555">Pump placement per ACI 304.2R. Washout zone must comply with TCEQ SWPPP / EPA CGP.</div>'
+      +'<p style="font-size:10px;color:#888">CONFIDENTIAL</p></body></html>');
+    w.document.close();
+  }
+  function toggle(){
+    var el=document.getElementById(MODAL_ID);
+    if(!el){
+      el=document.createElement('div');el.id=MODAL_ID;
+      el.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10060;align-items:center;justify-content:center';
+      el.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:700px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#3b82f6">🗺️ Site Logistics Planner</h3>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="sitelogistics-content"></div></div>';
+      el.addEventListener('click',function(e){if(e.target===el)el.style.display='none';});
+      document.body.appendChild(el);render();
+    } else { el.style.display=el.style.display==='none'?'flex':'none';if(el.style.display==='flex')render(); }
+  }
+  document.addEventListener('keydown',function(e){if(e.ctrlKey&&e.altKey&&e.key==='n'){e.preventDefault();toggle();}});
+  return {toggle:toggle,_add:_add,_del:_del,_print:_print};
+})();
+
+
+// ===== FEATURE 2: Daily Production Tracker (Ctrl+Alt+Q) =====
+window._oncorDailyProduction = (function(){
+  var MODAL_ID = 'overlay-dailyproduction';
+  var STORE = 'oncor_dailyprod_v1';
+  function getProj(){ return (window.projectName||'').trim()||'default'; }
+  function load(){ try{ return JSON.parse(localStorage.getItem(STORE+'_'+getProj()))||{sessions:[]}; }catch(e){ return {sessions:[]}; } }
+  function save(d){ localStorage.setItem(STORE+'_'+getProj(), JSON.stringify(d)); }
+
+  function calcHrs(s,e){ if(!s||!e)return 0;var sp=s.split(':'),ep=e.split(':');var sh=parseInt(sp[0])*60+parseInt(sp[1]),eh=parseInt(ep[0])*60+parseInt(ep[1]);var diff=eh-sh;if(diff<0)diff+=1440;return Math.round(diff*10/60)/10; }
+  function gradeColor(r){ return r>=1.2?'#10b981':r>=0.8?'#22c55e':r>=0.5?'#f59e0b':'#ef4444'; }
+  function gradeLabel(r){ return r>=1.2?'Excellent':r>=0.8?'Good':r>=0.5?'Below Avg':'Low'; }
+
+  function render(){
+    var d=load();var ss=d.sessions||[];
+    var el=document.getElementById(MODAL_ID);if(!el)return;
+    var content=el.querySelector('#dailyprod-content');if(!content)return;
+    var totalY=ss.reduce(function(a,s){return a+(parseFloat(s.yds)||0);},0);
+    var totalH=ss.reduce(function(a,s){return a+(parseFloat(s.hours)||0);},0);
+    var avgRate=totalH>0?Math.round(totalY/totalH*100)/100:0;var gc=gradeColor(avgRate);
+
+    var stats='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
+      +'<div style="background:#1e293b;border-radius:8px;padding:10px 14px;flex:1;min-width:70px"><div style="font-size:20px;font-weight:700;color:#60a5fa">'+ss.length+'</div><div style="font-size:11px;color:#94a3b8">Sessions</div></div>'
+      +'<div style="background:#1e293b;border-radius:8px;padding:10px 14px;flex:1;min-width:70px"><div style="font-size:20px;font-weight:700;color:#10b981">'+totalY.toFixed(1)+'</div><div style="font-size:11px;color:#94a3b8">Total yd³</div></div>'
+      +'<div style="background:#1e293b;border-radius:8px;padding:10px 14px;flex:1;min-width:70px"><div style="font-size:20px;font-weight:700;color:#f59e0b">'+totalH.toFixed(1)+'</div><div style="font-size:11px;color:#94a3b8">Hours</div></div>'
+      +'<div style="background:#1e293b;border-radius:8px;padding:10px 14px;flex:1;min-width:70px"><div style="font-size:20px;font-weight:700;color:'+gc+'">'+avgRate+'</div><div style="font-size:11px;color:#94a3b8">yd³/hr</div></div>'
+      +'</div>';
+
+    var form='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:14px">'
+      +'<div style="font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:10px">+ Log Production Session</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">'
+      +'<div><label style="font-size:11px;color:#94a3b8">Date *</label><input id="dp-date" type="date" value="'+new Date().toISOString().slice(0,10)+'" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Pour / Area *</label><input id="dp-area" placeholder="Slab Grid A-D" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">yd³ Placed *</label><input id="dp-yds" type="number" step="0.5" min="0" placeholder="45" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Start Time</label><input id="dp-start" type="time" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">End Time</label><input id="dp-end" type="time" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Crew Size</label><input id="dp-crew" type="number" min="1" placeholder="8" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box"></div>'
+      +'</div>'
+      +'<div style="margin-bottom:8px"><label style="font-size:11px;color:#94a3b8">Notes / Delays</label><textarea id="dp-notes" rows="2" placeholder="Any delays, issues..." style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box;resize:vertical"></textarea></div>'
+      +'<div style="display:flex;gap:8px"><button onclick="window._oncorDailyProduction._add()" style="background:#10b981;color:#fff;border:none;border-radius:6px;padding:7px 16px;cursor:pointer;font-size:12px">+ Log</button>'
+      +'<button onclick="window._oncorDailyProduction._print()" style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px">🖨️ Print</button></div></div>';
+
+    var list=ss.length===0?'<div style="color:#64748b;text-align:center;padding:20px;font-size:13px">No sessions logged yet.</div>':
+      ss.slice().reverse().map(function(s,ri){
+        var i=ss.length-1-ri;var h=parseFloat(s.hours)||0;var y=parseFloat(s.yds)||0;
+        var r=h>0?Math.round(y/h*100)/100:0;var gc2=gradeColor(r);
+        return '<div style="background:#1e293b;border-left:3px solid '+gc2+';border-radius:6px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between">'
+          +'<div style="flex:1"><div style="font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:4px">'+s.date+' — '+s.area+'</div>'
+          +'<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:#94a3b8">'
+          +'<span>📦 <strong style="color:#e5e7eb">'+y+'</strong> yd³</span>'
+          +(h>0?'<span>⏱ <strong style="color:#e5e7eb">'+h+'</strong> hrs</span>':'')
+          +(s.crew?'<span>👷 '+s.crew+' crew</span>':'')
+          +(h>0?'<span style="color:'+gc2+'">⚡ '+r+' yd³/hr — '+gradeLabel(r)+'</span>':'')
+          +'</div>'+(s.notes?'<div style="font-size:11px;color:#64748b;font-style:italic;margin-top:4px">'+s.notes+'</div>':'')
+          +'</div><button onclick="window._oncorDailyProduction._del('+i+')" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:14px">✕</button></div>';
+      }).join('');
+
+    content.innerHTML=stats+form+'<div style="font-size:11px;color:#64748b;margin-bottom:8px;padding:6px 10px;background:#1e293b;border-radius:6px">📊 ACI Benchmarks: Flatwork 0.8–1.5 yd³/labor-hr | Foundations 0.4–0.8 | Walls 0.2–0.6</div>'+list;
+  }
+
+  function _add(){
+    var area=(document.getElementById('dp-area')||{}).value||'';
+    var yds=(document.getElementById('dp-yds')||{}).value||'';
+    if(!area.trim()||!yds){alert('Area and yd³ required');return;}
+    var start=(document.getElementById('dp-start')||{}).value||'';
+    var end=(document.getElementById('dp-end')||{}).value||'';
+    var d=load();
+    d.sessions.push({date:(document.getElementById('dp-date')||{}).value||new Date().toISOString().slice(0,10),area:area.trim(),yds:parseFloat(yds)||0,start:start,end:end,hours:calcHrs(start,end),crew:(document.getElementById('dp-crew')||{}).value||'',notes:(document.getElementById('dp-notes')||{}).value||''});
+    save(d);['dp-area','dp-yds','dp-start','dp-end','dp-crew','dp-notes'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});render();
+  }
+  function _del(i){var d=load();d.sessions.splice(i,1);save(d);render();}
+  function _print(){
+    var d=load();var ss=d.sessions||[];var proj=window.projectName||'Project';var co=window.companyName||'Oncor';
+    var totalY=ss.reduce(function(a,s){return a+(parseFloat(s.yds)||0);},0);
+    var totalH=ss.reduce(function(a,s){return a+(parseFloat(s.hours)||0);},0);
+    var rows=ss.map(function(s){var h=parseFloat(s.hours)||0;var y=parseFloat(s.yds)||0;var r=h>0?Math.round(y/h*100)/100:'N/A';return '<tr><td>'+s.date+'</td><td>'+s.area+'</td><td>'+y+'</td><td>'+(s.crew||'-')+'</td><td>'+(h||'-')+'</td><td>'+r+'</td><td>'+(s.notes||'—')+'</td></tr>';}).join('');
+    var w=window.open('','_blank');
+    w.document.write('<!DOCTYPE html><html><head><title>Production Report — '+proj+'</title><style>body{font-family:Arial,sans-serif;font-size:12px;margin:20px}h1{font-size:16px}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #ccc;padding:5px 8px}th{background:#f0f0f0}@media print{button{display:none}}</style></head><body>'
+      +'<div style="display:flex;justify-content:space-between"><div><h1>📊 Daily Production Report</h1><div>'+co+' | '+proj+' | '+new Date().toLocaleDateString()+'</div></div><button onclick="window.print()" style="padding:6px 12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer">🖨️ Print</button></div>'
+      +'<div style="margin:10px 0"><strong>Summary:</strong> '+ss.length+' sessions | '+totalY.toFixed(1)+' yd³ | '+totalH.toFixed(1)+' hrs | Avg '+(totalH>0?Math.round(totalY/totalH*100)/100:'N/A')+' yd³/hr</div>'
+      +'<table><thead><tr><th>Date</th><th>Area</th><th>yd³</th><th>Crew</th><th>Hours</th><th>yd³/hr</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      +'<p style="font-size:10px;color:#888">ACI Benchmarks: Flatwork 0.8–1.5 | Foundations 0.4–0.8 | Walls 0.2–0.6 yd³/labor-hr</p></body></html>');
+    w.document.close();
+  }
+  function toggle(){
+    var el=document.getElementById(MODAL_ID);
+    if(!el){
+      el=document.createElement('div');el.id=MODAL_ID;
+      el.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10061;align-items:center;justify-content:center';
+      el.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:720px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#10b981">📊 Daily Production Tracker</h3>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="dailyprod-content"></div></div>';
+      el.addEventListener('click',function(e){if(e.target===el)el.style.display='none';});
+      document.body.appendChild(el);render();
+    } else { el.style.display=el.style.display==='none'?'flex':'none';if(el.style.display==='flex')render(); }
+  }
+  document.addEventListener('keydown',function(e){if(e.ctrlKey&&e.altKey&&e.key==='q'){e.preventDefault();toggle();}});
+  return {toggle:toggle,_add:_add,_del:_del,_print:_print};
+})();
+
+
+// ===== FEATURE 3: Equipment Pre-Use Inspection Log (Ctrl+Alt+J) =====
+window._oncorEquipInspection = (function(){
+  var MODAL_ID = 'overlay-equipinspection';
+  var STORE = 'oncor_equipinsp_v1';
+  function getProj(){ return (window.projectName||'').trim()||'default'; }
+  function load(){ try{ return JSON.parse(localStorage.getItem(STORE+'_'+getProj()))||{records:[]}; }catch(e){ return {records:[]}; } }
+  function save(d){ localStorage.setItem(STORE+'_'+getProj(), JSON.stringify(d)); }
+
+  var EQUIP_TYPES = ['Concrete Vibrator','Walk-Behind Saw','Ride-On Saw','Concrete Pump (Boom)','Concrete Pump (Line)','Trowel Machine','Laser Screed','Plate Compactor','Forklift / Telehandler','Skid Steer / Bobcat','Boom Lift','Scissor Lift','Generator','Air Compressor','Jackhammer','Other'];
+
+  function render(){
+    var d=load();var recs=d.records||[];
+    var el=document.getElementById(MODAL_ID);if(!el)return;
+    var content=el.querySelector('#equipinsp-content');if(!content)return;
+    var passed=recs.filter(function(r){return r.result==='Pass';}).length;
+    var failed=recs.filter(function(r){return r.result==='Fail';}).length;
+    var cond=recs.filter(function(r){return r.result==='Conditional';}).length;
+
+    var stats='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
+      +'<div style="background:#1e293b;border-radius:8px;padding:10px 14px;flex:1;min-width:70px"><div style="font-size:20px;font-weight:700;color:#60a5fa">'+recs.length+'</div><div style="font-size:11px;color:#94a3b8">Inspections</div></div>'
+      +'<div style="background:#1e293b;border-radius:8px;padding:10px 14px;flex:1;min-width:70px"><div style="font-size:20px;font-weight:700;color:#10b981">'+passed+'</div><div style="font-size:11px;color:#94a3b8">Pass ✅</div></div>'
+      +'<div style="background:#1e293b;border-radius:8px;padding:10px 14px;flex:1;min-width:70px"><div style="font-size:20px;font-weight:700;color:#ef4444">'+failed+'</div><div style="font-size:11px;color:#94a3b8">Fail ❌</div></div>'
+      +'<div style="background:#1e293b;border-radius:8px;padding:10px 14px;flex:1;min-width:70px"><div style="font-size:20px;font-weight:700;color:#f59e0b">'+cond+'</div><div style="font-size:11px;color:#94a3b8">Conditional</div></div>'
+      +'</div>';
+
+    var form='<div style="background:#1e293b;border-radius:8px;padding:14px;margin-bottom:14px">'
+      +'<div style="font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:10px">+ New Pre-Use Inspection (OSHA 1926.20)</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">'
+      +'<div><label style="font-size:11px;color:#94a3b8">Date *</label><input id="ei-date" type="date" value="'+new Date().toISOString().slice(0,10)+'" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Equipment Type *</label><select id="ei-type" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px">'+EQUIP_TYPES.map(function(t){return '<option>'+t+'</option>';}).join('')+'</select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Equipment ID / Tag</label><input id="ei-id" placeholder="VIB-01, SAW-3" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Inspected By</label><input id="ei-insp" placeholder="Foreman / Operator" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Result *</label><select id="ei-result" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px"><option>Pass</option><option>Conditional</option><option>Fail</option></select></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Work Area</label><input id="ei-area" placeholder="Building A" style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box"></div>'
+      +'</div>'
+      +'<div style="margin-bottom:8px"><label style="font-size:11px;color:#94a3b8">Deficiencies / Notes</label><textarea id="ei-notes" rows="2" placeholder="Any deficiencies found..." style="width:100%;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;padding:5px;font-size:12px;box-sizing:border-box;resize:vertical"></textarea></div>'
+      +'<div style="display:flex;gap:8px"><button onclick="window._oncorEquipInspection._add()" style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:7px 16px;cursor:pointer;font-size:12px">+ Log Inspection</button>'
+      +'<button onclick="window._oncorEquipInspection._print()" style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px">🖨️ Print Log</button></div></div>';
+
+    var list=recs.length===0?'<div style="color:#64748b;text-align:center;padding:20px;font-size:13px">No inspections logged yet.</div>':
+      recs.slice().reverse().map(function(r,ri){
+        var i=recs.length-1-ri;
+        var rc=r.result==='Pass'?'#10b981':r.result==='Fail'?'#ef4444':'#f59e0b';
+        return '<div style="background:#1e293b;border-left:3px solid '+rc+';border-radius:6px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between">'
+          +'<div style="flex:1"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">'
+          +'<span style="font-size:13px;font-weight:600;color:#e2e8f0">'+r.type+'</span>'
+          +(r.eqid?'<span style="font-size:11px;color:#60a5fa">#'+r.eqid+'</span>':'')
+          +'<span style="background:'+rc+'22;color:'+rc+';border-radius:4px;padding:2px 7px;font-size:10px;font-weight:600">'+r.result+'</span></div>'
+          +'<div style="font-size:11px;color:#94a3b8">'+r.date+(r.insp?' — '+r.insp:'')+(r.area?' — '+r.area:'')+'</div>'
+          +(r.notes?'<div style="font-size:11px;color:#f59e0b;margin-top:4px">⚠️ '+r.notes+'</div>':'')
+          +'</div><button onclick="window._oncorEquipInspection._del('+i+')" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:14px">✕</button></div>';
+      }).join('');
+
+    content.innerHTML=stats+form+'<div style="font-size:11px;color:#64748b;margin-bottom:8px;padding:6px 10px;background:#1e293b;border-radius:6px">OSHA 1926.20(b)(2): Pre-use inspections required for all equipment. Document deficiencies and corrective actions.</div>'+list;
+  }
+
+  function _add(){
+    var d=load();
+    d.records.push({date:(document.getElementById('ei-date')||{}).value||new Date().toISOString().slice(0,10),type:(document.getElementById('ei-type')||{}).value||'Other',eqid:(document.getElementById('ei-id')||{}).value||'',insp:(document.getElementById('ei-insp')||{}).value||'',result:(document.getElementById('ei-result')||{}).value||'Pass',area:(document.getElementById('ei-area')||{}).value||'',notes:(document.getElementById('ei-notes')||{}).value||''});
+    save(d);['ei-id','ei-insp','ei-area','ei-notes'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});render();
+  }
+  function _del(i){var d=load();d.records.splice(i,1);save(d);render();}
+  function _print(){
+    var d=load();var recs=d.records||[];var proj=window.projectName||'Project';var co=window.companyName||'Oncor';
+    var rows=recs.map(function(r){var rc=r.result==='Pass'?'green':r.result==='Fail'?'red':'orange';return '<tr><td>'+r.date+'</td><td>'+r.type+'</td><td>'+(r.eqid||'-')+'</td><td>'+(r.insp||'-')+'</td><td style="color:'+rc+';font-weight:600">'+r.result+'</td><td>'+(r.notes||'—')+'</td></tr>';}).join('');
+    var w=window.open('','_blank');
+    w.document.write('<!DOCTYPE html><html><head><title>Equipment Inspection Log — '+proj+'</title><style>body{font-family:Arial,sans-serif;font-size:12px;margin:20px}h1{font-size:16px}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #ccc;padding:5px 8px}th{background:#f0f0f0}@media print{button{display:none}}</style></head><body>'
+      +'<div style="display:flex;justify-content:space-between"><div><h1>🔧 Equipment Pre-Use Inspection Log</h1><div>'+co+' | '+proj+' | '+new Date().toLocaleDateString()+'</div></div><button onclick="window.print()" style="padding:6px 12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer">🖨️ Print</button></div>'
+      +'<div style="margin:10px 0"><strong>Summary:</strong> '+recs.length+' inspections | '+recs.filter(function(r){return r.result==='Pass';}).length+' Pass | '+recs.filter(function(r){return r.result==='Fail';}).length+' Fail | '+recs.filter(function(r){return r.result==='Conditional';}).length+' Conditional</div>'
+      +'<table><thead><tr><th>Date</th><th>Equipment</th><th>ID/Tag</th><th>Inspector</th><th>Result</th><th>Deficiencies/Notes</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      +'<div style="margin-top:12px;padding:8px;border:1px solid #ddd;border-radius:5px;font-size:11px;color:#555">OSHA 29 CFR 1926.20(b)(2): Employers shall instruct employees in the recognition and avoidance of unsafe conditions. Pre-use equipment inspections are required.</div>'
+      +'<p style="font-size:10px;color:#888">CONFIDENTIAL — SAFETY RECORDS</p></body></html>');
+    w.document.close();
+  }
+  function toggle(){
+    var el=document.getElementById(MODAL_ID);
+    if(!el){
+      el=document.createElement('div');el.id=MODAL_ID;
+      el.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10062;align-items:center;justify-content:center';
+      el.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:700px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#6366f1">🔧 Equipment Pre-Use Inspection Log</h3>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="equipinsp-content"></div></div>';
+      el.addEventListener('click',function(e){if(e.target===el)el.style.display='none';});
+      document.body.appendChild(el);render();
+    } else { el.style.display=el.style.display==='none'?'flex':'none';if(el.style.display==='flex')render(); }
+  }
+  document.addEventListener('keydown',function(e){if(e.ctrlKey&&e.altKey&&e.key==='j'){e.preventDefault();toggle();}});
+  return {toggle:toggle,_add:_add,_del:_del,_print:_print};
+})();
+
+
+/* ─── Escape closes all Session #113 modals ─── */
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){
+    ['overlay-sitelogistics','overlay-dailyproduction','overlay-equipinspection'].forEach(function(id){
+      var el=document.getElementById(id);
+      if(el&&el.style.display!=='none')el.style.display='none';
+    });
+  }
+});
+
+/* ─── Sidebar buttons ─── */
+document.addEventListener('DOMContentLoaded',function(){
+  var sidebar=document.querySelector('.sidebar-actions')||document.querySelector('#sidebarActions')||document.querySelector('aside');
+  function injectBtn(id,emoji,label,fn){
+    if(document.getElementById(id))return;
+    var btn=document.createElement('button');btn.id=id;btn.textContent=emoji+' '+label;
+    btn.style.cssText='display:block;width:100%;margin:2px 0;padding:6px 10px;background:#1e293b;color:#e5e7eb;border:1px solid #334155;border-radius:6px;cursor:pointer;text-align:left;font-size:12px';
+    btn.onclick=fn;if(sidebar)sidebar.appendChild(btn);
+  }
+  injectBtn('btnSiteLogistics','🗺️','Site Logistics',function(){window._oncorSiteLogistics.toggle();});
+  injectBtn('btnDailyProduction','📊','Daily Production',function(){window._oncorDailyProduction.toggle();});
+  injectBtn('btnEquipInspection','🔧','Equip Inspection',function(){window._oncorEquipInspection.toggle();});
+});
+
+})();
+
+// ==================== END SESSION #113 — Zeus ⚡ Site Logistics Planner + Daily Production Tracker + Equipment Pre-Use Inspection Log ====================
+
 
 })();
