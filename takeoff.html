@@ -181202,4 +181202,335 @@ document.addEventListener('DOMContentLoaded',function(){
 // ==================== END SESSION #116 — Zeus ⚡ Safety Toolbox Talk Log + Photo Documentation + W/C Ratio Calculator ====================
 
 
+// ==================== SESSION #117 — Zeus ⚡ Concrete Yield Calculator + Rebar Weight & Cost + Pour Schedule Board ====================
+(function(){
+'use strict';
+
+/* ─── 📊 Concrete Yield Calculator (Ctrl+Alt+G) ─── */
+window._oncorYieldCalc=(function(){
+  var MODAL_ID='overlay-yieldcalc';
+  function render(){
+    var c=document.getElementById('yieldcalc-content');if(!c)return;
+    var html='<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:16px">';
+    html+='<div style="font-size:12px;color:#94a3b8;margin-bottom:10px">📐 Batch Ticket Data</div>';
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+    html+='<div><label style="font-size:10px;color:#64748b">Batch Weight — Total (lbs)</label>';
+    html+='<input id="yc-batchweight" type="number" placeholder="e.g. 34500" style="width:100%;padding:8px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:12px;margin-top:4px" onchange="window._oncorYieldCalc._calc()"></div>';
+    html+='<div><label style="font-size:10px;color:#64748b">Unit Weight (pcf) — ASTM C138</label>';
+    html+='<input id="yc-unitweight" type="number" step="0.1" placeholder="e.g. 145.5" style="width:100%;padding:8px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:12px;margin-top:4px" onchange="window._oncorYieldCalc._calc()"></div>';
+    html+='<div><label style="font-size:10px;color:#64748b">Design Yield (yd³/batch)</label>';
+    html+='<input id="yc-designyield" type="number" step="0.01" placeholder="e.g. 9.0" value="9" style="width:100%;padding:8px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:12px;margin-top:4px" onchange="window._oncorYieldCalc._calc()"></div>';
+    html+='<div><label style="font-size:10px;color:#64748b">Ticket yd³ (as ordered)</label>';
+    html+='<input id="yc-ticketyds" type="number" step="0.01" placeholder="e.g. 10.0" value="10" style="width:100%;padding:8px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:12px;margin-top:4px" onchange="window._oncorYieldCalc._calc()"></div>';
+    html+='</div></div>';
+
+    html+='<div style="background:#1e3a5f;padding:16px;border-radius:8px;margin-bottom:16px">';
+    html+='<div style="font-size:12px;color:#60a5fa;margin-bottom:10px">📊 Yield Results</div>';
+    html+='<div id="yc-results" style="text-align:center;color:#64748b;padding:20px">Enter batch data above</div>';
+    html+='</div>';
+
+    html+='<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:12px">';
+    html+='<div style="font-size:11px;color:#94a3b8;margin-bottom:8px">📋 Quick Yield — Volume Method</div>';
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+    html+='<div><label style="font-size:10px;color:#64748b">Estimated yd³ (takeoff)</label>';
+    html+='<input id="yc-estyds" type="number" step="0.1" placeholder="e.g. 52" style="width:100%;padding:6px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:11px;margin-top:4px" onchange="window._oncorYieldCalc._calcQuick()"></div>';
+    html+='<div><label style="font-size:10px;color:#64748b">Ordered yd³</label>';
+    html+='<input id="yc-ordyds" type="number" step="0.1" placeholder="e.g. 56" style="width:100%;padding:6px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:11px;margin-top:4px" onchange="window._oncorYieldCalc._calcQuick()"></div>';
+    html+='<div><label style="font-size:10px;color:#64748b">Placed yd³ (actual)</label>';
+    html+='<input id="yc-placeyds" type="number" step="0.1" placeholder="e.g. 54" style="width:100%;padding:6px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:11px;margin-top:4px" onchange="window._oncorYieldCalc._calcQuick()"></div>';
+    html+='<div><label style="font-size:10px;color:#64748b">Price per yd³ ($)</label>';
+    html+='<input id="yc-price" type="number" step="1" placeholder="e.g. 185" value="185" style="width:100%;padding:6px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:11px;margin-top:4px" onchange="window._oncorYieldCalc._calcQuick()"></div>';
+    html+='</div>';
+    html+='<div id="yc-quickresults" style="margin-top:10px;font-size:11px;color:#64748b;text-align:center">Enter values to see waste analysis</div>';
+    html+='</div>';
+
+    html+='<div style="padding:10px;background:#0f172a;border-radius:6px;font-size:10px;color:#64748b">';
+    html+='<strong>Reference:</strong> ASTM C138 (Unit Weight/Yield), ACI 304R (acceptable waste 3-8%). ';
+    html+='Yield = Batch Weight ÷ (Unit Weight × 27). Under-yield (<97%) = investigate. Over-yield (>103%) = check air/water.';
+    html+='</div>';
+    c.innerHTML=html;
+  }
+
+  function _calc(){
+    var bw=parseFloat(document.getElementById('yc-batchweight').value)||0;
+    var uw=parseFloat(document.getElementById('yc-unitweight').value)||0;
+    var dy=parseFloat(document.getElementById('yc-designyield').value)||0;
+    var ty=parseFloat(document.getElementById('yc-ticketyds').value)||0;
+    var r=document.getElementById('yc-results');if(!r)return;
+    if(!bw||!uw){r.innerHTML='<div style="color:#64748b">Enter batch data above</div>';return;}
+
+    var actualYield=bw/(uw*27);
+    var yieldPct=dy>0?(actualYield/dy*100):0;
+    var ticketDiff=ty>0?(actualYield-ty):0;
+    var ok=yieldPct>=97&&yieldPct<=103;
+    var html='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">';
+    html+='<div style="background:'+(ok?'#166534':'#7f1d1d')+';padding:12px;border-radius:6px;text-align:center">';
+    html+='<div style="font-size:24px;color:'+(ok?'#4ade80':'#f87171')+';font-weight:bold">'+actualYield.toFixed(2)+'</div>';
+    html+='<div style="font-size:10px;color:#94a3b8">Actual Yield (yd³)</div></div>';
+    html+='<div style="background:#854d0e;padding:12px;border-radius:6px;text-align:center">';
+    html+='<div style="font-size:24px;color:#fbbf24;font-weight:bold">'+yieldPct.toFixed(1)+'%</div>';
+    html+='<div style="font-size:10px;color:#94a3b8">vs Design</div></div>';
+    html+='<div style="background:#1e3a5f;padding:12px;border-radius:6px;text-align:center">';
+    var diffColor=ticketDiff>=0?'#4ade80':'#f87171';
+    html+='<div style="font-size:24px;color:'+diffColor+';font-weight:bold">'+(ticketDiff>=0?'+':'')+ticketDiff.toFixed(2)+'</div>';
+    html+='<div style="font-size:10px;color:#94a3b8">vs Ticket yd³</div></div>';
+    html+='</div>';
+    if(!ok){html+='<div style="margin-top:10px;background:#7f1d1d;padding:8px;border-radius:4px;font-size:11px;color:#f87171;text-align:center">'+(yieldPct<97?'⚠️ Under-yield — check for missing material or batch error':'⚠️ Over-yield — check air content or excess water')+'</div>';}
+    r.innerHTML=html;
+  }
+
+  function _calcQuick(){
+    var est=parseFloat(document.getElementById('yc-estyds').value)||0;
+    var ord=parseFloat(document.getElementById('yc-ordyds').value)||0;
+    var placed=parseFloat(document.getElementById('yc-placeyds').value)||0;
+    var price=parseFloat(document.getElementById('yc-price').value)||0;
+    var r=document.getElementById('yc-quickresults');if(!r)return;
+    if(!est&&!ord&&!placed){r.innerHTML='Enter values to see waste analysis';return;}
+    var waste=ord-placed;var wastePct=ord>0?(waste/ord*100):0;
+    var wasteCost=waste*price;
+    var overOrder=ord-est;var overPct=est>0?(overOrder/est*100):0;
+    var ok=wastePct<=8;
+    var html='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px">';
+    html+='<div style="background:#0f172a;padding:8px;border-radius:4px;text-align:center"><div style="font-size:14px;color:#60a5fa;font-weight:bold">'+overOrder.toFixed(1)+'</div><div style="font-size:9px;color:#94a3b8">Over-order yd³</div></div>';
+    html+='<div style="background:#0f172a;padding:8px;border-radius:4px;text-align:center"><div style="font-size:14px;color:#fbbf24;font-weight:bold">'+overPct.toFixed(1)+'%</div><div style="font-size:9px;color:#94a3b8">Buffer %</div></div>';
+    html+='<div style="background:'+(ok?'#0f172a':'#7f1d1d')+';padding:8px;border-radius:4px;text-align:center"><div style="font-size:14px;color:'+(ok?'#4ade80':'#f87171')+';font-weight:bold">'+wastePct.toFixed(1)+'%</div><div style="font-size:9px;color:#94a3b8">Waste %</div></div>';
+    html+='<div style="background:#0f172a;padding:8px;border-radius:4px;text-align:center"><div style="font-size:14px;color:#ef4444;font-weight:bold">$'+wasteCost.toFixed(0)+'</div><div style="font-size:9px;color:#94a3b8">Waste Cost</div></div>';
+    html+='</div>';
+    r.innerHTML=html;
+  }
+
+  function toggle(){
+    var el=document.getElementById(MODAL_ID);
+    if(!el){
+      el=document.createElement('div');el.id=MODAL_ID;
+      el.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10066;align-items:center;justify-content:center';
+      el.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:600px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#10b981">📊 Concrete Yield Calculator</h3>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="yieldcalc-content"></div></div>';
+      el.addEventListener('click',function(e){if(e.target===el)el.style.display='none';});
+      document.body.appendChild(el);render();
+    } else { el.style.display=el.style.display==='none'?'flex':'none';if(el.style.display==='flex')render(); }
+  }
+  document.addEventListener('keydown',function(e){if(e.ctrlKey&&e.altKey&&e.key==='g'){e.preventDefault();toggle();}});
+  return {toggle:toggle,_calc:_calc,_calcQuick:_calcQuick};
+})();
+
+
+/* ─── 🔩 Rebar Weight & Cost Calculator (Ctrl+Alt+H) ─── */
+window._oncorRebarCalc=(function(){
+  var MODAL_ID='overlay-rebarcalc';
+  var bars=[
+    {size:'#3',dia:0.375,area:0.11,wt:0.376,labor:0.55},
+    {size:'#4',dia:0.500,area:0.20,wt:0.668,labor:0.60},
+    {size:'#5',dia:0.625,area:0.31,wt:1.043,labor:0.65},
+    {size:'#6',dia:0.750,area:0.44,wt:1.502,labor:0.70},
+    {size:'#7',dia:0.875,area:0.60,wt:2.044,labor:0.80},
+    {size:'#8',dia:1.000,area:0.79,wt:2.670,labor:0.85},
+    {size:'#9',dia:1.128,area:1.00,wt:3.400,labor:0.95},
+    {size:'#10',dia:1.270,area:1.27,wt:4.303,labor:1.05},
+    {size:'#11',dia:1.410,area:1.56,wt:5.313,labor:1.15}
+  ];
+
+  function render(){
+    var c=document.getElementById('rebarcalc-content');if(!c)return;
+    var html='<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:12px">';
+    html+='<div style="font-size:12px;color:#94a3b8;margin-bottom:8px">📋 Rebar Reference (ASTM A615 Gr 60)</div>';
+    html+='<div style="overflow-x:auto"><table style="width:100%;font-size:10px;border-collapse:collapse">';
+    html+='<tr style="color:#64748b"><th style="padding:4px;text-align:left;border-bottom:1px solid #334155">Size</th><th style="padding:4px;text-align:right;border-bottom:1px solid #334155">Dia (in)</th><th style="padding:4px;text-align:right;border-bottom:1px solid #334155">Area (in²)</th><th style="padding:4px;text-align:right;border-bottom:1px solid #334155">lb/ft</th><th style="padding:4px;text-align:right;border-bottom:1px solid #334155">$/lb (EP)</th></tr>';
+    bars.forEach(function(b){
+      html+='<tr><td style="padding:4px;color:#60a5fa;font-weight:bold">'+b.size+'</td><td style="padding:4px;text-align:right;color:#e5e7eb">'+b.dia.toFixed(3)+'</td><td style="padding:4px;text-align:right;color:#e5e7eb">'+b.area.toFixed(2)+'</td><td style="padding:4px;text-align:right;color:#4ade80">'+b.wt.toFixed(3)+'</td><td style="padding:4px;text-align:right;color:#fbbf24">$'+b.labor.toFixed(2)+'</td></tr>';
+    });
+    html+='</table></div></div>';
+
+    html+='<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:12px">';
+    html+='<div style="font-size:12px;color:#94a3b8;margin-bottom:8px">🧮 Quick Calculator</div>';
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
+    html+='<div><label style="font-size:10px;color:#64748b">Bar Size</label>';
+    html+='<select id="rc-size" style="width:100%;padding:6px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:11px;margin-top:4px" onchange="window._oncorRebarCalc._calc()">';
+    bars.forEach(function(b){html+='<option value="'+b.size+'"'+(b.size==='#5'?' selected':'')+'>'+b.size+' ('+b.wt.toFixed(3)+' lb/ft)</option>';});
+    html+='</select></div>';
+    html+='<div><label style="font-size:10px;color:#64748b">Length per Bar (ft)</label>';
+    html+='<input id="rc-length" type="number" value="20" style="width:100%;padding:6px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:11px;margin-top:4px" onchange="window._oncorRebarCalc._calc()"></div>';
+    html+='<div><label style="font-size:10px;color:#64748b"># of Bars</label>';
+    html+='<input id="rc-qty" type="number" value="100" style="width:100%;padding:6px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:11px;margin-top:4px" onchange="window._oncorRebarCalc._calc()"></div>';
+    html+='</div>';
+    html+='<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+    html+='<div><label style="font-size:10px;color:#64748b">Lap Splice Factor (%)</label>';
+    html+='<input id="rc-lap" type="number" value="10" style="width:100%;padding:6px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:11px;margin-top:4px" onchange="window._oncorRebarCalc._calc()"></div>';
+    html+='<div><label style="font-size:10px;color:#64748b">Price per lb ($)</label>';
+    html+='<input id="rc-price" type="number" step="0.01" value="0.65" style="width:100%;padding:6px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:11px;margin-top:4px" onchange="window._oncorRebarCalc._calc()"></div>';
+    html+='</div>';
+    html+='<div id="rc-results" style="margin-top:12px"></div>';
+    html+='</div>';
+
+    html+='<div style="padding:10px;background:#0f172a;border-radius:6px;font-size:10px;color:#64748b">';
+    html+='<strong>Note:</strong> Standard bar lengths: 20ft, 40ft, 60ft. Lap splice per ACI 318-19: #3-#5 = 24db, #6-#8 = 30db, #9-#11 = varies. ';
+    html+='El Paso 2025 rebar installed: $0.55-$1.15/lb depending on size.';
+    html+='</div>';
+    c.innerHTML=html;
+    _calc();
+  }
+
+  function _calc(){
+    var sizeStr=document.getElementById('rc-size').value;
+    var bar=bars.find(function(b){return b.size===sizeStr;});
+    if(!bar)return;
+    var len=parseFloat(document.getElementById('rc-length').value)||20;
+    var qty=parseInt(document.getElementById('rc-qty').value)||0;
+    var lapPct=(parseFloat(document.getElementById('rc-lap').value)||0)/100;
+    var price=parseFloat(document.getElementById('rc-price').value)||0.65;
+    var r=document.getElementById('rc-results');if(!r)return;
+
+    var totalFt=len*qty;
+    var withLap=totalFt*(1+lapPct);
+    var totalLbs=withLap*bar.wt;
+    var tons=totalLbs/2000;
+    var cost=totalLbs*price;
+
+    var html='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">';
+    html+='<div style="background:#166534;padding:10px;border-radius:6px;text-align:center"><div style="font-size:18px;color:#4ade80;font-weight:bold">'+withLap.toFixed(0)+'</div><div style="font-size:9px;color:#94a3b8">Lin. Ft (w/lap)</div></div>';
+    html+='<div style="background:#1e3a5f;padding:10px;border-radius:6px;text-align:center"><div style="font-size:18px;color:#60a5fa;font-weight:bold">'+totalLbs.toFixed(0)+'</div><div style="font-size:9px;color:#94a3b8">Pounds</div></div>';
+    html+='<div style="background:#854d0e;padding:10px;border-radius:6px;text-align:center"><div style="font-size:18px;color:#fbbf24;font-weight:bold">'+tons.toFixed(2)+'</div><div style="font-size:9px;color:#94a3b8">Tons</div></div>';
+    html+='<div style="background:#7c3aed;padding:10px;border-radius:6px;text-align:center"><div style="font-size:18px;color:#c4b5fd;font-weight:bold">$'+cost.toFixed(0)+'</div><div style="font-size:9px;color:#94a3b8">Material Cost</div></div>';
+    html+='</div>';
+    r.innerHTML=html;
+  }
+
+  function toggle(){
+    var el=document.getElementById(MODAL_ID);
+    if(!el){
+      el=document.createElement('div');el.id=MODAL_ID;
+      el.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10066;align-items:center;justify-content:center';
+      el.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:600px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#ef4444">🔩 Rebar Weight & Cost</h3>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="rebarcalc-content"></div></div>';
+      el.addEventListener('click',function(e){if(e.target===el)el.style.display='none';});
+      document.body.appendChild(el);render();
+    } else { el.style.display=el.style.display==='none'?'flex':'none';if(el.style.display==='flex')render(); }
+  }
+  document.addEventListener('keydown',function(e){if(e.ctrlKey&&e.altKey&&e.key==='h'){e.preventDefault();toggle();}});
+  return {toggle:toggle,_calc:_calc};
+})();
+
+
+/* ─── 📅 Pour Schedule Board (Ctrl+Alt+I) ─── */
+window._oncorPourBoard=(function(){
+  var MODAL_ID='overlay-pourboard';
+  var STORAGE_KEY='oncor_pourboard_v1_';
+  function getKey(){var p=window.projectName||'default';return STORAGE_KEY+p.replace(/[^a-zA-Z0-9]/g,'_');}
+  function load(){try{return JSON.parse(localStorage.getItem(getKey()))||[];}catch(e){return [];}}
+  function save(d){localStorage.setItem(getKey(),JSON.stringify(d));}
+  function fmt(d){if(!d)return'-';var dt=new Date(d+'T12:00:00');return dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}
+  function daysUntil(d){if(!d)return 999;var dt=new Date(d+'T12:00:00');var now=new Date();now.setHours(0,0,0,0);return Math.ceil((dt-now)/(1000*60*60*24));}
+
+  function render(){
+    var data=load();
+    data.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
+    var upcoming=data.filter(function(x){return x.status!=='Complete'&&x.status!=='Cancelled';});
+    var totalYds=upcoming.reduce(function(s,x){return s+(parseFloat(x.yds)||0);},0);
+    var c=document.getElementById('pourboard-content');if(!c)return;
+
+    var html='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">';
+    html+='<div style="background:#1e3a5f;padding:10px;border-radius:6px;text-align:center"><div style="font-size:20px;color:#60a5fa">'+data.length+'</div><div style="font-size:10px;color:#94a3b8">Total Pours</div></div>';
+    html+='<div style="background:#166534;padding:10px;border-radius:6px;text-align:center"><div style="font-size:20px;color:#4ade80">'+upcoming.length+'</div><div style="font-size:10px;color:#94a3b8">Upcoming</div></div>';
+    html+='<div style="background:#854d0e;padding:10px;border-radius:6px;text-align:center"><div style="font-size:20px;color:#fbbf24">'+totalYds.toFixed(0)+'</div><div style="font-size:10px;color:#94a3b8">Total yd³</div></div>';
+    html+='</div>';
+
+    html+='<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:12px">';
+    html+='<div style="font-size:12px;color:#94a3b8;margin-bottom:8px">➕ Schedule Pour</div>';
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+    html+='<input id="pb-name" placeholder="Pour Name *" style="padding:6px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:11px">';
+    html+='<input id="pb-date" type="date" style="padding:6px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:11px">';
+    html+='<input id="pb-time" type="time" value="06:00" style="padding:6px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:11px">';
+    html+='<input id="pb-yds" type="number" placeholder="yd³" style="padding:6px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:11px">';
+    html+='<select id="pb-psi" style="padding:6px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:11px">';
+    html+='<option value="">PSI</option><option>3000</option><option>3500</option><option>4000</option><option>4500</option><option>5000</option></select>';
+    html+='<select id="pb-method" style="padding:6px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:11px">';
+    html+='<option>Pump (Boom)</option><option>Pump (Line)</option><option>Direct Chute</option><option>Buggy</option><option>Conveyor</option></select>';
+    html+='</div>';
+    html+='<div style="margin-top:8px"><input id="pb-notes" placeholder="Notes (crew size, special requirements)" style="width:100%;padding:6px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:4px;font-size:11px"></div>';
+    html+='<button onclick="window._oncorPourBoard._add()" style="margin-top:8px;padding:6px 12px;background:#3b82f6;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px">+ Schedule Pour</button>';
+    html+='</div>';
+
+    html+='<div style="max-height:350px;overflow-y:auto">';
+    data.forEach(function(item,i){
+      var days=daysUntil(item.date);
+      var isToday=days===0;var isPast=days<0;var isSoon=days>=1&&days<=3;
+      var borderColor=item.status==='Complete'?'#4ade80':item.status==='Cancelled'?'#64748b':isToday?'#f59e0b':isPast?'#ef4444':isSoon?'#f97316':'#3b82f6';
+      html+='<div style="background:#1e293b;border-left:3px solid '+borderColor+';padding:10px;border-radius:6px;margin-bottom:8px'+(item.status==='Complete'||item.status==='Cancelled'?';opacity:0.6':'')+'">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:center">';
+      html+='<div><span style="color:#e5e7eb;font-weight:bold;font-size:12px">'+item.name+'</span>';
+      if(isToday&&item.status!=='Complete')html+=' <span style="background:#f59e0b;color:#000;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:bold">TODAY</span>';
+      if(isSoon&&item.status!=='Complete')html+=' <span style="background:#f97316;color:white;padding:1px 6px;border-radius:3px;font-size:9px">IN '+days+'d</span>';
+      if(item.status==='Complete')html+=' <span style="background:#166534;color:#4ade80;padding:1px 6px;border-radius:3px;font-size:9px">✓ DONE</span>';
+      html+='</div>';
+      html+='<div style="font-size:10px;color:#64748b">'+fmt(item.date)+(item.time?' @ '+item.time:'')+'</div>';
+      html+='</div>';
+      html+='<div style="font-size:11px;color:#94a3b8;margin-top:4px;display:flex;gap:12px;flex-wrap:wrap">';
+      if(item.yds) html+='<span>'+item.yds+' yd³</span>';
+      if(item.psi) html+='<span>'+item.psi+' PSI</span>';
+      if(item.method) html+='<span>'+item.method+'</span>';
+      html+='</div>';
+      if(item.notes)html+='<div style="font-size:10px;color:#64748b;margin-top:4px;font-style:italic">'+item.notes+'</div>';
+      html+='<div style="margin-top:6px;display:flex;gap:4px">';
+      if(item.status!=='Complete'&&item.status!=='Cancelled'){
+        html+='<button onclick="window._oncorPourBoard._complete('+i+')" style="padding:3px 8px;background:#166534;color:#4ade80;border:none;border-radius:3px;cursor:pointer;font-size:9px">✓ Complete</button>';
+        html+='<button onclick="window._oncorPourBoard._cancel('+i+')" style="padding:3px 8px;background:#374151;color:#9ca3af;border:none;border-radius:3px;cursor:pointer;font-size:9px">Cancel</button>';
+      }
+      html+='<button onclick="window._oncorPourBoard._del('+i+')" style="padding:3px 8px;background:#374151;color:#9ca3af;border:none;border-radius:3px;cursor:pointer;font-size:9px">🗑</button>';
+      html+='</div></div>';
+    });
+    if(!data.length)html+='<div style="text-align:center;color:#64748b;padding:20px">No pours scheduled yet</div>';
+    html+='</div>';
+    c.innerHTML=html;
+  }
+
+  function _add(){
+    var name=document.getElementById('pb-name').value.trim();
+    if(!name){alert('Pour name required');return;}
+    var data=load();
+    data.push({name:name,date:document.getElementById('pb-date').value||'',time:document.getElementById('pb-time').value,yds:document.getElementById('pb-yds').value,psi:document.getElementById('pb-psi').value,method:document.getElementById('pb-method').value,notes:document.getElementById('pb-notes').value,status:'Scheduled',created:new Date().toISOString()});
+    save(data);render();
+  }
+  function _complete(i){var d=load();d[i].status='Complete';d[i].completedAt=new Date().toISOString();save(d);render();}
+  function _cancel(i){var d=load();d[i].status='Cancelled';save(d);render();}
+  function _del(i){if(!confirm('Delete?'))return;var d=load();d.splice(i,1);save(d);render();}
+
+  function toggle(){
+    var el=document.getElementById(MODAL_ID);
+    if(!el){
+      el=document.createElement('div');el.id=MODAL_ID;
+      el.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10066;align-items:center;justify-content:center';
+      el.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:650px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#3b82f6">📅 Pour Schedule Board</h3>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="pourboard-content"></div></div>';
+      el.addEventListener('click',function(e){if(e.target===el)el.style.display='none';});
+      document.body.appendChild(el);render();
+    } else { el.style.display=el.style.display==='none'?'flex':'none';if(el.style.display==='flex')render(); }
+  }
+  document.addEventListener('keydown',function(e){if(e.ctrlKey&&e.altKey&&e.key==='i'){e.preventDefault();toggle();}});
+  return {toggle:toggle,_add:_add,_complete:_complete,_cancel:_cancel,_del:_del};
+})();
+
+
+/* ─── Escape + Sidebar ─── */
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){['overlay-yieldcalc','overlay-rebarcalc','overlay-pourboard'].forEach(function(id){var el=document.getElementById(id);if(el&&el.style.display!=='none')el.style.display='none';});}
+});
+document.addEventListener('DOMContentLoaded',function(){
+  var sidebar=document.querySelector('.sidebar-actions')||document.querySelector('#sidebarActions')||document.querySelector('aside');
+  function injectBtn(id,emoji,label,fn){if(document.getElementById(id))return;var btn=document.createElement('button');btn.id=id;btn.textContent=emoji+' '+label;btn.style.cssText='display:block;width:100%;margin:2px 0;padding:6px 10px;background:#1e293b;color:#e5e7eb;border:1px solid #334155;border-radius:6px;cursor:pointer;text-align:left;font-size:12px';btn.onclick=fn;if(sidebar)sidebar.appendChild(btn);}
+  injectBtn('btnYieldCalc','📊','Yield Calc',function(){window._oncorYieldCalc.toggle();});
+  injectBtn('btnRebarCalc','🔩','Rebar Calc',function(){window._oncorRebarCalc.toggle();});
+  injectBtn('btnPourBoard','📅','Pour Board',function(){window._oncorPourBoard.toggle();});
+});
+
+})();
+
+// ==================== END SESSION #117 — Zeus ⚡ Concrete Yield Calculator + Rebar Weight & Cost + Pour Schedule Board ====================
+
+
 })();
