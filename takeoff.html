@@ -182039,5 +182039,579 @@ document.addEventListener('DOMContentLoaded',function(){
 
 // ==================== END SESSION #118 — Zeus ⚡ Concrete Curing Record (Ctrl+Alt+L) + Pour Day Debrief (Ctrl+Alt+M) + Slab Load Capacity Calculator (Ctrl+Alt+O) ====================
 
+// ==================== SESSION #119 — Zeus ⚡ Concrete Temp Control Calculator (Ctrl+Alt+Y) + Vibrator Consolidation Planner (Ctrl+Alt+Z) + Formwork Lateral Pressure Calculator (Ctrl+Alt+1) ====================
+(function(){
+'use strict';
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   🧊 CONCRETE TEMPERATURE CONTROL CALCULATOR (Ctrl+Alt+Y)
+   ACI 305R-10 (Hot Weather) + ACI 306R-16 (Cold Weather)
+   Calculate ice/chilled water needed to hit target discharge temp
+   ───────────────────────────────────────────────────────────────────────────── */
+window._oncorTempControl = (function(){
+  var MODAL_ID = 'overlay-tempcontrol';
+
+  function _html(){
+    return '<div style="font-family:sans-serif;color:#e5e7eb">'
+      +'<p style="margin:0 0 12px;font-size:12px;color:#94a3b8">Calculate ice, chilled water, or heat additions needed to hit ACI 305R/306R target discharge temperatures. Based on weighted average mix temperature method.</p>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">'
+        // --- inputs left column ---
+        +'<div><h4 style="margin:0 0 8px;font-size:13px;color:#60a5fa">🧱 Mix Ingredients</h4>'
+          +'<table style="width:100%;border-collapse:collapse;font-size:11px">'
+            +'<tr><th style="text-align:left;padding:3px 6px;background:#1e293b;color:#94a3b8">Material</th><th style="padding:3px 6px;background:#1e293b;color:#94a3b8">Wt (lbs/CY)</th><th style="padding:3px 6px;background:#1e293b;color:#94a3b8">Temp (°F)</th></tr>'
+            +'<tr id="tc-row-cement"><td style="padding:3px 6px;color:#cbd5e1">Cement</td><td><input id="tc-w-cement" type="number" value="564" style="width:70px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:2px 4px;font-size:11px"></td><td><input id="tc-t-cement" type="number" value="150" style="width:60px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:2px 4px;font-size:11px"></td></tr>'
+            +'<tr><td style="padding:3px 6px;color:#cbd5e1">Coarse Agg (dry)</td><td><input id="tc-w-cagg" type="number" value="1800" style="width:70px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:2px 4px;font-size:11px"></td><td><input id="tc-t-cagg" type="number" value="95" style="width:60px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:2px 4px;font-size:11px"></td></tr>'
+            +'<tr><td style="padding:3px 6px;color:#cbd5e1">Fine Agg (dry)</td><td><input id="tc-w-fagg" type="number" value="1300" style="width:70px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:2px 4px;font-size:11px"></td><td><input id="tc-t-fagg" type="number" value="95" style="width:60px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:2px 4px;font-size:11px"></td></tr>'
+            +'<tr><td style="padding:3px 6px;color:#cbd5e1">Mix Water</td><td><input id="tc-w-water" type="number" value="250" style="width:70px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:2px 4px;font-size:11px"></td><td><input id="tc-t-water" type="number" value="80" style="width:60px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:2px 4px;font-size:11px"></td></tr>'
+          +'</table>'
+        +'</div>'
+        // --- right column ---
+        +'<div><h4 style="margin:0 0 8px;font-size:13px;color:#60a5fa">🎯 Target & Conditions</h4>'
+          +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'
+            +'<label style="font-size:11px;color:#94a3b8">Target Discharge °F<br><input id="tc-target" type="number" value="75" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:4px;font-size:12px"></label>'
+            +'<label style="font-size:11px;color:#94a3b8">Ambient Temp °F<br><input id="tc-ambient" type="number" value="100" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:4px;font-size:12px"></label>'
+            +'<label style="font-size:11px;color:#94a3b8">Order Size (yd³)<br><input id="tc-yds" type="number" value="10" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:4px;font-size:12px"></label>'
+            +'<label style="font-size:11px;color:#94a3b8">Cooling Method<br>'
+              +'<select id="tc-method" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:4px;font-size:12px">'
+                +'<option value="ice">Replace Water w/ Ice</option>'
+                +'<option value="chilled">Chilled Water Only</option>'
+                +'<option value="both">Ice + Chilled Water</option>'
+                +'<option value="heat">Heating (Cold Weather)</option>'
+              +'</select>'
+            +'</label>'
+          +'</div>'
+          +'<button onclick="window._oncorTempControl._calc()" style="margin-top:10px;width:100%;padding:8px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">⚡ Calculate</button>'
+        +'</div>'
+      +'</div>'
+      +'<div id="tc-result" style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;font-size:12px;color:#94a3b8;min-height:60px">Click Calculate to see results...</div>'
+      +'<div style="margin-top:10px;padding:10px;background:#1e293b;border-radius:6px;font-size:10px;color:#64748b">'
+        +'<strong style="color:#94a3b8">ACI 305R-10 Limits:</strong> Max discharge 95°F | Max during placement 90°F | Avoid pouring &gt;90°F ambient without precautions<br>'
+        +'<strong style="color:#94a3b8">ACI 306R-16 Limits:</strong> Min discharge 55°F (thin) / 50°F (massive) | Min 10°F above freezing (40°F) | Use heated water, insulated aggregate storage<br>'
+        +'<strong style="color:#94a3b8">El Paso Notes:</strong> July-Sep averages 95-105°F daytime. Ice @ batch plant = most effective single intervention. Plan 5 AM start for summer pours.'
+      +'</div>'
+    +'</div>';
+  }
+
+  function _calc(){
+    var Wc=parseFloat(document.getElementById('tc-w-cement').value)||564;
+    var Tc=parseFloat(document.getElementById('tc-t-cement').value)||150;
+    var Wca=parseFloat(document.getElementById('tc-w-cagg').value)||1800;
+    var Tca=parseFloat(document.getElementById('tc-t-cagg').value)||95;
+    var Wfa=parseFloat(document.getElementById('tc-w-fagg').value)||1300;
+    var Tfa=parseFloat(document.getElementById('tc-t-fagg').value)||95;
+    var Ww=parseFloat(document.getElementById('tc-w-water').value)||250;
+    var Tw=parseFloat(document.getElementById('tc-t-water').value)||80;
+    var Ttarget=parseFloat(document.getElementById('tc-target').value)||75;
+    var Tambient=parseFloat(document.getElementById('tc-ambient').value)||100;
+    var yds=parseFloat(document.getElementById('tc-yds').value)||10;
+    var method=document.getElementById('tc-method').value;
+
+    // ACI 305R weighted average concrete temperature formula
+    // T = (0.22(WcTc + WcaTca + WfaTfa) + WwTw) / (0.22(Wc+Wca+Wfa) + Ww)
+    var Tcalc = (0.22*(Wc*Tc + Wca*Tca + Wfa*Tfa) + Ww*Tw) / (0.22*(Wc+Wca+Wfa)+Ww);
+    var deltaT = Tcalc - Ttarget;
+
+    var statusColor = Tcalc <= 90 ? '#22c55e' : (Tcalc <= 95 ? '#f59e0b' : '#ef4444');
+    var aciStatus = Tcalc <= 90 ? '✅ WITHIN ACI 305R LIMIT' : (Tcalc <= 95 ? '⚠️ MARGINAL — Under 95°F max but watch placement temp' : '🚫 EXCEEDS ACI 305R MAX — Do not place');
+
+    var html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">'
+      +'<div style="background:#1e293b;border-radius:6px;padding:8px;text-align:center"><div style="font-size:10px;color:#94a3b8">Calculated Temp</div><div style="font-size:20px;font-weight:700;color:'+statusColor+'">'+Tcalc.toFixed(1)+'°F</div></div>'
+      +'<div style="background:#1e293b;border-radius:6px;padding:8px;text-align:center"><div style="font-size:10px;color:#94a3b8">Target Temp</div><div style="font-size:20px;font-weight:700;color:#3b82f6">'+Ttarget+'°F</div></div>'
+      +'<div style="background:#1e293b;border-radius:6px;padding:8px;text-align:center"><div style="font-size:10px;color:#94a3b8">Temp Reduction Needed</div><div style="font-size:20px;font-weight:700;color:'+(deltaT>0?'#ef4444':'#22c55e')+'">'+Math.abs(deltaT).toFixed(1)+'°F '+(deltaT>0?'↓':'✓')+'</div></div>'
+    +'</div>';
+
+    html += '<div style="padding:6px 10px;background:'+(Tcalc<=90?'#052e16':(Tcalc<=95?'#431407':'#450a0a'))+';border:1px solid '+(Tcalc<=90?'#16a34a':(Tcalc<=95?'#ea580c':'#dc2626'))+';border-radius:6px;color:'+statusColor+';font-weight:600;font-size:12px;margin-bottom:10px">'+aciStatus+'</div>';
+
+    if(deltaT > 0){
+      // Need to cool: explain methods
+      var icePerCY = '', iceTotal='', notes='';
+      if(method==='ice'||method==='both'){
+        // Replacing W lbs of water at Tw°F with ice at 32°F (absorbs 144 BTU/lb melting + sensible heat)
+        // Effect of replacing x lbs water with ice: ΔT = x*(144 + 32*(1)) / (total heat capacity denominator)
+        // Simplified: each lb ice replacing water at Tw reduces T by: (Tw-32+144) BTU / (0.22*(Wc+Wca+Wfa)+Ww) BTU/°F
+        var denom = 0.22*(Wc+Wca+Wfa)+Ww;
+        var btusPerLbIce = (Tw - 32 + 144); // latent heat of fusion 144 BTU/lb + sensible from 32°F to Tw
+        var lbsIcePerCY = (deltaT * denom) / btusPerLbIce;
+        lbsIcePerCY = Math.max(0, Math.min(lbsIcePerCY, Ww)); // can't replace more water than exists
+        var totalIce = lbsIcePerCY * yds;
+        icePerCY = lbsIcePerCY.toFixed(0);
+        iceTotal = totalIce.toFixed(0);
+        notes += '<div style="margin-top:6px;padding:6px 10px;background:#1e293b;border-radius:6px"><strong style="color:#38bdf8">❄️ Ice Replacement:</strong><br>'
+          +'Replace <strong style="color:#e2e8f0">'+icePerCY+' lbs of mix water per CY</strong> with crushed ice at batch plant<br>'
+          +'Total order of <strong>'+yds+' CY</strong>: need <strong style="color:#38bdf8">'+totalIce+' lbs ('+Math.ceil(parseFloat(totalIce)/2000)+' tons)</strong> of ice<br>'
+          +'<span style="font-size:10px;color:#64748b">Ice availability: confirm with batch plant 24 hrs prior. El Paso batch plants stock 5-15 tons typical.</span></div>';
+      }
+      if(method==='chilled'||method==='both'){
+        // Chilled water approach: use 40°F chilled water instead of 80°F tap
+        var Twchilled = 40;
+        var Tcchilled = (0.22*(Wc*Tc + Wca*Tca + Wfa*Tfa) + Ww*Twchilled) / (0.22*(Wc+Wca+Wfa)+Ww);
+        var tempDropChilled = Tcalc - Tcchilled;
+        notes += '<div style="margin-top:6px;padding:6px 10px;background:#1e293b;border-radius:6px"><strong style="color:#818cf8">💧 Chilled Water (40°F):</strong><br>'
+          +'Switching from '+Tw+'°F tap water to 40°F chilled water drops concrete temp by <strong style="color:#e2e8f0">'+tempDropChilled.toFixed(1)+'°F</strong><br>'
+          +'Resulting concrete temp: <strong>'+(Tcalc-tempDropChilled).toFixed(1)+'°F</strong> '
+          +((Tcalc-tempDropChilled)<=Ttarget?'<span style="color:#22c55e">✅ Meets target</span>':'<span style="color:#f59e0b">⚠️ Still '+Math.abs(Tcalc-tempDropChilled-Ttarget).toFixed(1)+'°F above target — consider adding ice too</span>')
+          +'</div>';
+      }
+      if(method==='heat'){
+        notes += '<div style="margin-top:6px;padding:6px 10px;background:#1e293b;border-radius:6px"><strong style="color:#f59e0b">♨️ Cold Weather Heating:</strong><br>'
+          +'Current calculated temp is already below target — no heating needed. Use warm/hot mixing water.<br>'
+          +'ACI 306R: heat water to max 180°F, add to agg BEFORE cement to avoid flash set.<br>'
+          +'<span style="font-size:10px;color:#64748b">If ambient &lt;40°F: insulating blankets, heated enclosures, and extended cure monitoring required.</span></div>';
+      }
+      html += notes;
+    } else {
+      html += '<div style="padding:8px 12px;background:#052e16;border:1px solid #16a34a;border-radius:6px;color:#22c55e;font-size:12px">✅ No cooling needed — calculated temp is at or below target of '+Ttarget+'°F.<br>'
+        +'<span style="color:#64748b;font-size:10px">Still consider ambient conditions, haul time, and slump loss for hot-weather pours.</span></div>';
+    }
+
+    // ACI 306R cold weather check
+    if(Tcalc < 55){
+      html += '<div style="margin-top:8px;padding:6px 10px;background:#1c1917;border:1px solid #f59e0b;border-radius:6px;font-size:11px;color:#fbbf24">❄️ ACI 306R Cold Weather: Concrete temp below 55°F. Minimum 55°F (thin sections) / 50°F (massive sections) at discharge. Heat mixing water. Protect from freezing for 7+ days.</div>';
+    }
+
+    // Per-truck summary
+    var truckSize = 10; // typical
+    var totalWater = Ww * yds;
+    html += '<div style="margin-top:8px;padding:8px;background:#1e293b;border-radius:6px;font-size:10px;color:#64748b">'
+      +'<strong style="color:#94a3b8">Order Summary for '+yds+' CY:</strong><br>'
+      +'Total mix water = '+totalWater.toFixed(0)+' lbs ('+Math.round(totalWater/8.33)+' gal) | '
+      +'Trucks (10 CY each) ≈ '+Math.ceil(yds/truckSize)+' loads | '
+      +'Water per truck ≈ '+(Ww*truckSize).toFixed(0)+' lbs ('+Math.round(Ww*truckSize/8.33)+' gal)'
+    +'</div>';
+
+    document.getElementById('tc-result').innerHTML = html;
+  }
+
+  function toggle(){
+    var el=document.getElementById(MODAL_ID);
+    if(!el){
+      el=document.createElement('div');el.id=MODAL_ID;
+      el.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10073;align-items:center;justify-content:center';
+      el.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:95%;max-width:780px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+          +'<h3 style="margin:0;font-size:15px;color:#3b82f6">🧊 Concrete Temperature Control Calculator</h3>'
+          +'<div><span style="font-size:10px;color:#64748b;margin-right:10px">ACI 305R-10 / ACI 306R-16</span>'
+          +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'</div>'
+        +'<div id="tc-content"></div>'
+      +'</div>';
+      el.addEventListener('click',function(e){if(e.target===el)el.style.display='none';});
+      document.body.appendChild(el);
+      document.getElementById('tc-content').innerHTML=_html();
+    } else {
+      el.style.display=el.style.display==='none'?'flex':'none';
+      if(el.style.display==='flex'){var c=document.getElementById('tc-content');if(c&&!c.innerHTML.trim())c.innerHTML=_html();}
+    }
+  }
+
+  document.addEventListener('keydown',function(e){if(e.ctrlKey&&e.altKey&&e.key==='y'){e.preventDefault();toggle();}});
+  return {toggle:toggle,_calc:_calc};
+})();
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   📳 VIBRATOR CONSOLIDATION PLANNER (Ctrl+Alt+Z)
+   ACI 309R-05: vibrator insertion spacing, radius of action, depth, withdrawal rate
+   ───────────────────────────────────────────────────────────────────────────── */
+window._oncorVibratorPlanner = (function(){
+  var MODAL_ID = 'overlay-vibrplanner';
+
+  function _html(){
+    return '<div style="font-family:sans-serif;color:#e5e7eb">'
+      +'<p style="margin:0 0 12px;font-size:12px;color:#94a3b8">Plan vibrator insertion spacing, frequency, and crew requirements per ACI 309R-05. Prevents honeycombing — the #1 concrete placement defect on commercial jobs.</p>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+        +'<div>'
+          +'<h4 style="margin:0 0 8px;font-size:13px;color:#60a5fa">⚙️ Vibrator Settings</h4>'
+          +'<label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:6px">Head Diameter<br>'
+            +'<select id="vp-size" onchange="window._oncorVibratorPlanner._calc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:5px;font-size:12px">'
+              +'<option value="1.5">1½" (38mm) — small, tight rebar</option>'
+              +'<option value="2">2" (50mm) — standard small</option>'
+              +'<option value="2.5">2½" (63mm) — standard medium</option>'
+              +'<option value="3" selected>3" (75mm) — most common commercial</option>'
+              +'<option value="4">4" (100mm) — large pour, slab</option>'
+              +'<option value="6">6" (150mm) — mass concrete</option>'
+            +'</select>'
+          +'</label>'
+          +'<label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:6px">Element Type<br>'
+            +'<select id="vp-element" onchange="window._oncorVibratorPlanner._calc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:5px;font-size:12px">'
+              +'<option value="slab">Slab-on-Grade</option>'
+              +'<option value="wall" selected>Concrete Wall</option>'
+              +'<option value="column">Column</option>'
+              +'<option value="footing">Footing/Grade Beam</option>'
+              +'<option value="beam">Beam</option>'
+              +'<option value="mass">Mass Concrete</option>'
+            +'</select>'
+          +'</label>'
+          +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'
+            +'<label style="font-size:11px;color:#94a3b8">Pour Height / Lift (ft)<br><input id="vp-height" type="number" value="4" onchange="window._oncorVibratorPlanner._calc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:5px;font-size:12px"></label>'
+            +'<label style="font-size:11px;color:#94a3b8">Pour Width (ft)<br><input id="vp-width" type="number" value="20" onchange="window._oncorVibratorPlanner._calc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:5px;font-size:12px"></label>'
+            +'<label style="font-size:11px;color:#94a3b8">Pour Length (ft)<br><input id="vp-length" type="number" value="50" onchange="window._oncorVibratorPlanner._calc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:5px;font-size:12px"></label>'
+            +'<label style="font-size:11px;color:#94a3b8">Slump (inches)<br><input id="vp-slump" type="number" value="4" onchange="window._oncorVibratorPlanner._calc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:5px;font-size:12px"></label>'
+          +'</div>'
+        +'</div>'
+        +'<div>'
+          +'<h4 style="margin:0 0 8px;font-size:13px;color:#60a5fa">📊 ACI 309R Reference</h4>'
+          +'<table style="width:100%;border-collapse:collapse;font-size:10px">'
+            +'<tr style="background:#1e293b"><th style="padding:4px 6px;text-align:left;color:#94a3b8">Vibrator Dia.</th><th style="padding:4px 6px;color:#94a3b8">ROA (in)</th><th style="padding:4px 6px;color:#94a3b8">Max Insert Spacing</th><th style="padding:4px 6px;color:#94a3b8">Withdrawal Rate</th></tr>'
+            +'<tr><td style="padding:3px 6px;color:#cbd5e1">1½"</td><td style="padding:3px 6px;color:#e2e8f0">3–6"</td><td style="padding:3px 6px;color:#e2e8f0">6"</td><td style="padding:3px 6px;color:#e2e8f0">3 sec/ft</td></tr>'
+            +'<tr style="background:#1e293b33"><td style="padding:3px 6px;color:#cbd5e1">2"</td><td style="padding:3px 6px;color:#e2e8f0">4–8"</td><td style="padding:3px 6px;color:#e2e8f0">9"</td><td style="padding:3px 6px;color:#e2e8f0">3 sec/ft</td></tr>'
+            +'<tr><td style="padding:3px 6px;color:#cbd5e1">2½"</td><td style="padding:3px 6px;color:#e2e8f0">6–12"</td><td style="padding:3px 6px;color:#e2e8f0">12"</td><td style="padding:3px 6px;color:#e2e8f0">3 sec/ft</td></tr>'
+            +'<tr style="background:#1e293b33"><td style="padding:3px 6px;color:#cbd5e1">3"</td><td style="padding:3px 6px;color:#e2e8f0">9–18"</td><td style="padding:3px 6px;color:#e2e8f0">18"</td><td style="padding:3px 6px;color:#e2e8f0">3–5 sec/ft</td></tr>'
+            +'<tr><td style="padding:3px 6px;color:#cbd5e1">4"</td><td style="padding:3px 6px;color:#e2e8f0">12–22"</td><td style="padding:3px 6px;color:#e2e8f0">22"</td><td style="padding:3px 6px;color:#e2e8f0">5 sec/ft</td></tr>'
+            +'<tr style="background:#1e293b33"><td style="padding:3px 6px;color:#cbd5e1">6"</td><td style="padding:3px 6px;color:#e2e8f0">18–30"</td><td style="padding:3px 6px;color:#e2e8f0">24"</td><td style="padding:3px 6px;color:#e2e8f0">5–8 sec/ft</td></tr>'
+          +'</table>'
+          +'<div style="margin-top:8px;padding:6px 8px;background:#1e293b;border-radius:6px;font-size:10px;color:#64748b">'
+            +'<strong style="color:#94a3b8">Key Rules (ACI 309R):</strong><br>'
+            +'• Insert spacing ≤ 1.5× ROA (never exceed 2× ROA)<br>'
+            +'• Insert 2–3 inches into previous lift to knit layers<br>'
+            +'• Withdraw slowly (3–5 sec/ft) — no air holes<br>'
+            +'• Duration: 5–15 sec per insertion until bubbles stop<br>'
+            +'• Never use vibrator to move concrete laterally — causes segregation<br>'
+            +'• Keep vibrator ≥ 3" from forms (form vibration = segregation)'
+          +'</div>'
+        +'</div>'
+      +'</div>'
+      +'<div id="vp-result" style="margin-top:12px;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;font-size:12px;color:#94a3b8">Adjust settings above to calculate vibration plan...</div>'
+    +'</div>';
+  }
+
+  // vibrator specs [ROA_min_in, ROA_max_in, max_insert_in, withdrawal_sec_per_ft, dwell_sec]
+  var SPECS = {
+    '1.5':[3,6,6,3,5],
+    '2':[4,8,9,3,7],
+    '2.5':[6,12,12,3,10],
+    '3':[9,18,18,4,10],
+    '4':[12,22,22,5,12],
+    '6':[18,30,24,6,15]
+  };
+
+  function _calc(){
+    var dia = document.getElementById('vp-size').value;
+    var element = document.getElementById('vp-element').value;
+    var height = parseFloat(document.getElementById('vp-height').value)||4;
+    var width = parseFloat(document.getElementById('vp-width').value)||20;
+    var length = parseFloat(document.getElementById('vp-length').value)||50;
+    var slump = parseFloat(document.getElementById('vp-slump').value)||4;
+
+    var spec = SPECS[dia]||SPECS['3'];
+    var roaMin=spec[0], roaMax=spec[1], maxInsert=spec[2], withdrawSec=spec[3], dwellSec=spec[4];
+
+    // Recommended insertion spacing = 1.5× ROA
+    var roaAvg = (roaMin+roaMax)/2;
+    var recSpacing = Math.min(1.5*roaAvg, maxInsert); // inches
+
+    // Lift depth recommendation
+    var maxLift = Math.min(height, dia==='6'?36:dia==='4'?24:dia==='3'?18:12); // inches
+    var liftsNeeded = Math.ceil((height*12)/maxLift);
+
+    // For walls/columns: insertion points per lift
+    var areaPerLift;
+    if(element==='wall'||element==='column'){
+      areaPerLift = width * length; // SF per lift plan area
+    } else {
+      areaPerLift = width * length;
+    }
+
+    // Number of insertion points in plan
+    var spacingFt = recSpacing/12;
+    var insertionsLong = Math.ceil(length/spacingFt)+1;
+    var insertionsWide = Math.ceil(width/spacingFt)+1;
+    var insertionsPerLift = insertionsLong * insertionsWide;
+    var totalInsertions = insertionsPerLift * liftsNeeded;
+
+    // Time per insertion: dwell + withdraw time
+    var withdrawTime = withdrawSec * (maxLift/12); // sec to withdraw
+    var timePerInsert = dwellSec + withdrawTime;
+    var totalVibTime = (totalInsertions * timePerInsert)/60; // minutes
+
+    // Slump adjustment note
+    var slumpNote = slump < 2 ? '⚠️ Low slump (&lt;2") — increase dwell time +5 sec, reduce spacing 25%' :
+                   slump >= 6 ? '⚠️ High slump (≥6") — SCC rules may apply; shorter vibration adequate' : '✅ Normal slump — standard spacing applies';
+
+    var html = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">'
+      +'<div style="background:#1e293b;border-radius:6px;padding:8px;text-align:center"><div style="font-size:9px;color:#94a3b8">Recommended Spacing</div><div style="font-size:18px;font-weight:700;color:#3b82f6">'+recSpacing.toFixed(0)+'"</div><div style="font-size:9px;color:#64748b">c/c insertions</div></div>'
+      +'<div style="background:#1e293b;border-radius:6px;padding:8px;text-align:center"><div style="font-size:9px;color:#94a3b8">Max Lift Height</div><div style="font-size:18px;font-weight:700;color:#8b5cf6">'+maxLift+'"</div><div style="font-size:9px;color:#64748b">'+(liftsNeeded>1?liftsNeeded+' lifts needed':'single lift')+'</div></div>'
+      +'<div style="background:#1e293b;border-radius:6px;padding:8px;text-align:center"><div style="font-size:9px;color:#94a3b8">Total Insertions</div><div style="font-size:18px;font-weight:700;color:#f59e0b">'+totalInsertions+'</div><div style="font-size:9px;color:#64748b">all lifts</div></div>'
+      +'<div style="background:#1e293b;border-radius:6px;padding:8px;text-align:center"><div style="font-size:9px;color:#94a3b8">Min Vibration Time</div><div style="font-size:18px;font-weight:700;color:#22c55e">'+totalVibTime.toFixed(0)+' min</div><div style="font-size:9px;color:#64748b">continuous</div></div>'
+    +'</div>';
+
+    // Crew recommendation
+    var vibratorsNeeded = Math.ceil(totalVibTime / 60); // assume 1 hr pour
+    vibratorsNeeded = Math.max(1, vibratorsNeeded);
+    html += '<div style="background:#1e293b;border-radius:6px;padding:10px;margin-bottom:10px">'
+      +'<strong style="color:#60a5fa;font-size:12px">📋 Vibration Plan — '+dia+'" Head on '+element+'</strong><br>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;font-size:11px;color:#cbd5e1">'
+        +'<div>• Insert spacing: <strong>'+recSpacing.toFixed(0)+'" c/c</strong> (≤1.5× ROA)</div>'
+        +'<div>• Lift height: max <strong>'+maxLift+'"</strong> per lift ('+liftsNeeded+' lift'+(liftsNeeded>1?'s':'')+')</div>'
+        +'<div>• Dwell per insert: <strong>'+dwellSec+'–'+(dwellSec+5)+' sec</strong> (until bubbles stop)</div>'
+        +'<div>• Withdrawal: <strong>'+withdrawSec+' sec/ft</strong> (slow, steady)</div>'
+        +'<div>• Points per lift: <strong>'+insertionsPerLift+'</strong> insertions</div>'
+        +'<div>• Vibrators recommended: <strong>'+(vibratorsNeeded===1?'1 operator':''+vibratorsNeeded+' vibrators')+'</strong></div>'
+      +'</div>'
+    +'</div>';
+
+    html += '<div style="padding:6px 10px;background:#1e293b;border-radius:6px;font-size:11px;margin-bottom:6px"><span style="color:#f59e0b">⚠️ Slump Note: </span><span style="color:#cbd5e1">'+slumpNote+'</span></div>';
+
+    // Warning for walls
+    if(element==='wall'&&height>8){
+      html += '<div style="padding:6px 10px;background:#431407;border:1px solid #ea580c;border-radius:6px;font-size:11px;color:#fdba74">⚠️ Tall wall ('+height+'ft) — use bottom-up vibration strategy. Insert into fresh concrete only (top of previous lift +6"). ACI 309R: max 18" below concrete surface for 3"+ vibrators.</div>';
+    }
+
+    document.getElementById('vp-result').innerHTML = html;
+  }
+
+  function toggle(){
+    var el=document.getElementById(MODAL_ID);
+    if(!el){
+      el=document.createElement('div');el.id=MODAL_ID;
+      el.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10074;align-items:center;justify-content:center';
+      el.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:95%;max-width:800px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+          +'<h3 style="margin:0;font-size:15px;color:#3b82f6">📳 Vibrator Consolidation Planner</h3>'
+          +'<div><span style="font-size:10px;color:#64748b;margin-right:10px">ACI 309R-05</span>'
+          +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'</div>'
+        +'<div id="vp-content"></div>'
+      +'</div>';
+      el.addEventListener('click',function(e){if(e.target===el)el.style.display='none';});
+      document.body.appendChild(el);
+      document.getElementById('vp-content').innerHTML=_html();
+      setTimeout(_calc,100);
+    } else {
+      el.style.display=el.style.display==='none'?'flex':'none';
+      if(el.style.display==='flex'){var c=document.getElementById('vp-content');if(c&&!c.innerHTML.trim()){c.innerHTML=_html();setTimeout(_calc,100);}}
+    }
+  }
+
+  document.addEventListener('keydown',function(e){if(e.ctrlKey&&e.altKey&&e.key==='z'){e.preventDefault();toggle();}});
+  return {toggle:toggle,_calc:_calc};
+})();
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   🏗️ FORMWORK LATERAL PRESSURE CALCULATOR (Ctrl+Alt+1)
+   ACI 347.2R-05: concrete lateral pressure on wall/column forms
+   Calculates design pressure, tie spacing, form design load
+   ───────────────────────────────────────────────────────────────────────────── */
+window._oncorFormworkPressure = (function(){
+  var MODAL_ID = 'overlay-formpressure';
+
+  function _html(){
+    return '<div style="font-family:sans-serif;color:#e5e7eb">'
+      +'<p style="margin:0 0 12px;font-size:12px;color:#94a3b8">Calculate design lateral pressure on wall and column forms per ACI 347.2R-05. Used to select tie spacing, form panel thickness, waler size, and snap tie capacity.</p>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+        +'<div>'
+          +'<h4 style="margin:0 0 8px;font-size:13px;color:#60a5fa">📐 Pour Parameters</h4>'
+          +'<label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:6px">Element Type<br>'
+            +'<select id="fp-type" onchange="window._oncorFormworkPressure._calc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:5px;font-size:12px">'
+              +'<option value="wall" selected>Wall</option>'
+              +'<option value="column">Column</option>'
+            +'</select>'
+          +'</label>'
+          +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'
+            +'<label style="font-size:11px;color:#94a3b8">Pour Rate (ft/hr)<br><input id="fp-rate" type="number" value="4" step="0.5" onchange="window._oncorFormworkPressure._calc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:5px;font-size:12px"></label>'
+            +'<label style="font-size:11px;color:#94a3b8">Wall Height (ft)<br><input id="fp-height" type="number" value="10" onchange="window._oncorFormworkPressure._calc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:5px;font-size:12px"></label>'
+            +'<label style="font-size:11px;color:#94a3b8">Concrete Temp (°F)<br><input id="fp-temp" type="number" value="75" onchange="window._oncorFormworkPressure._calc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:5px;font-size:12px"></label>'
+            +'<label style="font-size:11px;color:#94a3b8">Unit Weight (pcf)<br><input id="fp-uw" type="number" value="150" onchange="window._oncorFormworkPressure._calc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:5px;font-size:12px"></label>'
+          +'</div>'
+          +'<label style="font-size:11px;color:#94a3b8;display:block;margin-top:6px">Cement Type / Mix<br>'
+            +'<select id="fp-cement" onchange="window._oncorFormworkPressure._calc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:5px;font-size:12px">'
+              +'<option value="typeI" selected>Type I/II (no retarder)</option>'
+              +'<option value="retarded">Retarded or &lt;70°F</option>'
+              +'<option value="typeIII">Type III High Early</option>'
+            +'</select>'
+          +'</label>'
+          +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">'
+            +'<label style="font-size:11px;color:#94a3b8">Tie Capacity (lbs)<br><input id="fp-tie" type="number" value="3000" onchange="window._oncorFormworkPressure._calc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:5px;font-size:12px"></label>'
+            +'<label style="font-size:11px;color:#94a3b8">Form Panel Width (in)<br><input id="fp-panel" type="number" value="24" onchange="window._oncorFormworkPressure._calc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;padding:5px;font-size:12px"></label>'
+          +'</div>'
+          +'<button onclick="window._oncorFormworkPressure._calc()" style="margin-top:10px;width:100%;padding:8px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">⚡ Calculate Pressure & Tie Spacing</button>'
+        +'</div>'
+        +'<div>'
+          +'<h4 style="margin:0 0 8px;font-size:13px;color:#60a5fa">📊 ACI 347.2R Formulas</h4>'
+          +'<div style="background:#1e293b;border-radius:6px;padding:10px;font-size:10px;color:#94a3b8">'
+            +'<strong style="color:#60a5fa">Walls (≤14 ft/hr rate, &lt;14 ft height):</strong><br>'
+            +'p = Cw × Cc × [150 + 9000R/T]<br>'
+            +'Max: 600 psf ≤ p ≤ 150h (pcf × ft)<br><br>'
+            +'<strong style="color:#60a5fa">Walls (rate &gt;14 ft/hr OR height &gt;14 ft):</strong><br>'
+            +'p = Cw × Cc × 150h (full hydrostatic)<br><br>'
+            +'<strong style="color:#60a5fa">Columns (any rate):</strong><br>'
+            +'p = Cw × Cc × [150 + 9000R/T]<br>'
+            +'Max: 150h or full hydrostatic<br><br>'
+            +'<strong style="color:#e2e8f0">Variables:</strong><br>'
+            +'R = pour rate (ft/hr)<br>'
+            +'T = concrete temp (°F)<br>'
+            +'h = total height (ft)<br>'
+            +'Cw = unit weight factor (0.8–1.2)<br>'
+            +'Cc = cement factor (1.0 std / 1.2 retarded / 1.4 other)<br><br>'
+            +'<strong style="color:#f59e0b">Tie Spacing:</strong><br>'
+            +'s = Tie Capacity / (p × panel_width/12)<br>'
+            +'Use SF = 1.5–2.0 (divide result by SF)'
+          +'</div>'
+          +'<div style="margin-top:8px;background:#1e293b;border-radius:6px;padding:8px;font-size:10px;color:#64748b">'
+            +'<strong style="color:#94a3b8">Common El Paso Tie Sizes:</strong><br>'
+            +'• Snap Tie 3/16" = 3,000 lbs (most common)<br>'
+            +'• Snap Tie 1/4" = 6,000 lbs<br>'
+            +'• She-bolt = 8,000–26,000 lbs<br>'
+            +'• Dywidag rod = 25,000–50,000 lbs<br>'
+            +'<strong style="color:#94a3b8">Form panel notes:</strong><br>'
+            +'• 3/4" ply spans ~2.0 ft @ 200 psf<br>'
+            +'• 1-1/8" ply spans ~2.5 ft @ 200 psf'
+          +'</div>'
+        +'</div>'
+      +'</div>'
+      +'<div id="fp-result" style="margin-top:12px;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;font-size:12px;color:#94a3b8;min-height:80px">Click Calculate to see design pressures...</div>'
+    +'</div>';
+  }
+
+  function _calc(){
+    var type = document.getElementById('fp-type').value;
+    var rate = parseFloat(document.getElementById('fp-rate').value)||4;
+    var height = parseFloat(document.getElementById('fp-height').value)||10;
+    var temp = parseFloat(document.getElementById('fp-temp').value)||75;
+    var uw = parseFloat(document.getElementById('fp-uw').value)||150;
+    var cementType = document.getElementById('fp-cement').value;
+    var tieCapacity = parseFloat(document.getElementById('fp-tie').value)||3000;
+    var panelWidth = parseFloat(document.getElementById('fp-panel').value)||24;
+
+    // Cw factor
+    var Cw = uw < 140 ? 0.8 : (uw > 160 ? 1.2 : uw/150);
+    // Cc factor
+    var Cc = cementType==='retarded' ? 1.2 : (cementType==='typeIII' ? 0.9 : 1.0);
+
+    // Hydrostatic pressure (worst case)
+    var pHydro = Cw * uw * height;
+
+    // ACI 347.2R formula pressure
+    var pFormula, pMin=600, pMax, fullHydrostatic=false;
+
+    if(type==='column'){
+      // Columns: formula up to full hydrostatic
+      pFormula = Cw * Cc * (150 + 9000*rate/temp);
+      pMax = pHydro;
+      pFormula = Math.min(pFormula, pMax);
+      pMin = 600;
+    } else {
+      // Walls
+      if(rate > 7 || height > 14){
+        // Full hydrostatic
+        pFormula = pHydro;
+        fullHydrostatic = true;
+      } else {
+        pFormula = Cw * Cc * (150 + 9000*rate/temp);
+        pMax = Math.min(pHydro, uw*height);
+        pFormula = Math.max(pMin, Math.min(pFormula, pMax));
+      }
+    }
+
+    var pDesign = pFormula;
+
+    // Tie spacing (vertical and horizontal)
+    // Tie spacing = TieCapacity / (pDesign * horizontal_span)
+    // For vertical ties: tributary area per tie = horiz_span × vert_spacing
+    // Simplified: vert_tie_spacing = TieCapacity / (pDesign × panelWidth/12)
+    var horizSpan = panelWidth/12; // ft
+    var tierSpacing_raw = tieCapacity / (pDesign * horizSpan); // ft
+    var tierSpacing = Math.floor(tierSpacing_raw * 12) ; // inches, floor to nearest inch
+    // Apply SF of 1.5
+    var tierSpacing_design = Math.floor(tierSpacing / 1.5);
+
+    // Max recommended tie spacing check
+    var warningHigh = tierSpacing_design > 24;
+    var warningLow = tierSpacing_design < 6;
+
+    // Pressure categories
+    var pColor = pDesign < 600 ? '#22c55e' : (pDesign < 1200 ? '#f59e0b' : '#ef4444');
+    var pLabel = pDesign < 600 ? 'LOW' : (pDesign < 1200 ? 'MODERATE' : 'HIGH');
+
+    var html = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">'
+      +'<div style="background:#1e293b;border-radius:6px;padding:8px;text-align:center"><div style="font-size:9px;color:#94a3b8">Design Pressure</div><div style="font-size:20px;font-weight:700;color:'+pColor+'">'+pDesign.toFixed(0)+' psf</div><div style="font-size:9px;color:'+pColor+'">'+pLabel+'</div></div>'
+      +'<div style="background:#1e293b;border-radius:6px;padding:8px;text-align:center"><div style="font-size:9px;color:#94a3b8">Hydrostatic Max</div><div style="font-size:18px;font-weight:700;color:#8b5cf6">'+pHydro.toFixed(0)+' psf</div><div style="font-size:9px;color:#64748b">'+height+'ft × '+uw+'pcf</div></div>'
+      +'<div style="background:#1e293b;border-radius:6px;padding:8px;text-align:center"><div style="font-size:9px;color:#94a3b8">Tie Spacing (SF=1.5)</div><div style="font-size:20px;font-weight:700;color:'+(warningHigh||warningLow?'#f59e0b':'#22c55e')+'">'+tierSpacing_design+'"</div><div style="font-size:9px;color:#64748b">vertical o.c.</div></div>'
+      +'<div style="background:#1e293b;border-radius:6px;padding:8px;text-align:center"><div style="font-size:9px;color:#94a3b8">Load per Tie</div><div style="font-size:18px;font-weight:700;color:#38bdf8">'+(pDesign*(panelWidth/12)*(tierSpacing_design/12)).toFixed(0)+' lbs</div><div style="font-size:9px;color:#64748b">vs '+(tieCapacity/1000).toFixed(1)+'k capacity</div></div>'
+    +'</div>';
+
+    if(fullHydrostatic){
+      html += '<div style="padding:6px 10px;background:#450a0a;border:1px solid #dc2626;border-radius:6px;font-size:11px;color:#fca5a5;margin-bottom:8px">⚠️ Full Hydrostatic Pressure governs — pour rate &gt;7 ft/hr or wall height &gt;14 ft. This is the worst-case condition. Consider reducing pour rate.</div>';
+    }
+
+    html += '<div style="background:#1e293b;border-radius:6px;padding:10px;margin-bottom:8px">'
+      +'<strong style="color:#60a5fa;font-size:12px">📋 Design Summary</strong>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:8px;font-size:11px;color:#cbd5e1">'
+        +'<div>• Element: <strong>'+type+'</strong> @ '+rate+' ft/hr pour rate</div>'
+        +'<div>• Height: <strong>'+height+' ft</strong> | Temp: <strong>'+temp+'°F</strong></div>'
+        +'<div>• Unit Wt: <strong>'+uw+' pcf</strong> (Cw='+Cw.toFixed(2)+')</div>'
+        +'<div>• Cement: <strong>'+cementType+'</strong> (Cc='+Cc.toFixed(1)+')</div>'
+        +'<div>• ACI Design Pressure: <strong>'+pDesign.toFixed(0)+' psf</strong></div>'
+        +'<div>• Tie: <strong>'+tieCapacity+' lb cap</strong> @ '+panelWidth+'" panel</div>'
+        +'<div>• Max tie spacing (raw): '+tierSpacing+'" | <strong>Design spacing (÷1.5 SF): '+tierSpacing_design+'"</strong></div>'
+        +'<div>• Load per tie @ design spacing: <strong>'+(pDesign*(panelWidth/12)*(tierSpacing_design/12)).toFixed(0)+' lbs</strong></div>'
+      +'</div>'
+    +'</div>';
+
+    if(warningHigh) html += '<div style="padding:6px 10px;background:#1c1917;border:1px solid #f59e0b;border-radius:6px;font-size:11px;color:#fbbf24;margin-bottom:6px">⚠️ Calculated spacing &gt;24" — verify against form manufacturer\'s specs and waler sizing. May need intermediate walers.</div>';
+    if(warningLow) html += '<div style="padding:6px 10px;background:#450a0a;border:1px solid #dc2626;border-radius:6px;font-size:11px;color:#fca5a5;margin-bottom:6px">🚫 Pressure very high — tie spacing &lt;6". Consider reducing pour rate, using she-bolts (6k–25k lbs), or larger tie diameter.</div>';
+
+    html += '<div style="padding:6px 8px;background:#1e293b;border-radius:6px;font-size:10px;color:#64748b">'
+      +'ACI 347.2R-05 | ANSI/ASSE A10.9 Concrete Construction | ACI 318-19 §26.11 | OSHA 1926.703(a)<br>'
+      +'These are preliminary calculations — verify with licensed formwork engineer for design of record on commercial projects.'
+    +'</div>';
+
+    document.getElementById('fp-result').innerHTML = html;
+  }
+
+  function toggle(){
+    var el=document.getElementById(MODAL_ID);
+    if(!el){
+      el=document.createElement('div');el.id=MODAL_ID;
+      el.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10075;align-items:center;justify-content:center';
+      el.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:95%;max-width:820px;max-height:90vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+          +'<h3 style="margin:0;font-size:15px;color:#3b82f6">🏗️ Formwork Lateral Pressure Calculator</h3>'
+          +'<div><span style="font-size:10px;color:#64748b;margin-right:10px">ACI 347.2R-05</span>'
+          +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'</div>'
+        +'<div id="fp-content"></div>'
+      +'</div>';
+      el.addEventListener('click',function(e){if(e.target===el)el.style.display='none';});
+      document.body.appendChild(el);
+      document.getElementById('fp-content').innerHTML=_html();
+      setTimeout(_calc,100);
+    } else {
+      el.style.display=el.style.display==='none'?'flex':'none';
+      if(el.style.display==='flex'){var c=document.getElementById('fp-content');if(c&&!c.innerHTML.trim()){c.innerHTML=_html();setTimeout(_calc,100);}}
+    }
+  }
+
+  document.addEventListener('keydown',function(e){
+    if(e.ctrlKey&&e.altKey&&e.key==='1'){e.preventDefault();toggle();}
+  });
+  return {toggle:toggle,_calc:_calc};
+})();
+
+/* ─── Escape + sidebar injection ─── */
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){
+    ['overlay-tempcontrol','overlay-vibrplanner','overlay-formpressure'].forEach(function(id){
+      var el=document.getElementById(id);if(el&&el.style.display!=='none')el.style.display='none';
+    });
+  }
+});
+
+document.addEventListener('DOMContentLoaded',function(){
+  var sidebar=document.querySelector('.sidebar-actions')||document.querySelector('#sidebarActions')||document.querySelector('aside');
+  function injectBtn(id,emoji,label,fn){
+    if(document.getElementById(id))return;
+    var btn=document.createElement('button');btn.id=id;btn.textContent=emoji+' '+label;
+    btn.style.cssText='display:block;width:100%;margin:2px 0;padding:6px 10px;background:#1e293b;color:#e5e7eb;border:1px solid #334155;border-radius:6px;cursor:pointer;text-align:left;font-size:12px';
+    btn.onclick=fn;if(sidebar)sidebar.appendChild(btn);
+  }
+  injectBtn('btnTempControl','🧊','Temp Control Calc',function(){window._oncorTempControl.toggle();});
+  injectBtn('btnVibrPlanner','📳','Vibrator Planner',function(){window._oncorVibratorPlanner.toggle();});
+  injectBtn('btnFormPressure','🏗️','Formwork Pressure',function(){window._oncorFormworkPressure.toggle();});
+});
+
+})();
+
+// ==================== END SESSION #119 — Zeus ⚡ Concrete Temp Control Calculator (Ctrl+Alt+Y) + Vibrator Consolidation Planner (Ctrl+Alt+Z) + Formwork Lateral Pressure Calculator (Ctrl+Alt+1) ====================
+
 
 })();
