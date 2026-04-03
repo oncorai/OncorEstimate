@@ -1,5 +1,65 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 3, 2026 - 03:35 UTC (Overnight Cron #109)
+**Status:** ✅ THREE NEW FEATURES added (+539 lines)
+
+### What Was Added:
+
+---
+
+### 🚛 Daily Dispatch Board (Ctrl+Alt+[) — ~200 lines
+- New `🚛 Daily Dispatch` button in sidebar
+- `Ctrl+Alt+[` keyboard shortcut opens/toggles the modal
+- **Purpose:** Morning dispatch view for field operations — who's going where, what equipment, what time. The foreman's daily assignment board.
+
+**Features:**
+- 3-card KPI header: Today's Dispatches / Total Crew / Equipment Assigned
+- Per-dispatch entry: Date, Report Time, Type (10 types: Pour Crew, Prep/Form, Rebar, Finishing, Saw, Pump Setup, etc.)
+- Location/Area, Foreman name, Crew Size, Equipment selection (13 options), Est. Hours, Notes/Instructions
+- Today's dispatches shown prominently with edit/delete
+- Past dispatches collapsible history
+- **Printable Daily Dispatch Sheet** — sorted by report time, professional table format
+- localStorage per project: `oncor_dispatch_v1_[project]`
+
+---
+
+### 💵 Labor Burden Calculator (Ctrl+Alt+]) — ~220 lines
+- New `💵 Labor Burden` button in sidebar
+- `Ctrl+Alt+]` keyboard shortcut opens/toggles the modal
+- **Purpose:** Calculate true labor cost including payroll taxes, insurance, and benefits. Essential for accurate bidding — knowing your $22/hr laborer actually costs $28+/hr fully burdened.
+
+**Features:**
+- Configurable burden rates: FICA 7.65%, FUTA 0.6%, SUTA 2.7% (TX), Workers Comp 8.5%, GL Insurance 2%, Health Insurance $/hr, Retirement %, PTO %, Training %, Other %
+- Pre-loaded El Paso 2025-2026 labor rates: Foreman $38, Finisher $32, Laborer $22, Form Carpenter $30, Rod Buster $28, Equipment Operator $34, Helper $18
+- Burdened Labor Rates table: shows base rate, burden amount, burden %, and fully loaded rate per position
+- Add/edit/delete positions
+- **Quick Project Labor Cost Calculator** — select position, enter hours/workers/days, get base cost + burden cost + total cost breakdown
+- localStorage global: `oncor_labor_burden_v1`
+
+**Reference:** IRS Publication 15, TX Workers Comp rates, FUTA/SUTA guidelines
+
+---
+
+### 📈 Concrete Price Tracker (Ctrl+Alt+\\) — ~220 lines
+- New `📈 Price Tracker` button in sidebar
+- `Ctrl+Alt+\` keyboard shortcut opens/toggles the modal
+- **Purpose:** Track ready-mix prices over time from different suppliers. Monitor price trends, compare batch plants, maintain pricing history for bid calibration.
+
+**Features:**
+- 4-card KPI: Price Records / Suppliers / Avg $/yd³ / Price Range
+- Per-price entry: Date, Supplier (Martin Marietta, Cemex, Texas Concrete, Vulcan, Other), PSI (2500-6000), Price/yd³, Mix Code, Fiber Adder $/yd³, Notes
+- Price history table sorted by date
+- **El Paso 2025-2026 Baseline Reference** panel (collapsible): 3000 PSI $165-175, 4000 PSI $180-195, 5000 PSI $195-215, fiber adder +$8-12, short load +$75-125, Saturday +$15-25
+- **Printable Price History Report**
+- localStorage global: `oncor_price_tracker_v1`
+
+**Commits:**
+- d9bcf2e: 🚛💵📈 Daily Dispatch Board (Ctrl+Alt+[) + Labor Burden Calculator (Ctrl+Alt+]) + Concrete Price Tracker (Ctrl+Alt+\\) (+539 lines) [Session #109]
+
+**Total Lines:** ~177,622 | **New Shortcuts:** Ctrl+Alt+[ (Dispatch), Ctrl+Alt+] (Labor Burden), Ctrl+Alt+\\ (Price Tracker)
+
+---
+
 ## ✅ SESSION: Apr 2, 2026 - 17:02 UTC (Overnight Cron #107)
 **Status:** ✅ THREE NEW FEATURES added (+458 lines)
 
