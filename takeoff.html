@@ -178081,4 +178081,461 @@ document.addEventListener('DOMContentLoaded',function(){
 // ==================== END SESSION #110 — Zeus ⚡ Punch Clock & Shift Timer + Bid Margin Sensitivity Analyzer + Subgrade Prep Estimator ====================
 
 
+
+// ==================== SESSION #111 — Zeus ⚡ Weather Alert System + Crew Roster Manager + Overtime Calculator ====================
+(function(){
+'use strict';
+
+function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   🌡️ WEATHER ALERT SYSTEM
+   Purpose: Real-time weather check for El Paso. Flags ACI 305R (hot weather)
+   and ACI 306R (cold weather) conditions. Pull wttr.in data, no API key.
+   Ctrl+Alt+W to open.
+═══════════════════════════════════════════════════════════════════════════ */
+window._oncorWeatherAlert = (function(){
+  var MODAL_ID = 'overlay-weather';
+  var CITY = 'El Paso, TX';
+  var cached = null;
+  var lastFetch = 0;
+
+  function fetchWeather(cb){
+    var now = Date.now();
+    if(cached && now-lastFetch < 600000){ cb(cached); return; }
+    var url = 'https://wttr.in/'+encodeURIComponent(CITY)+'?format=j1';
+    fetch(url).then(function(r){ return r.json(); }).then(function(data){
+      cached = data; lastFetch = now; cb(data);
+    }).catch(function(err){ cb(null, err); });
+  }
+
+  function render(){
+    var el = document.getElementById('weather-content'); if(!el) return;
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:#64748b">⏳ Fetching weather data for '+CITY+'...</div>';
+
+    fetchWeather(function(data, err){
+      if(err || !data || !data.current_condition){
+        el.innerHTML = '<div style="text-align:center;padding:30px;color:#ef4444">⚠️ Failed to fetch weather data. Check internet connection.</div>';
+        return;
+      }
+      var curr = data.current_condition[0];
+      var tempF = parseFloat(curr.temp_F)||70;
+      var humidity = parseFloat(curr.humidity)||50;
+      var windMph = parseFloat(curr.windspeedMiles)||5;
+      var desc = curr.weatherDesc[0]?.value || 'Unknown';
+      var feelsLike = parseFloat(curr.FeelsLikeF)||tempF;
+      var uvIdx = parseInt(curr.uvIndex)||0;
+
+      var alerts = [];
+      var pourStatus = '✅ GOOD';
+      var pourColor = '#4ade80';
+
+      // ACI 305R Hot Weather
+      if(tempF >= 90){
+        alerts.push({type:'hot',msg:'🔴 ACI 305R Hot Weather: Temp '+tempF+'°F ≥90°F. Use ice water, retarder, early pour start.'});
+        pourStatus = '⚠️ CAUTION'; pourColor = '#f59e0b';
+      } else if(tempF >= 85){
+        alerts.push({type:'warm',msg:'🟡 Warm conditions: '+tempF+'°F. Monitor evaporation rate. Consider misting/fog.'});
+        if(pourStatus==='✅ GOOD'){ pourStatus='⚡ OK'; pourColor='#fbbf24'; }
+      }
+      // ACI 306R Cold Weather
+      if(tempF <= 40){
+        alerts.push({type:'cold',msg:'🔵 ACI 306R Cold Weather: Temp '+tempF+'°F ≤40°F. Protect concrete, use heated water, accelerators.'});
+        pourStatus = '⚠️ CAUTION'; pourColor = '#60a5fa';
+      } else if(tempF <= 50){
+        alerts.push({type:'cool',msg:'🟢 Cool conditions: '+tempF+'°F. Monitor overnight temps. Consider insulating blankets.'});
+      }
+      // Wind
+      if(windMph >= 15){
+        alerts.push({type:'wind',msg:'💨 High wind: '+windMph+' mph. Increased evaporation. Use windbreaks, apply curing compound immediately.'});
+        if(pourStatus==='✅ GOOD'){ pourStatus='⚡ WATCH'; pourColor='#fbbf24'; }
+      }
+      // Low humidity + heat = evaporation
+      if(humidity < 30 && tempF >= 80){
+        alerts.push({type:'evap',msg:'☀️ High evaporation risk: Humidity '+humidity+'%, Temp '+tempF+'°F. Fog, wet cure, or accelerate finishing.'});
+      }
+      // Rain
+      var lowerDesc = desc.toLowerCase();
+      if(lowerDesc.indexOf('rain')>=0 || lowerDesc.indexOf('shower')>=0 || lowerDesc.indexOf('storm')>=0){
+        alerts.push({type:'rain',msg:'🌧️ Rain/Storm: "'+desc+'". DO NOT POUR. Rain ruins fresh concrete.'});
+        pourStatus = '🚫 NO POUR'; pourColor = '#ef4444';
+      }
+
+      var html = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
+        +'<div style="flex:2;min-width:200px;background:#1e293b;padding:14px;border-radius:8px">'
+        +'<div style="font-size:12px;color:#94a3b8;margin-bottom:4px">'+_esc(CITY)+' — Current Conditions</div>'
+        +'<div style="font-size:36px;font-weight:700;color:#22d3ee">'+tempF+'°F</div>'
+        +'<div style="color:#94a3b8;margin-top:2px">'+_esc(desc)+'</div>'
+        +'<div style="font-size:12px;color:#64748b;margin-top:6px">Feels like '+feelsLike+'°F &middot; Humidity '+humidity+'% &middot; Wind '+windMph+' mph &middot; UV '+uvIdx+'</div>'
+        +'</div>'
+        +'<div style="flex:1;min-width:120px;background:#1e293b;padding:14px;border-radius:8px;text-align:center;border:2px solid '+pourColor+'">'
+        +'<div style="font-size:11px;color:#94a3b8;margin-bottom:6px">POUR STATUS</div>'
+        +'<div style="font-size:22px;font-weight:700;color:'+pourColor+'">'+pourStatus+'</div>'
+        +'</div></div>';
+
+      if(alerts.length){
+        html += '<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:14px">'
+          +'<div style="font-weight:600;margin-bottom:8px;color:#f59e0b">⚠️ Weather Alerts</div>';
+        alerts.forEach(function(a){
+          var bg = a.type==='hot'?'#7f1d1d':a.type==='cold'?'#1e3a8a':a.type==='rain'?'#450a0a':'#422006';
+          html += '<div style="background:'+bg+';padding:8px;border-radius:4px;margin-bottom:6px;font-size:12px">'+_esc(a.msg)+'</div>';
+        });
+        html += '</div>';
+      } else {
+        html += '<div style="background:#14532d;padding:12px;border-radius:8px;margin-bottom:14px;color:#4ade80;text-align:center">✅ No weather alerts. Good conditions for pouring.</div>';
+      }
+
+      // 3-day forecast
+      if(data.weather && data.weather.length){
+        html += '<div style="font-weight:600;margin-bottom:8px">📅 3-Day Forecast</div>'
+          +'<div style="display:flex;gap:8px;flex-wrap:wrap">';
+        data.weather.slice(0,3).forEach(function(day){
+          var hi = day.maxtempF||'--', lo = day.mintempF||'--';
+          var ddesc = day.hourly && day.hourly[4] ? (day.hourly[4].weatherDesc[0]?.value||'') : '';
+          var rain = day.hourly ? day.hourly.reduce(function(s,h){ return s+parseFloat(h.chanceofrain||0); },0)/day.hourly.length : 0;
+          html += '<div style="flex:1;min-width:120px;background:#1e293b;padding:10px;border-radius:6px;text-align:center">'
+            +'<div style="font-size:12px;color:#94a3b8">'+_esc(day.date)+'</div>'
+            +'<div style="font-size:18px;font-weight:700;color:#e5e7eb;margin:4px 0">'+hi+'° / '+lo+'°</div>'
+            +'<div style="font-size:11px;color:#64748b">'+_esc(ddesc)+'</div>'
+            +(rain>30?'<div style="font-size:10px;color:#60a5fa;margin-top:4px">🌧️ '+Math.round(rain)+'% rain</div>':'')
+            +'</div>';
+        });
+        html += '</div>';
+      }
+
+      // Quick reference
+      html += '<details style="margin-top:16px"><summary style="cursor:pointer;color:#94a3b8;font-size:12px">📋 ACI Hot/Cold Weather Reference</summary>'
+        +'<div style="background:#1e293b;padding:10px;border-radius:6px;margin-top:8px;font-size:12px">'
+        +'<div style="margin-bottom:6px"><strong style="color:#ef4444">ACI 305R Hot Weather (≥90°F):</strong> Ice water, retarder, fog/mist, early pour start (5-6 AM), immediate cure compound.</div>'
+        +'<div><strong style="color:#60a5fa">ACI 306R Cold Weather (≤40°F):</strong> Heated water/aggregates, accelerators, insulating blankets, no pour if <25°F expected in 24h.</div>'
+        +'</div></details>';
+
+      el.innerHTML = html;
+    });
+  }
+
+  function toggle(){
+    var el = document.getElementById(MODAL_ID);
+    if(!el){
+      el = document.createElement('div');
+      el.id = MODAL_ID;
+      el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:10010;display:flex;align-items:center;justify-content:center';
+      el.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:600px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#22d3ee">🌡️ Weather Alert System</h3>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="weather-content"></div></div>';
+      el.addEventListener('click',function(e){ if(e.target===el) el.style.display='none'; });
+      document.body.appendChild(el);
+      render();
+    } else {
+      el.style.display = el.style.display==='none' ? 'flex' : 'none';
+      if(el.style.display==='flex') render();
+    }
+  }
+
+  document.addEventListener('keydown',function(e){ if(e.ctrlKey&&e.altKey&&e.key==='w'){ e.preventDefault(); toggle(); } });
+  return { toggle:toggle };
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   👷 CREW ROSTER MANAGER
+   Purpose: Manage crew contacts, emergency info, certifications, trade/rate.
+   localStorage per project. Print roster for field trailer.
+   Ctrl+Alt+R to open.
+═══════════════════════════════════════════════════════════════════════════ */
+window._oncorCrewRoster = (function(){
+  var MODAL_ID = 'overlay-crewroster';
+  var KEY_PREFIX = 'oncor_crew_roster_v1_';
+  var showForm = false, editIdx = null;
+
+  var TRADES = ['Foreman','Finisher','Laborer','Form Setter','Rebar Placer','Pump Operator','Saw Cutter','Equipment Operator','Helper','Other'];
+
+  function getKey(){ return KEY_PREFIX + ((document.getElementById('projectName')||{value:''}).value||'default').replace(/[^a-zA-Z0-9]/g,'_'); }
+  function load(){ try{ return JSON.parse(localStorage.getItem(getKey()))||[]; }catch(e){ return []; } }
+  function save(d){ localStorage.setItem(getKey(),JSON.stringify(d)); }
+
+  function render(){
+    var el = document.getElementById('crewroster-content'); if(!el) return;
+    var crew = load();
+
+    var html = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+      +'<div style="flex:1;min-width:90px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700;color:#22d3ee">'+crew.length+'</div><div style="font-size:11px;color:#94a3b8">Crew Members</div></div>';
+    var trades = {};
+    crew.forEach(function(c){ trades[c.trade] = (trades[c.trade]||0)+1; });
+    var topTrade = Object.keys(trades).sort(function(a,b){ return trades[b]-trades[a]; })[0]||'—';
+    html += '<div style="flex:1;min-width:90px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700;color:#f59e0b">'+(trades[topTrade]||0)+'</div><div style="font-size:11px;color:#94a3b8">'+_esc(topTrade)+'s</div></div>';
+    var certCount = crew.filter(function(c){ return c.certs && c.certs.trim(); }).length;
+    html += '<div style="flex:1;min-width:90px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700;color:#4ade80">'+certCount+'</div><div style="font-size:11px;color:#94a3b8">w/ Certs</div></div>';
+    html += '</div>';
+
+    html += '<div style="display:flex;gap:8px;margin-bottom:12px">'
+      +'<button onclick="window._oncorCrewRoster._showForm()" style="padding:6px 12px;background:#22d3ee;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:600">+ Add Crew Member</button>'
+      +'<button onclick="window._oncorCrewRoster._print()" style="padding:6px 12px;background:#475569;color:#fff;border:none;border-radius:4px;cursor:pointer">🖨️ Print Roster</button>'
+      +'</div>';
+
+    if(showForm){
+      var f = editIdx!==null ? crew[editIdx] : {};
+      html += '<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:12px">'
+        +'<div style="font-weight:600;margin-bottom:8px">'+(editIdx!==null?'Edit':'Add')+' Crew Member</div>'
+        +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px">'
+        +'<div><label style="font-size:11px;color:#94a3b8">Name *</label><input type="text" id="cr-name" value="'+_esc(f.name||'')+'" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;box-sizing:border-box"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Trade</label><select id="cr-trade" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb">'+TRADES.map(function(t){ return '<option'+(f.trade===t?' selected':'')+'>'+t+'</option>'; }).join('')+'</select></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Phone</label><input type="tel" id="cr-phone" value="'+_esc(f.phone||'')+'" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;box-sizing:border-box"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Rate $/hr</label><input type="number" id="cr-rate" value="'+(f.rate||60)+'" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;box-sizing:border-box"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Emergency Contact</label><input type="text" id="cr-emerg" value="'+_esc(f.emergContact||'')+'" placeholder="Name / Phone" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;box-sizing:border-box"></div>'
+        +'<div><label style="font-size:11px;color:#94a3b8">Certifications</label><input type="text" id="cr-certs" value="'+_esc(f.certs||'')+'" placeholder="OSHA 10, ACI Flatwork, etc." style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;box-sizing:border-box"></div>'
+        +'</div>'
+        +'<div style="margin-top:8px"><label style="font-size:11px;color:#94a3b8">Notes</label><input type="text" id="cr-notes" value="'+_esc(f.notes||'')+'" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb;box-sizing:border-box"></div>'
+        +'<div style="margin-top:10px;display:flex;gap:8px">'
+        +'<button onclick="window._oncorCrewRoster._save()" style="padding:6px 14px;background:#22d3ee;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:600">Save</button>'
+        +'<button onclick="window._oncorCrewRoster._cancel()" style="padding:6px 14px;background:#64748b;color:#fff;border:none;border-radius:4px;cursor:pointer">Cancel</button>'
+        +'</div></div>';
+    }
+
+    if(crew.length){
+      html += '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#1e293b"><th style="padding:6px;text-align:left">Name</th><th style="padding:6px;text-align:left">Trade</th><th style="padding:6px;text-align:left">Phone</th><th style="padding:6px;text-align:right">Rate</th><th style="padding:6px;text-align:left">Certs</th><th style="padding:6px"></th></tr></thead><tbody>';
+      crew.forEach(function(c,i){
+        html += '<tr style="border-bottom:1px solid #334155">'
+          +'<td style="padding:5px 6px;font-weight:600">'+_esc(c.name)+'</td>'
+          +'<td style="padding:5px 6px;color:#94a3b8">'+_esc(c.trade)+'</td>'
+          +'<td style="padding:5px 6px"><a href="tel:'+_esc(c.phone)+'" style="color:#60a5fa">'+_esc(c.phone||'—')+'</a></td>'
+          +'<td style="padding:5px 6px;text-align:right;color:#4ade80">$'+(c.rate||'—')+'</td>'
+          +'<td style="padding:5px 6px;font-size:11px;color:#94a3b8">'+_esc(c.certs||'—')+'</td>'
+          +'<td style="padding:5px 6px;text-align:center">'
+          +'<button onclick="window._oncorCrewRoster._edit('+i+')" style="padding:2px 5px;background:#475569;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:10px;margin-right:3px">✏️</button>'
+          +'<button onclick="window._oncorCrewRoster._del('+i+')" style="padding:2px 5px;background:#dc2626;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:10px">×</button>'
+          +'</td></tr>';
+      });
+      html += '</tbody></table>';
+    } else {
+      html += '<div style="background:#1e293b;padding:20px;border-radius:8px;text-align:center;color:#64748b">No crew members added yet.</div>';
+    }
+
+    el.innerHTML = html;
+  }
+
+  function _showForm(){ showForm=true; editIdx=null; render(); }
+  function _cancel(){ showForm=false; editIdx=null; render(); }
+  function _edit(i){ showForm=true; editIdx=i; render(); }
+  function _del(i){ if(!confirm('Remove this crew member?')) return; var d=load(); d.splice(i,1); save(d); render(); }
+  function _save(){
+    var name = (document.getElementById('cr-name')||{value:''}).value.trim();
+    if(!name){ alert('Name is required.'); return; }
+    var d = load();
+    var entry = {
+      name: name,
+      trade: (document.getElementById('cr-trade')||{value:'Other'}).value,
+      phone: (document.getElementById('cr-phone')||{value:''}).value.trim(),
+      rate: parseFloat((document.getElementById('cr-rate')||{value:'60'}).value)||60,
+      emergContact: (document.getElementById('cr-emerg')||{value:''}).value.trim(),
+      certs: (document.getElementById('cr-certs')||{value:''}).value.trim(),
+      notes: (document.getElementById('cr-notes')||{value:''}).value.trim()
+    };
+    if(editIdx!==null){ d[editIdx]=entry; } else { d.push(entry); }
+    save(d); showForm=false; editIdx=null; render();
+  }
+
+  function _print(){
+    var crew = load();
+    var proj = (document.getElementById('projectName')||{value:''}).value||'Project';
+    var rows = crew.map(function(c){
+      return '<tr><td>'+_esc(c.name)+'</td><td>'+_esc(c.trade)+'</td><td>'+_esc(c.phone||'—')+'</td><td>$'+(c.rate||'—')+'</td><td>'+_esc(c.emergContact||'—')+'</td><td>'+_esc(c.certs||'—')+'</td></tr>';
+    }).join('');
+    var html = '<html><head><title>Crew Roster</title><style>body{font-family:Arial,sans-serif;margin:20px;font-size:12px}table{width:100%;border-collapse:collapse}th{background:#1e293b;color:#fff;padding:6px}td{padding:5px;border-bottom:1px solid #e5e7eb}@media print{.np{display:none}}</style></head><body>'
+      +'<h2>👷 Crew Roster — '+_esc(proj)+'</h2><p>Printed: '+new Date().toLocaleString()+'</p>'
+      +'<table><thead><tr><th>Name</th><th>Trade</th><th>Phone</th><th>Rate</th><th>Emergency Contact</th><th>Certifications</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      +'<p style="color:#666;font-size:10px;margin-top:20px">CONFIDENTIAL — POST IN FIELD TRAILER</p>'
+      +'<button class="np" onclick="window.print()" style="margin:10px;padding:8px 20px;background:#1e293b;color:#fff;border:none;border-radius:4px;cursor:pointer">🖨️ Print</button></body></html>';
+    var win = window.open('','_blank','width=800,height=700'); win.document.write(html); win.document.close();
+  }
+
+  function toggle(){
+    var el = document.getElementById(MODAL_ID);
+    if(!el){
+      el = document.createElement('div');
+      el.id = MODAL_ID;
+      el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:10010;display:flex;align-items:center;justify-content:center';
+      el.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:780px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#f59e0b">👷 Crew Roster Manager</h3>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="crewroster-content"></div></div>';
+      el.addEventListener('click',function(e){ if(e.target===el) el.style.display='none'; });
+      document.body.appendChild(el);
+      render();
+    } else {
+      el.style.display = el.style.display==='none' ? 'flex' : 'none';
+      if(el.style.display==='flex') render();
+    }
+  }
+
+  document.addEventListener('keydown',function(e){ if(e.ctrlKey&&e.altKey&&e.key==='r'){ e.preventDefault(); toggle(); } });
+  return { toggle:toggle, _showForm:_showForm, _cancel:_cancel, _edit:_edit, _del:_del, _save:_save, _print:_print };
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   🧮 OVERTIME CALCULATOR
+   Purpose: Calculate weekly pay with FLSA overtime (1.5x over 40 hrs).
+   Supports regular rate, OT, double-time (TX optional). Per-worker.
+   Ctrl+Alt+O to open.
+═══════════════════════════════════════════════════════════════════════════ */
+window._oncorOvertimeCalc = (function(){
+  var MODAL_ID = 'overlay-otcalc';
+  var workers = [];
+
+  function render(){
+    var el = document.getElementById('otcalc-content'); if(!el) return;
+
+    var totalReg = 0, totalOT = 0, totalDT = 0, totalPay = 0;
+    workers.forEach(function(w){
+      var reg = Math.min(w.hours,40);
+      var ot = w.hours>40 ? Math.min(w.hours-40,w.dtThreshold>40?w.dtThreshold-40:20) : 0;
+      var dt = w.dtThreshold && w.hours>w.dtThreshold ? w.hours-w.dtThreshold : 0;
+      w.regPay = reg*w.rate;
+      w.otPay = ot*w.rate*1.5;
+      w.dtPay = dt*w.rate*2;
+      w.totalPay = w.regPay+w.otPay+w.dtPay;
+      totalReg += w.regPay; totalOT += w.otPay; totalDT += w.dtPay; totalPay += w.totalPay;
+    });
+
+    var html = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+      +'<div style="flex:1;min-width:90px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700;color:#22d3ee">'+workers.length+'</div><div style="font-size:11px;color:#94a3b8">Workers</div></div>'
+      +'<div style="flex:1;min-width:90px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700;color:#4ade80">$'+totalReg.toFixed(0)+'</div><div style="font-size:11px;color:#94a3b8">Regular Pay</div></div>'
+      +'<div style="flex:1;min-width:90px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700;color:#f59e0b">$'+totalOT.toFixed(0)+'</div><div style="font-size:11px;color:#94a3b8">OT Pay (1.5x)</div></div>'
+      +'<div style="flex:1;min-width:90px;padding:10px;background:#0f172a;border-radius:6px;text-align:center"><div style="font-size:20px;font-weight:700;color:#a78bfa">$'+totalPay.toFixed(2)+'</div><div style="font-size:11px;color:#94a3b8">Total Pay</div></div>'
+      +'</div>';
+
+    html += '<div style="background:#1e293b;padding:12px;border-radius:8px;margin-bottom:12px">'
+      +'<div style="font-weight:600;margin-bottom:8px">➕ Add Worker Hours</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">'
+      +'<div><label style="font-size:11px;color:#94a3b8">Worker Name</label><input type="text" id="ot-name" placeholder="e.g. Carlos" style="width:140px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Hours Worked</label><input type="number" id="ot-hours" placeholder="e.g. 52" style="width:90px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb" step="0.5"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">Rate $/hr</label><input type="number" id="ot-rate" value="25" style="width:80px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb" step="0.5"></div>'
+      +'<div><label style="font-size:11px;color:#94a3b8">DT After (hrs)</label><input type="number" id="ot-dt" placeholder="e.g. 60" style="width:80px;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e5e7eb" title="Double-time threshold (optional)"></div>'
+      +'<button onclick="window._oncorOvertimeCalc._add()" style="padding:6px 14px;background:#22d3ee;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:700">+ Add</button>'
+      +'</div></div>';
+
+    if(workers.length){
+      html += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px"><thead><tr style="background:#1e293b"><th style="padding:6px;text-align:left">Worker</th><th style="padding:6px;text-align:right">Hours</th><th style="padding:6px;text-align:right">Rate</th><th style="padding:6px;text-align:right">Reg Pay</th><th style="padding:6px;text-align:right">OT Pay</th><th style="padding:6px;text-align:right">DT Pay</th><th style="padding:6px;text-align:right">Total</th><th style="padding:6px"></th></tr></thead><tbody>';
+      workers.forEach(function(w,i){
+        var otHrs = w.hours>40 ? Math.min(w.hours-40,w.dtThreshold>40?w.dtThreshold-40:20) : 0;
+        var dtHrs = w.dtThreshold && w.hours>w.dtThreshold ? w.hours-w.dtThreshold : 0;
+        html += '<tr style="border-bottom:1px solid #334155">'
+          +'<td style="padding:5px 6px;font-weight:600">'+_esc(w.name)+'</td>'
+          +'<td style="padding:5px 6px;text-align:right">'+w.hours+' <span style="color:#64748b;font-size:10px">('+Math.min(w.hours,40)+' reg'+(otHrs?', '+otHrs.toFixed(1)+' OT':'')+(dtHrs?', '+dtHrs.toFixed(1)+' DT':'')+')</span></td>'
+          +'<td style="padding:5px 6px;text-align:right;color:#94a3b8">$'+w.rate+'</td>'
+          +'<td style="padding:5px 6px;text-align:right;color:#4ade80">$'+w.regPay.toFixed(2)+'</td>'
+          +'<td style="padding:5px 6px;text-align:right;color:#f59e0b">$'+w.otPay.toFixed(2)+'</td>'
+          +'<td style="padding:5px 6px;text-align:right;color:#a78bfa">$'+w.dtPay.toFixed(2)+'</td>'
+          +'<td style="padding:5px 6px;text-align:right;font-weight:700">$'+w.totalPay.toFixed(2)+'</td>'
+          +'<td style="padding:5px 6px;text-align:center"><button onclick="window._oncorOvertimeCalc._del('+i+')" style="padding:2px 6px;background:#dc2626;color:#fff;border:none;border-radius:3px;cursor:pointer">×</button></td>'
+          +'</tr>';
+      });
+      html += '<tr style="background:#1e293b;font-weight:700"><td colspan="3" style="padding:8px 6px">TOTALS</td><td style="padding:8px 6px;text-align:right;color:#4ade80">$'+totalReg.toFixed(2)+'</td><td style="padding:8px 6px;text-align:right;color:#f59e0b">$'+totalOT.toFixed(2)+'</td><td style="padding:8px 6px;text-align:right;color:#a78bfa">$'+totalDT.toFixed(2)+'</td><td style="padding:8px 6px;text-align:right">$'+totalPay.toFixed(2)+'</td><td></td></tr>';
+      html += '</tbody></table>';
+      html += '<div style="display:flex;gap:8px"><button onclick="window._oncorOvertimeCalc._print()" style="padding:7px 16px;background:#475569;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">🖨️ Print Payroll</button>'
+        +'<button onclick="window._oncorOvertimeCalc._clear()" style="padding:7px 14px;background:#7f1d1d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">🗑 Clear All</button></div>';
+    }
+
+    html += '<details style="margin-top:16px"><summary style="cursor:pointer;color:#94a3b8;font-size:12px">📋 FLSA Overtime Rules Reference</summary>'
+      +'<div style="background:#1e293b;padding:10px;border-radius:6px;margin-top:8px;font-size:12px">'
+      +'<div><strong>FLSA (29 USC 207):</strong> Time-and-a-half (1.5x) for hours over 40 in a workweek.</div>'
+      +'<div style="margin-top:6px"><strong>Texas:</strong> No state OT law; follows FLSA. Some contracts specify double-time (2x) after 60 hrs or on Sundays/holidays.</div>'
+      +'<div style="margin-top:6px"><strong>Note:</strong> DT (double-time) is optional — enter threshold only if contract requires it.</div>'
+      +'</div></details>';
+
+    el.innerHTML = html;
+  }
+
+  function _add(){
+    var name = (document.getElementById('ot-name')||{value:''}).value.trim();
+    var hours = parseFloat((document.getElementById('ot-hours')||{value:'0'}).value)||0;
+    var rate = parseFloat((document.getElementById('ot-rate')||{value:'25'}).value)||25;
+    var dt = parseFloat((document.getElementById('ot-dt')||{value:''}).value)||0;
+    if(!name){ alert('Enter worker name.'); return; }
+    if(hours<=0){ alert('Enter hours worked.'); return; }
+    workers.push({name:name,hours:hours,rate:rate,dtThreshold:dt||0});
+    document.getElementById('ot-name').value = '';
+    document.getElementById('ot-hours').value = '';
+    render();
+  }
+  function _del(i){ workers.splice(i,1); render(); }
+  function _clear(){ if(confirm('Clear all workers?')){ workers=[]; render(); } }
+
+  function _print(){
+    var totalReg = 0, totalOT = 0, totalDT = 0, totalPay = 0;
+    var rows = workers.map(function(w){
+      var reg = Math.min(w.hours,40);
+      var ot = w.hours>40 ? Math.min(w.hours-40,w.dtThreshold>40?w.dtThreshold-40:20) : 0;
+      var dt = w.dtThreshold && w.hours>w.dtThreshold ? w.hours-w.dtThreshold : 0;
+      var rp = reg*w.rate, op = ot*w.rate*1.5, dp = dt*w.rate*2, tp = rp+op+dp;
+      totalReg+=rp; totalOT+=op; totalDT+=dp; totalPay+=tp;
+      return '<tr><td>'+_esc(w.name)+'</td><td>'+w.hours+'</td><td>$'+w.rate+'</td><td>$'+rp.toFixed(2)+'</td><td>$'+op.toFixed(2)+'</td><td>$'+dp.toFixed(2)+'</td><td style="font-weight:700">$'+tp.toFixed(2)+'</td></tr>';
+    }).join('');
+    var html = '<html><head><title>Overtime Payroll</title><style>body{font-family:Arial,sans-serif;margin:20px;font-size:12px}table{width:100%;border-collapse:collapse}th{background:#1e293b;color:#fff;padding:6px}td{padding:5px;border-bottom:1px solid #e5e7eb}.total{font-weight:700;background:#f9fafb}@media print{.np{display:none}}</style></head><body>'
+      +'<h2>🧮 Overtime Payroll Calculator</h2><p>Printed: '+new Date().toLocaleString()+'</p>'
+      +'<p style="color:#666;font-size:11px">FLSA 29 USC 207: OT = 1.5x over 40 hrs/week. DT = 2x if threshold set.</p>'
+      +'<table><thead><tr><th>Worker</th><th>Hours</th><th>Rate</th><th>Reg Pay</th><th>OT Pay</th><th>DT Pay</th><th>Total</th></tr></thead><tbody>'+rows
+      +'<tr class="total"><td colspan="3">TOTALS</td><td>$'+totalReg.toFixed(2)+'</td><td>$'+totalOT.toFixed(2)+'</td><td>$'+totalDT.toFixed(2)+'</td><td>$'+totalPay.toFixed(2)+'</td></tr></tbody></table>'
+      +'<p style="color:#666;font-size:10px;margin-top:20px">CONFIDENTIAL — INTERNAL USE ONLY</p>'
+      +'<button class="np" onclick="window.print()" style="margin:10px;padding:8px 20px;background:#1e293b;color:#fff;border:none;border-radius:4px;cursor:pointer">🖨️ Print</button></body></html>';
+    var win = window.open('','_blank','width=800,height=700'); win.document.write(html); win.document.close();
+  }
+
+  function toggle(){
+    var el = document.getElementById(MODAL_ID);
+    if(!el){
+      el = document.createElement('div');
+      el.id = MODAL_ID;
+      el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:10010;display:flex;align-items:center;justify-content:center';
+      el.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;width:90%;max-width:850px;max-height:85vh;overflow-y:auto">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="margin:0;font-size:16px;color:#a78bfa">🧮 Overtime Calculator (FLSA)</h3>'
+        +'<button onclick="document.getElementById(\''+MODAL_ID+'\').style.display=\'none\'" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">&#x2715;</button></div>'
+        +'<div id="otcalc-content"></div></div>';
+      el.addEventListener('click',function(e){ if(e.target===el) el.style.display='none'; });
+      document.body.appendChild(el);
+      render();
+    } else {
+      el.style.display = el.style.display==='none' ? 'flex' : 'none';
+      if(el.style.display==='flex') render();
+    }
+  }
+
+  document.addEventListener('keydown',function(e){ if(e.ctrlKey&&e.altKey&&e.key==='o'){ e.preventDefault(); toggle(); } });
+  return { toggle:toggle, _add:_add, _del:_del, _clear:_clear, _print:_print };
+})();
+
+
+/* ─── Escape closes all Session #111 modals ─── */
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){
+    ['overlay-weather','overlay-crewroster','overlay-otcalc'].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el && el.style.display!=='none') el.style.display='none';
+    });
+  }
+});
+
+/* ─── Sidebar buttons ─── */
+document.addEventListener('DOMContentLoaded',function(){
+  var sidebar = document.querySelector('.sidebar-actions')||document.querySelector('#sidebarActions')||document.querySelector('aside');
+  function injectBtn(id,emoji,label,fn){
+    if(document.getElementById(id)) return;
+    var btn = document.createElement('button');
+    btn.id=id; btn.textContent=emoji+' '+label;
+    btn.style.cssText='display:block;width:100%;margin:2px 0;padding:6px 10px;background:#1e293b;color:#e5e7eb;border:1px solid #334155;border-radius:6px;cursor:pointer;text-align:left;font-size:12px';
+    btn.onclick=fn;
+    if(sidebar) sidebar.appendChild(btn);
+  }
+  injectBtn('btnWeatherAlert','🌡️','Weather Alert',function(){ window._oncorWeatherAlert.toggle(); });
+  injectBtn('btnCrewRoster','👷','Crew Roster',function(){ window._oncorCrewRoster.toggle(); });
+  injectBtn('btnOTCalc','🧮','Overtime Calc',function(){ window._oncorOvertimeCalc.toggle(); });
+});
+
+})();
+
+// ==================== END SESSION #111 — Zeus ⚡ Weather Alert System + Crew Roster Manager + Overtime Calculator ====================
+
+
 })();
