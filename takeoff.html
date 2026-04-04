@@ -198450,3 +198450,464 @@ window.emgPrint=function(){
 
 })();
 // ==================== END SESSION #147 — Zeus ⚡ Concrete Mix Submittal Status (Ctrl+Shift+F10) + Daily Progress Photo Board (Ctrl+Shift+F11) + Site Incident Report (Ctrl+Shift+F12) ====================
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// SESSION #148 — THREE NEW FEATURES
+// ═══════════════════════════════════════════════════════════════════════════════
+(function(){
+  // Utility functions
+  function addBtn148(label,icon,color,modalId,kbTest,title){
+    var sidebar=document.querySelector('.sidebar-actions')||document.querySelector('.sidebar');if(!sidebar)return;
+    var btn=document.createElement('button');btn.className='action-btn secondary';btn.title=title||label;
+    btn.style.cssText='background:rgba('+hexRgb148(color)+',0.1);border-color:rgba('+hexRgb148(color)+',0.35);color:'+color+';margin-bottom:4px;';
+    btn.innerHTML=icon+' '+label;btn.onclick=function(){toggleModal148(modalId);};sidebar.appendChild(btn);
+    document.addEventListener('keydown',function(e){if(kbTest&&kbTest(e)){e.preventDefault();toggleModal148(modalId);}});
+  }
+  function hexRgb148(h){h=h.replace('#','');return parseInt(h.substr(0,2),16)+','+parseInt(h.substr(2,2),16)+','+parseInt(h.substr(4,2),16);}
+  function makeModal148(id,title,accentColor,bodyHtml){
+    if(document.getElementById(id))return;var m=document.createElement('div');m.id=id;
+    m.style.cssText='display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.75);align-items:center;justify-content:center;';
+    m.innerHTML='<div style="background:#1e293b;border:1px solid '+accentColor+';border-radius:12px;width:94%;max-width:1000px;max-height:90vh;overflow-y:auto;padding:0;">'
+      +'<div style="background:'+accentColor+';padding:14px 20px;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center;">'
+      +'<div style="font-weight:700;color:#fff;font-size:15px;">'+title+'</div>'
+      +'<button onclick="document.getElementById(\''+id+'\').style.display=\'none\'" style="background:rgba(0,0,0,0.3);color:#fff;border:none;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:16px;">✕</button></div>'
+      +'<div style="padding:18px;">'+bodyHtml+'</div></div>';
+    m.addEventListener('click',function(e){if(e.target===m)m.style.display='none';});document.body.appendChild(m);
+  }
+  function toggleModal148(id){var el=document.getElementById(id);if(el)el.style.display=(el.style.display==='flex')?'none':'flex';}
+  function fmtD148(d){if(!d)return'—';var p=d.split('-');return p[1]+'/'+p[2]+'/'+p[0];}
+  function proj148(){return(window.currentProjectName||'Project');}
+  function fmtMoney(v){return'$'+(+v||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});}
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // TOOL 1: 📊 BID WIN/LOSS ANALYTICS DASHBOARD (Ctrl+Shift+Alt+1)
+  // ═══════════════════════════════════════════════════════════════════════════════
+  addBtn148('Bid Analytics','📊','#6366f1','s148-bwa',
+    function(e){return e.ctrlKey&&e.shiftKey&&e.altKey&&e.key==='1';},'Ctrl+Shift+Alt+1 — Bid Win/Loss Analytics Dashboard');
+  makeModal148('s148-bwa','📊 Bid Win/Loss Analytics Dashboard','#6366f1','<div id="bwa-body">Loading...</div>');
+
+  function bwaKey(){return 'oncor_bwa_v1';}
+  function bwaLoad(){try{return JSON.parse(localStorage.getItem(bwaKey())||'[]');}catch(e){return[];}}
+  function bwaSave(d){localStorage.setItem(bwaKey(),JSON.stringify(d));}
+
+  var BWA_OUTCOMES=['Won','Lost','Pending','No Bid','Withdrawn'];
+  var BWA_TYPES=['Commercial','Industrial','Municipal','Residential','Tilt-Up','Site Concrete','Public Works','Other'];
+  var BWA_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  function bwaRender(){
+    var bids=bwaLoad();
+    var won=bids.filter(function(b){return b.outcome==='Won';});
+    var lost=bids.filter(function(b){return b.outcome==='Lost';});
+    var pending=bids.filter(function(b){return b.outcome==='Pending';});
+    var winRate=won.length+lost.length>0?Math.round(won.length/(won.length+lost.length)*100):0;
+    var wonVal=won.reduce(function(s,b){return s+(+b.amount||0);},0);
+    var lostVal=lost.reduce(function(s,b){return s+(+b.amount||0);},0);
+    var pendingVal=pending.reduce(function(s,b){return s+(+b.amount||0);},0);
+    var avgBid=bids.length>0?Math.round(bids.reduce(function(s,b){return s+(+b.amount||0);},0)/bids.length):0;
+    var avgWon=won.length>0?Math.round(wonVal/won.length):0;
+
+    // GC analysis
+    var gcMap={};
+    bids.forEach(function(b){
+      if(!b.gc)return;
+      if(!gcMap[b.gc])gcMap[b.gc]={name:b.gc,bids:0,won:0,val:0};
+      gcMap[b.gc].bids++;
+      if(b.outcome==='Won'){gcMap[b.gc].won++;gcMap[b.gc].val+=(+b.amount||0);}
+    });
+    var gcList=Object.values(gcMap).sort(function(a,b){return b.val-a.val;});
+
+    // Win rate by type
+    var typeMap={};
+    bids.forEach(function(b){
+      if(!b.type)return;
+      if(!typeMap[b.type])typeMap[b.type]={bids:0,won:0};
+      typeMap[b.type].bids++;
+      if(b.outcome==='Won')typeMap[b.type].won++;
+    });
+
+    var wrColor=winRate>=50?'#22c55e':winRate>=30?'#f59e0b':'#ef4444';
+    var statsHtml='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">'
+      +'<div style="background:#0f172a;border:1px solid #6366f1;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#6366f1;">'+bids.length+'</div><div style="font-size:11px;color:#94a3b8;">Total Bids</div></div>'
+      +'<div style="background:#0f172a;border:1px solid '+wrColor+';border-radius:8px;padding:12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:'+wrColor+';">'+winRate+'%</div><div style="font-size:11px;color:#94a3b8;">Win Rate</div></div>'
+      +'<div style="background:#0f172a;border:1px solid #22c55e;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#22c55e;">'+fmtMoney(wonVal)+'</div><div style="font-size:11px;color:#94a3b8;">Revenue Won</div></div>'
+      +'<div style="background:#0f172a;border:1px solid #f59e0b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#f59e0b;">'+fmtMoney(pendingVal)+'</div><div style="font-size:11px;color:#94a3b8;">Pipeline</div></div>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">'
+      +'<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:16px;font-weight:700;color:#6366f1;">'+fmtMoney(avgBid)+'</div><div style="font-size:10px;color:#94a3b8;">Avg Bid Size</div></div>'
+      +'<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:16px;font-weight:700;color:#22c55e;">'+fmtMoney(avgWon)+'</div><div style="font-size:10px;color:#94a3b8;">Avg Won Job</div></div>'
+      +'<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:16px;font-weight:700;color:#ef4444;">'+lost.length+'</div><div style="font-size:10px;color:#94a3b8;">Jobs Lost</div></div>'
+      +'<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:16px;font-weight:700;color:#ef4444;">'+fmtMoney(lostVal)+'</div><div style="font-size:10px;color:#94a3b8;">Value Lost</div></div>'
+      +'</div>';
+
+    var formHtml='<div style="background:#0f172a;border:1px solid #6366f1;border-radius:8px;padding:14px;margin-bottom:14px;">'
+      +'<div style="font-weight:600;color:#6366f1;margin-bottom:10px;">+ Log Bid Outcome</div>'
+      +'<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr auto;gap:8px;margin-bottom:8px;">'
+      +'<input id="bwa-proj" placeholder="Project / Job Name" style="background:#1e293b;border:1px solid #475569;border-radius:6px;padding:7px;color:#f1f5f9;font-size:11px;"/>'
+      +'<input id="bwa-gc" placeholder="GC / Client" style="background:#1e293b;border:1px solid #475569;border-radius:6px;padding:7px;color:#f1f5f9;font-size:11px;"/>'
+      +'<input id="bwa-amount" type="number" placeholder="Bid Amount $" style="background:#1e293b;border:1px solid #475569;border-radius:6px;padding:7px;color:#f1f5f9;font-size:11px;"/>'
+      +'<select id="bwa-outcome" style="background:#1e293b;border:1px solid #475569;border-radius:6px;padding:7px;color:#f1f5f9;font-size:11px;">'+BWA_OUTCOMES.map(function(o){return'<option>'+o+'</option>';}).join('')+'</select>'
+      +'<select id="bwa-type" style="background:#1e293b;border:1px solid #475569;border-radius:6px;padding:7px;color:#f1f5f9;font-size:11px;">'+BWA_TYPES.map(function(t){return'<option>'+t+'</option>';}).join('')+'</select>'
+      +'<button onclick="bwaAdd()" style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-weight:600;font-size:11px;">Log</button>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:8px;">'
+      +'<input id="bwa-date" type="date" value="'+new Date().toISOString().slice(0,10)+'" style="background:#1e293b;border:1px solid #475569;border-radius:6px;padding:7px;color:#f1f5f9;font-size:11px;"/>'
+      +'<input id="bwa-winner" placeholder="Winner (if lost)" style="background:#1e293b;border:1px solid #475569;border-radius:6px;padding:7px;color:#f1f5f9;font-size:11px;"/>'
+      +'<input id="bwa-notes" placeholder="Notes / Why won or lost" style="background:#1e293b;border:1px solid #475569;border-radius:6px;padding:7px;color:#f1f5f9;font-size:11px;"/>'
+      +'</div></div>';
+
+    var gcHtml='';
+    if(gcList.length>0){
+      gcHtml='<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:14px;">'
+        +'<div style="font-weight:600;color:#6366f1;margin-bottom:10px;">🏢 Top GC/Client Performance</div>'
+        +'<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead>'
+        +'<tr style="color:#94a3b8;border-bottom:1px solid #334155;">'
+        +'<th style="text-align:left;padding:6px;">GC / Client</th><th style="text-align:right;padding:6px;">Bids</th><th style="text-align:right;padding:6px;">Won</th><th style="text-align:right;padding:6px;">Win%</th><th style="text-align:right;padding:6px;">Revenue</th></tr></thead><tbody>';
+      gcList.slice(0,8).forEach(function(g){
+        var wr2=g.bids>0?Math.round(g.won/g.bids*100):0;
+        var c=wr2>=50?'#22c55e':wr2>=30?'#f59e0b':'#94a3b8';
+        gcHtml+='<tr style="border-bottom:1px solid #1e293b;">'
+          +'<td style="padding:6px;color:#f1f5f9;">'+g.name+'</td>'
+          +'<td style="padding:6px;text-align:right;color:#94a3b8;">'+g.bids+'</td>'
+          +'<td style="padding:6px;text-align:right;color:#22c55e;">'+g.won+'</td>'
+          +'<td style="padding:6px;text-align:right;color:'+c+';">'+wr2+'%</td>'
+          +'<td style="padding:6px;text-align:right;color:#6366f1;">'+fmtMoney(g.val)+'</td>'
+          +'</tr>';
+      });
+      gcHtml+='</tbody></table></div>';
+    }
+
+    var typeHtml='';
+    var typeKeys=Object.keys(typeMap);
+    if(typeKeys.length>0){
+      typeHtml='<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:14px;">'
+        +'<div style="font-weight:600;color:#6366f1;margin-bottom:10px;">📂 Win Rate by Project Type</div>'
+        +'<div style="display:flex;flex-wrap:wrap;gap:8px;">';
+      typeKeys.forEach(function(type){
+        var tm=typeMap[type];
+        var wr3=tm.bids>0?Math.round(tm.won/tm.bids*100):0;
+        var c=wr3>=50?'#22c55e':wr3>=30?'#f59e0b':'#ef4444';
+        typeHtml+='<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:10px 14px;min-width:120px;">'
+          +'<div style="font-size:10px;color:#94a3b8;">'+type+'</div>'
+          +'<div style="font-size:18px;font-weight:700;color:'+c+';">'+wr3+'%</div>'
+          +'<div style="font-size:10px;color:#64748b;">'+tm.won+'/'+tm.bids+' bids</div>'
+          +'</div>';
+      });
+      typeHtml+='</div></div>';
+    }
+
+    var listHtml='<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:14px;">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
+      +'<div style="font-weight:600;color:#6366f1;">📋 Bid History</div>'
+      +'<button onclick="bwaPrint()" style="background:#334155;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:11px;">🖨 Print</button></div>';
+
+    if(bids.length===0){
+      listHtml+='<div style="text-align:center;color:#64748b;padding:20px;">No bids logged yet</div>';
+    } else {
+      var sorted=bids.slice().sort(function(a,b){return b.date.localeCompare(a.date);});
+      sorted.forEach(function(bid,ri){
+        var i=bids.indexOf(bid);
+        var oc=bid.outcome;
+        var ocColor=oc==='Won'?'#22c55e':oc==='Lost'?'#ef4444':oc==='Pending'?'#f59e0b':'#64748b';
+        listHtml+='<div style="background:#1e293b;border:1px solid #334155;border-left:4px solid '+ocColor+';border-radius:8px;padding:10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">'
+          +'<div><div style="font-weight:600;color:#f1f5f9;">'+bid.project+'</div>'
+          +'<div style="font-size:11px;color:#94a3b8;">'+(bid.gc||'')+(bid.type?' · '+bid.type:'')+' · '+fmtD148(bid.date)+(bid.winner?' · Lost to: '+bid.winner:'')+'</div>'
+          +(bid.notes?'<div style="font-size:10px;color:#64748b;margin-top:2px;">'+bid.notes+'</div>':'')+'</div>'
+          +'<div style="display:flex;align-items:center;gap:10px;">'
+          +'<span style="font-size:16px;font-weight:700;color:#6366f1;">'+fmtMoney(bid.amount)+'</span>'
+          +'<span style="background:'+ocColor+'22;color:'+ocColor+';padding:3px 10px;border-radius:12px;font-size:10px;font-weight:600;">'+oc+'</span>'
+          +'<button onclick="bwaDel('+i+')" style="background:#ef4444;color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:10px;">✕</button>'
+          +'</div></div>';
+      });
+    }
+    listHtml+='</div>';
+    document.getElementById('bwa-body').innerHTML=statsHtml+formHtml+gcHtml+typeHtml+listHtml;
+  }
+
+  window.bwaAdd=function(){
+    var bids=bwaLoad();
+    var proj=document.getElementById('bwa-proj').value.trim();
+    if(!proj)return alert('Project name required');
+    bids.push({project:proj,gc:(document.getElementById('bwa-gc').value||'').trim(),amount:parseFloat(document.getElementById('bwa-amount').value)||0,outcome:document.getElementById('bwa-outcome').value,type:document.getElementById('bwa-type').value,date:document.getElementById('bwa-date').value,winner:(document.getElementById('bwa-winner').value||'').trim(),notes:(document.getElementById('bwa-notes').value||'').trim()});
+    bwaSave(bids);bwaRender();
+    document.getElementById('bwa-proj').value='';document.getElementById('bwa-gc').value='';document.getElementById('bwa-amount').value='';document.getElementById('bwa-winner').value='';document.getElementById('bwa-notes').value='';
+  };
+  window.bwaDel=function(i){var b=bwaLoad();b.splice(i,1);bwaSave(b);bwaRender();};
+  window.bwaPrint=function(){
+    var bids=bwaLoad();
+    var won2=bids.filter(function(b){return b.outcome==='Won';});
+    var lost2=bids.filter(function(b){return b.outcome==='Lost';});
+    var wr=won2.length+lost2.length>0?Math.round(won2.length/(won2.length+lost2.length)*100):0;
+    var rows=bids.slice().sort(function(a,b){return b.date.localeCompare(a.date);}).map(function(b){return'<tr><td>'+fmtD148(b.date)+'</td><td>'+b.project+'</td><td>'+(b.gc||'')+'</td><td>'+(b.type||'')+'</td><td>'+fmtMoney(b.amount)+'</td><td>'+b.outcome+'</td><td>'+(b.winner||'')+'</td><td>'+(b.notes||'')+'</td></tr>';}).join('');
+    var w=window.open('','_blank');
+    w.document.write('<!DOCTYPE html><html><head><title>Bid Analytics</title><style>body{font-family:Arial;font-size:11px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:5px;}th{background:#6366f1;color:#fff;}</style></head><body>'
+      +'<h2>📊 Bid Win/Loss Analytics</h2><p><strong>Total Bids:</strong> '+bids.length+' &nbsp; <strong>Win Rate:</strong> '+wr+'% &nbsp; <strong>Won:</strong> '+won2.length+' &nbsp; <strong>Lost:</strong> '+lost2.length+'</p>'
+      +'<table><thead><tr><th>Date</th><th>Project</th><th>GC/Client</th><th>Type</th><th>Amount</th><th>Outcome</th><th>Winner</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      +'<p style="font-size:10px;color:#666;margin-top:10px;">CONFIDENTIAL — Oncor Bid Intelligence</p>'
+      +'<button onclick="window.print()" style="background:#6366f1;color:#fff;border:none;padding:8px 16px;cursor:pointer;border-radius:6px;">🖨 Print</button></body></html>');w.document.close();
+  };
+  window._getBWAStats=function(){var b=bwaLoad();var w=b.filter(function(x){return x.outcome==='Won';});var l=b.filter(function(x){return x.outcome==='Lost';});return{total:b.length,won:w.length,lost:l.length,winRate:w.length+l.length>0?Math.round(w.length/(w.length+l.length)*100):0,wonVal:w.reduce(function(s,x){return s+(+x.amount||0);},0)};};
+
+  var bwaObs=new MutationObserver(function(muts){muts.forEach(function(m){if(m.type==='attributes'&&m.attributeName==='style'){var el=document.getElementById('s148-bwa');if(el&&el.style.display==='flex')bwaRender();}});});
+  var bwaEl=document.getElementById('s148-bwa');if(bwaEl)bwaObs.observe(bwaEl,{attributes:true});
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // TOOL 2: 🔩 ANCHOR BOLT & EMBED COST ESTIMATOR (Ctrl+Shift+Alt+2)
+  // ═══════════════════════════════════════════════════════════════════════════════
+  addBtn148('Anchor & Embed Calc','🔩','#f97316','s148-ace',
+    function(e){return e.ctrlKey&&e.shiftKey&&e.altKey&&e.key==='2';},'Ctrl+Shift+Alt+2 — Anchor Bolt & Embed Cost Estimator');
+  makeModal148('s148-ace','🔩 Anchor Bolt & Embed Cost Estimator','#f97316','<div id="ace-body">Loading...</div>');
+
+  var ACE_TYPES=[
+    {label:'L-Bolt (Standard)',unit:'EA',price:4.50,install:8,desc:'ASTM F1554 Gr36, 3/4" dia, 12" embed'},
+    {label:'L-Bolt (Heavy)',unit:'EA',price:9.00,install:12,desc:'ASTM F1554 Gr55, 1" dia, 18" embed'},
+    {label:'Headed Bolt (3/4")',unit:'EA',price:6.50,install:10,desc:'ASTM A307, cast-in-place'},
+    {label:'Headed Bolt (1")',unit:'EA',price:11.00,install:14,desc:'ASTM A307 high-strength'},
+    {label:'Expansion Anchor (3/4")',unit:'EA',price:14.00,install:18,desc:'Hilti HSL-3 or equiv, post-installed'},
+    {label:'Epoxy Anchor (5/8")',unit:'EA',price:22.00,install:25,desc:'Hilti HIT-RE500 or equiv, cracked/uncracked'},
+    {label:'Epoxy Anchor (7/8")',unit:'EA',price:38.00,install:35,desc:'ASTM C881 / ACI 318 §17 post-installed'},
+    {label:'Embed Plate (6"x6"x3/8")',unit:'EA',price:28.00,install:30,desc:'ASTM A36 weld plate'},
+    {label:'Embed Plate (12"x12"x1/2")',unit:'EA',price:72.00,install:45,desc:'ASTM A36, tilt-up panel'},
+    {label:'Conduit Sleeve (2")',unit:'EA',price:3.50,install:6,desc:'PVC conduit stub-out'},
+    {label:'Pipe Sleeve (4")',unit:'EA',price:12.00,install:10,desc:'Steel pipe blockout'},
+    {label:'Column Base Plate (12"x12")',unit:'EA',price:85.00,install:55,desc:'AISC / ASTM A36'},
+    {label:'Rebar Dowel (#5, 24")',unit:'EA',price:2.80,install:5,desc:'ASTM A615 Gr60 epoxy-coated'},
+    {label:'Rebar Dowel (#6, 24")',unit:'EA',price:4.20,install:6,desc:'ASTM A615 Gr60'},
+    {label:'J-Bolt (1/2")',unit:'EA',price:2.50,install:6,desc:'Galv. ASTM F1554 Gr36'},
+    {label:'Blockout Form (12"x12")',unit:'EA',price:8.00,install:15,desc:'Foam or wood blockout'},
+  ];
+  var ACE_LABOR_RATE=68; // per hour installed
+
+  function aceKey(){return 'oncor_ace_v1_'+(proj148()||'global');}
+  function aceLoad(){try{return JSON.parse(localStorage.getItem(aceKey())||'[]');}catch(e){return[];}}
+  function aceSave(d){localStorage.setItem(aceKey(),JSON.stringify(d));}
+
+  function aceRender(){
+    var items=aceLoad();
+    var totalMat=items.reduce(function(s,it){return s+(it.qty*(it.price||0));},0);
+    var totalInst=items.reduce(function(s,it){return s+(it.qty*(it.installMin||0)/60*ACE_LABOR_RATE);},0);
+    var totalCost=totalMat+totalInst;
+    var totalQty=items.reduce(function(s,it){return s+it.qty;},0);
+
+    var statsHtml='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">'
+      +'<div style="background:#0f172a;border:1px solid #f97316;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#f97316;">'+items.length+'</div><div style="font-size:11px;color:#94a3b8;">Line Items</div></div>'
+      +'<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#f1f5f9;">'+totalQty+'</div><div style="font-size:11px;color:#94a3b8;">Total Units</div></div>'
+      +'<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#22c55e;">'+fmtMoney(totalMat)+'</div><div style="font-size:11px;color:#94a3b8;">Material</div></div>'
+      +'<div style="background:#0f172a;border:1px solid #f97316;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#f97316;">'+fmtMoney(totalCost)+'</div><div style="font-size:11px;color:#94a3b8;">Total w/ Install</div></div>'
+      +'</div>';
+
+    var refHtml='<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:14px;">'
+      +'<div style="font-weight:600;color:#f97316;margin-bottom:10px;">+ Add Embed/Anchor Item</div>'
+      +'<div style="display:grid;grid-template-columns:3fr 1fr 1fr 1fr auto;gap:8px;align-items:center;">'
+      +'<select id="ace-type" style="background:#1e293b;border:1px solid #475569;border-radius:6px;padding:7px;color:#f1f5f9;font-size:11px;">'
+      +ACE_TYPES.map(function(t){return'<option value="'+ACE_TYPES.indexOf(t)+'">'+t.label+'</option>';}).join('')
+      +'</select>'
+      +'<input id="ace-qty" type="number" placeholder="Qty" value="1" style="background:#1e293b;border:1px solid #475569;border-radius:6px;padding:7px;color:#f1f5f9;font-size:11px;"/>'
+      +'<input id="ace-price" type="number" placeholder="$/EA override" style="background:#1e293b;border:1px solid #475569;border-radius:6px;padding:7px;color:#f1f5f9;font-size:11px;"/>'
+      +'<input id="ace-area" placeholder="Area/Location" style="background:#1e293b;border:1px solid #475569;border-radius:6px;padding:7px;color:#f1f5f9;font-size:11px;"/>'
+      +'<button onclick="aceAdd()" style="background:#f97316;color:#fff;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-weight:600;font-size:11px;">Add</button>'
+      +'</div>'
+      +'<div style="font-size:10px;color:#64748b;margin-top:6px;">Labor rate: $'+ACE_LABOR_RATE+'/hr · Override price to use supplier quote</div>'
+      +'</div>';
+
+    var listHtml='<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:14px;">';
+    if(items.length===0){
+      listHtml+='<div style="text-align:center;color:#64748b;padding:20px;">No items added yet</div>';
+    } else {
+      listHtml+='<div style="display:flex;justify-content:space-between;margin-bottom:8px;">'
+        +'<div style="font-weight:600;color:#f97316;">📋 Item List</div>'
+        +'<button onclick="acePrint()" style="background:#334155;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:11px;">🖨 Print</button></div>'
+        +'<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead>'
+        +'<tr style="color:#94a3b8;border-bottom:1px solid #334155;">'
+        +'<th style="text-align:left;padding:6px;">Item</th><th style="text-align:left;padding:6px;">Area</th><th style="text-align:right;padding:6px;">Qty</th><th style="text-align:right;padding:6px;">$/EA</th><th style="text-align:right;padding:6px;">Material</th><th style="text-align:right;padding:6px;">Install</th><th style="text-align:right;padding:6px;">Total</th><th style="padding:6px;"></th></tr></thead><tbody>';
+      var mRunning=0,tRunning=0;
+      items.forEach(function(it,i){
+        var mat=it.qty*(it.price||0);
+        var inst=it.qty*(it.installMin||0)/60*ACE_LABOR_RATE;
+        var tot=mat+inst;
+        mRunning+=mat;tRunning+=tot;
+        listHtml+='<tr style="border-bottom:1px solid #1e293b;">'
+          +'<td style="padding:6px;color:#f1f5f9;">'+it.label+'<br><span style="color:#64748b;font-size:9px;">'+it.desc+'</span></td>'
+          +'<td style="padding:6px;color:#94a3b8;">'+(it.area||'—')+'</td>'
+          +'<td style="padding:6px;text-align:right;color:#f1f5f9;">'+it.qty+'</td>'
+          +'<td style="padding:6px;text-align:right;color:#f1f5f9;">$'+it.price.toFixed(2)+'</td>'
+          +'<td style="padding:6px;text-align:right;color:#22c55e;">'+fmtMoney(mat)+'</td>'
+          +'<td style="padding:6px;text-align:right;color:#f59e0b;">'+fmtMoney(inst)+'</td>'
+          +'<td style="padding:6px;text-align:right;color:#f97316;font-weight:700;">'+fmtMoney(tot)+'</td>'
+          +'<td style="padding:6px;"><button onclick="aceDel('+i+')" style="background:#ef4444;color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:10px;">✕</button></td>'
+          +'</tr>';
+      });
+      listHtml+='<tr style="border-top:2px solid #f97316;font-weight:700;">'
+        +'<td colspan="4" style="padding:8px;color:#f1f5f9;">TOTALS</td>'
+        +'<td style="padding:8px;text-align:right;color:#22c55e;">'+fmtMoney(totalMat)+'</td>'
+        +'<td style="padding:8px;text-align:right;color:#f59e0b;">'+fmtMoney(totalInst)+'</td>'
+        +'<td style="padding:8px;text-align:right;color:#f97316;font-size:14px;">'+fmtMoney(totalCost)+'</td>'
+        +'<td></td></tr>';
+      listHtml+='</tbody></table>';
+    }
+    listHtml+='</div>';
+
+    var refTableHtml='<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:14px;">'
+      +'<div style="font-weight:600;color:#f97316;margin-bottom:10px;">📚 El Paso 2025-2026 Reference Prices (ASTM F1554 / ACI 318 §17)</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;">'
+      +ACE_TYPES.slice(0,8).map(function(t){return'<div style="background:#1e293b;border-radius:6px;padding:8px;font-size:10px;">'
+        +'<span style="color:#f97316;font-weight:600;">'+t.label+'</span><br>'
+        +'<span style="color:#22c55e;">$'+t.price.toFixed(2)+'/EA mat</span> · <span style="color:#94a3b8;">~'+t.installMin+' min install</span><br>'
+        +'<span style="color:#64748b;">'+t.desc+'</span></div>';}).join('')
+      +'</div></div>';
+
+    document.getElementById('ace-body').innerHTML=statsHtml+refHtml+listHtml+refTableHtml;
+  }
+
+  window.aceAdd=function(){
+    var items=aceLoad();
+    var typeIdx=parseInt(document.getElementById('ace-type').value)||0;
+    var t=ACE_TYPES[typeIdx];
+    var qty=parseInt(document.getElementById('ace-qty').value)||1;
+    var priceOverride=parseFloat(document.getElementById('ace-price').value);
+    var price=isNaN(priceOverride)?t.price:priceOverride;
+    items.push({label:t.label,desc:t.desc,qty:qty,price:price,installMin:t.installMin,area:(document.getElementById('ace-area').value||'').trim()});
+    aceSave(items);aceRender();
+    document.getElementById('ace-qty').value='1';document.getElementById('ace-price').value='';document.getElementById('ace-area').value='';
+  };
+  window.aceDel=function(i){var it=aceLoad();it.splice(i,1);aceSave(it);aceRender();};
+  window.acePrint=function(){
+    var items=aceLoad();
+    var totalMat2=items.reduce(function(s,it){return s+(it.qty*(it.price||0));},0);
+    var totalInst2=items.reduce(function(s,it){return s+(it.qty*(it.installMin||0)/60*ACE_LABOR_RATE);},0);
+    var rows=items.map(function(it){var mat=it.qty*(it.price||0);var inst=it.qty*(it.installMin||0)/60*ACE_LABOR_RATE;return'<tr><td>'+it.label+'</td><td>'+(it.area||'—')+'</td><td style="text-align:right">'+it.qty+'</td><td style="text-align:right">$'+it.price.toFixed(2)+'</td><td style="text-align:right">'+fmtMoney(mat)+'</td><td style="text-align:right">'+fmtMoney(inst)+'</td><td style="text-align:right"><strong>'+fmtMoney(mat+inst)+'</strong></td></tr>';}).join('');
+    var w=window.open('','_blank');
+    w.document.write('<!DOCTYPE html><html><head><title>Anchor/Embed Estimate</title><style>body{font-family:Arial;font-size:11px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:5px 7px;}th{background:#f97316;color:#fff;}</style></head><body>'
+      +'<h2>🔩 Anchor Bolt & Embed Cost Estimate</h2><p><strong>Project:</strong> '+proj148()+'</p>'
+      +'<table><thead><tr><th>Item</th><th>Area</th><th>Qty</th><th>$/EA</th><th>Material</th><th>Install</th><th>Total</th></tr></thead><tbody>'+rows
+      +'<tr style="font-weight:700;background:#fff3e0"><td colspan="4">TOTALS</td><td>'+fmtMoney(totalMat2)+'</td><td>'+fmtMoney(totalInst2)+'</td><td>'+fmtMoney(totalMat2+totalInst2)+'</td></tr>'
+      +'</tbody></table>'
+      +'<p style="font-size:10px;color:#666;margin-top:10px;">ASTM F1554 / ACI 318 §17 / AISC — Labor rate $'+ACE_LABOR_RATE+'/hr — El Paso 2025-2026</p>'
+      +'<button onclick="window.print()" style="background:#f97316;color:#fff;border:none;padding:8px 16px;cursor:pointer;border-radius:6px;">🖨 Print</button></body></html>');w.document.close();
+  };
+
+  var aceObs=new MutationObserver(function(muts){muts.forEach(function(m){if(m.type==='attributes'&&m.attributeName==='style'){var el=document.getElementById('s148-ace');if(el&&el.style.display==='flex')aceRender();}});});
+  var aceEl=document.getElementById('s148-ace');if(aceEl)aceObs.observe(aceEl,{attributes:true});
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // TOOL 3: 📋 ACI 301 SPEC COMPLIANCE TRACKER (Ctrl+Shift+Alt+3)
+  // ═══════════════════════════════════════════════════════════════════════════════
+  addBtn148('ACI 301 Compliance','📋','#10b981','s148-act',
+    function(e){return e.ctrlKey&&e.shiftKey&&e.altKey&&e.key==='3';},'Ctrl+Shift+Alt+3 — ACI 301 Spec Compliance Tracker');
+  makeModal148('s148-act','📋 ACI 301 Spec Compliance Tracker','#10b981','<div id="act-body">Loading...</div>');
+
+  var ACT_SECTIONS=[
+    {id:'1.6',title:'Pre-Pour Notification',desc:'GC/Inspector notified ≥24hr in advance',ref:'ACI 301 §1.6'},
+    {id:'3.1',title:'Mix Design Approved',desc:'EOR-approved mix design on file before placement',ref:'ACI 301 §3.1 / ACI 318 §26.4'},
+    {id:'3.2',title:'w/cm Ratio Compliant',desc:'w/cm ≤ specified max per exposure class',ref:'ACI 318-19 §19.3.3'},
+    {id:'4.2',title:'Slump Within Spec',desc:'All tested loads within specified slump ± tolerance',ref:'ACI 301 §4.2 / ASTM C143'},
+    {id:'4.3',title:'Air Content Confirmed',desc:'Air content tested per ASTM C231 / within spec',ref:'ACI 301 §4.3 / ASTM C231'},
+    {id:'4.4',title:'Concrete Temp Compliant',desc:'90°F max (ACI 305R) / 50°F min (ACI 306R) at discharge',ref:'ACI 301 §4.4 / ASTM C1064'},
+    {id:'5.1',title:'Placement Rate Per Plan',desc:'Concrete placed per sequence drawing or approved plan',ref:'ACI 301 §5.1'},
+    {id:'5.2',title:'No Free Fall >5ft',desc:'No drop exceeding 5 feet without tube/chute',ref:'ACI 304R §8.2'},
+    {id:'5.3',title:'Vibration Documented',desc:'Internal vibration at max 18" spacing, full depth per ACI 309',ref:'ACI 301 §5.3 / ACI 309R'},
+    {id:'5.4',title:'No Water Added On-Site',desc:'No unauthorized water addition per ASTM C94 §11.8',ref:'ASTM C94 §11.8'},
+    {id:'5.5',title:'Cylinder Sets Cast',desc:'Min 1 set per 100 CY or 5000 SF, per ACI 318 §26.12',ref:'ACI 318-19 §26.12 / ASTM C31'},
+    {id:'5.6',title:'Composite Samples (ASTM C172)',desc:'All test samples taken per ASTM C172 protocol',ref:'ASTM C172 / ACI 301 §5.6'},
+    {id:'6.1',title:'Finishing Per Spec',desc:'Finish type matches specification (broom/trowel/exposed/etc.)',ref:'ACI 301 §6.1 / ACI 302.1R'},
+    {id:'6.2',title:'No Finishing on Bleed Water',desc:'No finishing operations while bleed water is present',ref:'ACI 302.1R §8.6'},
+    {id:'6.3',title:'F-Number Tolerances Met',desc:'FF/FL tested per ASTM E1155 if specified',ref:'ACI 117 / ASTM E1155'},
+    {id:'7.1',title:'Curing Method Per Spec',desc:'Specified curing method applied (compound, wet cure, etc.)',ref:'ACI 301 §7.1 / ACI 308R'},
+    {id:'7.2',title:'Curing Duration Satisfied',desc:'Min 7 days moist cure (Type I/II), 3 days Type III per ACI 308R',ref:'ACI 308R / ACI 301 §7.2'},
+    {id:'7.3',title:'Curing Compound Coverage',desc:'Applied at 150-200 SF/gal per ASTM C309 / ACI 308R',ref:'ACI 308R / ASTM C309'},
+    {id:'8.1',title:'28-Day Breaks Passed',desc:'Avg of 2 cylinders ≥ f'c, no individual < f'c−500 psi',ref:'ACI 318-19 §26.12.3'},
+    {id:'8.2',title:'Low Break Investigation Done',desc:'If break fails, ACI 318 §26.12.4 investigation documented',ref:'ACI 318-19 §26.12.4'},
+    {id:'9.1',title:'Special Inspection Signed',desc:'Special inspection reports signed and in job file',ref:'IBC §1705 / ACI 301 §9.1'},
+    {id:'9.2',title:'Deviation Log Closed',desc:'All spec deviations documented and resolved/accepted',ref:'ACI 301 §1.6.7'},
+  ];
+
+  function actKey(){return 'oncor_act_v1_'+(proj148()||'global');}
+  function actLoad(){try{return JSON.parse(localStorage.getItem(actKey())||{});} catch(e){return {};}}
+  function actSave(d){localStorage.setItem(actKey(),JSON.stringify(d));}
+
+  function actRender(){
+    var state=actLoad();
+    var done=ACT_SECTIONS.filter(function(s){return state[s.id]==='done';}).length;
+    var na=ACT_SECTIONS.filter(function(s){return state[s.id]==='na';}).length;
+    var active=ACT_SECTIONS.length-na;
+    var pct=active>0?Math.round(done/active*100):100;
+    var pctColor=pct>=90?'#22c55e':pct>=70?'#f59e0b':'#ef4444';
+    var ready=pct===100||done===active;
+
+    var statsHtml='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">'
+      +'<div style="background:#0f172a;border:1px solid #10b981;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#10b981;">'+ACT_SECTIONS.length+'</div><div style="font-size:11px;color:#94a3b8;">Total Items</div></div>'
+      +'<div style="background:#0f172a;border:1px solid #22c55e;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#22c55e;">'+done+'</div><div style="font-size:11px;color:#94a3b8;">Confirmed ✅</div></div>'
+      +'<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#64748b;">'+na+'</div><div style="font-size:11px;color:#94a3b8;">N/A</div></div>'
+      +'<div style="background:'+(ready?'#052e16':'#0f172a')+';border:1px solid '+(ready?'#22c55e':'#334155')+';border-radius:8px;padding:12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:'+pctColor+';">'+pct+'%</div><div style="font-size:11px;color:#94a3b8;">'+(ready?'ACI 301 READY ✅':'Compliance')+'</div></div>'
+      +'</div>'
+      +'<div style="background:#1e293b;border-radius:8px;height:10px;margin-bottom:14px;overflow:hidden;">'
+      +'<div style="height:100%;background:'+pctColor+';width:'+pct+'%;transition:width 0.3s;border-radius:8px;"></div></div>';
+
+    var actionHtml='<div style="display:flex;gap:8px;margin-bottom:14px;">'
+      +'<button onclick="actSetAll(\'done\')" style="background:#10b981;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:11px;">✅ Mark All Done</button>'
+      +'<button onclick="actSetAll(\'open\')" style="background:#334155;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:11px;">↩ Reset All</button>'
+      +'<button onclick="actPrint()" style="background:#334155;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:11px;">🖨 Print Report</button>'
+      +'</div>';
+
+    var groupOrder=['Mix Design & Materials','Placement & Delivery','Finishing & Curing','QC & Inspection'];
+    var groupMap={
+      '1.6':'Placement & Delivery','3.1':'Mix Design & Materials','3.2':'Mix Design & Materials',
+      '4.2':'Mix Design & Materials','4.3':'Mix Design & Materials','4.4':'Mix Design & Materials',
+      '5.1':'Placement & Delivery','5.2':'Placement & Delivery','5.3':'Placement & Delivery',
+      '5.4':'Placement & Delivery','5.5':'Placement & Delivery','5.6':'Placement & Delivery',
+      '6.1':'Finishing & Curing','6.2':'Finishing & Curing','6.3':'Finishing & Curing',
+      '7.1':'Finishing & Curing','7.2':'Finishing & Curing','7.3':'Finishing & Curing',
+      '8.1':'QC & Inspection','8.2':'QC & Inspection','9.1':'QC & Inspection','9.2':'QC & Inspection'
+    };
+
+    var listHtml='';
+    groupOrder.forEach(function(grp){
+      var grpSections=ACT_SECTIONS.filter(function(s){return groupMap[s.id]===grp;});
+      var grpDone=grpSections.filter(function(s){return state[s.id]==='done';}).length;
+      var grpNA=grpSections.filter(function(s){return state[s.id]==='na';}).length;
+      listHtml+='<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:10px;">'
+        +'<div style="font-weight:600;color:#10b981;margin-bottom:10px;">'+grp+' ('+grpDone+'/'+(grpSections.length-grpNA)+' done)</div>';
+      grpSections.forEach(function(sec){
+        var s=state[sec.id]||'open';
+        var rowBg=s==='done'?'#052e16':s==='na'?'#1e293b':'#0f172a';
+        var rowBorder=s==='done'?'#22c55e':s==='na'?'#334155':'#334155';
+        listHtml+='<div style="background:'+rowBg+';border:1px solid '+rowBorder+';border-radius:6px;padding:10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">'
+          +'<div style="flex:1;">'
+          +'<div style="font-weight:600;color:#f1f5f9;font-size:12px;">'+sec.id+' — '+sec.title+'</div>'
+          +'<div style="font-size:10px;color:#94a3b8;margin-top:2px;">'+sec.desc+'</div>'
+          +'<div style="font-size:9px;color:#64748b;">'+sec.ref+'</div>'
+          +'</div>'
+          +'<div style="display:flex;gap:6px;margin-left:12px;">'
+          +'<button onclick="actToggle(\''+sec.id+'\',\'done\')" style="background:'+(s==='done'?'#22c55e':'#1e293b')+';color:'+(s==='done'?'#fff':'#94a3b8')+';border:1px solid #334155;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;">✅</button>'
+          +'<button onclick="actToggle(\''+sec.id+'\',\'open\')" style="background:'+(s==='open'?'#f59e0b':'#1e293b')+';color:'+(s==='open'?'#fff':'#94a3b8')+';border:1px solid #334155;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;">⬜</button>'
+          +'<button onclick="actToggle(\''+sec.id+'\',\'na\')" style="background:'+(s==='na'?'#475569':'#1e293b')+';color:'+(s==='na'?'#fff':'#94a3b8')+';border:1px solid #334155;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;">N/A</button>'
+          +'</div></div>';
+      });
+      listHtml+='</div>';
+    });
+
+    document.getElementById('act-body').innerHTML=statsHtml+actionHtml+listHtml
+      +'<div style="background:#0f172a;border:1px solid #10b981;border-radius:8px;padding:12px;font-size:11px;color:#6ee7b7;margin-top:4px;">'
+      +'<strong>📚 Standards:</strong> ACI 301-16 Specifications for Structural Concrete · ACI 318-19 Building Code · ACI 302.1R / 304R / 308R / 309R / 117 · ASTM C94 / C172 / C143 / C231 / C1064 / C31 / C39 / E1155 · IBC §1705</div>';
+  }
+
+  window.actToggle=function(id,val){var s=actLoad();s[id]=(s[id]===val)?'open':val;actSave(s);actRender();};
+  window.actSetAll=function(val){var s=actLoad();ACT_SECTIONS.forEach(function(sec){s[sec.id]=val;});actSave(s);actRender();};
+  window.actPrint=function(){
+    var state=actLoad();
+    var done2=ACT_SECTIONS.filter(function(s){return state[s.id]==='done';}).length;
+    var rows=ACT_SECTIONS.map(function(s){var st=state[s.id]||'open';return'<tr><td>'+s.id+'</td><td>'+s.title+'</td><td>'+s.desc+'</td><td>'+s.ref+'</td><td style="font-weight:700;color:'+(st==='done'?'green':st==='na'?'gray':'red')+'">'+(st==='done'?'✅ Confirmed':st==='na'?'N/A':'⬜ Open')+'</td></tr>';}).join('');
+    var w=window.open('','_blank');
+    w.document.write('<!DOCTYPE html><html><head><title>ACI 301 Compliance</title><style>body{font-family:Arial;font-size:11px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:5px;}th{background:#10b981;color:#fff;}</style></head><body>'
+      +'<h2>📋 ACI 301 Spec Compliance Tracker</h2><p><strong>Project:</strong> '+proj148()+' &nbsp; <strong>Confirmed:</strong> '+done2+'/'+ACT_SECTIONS.length+'</p>'
+      +'<table><thead><tr><th>§</th><th>Requirement</th><th>Description</th><th>Reference</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      +'<p style="font-size:10px;color:#666;margin-top:10px;">ACI 301-16 / ACI 318-19 / ASTM C94 — CONFIDENTIAL</p>'
+      +'<button onclick="window.print()" style="background:#10b981;color:#fff;border:none;padding:8px 16px;cursor:pointer;border-radius:6px;">🖨 Print</button></body></html>');w.document.close();
+  };
+  window._getACTStats=function(){var s=actLoad();return{total:ACT_SECTIONS.length,done:ACT_SECTIONS.filter(function(x){return s[x.id]==='done';}).length,pct:Math.round(ACT_SECTIONS.filter(function(x){return s[x.id]==='done';}).length/ACT_SECTIONS.length*100)};};
+
+  var actObs=new MutationObserver(function(muts){muts.forEach(function(m){if(m.type==='attributes'&&m.attributeName==='style'){var el=document.getElementById('s148-act');if(el&&el.style.display==='flex')actRender();}});});
+  var actEl=document.getElementById('s148-act');if(actEl)actObs.observe(actEl,{attributes:true});
+
+})();
+</script>
