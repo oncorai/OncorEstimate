@@ -200923,3 +200923,627 @@ window.emgPrint=function(){
 })();
 </script>
 <!-- END SESSION #153 -->
+
+<!-- BEGIN SESSION #154 -->
+<script>
+(function(){
+  // =================== SESSION #154 ===================
+  // THREE NEW FEATURES — Ctrl+Alt+4 / Ctrl+Alt+5 / Ctrl+Alt+6
+  // TOOL 1: Concrete Wall Thickness & Height/Thickness Ratio Checker (Ctrl+Alt+4)
+  // TOOL 2: Aggregate & Sieve Analysis Compliance Checker (Ctrl+Alt+5)
+  // TOOL 3: Concrete Air Entrainment Spec Guide (Ctrl+Alt+6)
+  // =====================================================
+
+  // --- Inject modals into DOM ---
+  var container = document.createElement('div');
+  container.innerHTML = `
+  <!-- MODAL 1: WALL THICKNESS CHECKER -->
+  <div id="s154-wallthk" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;padding:16px;overflow-y:auto;">
+    <div style="background:#0f172a;border:1px solid #6366f1;border-radius:12px;max-width:680px;width:100%;padding:20px;max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div><div style="font-size:16px;font-weight:700;color:#a5b4fc;">🏗️ Wall Thickness & h/t Checker</div>
+        <div style="font-size:10px;color:#64748b;">ACI 318-19 §11.3 / IBC 2021 §1905.1.8 | Ctrl+Alt+4</div></div>
+        <button onclick="document.getElementById('s154-wallthk').style.display='none'" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:4px 10px;cursor:pointer;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div>
+          <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Wall Type</label>
+          <select id="wtWallType" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:6px;font-size:11px;" onchange="wtCalc()">
+            <option value="bearing">Bearing Wall (Load-Bearing)</option>
+            <option value="shear">Shear Wall / Lateral</option>
+            <option value="nonbearing">Non-Bearing Wall</option>
+            <option value="basement">Basement / Below-Grade</option>
+            <option value="tiltup">Tilt-Up Panel</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Wall Height (ft)</label>
+          <input id="wtHeight" type="number" value="12" min="1" max="60" step="0.5" oninput="wtCalc()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:6px;font-size:11px;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Proposed Thickness (in)</label>
+          <input id="wtThick" type="number" value="8" min="4" max="36" step="0.5" oninput="wtCalc()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:6px;font-size:11px;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Design f'c (PSI)</label>
+          <select id="wtFc" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:6px;font-size:11px;" onchange="wtCalc()">
+            <option value="3000">3000 PSI</option>
+            <option value="4000" selected>4000 PSI</option>
+            <option value="5000">5000 PSI</option>
+            <option value="6000">6000 PSI</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Restraint Condition</label>
+          <select id="wtRestraint" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:6px;font-size:11px;" onchange="wtCalc()">
+            <option value="both">Both Ends Supported</option>
+            <option value="cantilever">Cantilever (Top Free)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Wind / Seismic Zone</label>
+          <select id="wtWind" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:6px;font-size:11px;" onchange="wtCalc()">
+            <option value="normal">Normal (V ≤ 110 mph)</option>
+            <option value="high" selected>High Wind (El Paso 110 mph)</option>
+            <option value="seismic">High Seismic (SDC D-F)</option>
+          </select>
+        </div>
+      </div>
+      <div id="wt-results" style="margin-bottom:12px;"></div>
+      <div style="background:#1e293b;border-radius:8px;padding:10px;font-size:10px;color:#64748b;">
+        <div style="color:#a5b4fc;font-weight:700;margin-bottom:6px;">📚 ACI 318-19 Quick Reference</div>
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr><th style="color:#64748b;text-align:left;padding:3px;">Wall Type</th><th style="color:#64748b;padding:3px;">ACI Min h/t</th><th style="color:#64748b;padding:3px;">IBC Min Thick.</th><th style="color:#64748b;padding:3px;">Section</th></tr></thead>
+          <tbody>
+            <tr><td style="color:#f1f5f9;padding:3px;">Bearing Wall</td><td style="color:#60a5fa;padding:3px;text-align:center;">h/25 (both) or h/10 (cant)</td><td style="color:#60a5fa;padding:3px;text-align:center;">6" min</td><td style="color:#94a3b8;padding:3px;">ACI §11.3.1.1</td></tr>
+            <tr><td style="color:#f1f5f9;padding:3px;">Non-Bearing</td><td style="color:#60a5fa;padding:3px;text-align:center;">h/30 or 4" min</td><td style="color:#60a5fa;padding:3px;text-align:center;">4" min</td><td style="color:#94a3b8;padding:3px;">ACI §11.3.1.1</td></tr>
+            <tr><td style="color:#f1f5f9;padding:3px;">Basement</td><td style="color:#60a5fa;padding:3px;text-align:center;">7.5" min (IBC)</td><td style="color:#60a5fa;padding:3px;text-align:center;">7.5" soil ≤7ft</td><td style="color:#94a3b8;padding:3px;">IBC §1905.1.8</td></tr>
+            <tr><td style="color:#f1f5f9;padding:3px;">Tilt-Up</td><td style="color:#60a5fa;padding:3px;text-align:center;">h/50 max slenderness</td><td style="color:#60a5fa;padding:3px;text-align:center;">5.5" min</td><td style="color:#94a3b8;padding:3px;">ACI 551.1R §4.2</td></tr>
+            <tr><td style="color:#f1f5f9;padding:3px;">Shear Wall</td><td style="color:#60a5fa;padding:3px;text-align:center;">6" or h/16 (SDC D+)</td><td style="color:#60a5fa;padding:3px;text-align:center;">6" min</td><td style="color:#94a3b8;padding:3px;">ACI §18.10.2.3</td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:6px;color:#64748b;">⚡ El Paso: ASCE 7-22 Wind Speed 110 mph Exposure C, Seismic SDC B (most areas). Consult EOR for all structural wall design.</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button onclick="wtPrint()" style="background:#4338ca;border:1px solid #6366f1;color:#c7d2fe;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:11px;">🖨 Print Report</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: AGGREGATE SIEVE ANALYSIS -->
+  <div id="s154-sieve" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;padding:16px;overflow-y:auto;">
+    <div style="background:#0f172a;border:1px solid #f59e0b;border-radius:12px;max-width:700px;width:100%;padding:20px;max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div><div style="font-size:16px;font-weight:700;color:#fcd34d;">🪨 Aggregate Gradation Checker</div>
+        <div style="font-size:10px;color:#64748b;">ASTM C33 / ASTM C136 | Ctrl+Alt+5</div></div>
+        <button onclick="document.getElementById('s154-sieve').style.display='none'" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:4px 10px;cursor:pointer;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div>
+          <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Aggregate Type</label>
+          <select id="svType" onchange="svLoad()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:6px;font-size:11px;">
+            <option value="coarse_1in">Coarse — 1" Nominal Max (ASTM C33 #57)</option>
+            <option value="coarse_34in" selected>Coarse — 3/4" Nominal Max (ASTM C33 #67)</option>
+            <option value="coarse_12in">Coarse — 1/2" Nominal Max (ASTM C33 #7)</option>
+            <option value="fine">Fine Aggregate / Sand (ASTM C33)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Source / Label</label>
+          <input id="svLabel" type="text" placeholder="e.g. Martin Marietta 3/4 Limestone" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:6px;font-size:11px;box-sizing:border-box;">
+        </div>
+      </div>
+      <div id="sieve-inputs" style="margin-bottom:12px;"></div>
+      <div id="sieve-results" style="margin-bottom:12px;"></div>
+      <div style="background:#1e293b;border-radius:8px;padding:10px;font-size:10px;color:#64748b;">
+        <div style="color:#fcd34d;font-weight:700;margin-bottom:4px;">📚 ASTM C33 Notes</div>
+        <div>• Fineness Modulus target for concrete sand: 2.3–3.1 (sweet spot 2.5–2.9)</div>
+        <div>• El Paso caliche: often marginally graded — request full sieve cert from supplier</div>
+        <div>• Coarse agg max size ≤ 1/5 narrowest dimension, 1/3 slab depth, 3/4 min clear rebar spacing (ACI 318 §26.4.2)</div>
+        <div>• Flat/elongated particles (>3:1) ≤ 15% by mass per ASTM D4791</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button onclick="svCalc()" style="background:#92400e;border:1px solid #f59e0b;color:#fde68a;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:11px;">🧮 Check Gradation</button>
+        <button onclick="svPrint()" style="background:#92400e;border:1px solid #f59e0b;color:#fde68a;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:11px;">🖨 Print Report</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: AIR ENTRAINMENT SPEC GUIDE -->
+  <div id="s154-air" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;padding:16px;overflow-y:auto;">
+    <div style="background:#0f172a;border:1px solid #22c55e;border-radius:12px;max-width:660px;width:100%;padding:20px;max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div><div style="font-size:16px;font-weight:700;color:#4ade80;">💨 Air Entrainment Spec Guide</div>
+        <div style="font-size:10px;color:#64748b;">ACI 318-19 Table 19.3.3 / ACI 301 / ASTM C231 | Ctrl+Alt+6</div></div>
+        <button onclick="document.getElementById('s154-air').style.display='none'" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:4px 10px;cursor:pointer;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div>
+          <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Exposure Class (ACI 318 §19.3.3)</label>
+          <select id="airExposure" onchange="airCalc()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:6px;font-size:11px;">
+            <option value="F0">F0 — Not exposed to freezing</option>
+            <option value="F1">F1 — Moderate exposure (occasional freezing)</option>
+            <option value="F2">F2 — Severe exposure (repeated freeze-thaw)</option>
+            <option value="S0">S0 — Not exposed to sulfates</option>
+            <option value="S1">S1 — Moderate sulfate (150–1500 ppm)</option>
+            <option value="S2">S2 — Severe sulfate (1500–10,000 ppm)</option>
+            <option value="S3">S3 — Very severe sulfate (&gt;10,000 ppm)</option>
+            <option value="W0">W0 — Dry or protected</option>
+            <option value="W1">W1 — Exposed to moisture</option>
+            <option value="W2">W2 — Exposed to moisture and external source</option>
+            <option value="C0">C0 — Dry / not exposed to chlorides</option>
+            <option value="C1">C1 — Exposed to chlorides</option>
+            <option value="C2">C2 — Severe chloride exposure</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Nominal Max Aggregate Size</label>
+          <select id="airAggSize" onchange="airCalc()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:6px;font-size:11px;">
+            <option value="3/8">3/8" (9.5 mm)</option>
+            <option value="1/2">1/2" (12.5 mm)</option>
+            <option value="3/4" selected>3/4" (19 mm)</option>
+            <option value="1">1" (25 mm)</option>
+            <option value="1.5">1.5" (37.5 mm)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Design f'c (PSI)</label>
+          <select id="airFc" onchange="airCalc()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:6px;font-size:11px;">
+            <option value="3000">3000 PSI</option>
+            <option value="4000" selected>4000 PSI</option>
+            <option value="5000">5000 PSI</option>
+            <option value="6000">6000 PSI</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Location</label>
+          <select id="airLocation" onchange="airCalc()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:6px;font-size:11px;">
+            <option value="elpaso" selected>El Paso, TX (arid, mild freeze)</option>
+            <option value="north">North TX / Amarillo (moderate freeze)</option>
+            <option value="colorado">Colorado / High Altitude (severe freeze)</option>
+            <option value="coastal">Coastal (high humidity, chlorides)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Measured Air (field test, %)</label>
+          <input id="airMeasured" type="number" placeholder="e.g. 4.5" min="0" max="15" step="0.1" oninput="airCalc()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:6px;font-size:11px;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Element Type</label>
+          <select id="airElement" onchange="airCalc()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:6px;font-size:11px;">
+            <option value="slab">Slab-on-Grade</option>
+            <option value="elevated">Elevated Slab / Deck</option>
+            <option value="wall">Wall</option>
+            <option value="footing">Footing / Foundation</option>
+            <option value="column">Column / Beam</option>
+            <option value="pavement">Pavement / Flatwork (exterior)</option>
+          </select>
+        </div>
+      </div>
+      <div id="air-results" style="margin-bottom:12px;"></div>
+      <div style="background:#1e293b;border-radius:8px;padding:10px;font-size:10px;color:#64748b;">
+        <div style="color:#4ade80;font-weight:700;margin-bottom:6px;">📚 ACI 318-19 Table 19.3.3 Air Entrainment Reference</div>
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr>
+            <th style="color:#64748b;text-align:left;padding:3px;">Agg Max Size</th>
+            <th style="color:#64748b;padding:3px;text-align:center;">F1 (Moderate)</th>
+            <th style="color:#64748b;padding:3px;text-align:center;">F2 (Severe)</th>
+            <th style="color:#64748b;padding:3px;text-align:center;">Notes</th>
+          </tr></thead>
+          <tbody>
+            <tr><td style="color:#f1f5f9;padding:3px;">3/8"</td><td style="color:#60a5fa;padding:3px;text-align:center;">6±1.5%</td><td style="color:#60a5fa;padding:3px;text-align:center;">7.5±1.5%</td><td style="color:#94a3b8;padding:3px;">Highest air %</td></tr>
+            <tr><td style="color:#f1f5f9;padding:3px;">1/2"</td><td style="color:#60a5fa;padding:3px;text-align:center;">5.5±1.5%</td><td style="color:#60a5fa;padding:3px;text-align:center;">7±1.5%</td><td style="color:#94a3b8;padding:3px;">—</td></tr>
+            <tr><td style="color:#f1f5f9;padding:3px;">3/4"</td><td style="color:#60a5fa;padding:3px;text-align:center;">5±1.5%</td><td style="color:#60a5fa;padding:3px;text-align:center;">6±1.5%</td><td style="color:#94a3b8;padding:3px;">Most common</td></tr>
+            <tr><td style="color:#f1f5f9;padding:3px;">1"</td><td style="color:#60a5fa;padding:3px;text-align:center;">4.5±1.5%</td><td style="color:#60a5fa;padding:3px;text-align:center;">6±1.5%</td><td style="color:#94a3b8;padding:3px;">—</td></tr>
+            <tr><td style="color:#f1f5f9;padding:3px;">1.5"</td><td style="color:#60a5fa;padding:3px;text-align:center;">4.5±1.5%</td><td style="color:#60a5fa;padding:3px;text-align:center;">5.5±1.5%</td><td style="color:#94a3b8;padding:3px;">Large agg</td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:6px;">⚡ El Paso F0/F1 (mild freezing winters, Elevation 3,800ft). Most commercial slabs: non-air-entrained or 3–4% protective. High strength (f'c ≥5000): air-entrainment significantly reduces strength — confirm with EOR.</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button onclick="airPrint()" style="background:#14532d;border:1px solid #22c55e;color:#86efac;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:11px;">🖨 Print Spec Sheet</button>
+      </div>
+    </div>
+  </div>
+  `;
+  document.body.appendChild(container);
+
+  // ===========================================================
+  // TOOL 1: WALL THICKNESS CHECKER
+  // ===========================================================
+  window.wtCalc = function(){
+    var wallType = document.getElementById('wtWallType').value;
+    var heightFt = parseFloat(document.getElementById('wtHeight').value)||12;
+    var thickIn = parseFloat(document.getElementById('wtThick').value)||8;
+    var fc = parseInt(document.getElementById('wtFc').value)||4000;
+    var restraint = document.getElementById('wtRestraint').value;
+    var wind = document.getElementById('wtWind').value;
+    var heightIn = heightFt * 12;
+    var ht = heightIn / thickIn;
+
+    // Minimum thickness rules per ACI 318-19 and IBC
+    var minThick = 4; // absolute minimum
+    var maxHT = 25; // h/t limit
+    var ref = '';
+    var notes = [];
+
+    if(wallType === 'bearing'){
+      minThick = 6;
+      maxHT = restraint === 'cantilever' ? 10 : 25;
+      ref = 'ACI 318-19 §11.3.1.1';
+      notes.push('Bearing walls: min 6" or 1/25 clear height, whichever greater');
+      if(restraint === 'cantilever') notes.push('Cantilever bearing wall: max h/t = 10 (ACI 551.1R)');
+    } else if(wallType === 'shear'){
+      minThick = 6;
+      maxHT = wind === 'seismic' ? 16 : 25;
+      ref = 'ACI 318-19 §18.10.2.3';
+      notes.push('Shear walls (SDC D-F): min 6" and ≥ h/16');
+      if(wind === 'high' || wind === 'seismic') notes.push('High wind/seismic: EOR to verify ACI §18.10 special provisions');
+    } else if(wallType === 'nonbearing'){
+      minThick = 4;
+      maxHT = 30;
+      ref = 'ACI 318-19 §11.3.1.1';
+      notes.push('Non-bearing walls: 4" min or h/30, whichever is greater');
+    } else if(wallType === 'basement'){
+      minThick = 7.5;
+      maxHT = 20;
+      ref = 'IBC 2021 §1905.1.8';
+      notes.push('Basement walls: 7.5" min when soil retained ≤7ft; 9.5" min for 8-10ft retained');
+      notes.push('Consider lateral earth pressure — EOR sizing required');
+    } else if(wallType === 'tiltup'){
+      minThick = 5.5;
+      maxHT = 50;
+      ref = 'ACI 551.1R-14 §4.2';
+      notes.push('Tilt-up panels: max slenderness h/t = 50 (ACI 551.1R §4.4.2)');
+      notes.push('Min 5.5" per TCA, 7.25" typical for seismic performance');
+    }
+
+    // Min thickness from h/t rule
+    var minThickFromHT = Math.ceil((heightIn / maxHT) * 2) / 2;
+    var governingMin = Math.max(minThick, minThickFromHT);
+
+    var pass = thickIn >= governingMin && ht <= maxHT;
+    var statusColor = pass ? '#22c55e' : '#ef4444';
+    var statusLabel = pass ? '✅ WITHIN LIMITS' : '❌ BELOW MINIMUM — INCREASE THICKNESS';
+    var htColor = ht <= maxHT ? '#22c55e' : '#ef4444';
+
+    // Volume estimate
+    var wallArea = heightFt * 20; // assume 20ft long for reference
+    var yd3per100sf = (thickIn / 12) * 100 / 27;
+
+    var html = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">'
+      + '<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:9px;color:#64748b;">h/t Ratio</div><div style="font-size:20px;font-weight:700;color:'+htColor+';">'+Math.round(ht*10)/10+'</div><div style="font-size:9px;color:#64748b;">Max '+maxHT+'</div></div>'
+      + '<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:9px;color:#64748b;">Min Required (in)</div><div style="font-size:20px;font-weight:700;color:#f59e0b;">'+governingMin+'"</div><div style="font-size:9px;color:#64748b;">'+ref+'</div></div>'
+      + '<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:9px;color:#64748b;">Proposed (in)</div><div style="font-size:20px;font-weight:700;color:#60a5fa;">'+thickIn+'"</div><div style="font-size:9px;color:#64748b;">'+(pass?'+'+Math.round((thickIn-governingMin)*10)/10+'" margin':'DEFICIENT '+Math.round((governingMin-thickIn)*10)/10+'" short')+'</div></div>'
+      + '<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:9px;color:#64748b;">yd³/100 SF</div><div style="font-size:20px;font-weight:700;color:#a78bfa;">'+Math.round(yd3per100sf*10)/10+'</div><div style="font-size:9px;color:#64748b;">wall volume ref</div></div>'
+      + '</div>'
+      + '<div style="background:'+(pass?'#14532d':'#7f1d1d')+';border:1px solid '+statusColor+';border-radius:8px;padding:12px;margin-bottom:8px;text-align:center;">'
+      + '<div style="font-size:14px;font-weight:700;color:'+statusColor+';">'+statusLabel+'</div>'
+      + '</div>'
+      + '<div style="background:#1e293b;border-radius:8px;padding:10px;font-size:10px;">'
+      + '<div style="color:#a5b4fc;font-weight:700;margin-bottom:6px;">📋 Design Notes</div>'
+      + notes.map(function(n){return '<div style="color:#94a3b8;padding:2px 0;">• '+n+'</div>';}).join('')
+      + (wind==='high'?'<div style="color:#fbbf24;padding:2px 0;">• El Paso: ASCE 7-22 Risk Cat II — 110 mph basic wind speed, Exposure C typical</div>':'')
+      + (fc>=5000?'<div style="color:#fbbf24;padding:2px 0;">• High f\'c ('+fc+' PSI): Verify mix design, use ASTM C94 Type III or HRWR admixture</div>':'')
+      + '</div>';
+
+    document.getElementById('wt-results').innerHTML = html;
+  };
+
+  window.wtPrint = function(){
+    var wallType = document.getElementById('wtWallType').options[document.getElementById('wtWallType').selectedIndex].text;
+    var h = document.getElementById('wtHeight').value;
+    var t = document.getElementById('wtThick').value;
+    var fc = document.getElementById('wtFc').value;
+    var w = window.open('','_blank'); if(!w) return;
+    w.document.write('<!DOCTYPE html><html><head><title>Wall Thickness Report</title><style>body{font-family:Arial;font-size:10px;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:5px;}</style></head><body>'
+      +'<h2>🏗️ Wall Thickness & h/t Checker</h2><p>Type: '+wallType+' | Height: '+h+"ft | Proposed: "+t+"in | f'c: "+fc+' PSI | Project: '+(window.projectName||'')+'  | Printed: '+new Date().toLocaleDateString()+'</p>'
+      +'<p style="color:#666;">⚠️ Preliminary sizing reference only. All structural wall design requires Licensed Engineer of Record review per ACI 318-19 and applicable building code.</p>'
+      +'<div id="print-wt-placeholder"></div>'
+      +'<p style="font-size:9px;color:#666;margin-top:16px;">ACI 318-19 §11.3 / ACI 551.1R-14 / IBC 2021 §1905.1.8 | CONFIDENTIAL — INTERNAL USE ONLY</p>'
+      +'<button onclick="window.print()" style="background:#4338ca;color:#fff;border:none;padding:8px 16px;cursor:pointer;border-radius:6px;">🖨 Print</button>'
+      +'</body></html>');
+    w.document.close();
+  };
+
+  // ===========================================================
+  // TOOL 2: AGGREGATE SIEVE ANALYSIS
+  // ===========================================================
+  var SIEVE_SPECS = {
+    coarse_1in: {
+      label: 'Coarse #57 — 1" Nom. Max (ASTM C33)',
+      sieves: ['1.5"','1"','3/4"','1/2"','3/8"','No.4','Pan'],
+      minPass: [100,95,25,0,0,0,0],
+      maxPass: [100,100,60,10,10,5,0],
+      note: 'ASTM C33 Size #57. Common for slabs, footings, and general construction.'
+    },
+    coarse_34in: {
+      label: 'Coarse #67 — 3/4" Nom. Max (ASTM C33)',
+      sieves: ['1"','3/4"','1/2"','3/8"','No.4','No.8','Pan'],
+      minPass: [100,90,20,0,0,0,0],
+      maxPass: [100,100,55,15,10,5,0],
+      note: 'ASTM C33 Size #67. Most common for pump mixes and architectural concrete.'
+    },
+    coarse_12in: {
+      label: 'Coarse #7 — 1/2" Nom. Max (ASTM C33)',
+      sieves: ['1/2"','3/8"','No.4','No.8','No.16','Pan'],
+      minPass: [90,40,0,0,0,0],
+      maxPass: [100,70,15,5,0,0],
+      note: 'ASTM C33 Size #7. Used for thin slabs and pump mixes with tight clearances.'
+    },
+    fine: {
+      label: 'Fine Aggregate / Sand (ASTM C33)',
+      sieves: ['3/8"','No.4','No.8','No.16','No.30','No.50','No.100','Pan'],
+      minPass: [100,95,80,50,25,10,2,0],
+      maxPass: [100,100,100,85,60,30,10,0],
+      note: 'ASTM C33 Fine Aggregate. FM = sum(% retained on No.100 through 3/8") / 100. Target FM 2.3–3.1.'
+    }
+  };
+
+  window.svLoad = function(){
+    var type = document.getElementById('svType').value;
+    var spec = SIEVE_SPECS[type];
+    var html = '<div style="font-size:10px;color:#fcd34d;margin-bottom:6px;">'+spec.label+'</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">';
+    spec.sieves.forEach(function(s, i){
+      if(s === 'Pan') return;
+      html += '<div><label style="font-size:9px;color:#94a3b8;display:block;">'+s+' sieve<br><span style="color:#64748b;">(% passing)</span></label>'
+        + '<input id="sv_'+i+'" type="number" min="0" max="100" step="0.1" placeholder="0–100" style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:5px;font-size:11px;box-sizing:border-box;"></div>';
+    });
+    html += '</div>';
+    document.getElementById('sieve-inputs').innerHTML = html;
+    document.getElementById('sieve-results').innerHTML = '';
+  };
+
+  window.svCalc = function(){
+    var type = document.getElementById('svType').value;
+    var spec = SIEVE_SPECS[type];
+    var label = document.getElementById('svLabel').value || 'Sample';
+    var values = [];
+    var allFilled = true;
+    spec.sieves.forEach(function(s, i){
+      if(s === 'Pan'){ values.push(0); return; }
+      var el = document.getElementById('sv_'+i);
+      var v = el ? parseFloat(el.value) : null;
+      if(v === null || isNaN(v)){ allFilled = false; values.push(null); } else { values.push(v); }
+    });
+
+    if(!allFilled){
+      document.getElementById('sieve-results').innerHTML = '<div style="background:#7f1d1d;border-radius:8px;padding:10px;color:#fca5a5;font-size:11px;">⚠️ Enter % passing values for all sieves, then click Check Gradation.</div>';
+      return;
+    }
+
+    var rows = '';
+    var passes = 0;
+    var fails = 0;
+    var fmRetained = 0;
+    var fmSieves = ['No.100','No.50','No.30','No.16','No.8','No.4','3/8"']; // for FM calc
+
+    spec.sieves.forEach(function(s, i){
+      if(s === 'Pan') return;
+      var v = values[i];
+      var min = spec.minPass[i];
+      var max = spec.maxPass[i];
+      var ok = (v >= min && v <= max);
+      if(ok) passes++; else fails++;
+      var statusIcon = ok ? '✅' : '❌';
+      var retained = i === 0 ? (100 - v) : (values[i-1] - v);
+      if(type === 'fine' && fmSieves.indexOf(s) !== -1) fmRetained += retained;
+      rows += '<tr style="background:'+(ok?'transparent':'rgba(239,68,68,0.1)')+';">'
+        + '<td style="color:#f1f5f9;padding:4px;">'+s+'</td>'
+        + '<td style="color:#60a5fa;padding:4px;text-align:right;">'+v+'%</td>'
+        + '<td style="color:#64748b;padding:4px;text-align:center;">'+min+'–'+max+'</td>'
+        + '<td style="color:#22c55e;padding:4px;text-align:right;">'+Math.round(retained*10)/10+'%</td>'
+        + '<td style="padding:4px;text-align:center;">'+statusIcon+'</td>'
+        + '</tr>';
+    });
+
+    var overall = fails === 0;
+    var fm = Math.round(fmRetained / 100 * 100) / 100;
+    var fmNote = type === 'fine' ? ' | Fineness Modulus: <strong style="color:'+(fm>=2.3&&fm<=3.1?'#22c55e':'#f59e0b')+';">'+fm+'</strong> (target 2.3–3.1)' : '';
+    var html = '<div style="background:'+(overall?'#14532d':'#7f1d1d')+';border:1px solid '+(overall?'#22c55e':'#ef4444')+';border-radius:8px;padding:10px;margin-bottom:8px;">'
+      + '<div style="font-size:13px;font-weight:700;color:'+(overall?'#4ade80':'#f87171')+';margin-bottom:4px;">'+(overall?'✅ COMPLIES — ASTM C33':'❌ FAILS ASTM C33 — '+fails+' sieve(s) out of range')+'</div>'
+      + '<div style="font-size:10px;color:#94a3b8;">'+label+' | '+passes+' sieves pass / '+fails+' fail'+fmNote+'</div>'
+      + '</div>'
+      + '<div style="background:#1e293b;border-radius:8px;padding:10px;">'
+      + '<table style="width:100%;border-collapse:collapse;font-size:11px;">'
+      + '<thead><tr><th style="color:#64748b;text-align:left;padding:4px;border-bottom:1px solid #334155;">Sieve</th><th style="color:#64748b;padding:4px;border-bottom:1px solid #334155;text-align:right;">% Passing</th><th style="color:#64748b;padding:4px;border-bottom:1px solid #334155;text-align:center;">ASTM C33 Range</th><th style="color:#64748b;padding:4px;border-bottom:1px solid #334155;text-align:right;">% Retained</th><th style="color:#64748b;padding:4px;border-bottom:1px solid #334155;text-align:center;">Status</th></tr></thead>'
+      + '<tbody>'+rows+'</tbody></table>'
+      + '<div style="font-size:10px;color:#64748b;margin-top:6px;">'+spec.note+'</div>'
+      + '</div>';
+    document.getElementById('sieve-results').innerHTML = html;
+  };
+
+  window.svPrint = function(){
+    var type = document.getElementById('svType').value;
+    var spec = SIEVE_SPECS[type];
+    var label = document.getElementById('svLabel').value || 'Sample';
+    var w = window.open('','_blank'); if(!w) return;
+    var rows = '';
+    spec.sieves.forEach(function(s, i){
+      if(s==='Pan') return;
+      var el = document.getElementById('sv_'+i);
+      var v = el ? el.value : '—';
+      var ok = el && parseFloat(el.value) >= spec.minPass[i] && parseFloat(el.value) <= spec.maxPass[i];
+      rows += '<tr style="background:'+(ok?'white':'#ffeeee')+'"><td>'+s+'</td><td style="text-align:right;">'+v+'%</td><td style="text-align:center;">'+spec.minPass[i]+'–'+spec.maxPass[i]+'</td><td style="text-align:center;">'+(ok?'PASS':'FAIL')+'</td></tr>';
+    });
+    w.document.write('<!DOCTYPE html><html><head><title>Sieve Analysis</title><style>body{font-family:Arial;font-size:10px;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:5px;}</style></head><body>'
+      +'<h2>🪨 Aggregate Gradation Report — ASTM C33</h2><p>Aggregate: '+spec.label+'  | Sample: '+label+'  | Printed: '+new Date().toLocaleDateString()+'</p>'
+      +'<table><thead><tr><th>Sieve Size</th><th style="text-align:right;">% Passing</th><th style="text-align:center;">ASTM C33 Limits</th><th style="text-align:center;">Result</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      +'<p style="font-size:9px;color:#666;margin-top:12px;">ASTM C33 / ASTM C136 | Project: '+(window.projectName||'')+'</p>'
+      +'<button onclick="window.print()" style="background:#92400e;color:#fff;border:none;padding:8px 16px;cursor:pointer;border-radius:6px;">🖨 Print</button>'
+      +'</body></html>');
+    w.document.close();
+  };
+
+  // ===========================================================
+  // TOOL 3: AIR ENTRAINMENT SPEC GUIDE
+  // ===========================================================
+  var AIR_TABLE = {
+    'F0': { required: false, label: 'Not Required', note: 'No freezing exposure — air entrainment not required for freeze-thaw protection.' },
+    'F1': {
+      required: true,
+      label: 'Required — Moderate Freeze-Thaw',
+      targets: { '3/8': [6,1.5], '1/2': [5.5,1.5], '3/4': [5,1.5], '1': [4.5,1.5], '1.5': [4.5,1.5] },
+      note: 'ACI 318-19 Table 19.3.3.1 — moderate exposure (occasional freeze-thaw, not saturated).'
+    },
+    'F2': {
+      required: true,
+      label: 'Required — Severe Freeze-Thaw',
+      targets: { '3/8': [7.5,1.5], '1/2': [7,1.5], '3/4': [6,1.5], '1': [6,1.5], '1.5': [5.5,1.5] },
+      note: 'ACI 318-19 Table 19.3.3.1 — severe exposure (repeated freezing while saturated). Use AEA per ASTM C260.'
+    },
+    'S0': { required: false, label: 'Not Required (Sulfate)', note: 'No sulfate exposure — no special w/cm or air required for sulfate protection.' },
+    'S1': { required: false, label: 'Not Required — Low Sulfate', note: 'Moderate sulfate: control w/cm ≤ 0.50, Type II cement. No mandatory air entrainment.' },
+    'S2': { required: false, label: 'Not Required — High w/cm Control', note: 'Severe sulfate: w/cm ≤ 0.45, ASTM C150 Type V or Type IS/IP. No mandatory air for sulfate.' },
+    'S3': { required: false, label: 'Not Required — Severe Sulfate', note: 'Very severe: w/cm ≤ 0.40, Type V. No mandatory air entrainment per ACI 318 §19.3.3 for sulfate.' },
+    'W0': { required: false, label: 'Not Required', note: 'Dry or protected exposure — no air entrainment required.' },
+    'W1': { required: false, label: 'Not Required', note: 'Moderate moisture: control w/cm. No mandatory air.' },
+    'W2': { required: false, label: 'Consider Protective', note: 'Exposed to moisture + external source: may spec 3-4% air as protective measure.' },
+    'C0': { required: false, label: 'Not Required', note: 'No chloride exposure.' },
+    'C1': { required: false, label: 'Not Required (control w/cm)', note: 'Chloride: control w/cm ≤ 0.40. No mandatory air for chloride protection.' },
+    'C2': { required: false, label: 'Not Required (low w/cm)', note: 'Severe chloride: w/cm ≤ 0.40, maximum w/cm 0.35 preferred. No mandatory air.' }
+  };
+
+  window.airCalc = function(){
+    var exposure = document.getElementById('airExposure').value;
+    var aggSize = document.getElementById('airAggSize').value;
+    var fc = parseInt(document.getElementById('airFc').value)||4000;
+    var location = document.getElementById('airLocation').value;
+    var measured = parseFloat(document.getElementById('airMeasured').value);
+    var element = document.getElementById('airElement').value;
+    var spec = AIR_TABLE[exposure];
+
+    // Location override for El Paso
+    var locationNote = '';
+    if(location === 'elpaso'){
+      locationNote = '⚡ El Paso context: F-exposure class is typically F0–F1. Most jobs spec non-air-entrained or 3% protective. Winters mild (lows avg 30–40°F Jan), rare hard freeze. Confirm with project EOR.';
+    } else if(location === 'north'){
+      locationNote = '⚡ N. Texas / Amarillo: F1–F2 applies for exterior flatwork exposed to deicing salts.';
+    } else if(location === 'colorado'){
+      locationNote = '⚡ Colorado / High Altitude: F2 standard. AEA mandatory for exterior slabs.';
+    } else if(location === 'coastal'){
+      locationNote = '⚡ Coastal: C1/C2 chloride exposure dominant. Low w/cm and supplementary cementitious more important than air.';
+    }
+
+    // Strength reduction warning
+    var strengthNote = '';
+    if(spec.required && fc >= 5000){
+      strengthNote = '⚠️ High Strength Warning: Each 1% air entrainment reduces compressive strength ~5%. At '+fc+' PSI, air entrainment may compromise strength target — confirm with EOR. Consider proportioning to higher f\'cr.';
+    }
+
+    // Get target air
+    var targetAir = null, tolerance = null;
+    if(spec.required && spec.targets){
+      var t = spec.targets[aggSize] || spec.targets['3/4'];
+      targetAir = t[0]; tolerance = t[1];
+    }
+
+    // Field test check
+    var fieldCheck = '';
+    if(!isNaN(measured) && targetAir !== null){
+      var inRange = measured >= (targetAir - tolerance) && measured <= (targetAir + tolerance);
+      var fieldColor = inRange ? '#22c55e' : '#ef4444';
+      fieldCheck = '<div style="background:'+(inRange?'#14532d':'#7f1d1d')+';border:1px solid '+fieldColor+';border-radius:8px;padding:10px;margin-top:8px;">'
+        + '<div style="font-size:12px;font-weight:700;color:'+fieldColor+';">'+(inRange?'✅ FIELD AIR IN SPEC':'❌ FIELD AIR OUT OF SPEC')+'</div>'
+        + '<div style="font-size:10px;color:#94a3b8;margin-top:4px;">Measured: '+measured+'% | Target: '+targetAir+'±'+tolerance+'% | Range: '+(targetAir-tolerance)+'–'+(targetAir+tolerance)+'%</div>'
+        + '</div>';
+    }
+
+    var specColor = spec.required ? '#f59e0b' : '#22c55e';
+    var html = '<div style="background:'+(spec.required?'#3b2000':'#14532d')+';border:1px solid '+specColor+';border-radius:8px;padding:12px;margin-bottom:8px;">'
+      + '<div style="font-size:13px;font-weight:700;color:'+specColor+';">'+(spec.required?'⚠️ AIR ENTRAINMENT REQUIRED':'✅ '+spec.label)+'</div>'
+      + (targetAir !== null ? '<div style="font-size:14px;font-weight:700;color:#f1f5f9;margin-top:4px;">Target: '+targetAir+'% ± '+tolerance+'% (Range: '+(targetAir-tolerance)+'–'+(targetAir+tolerance)+'%)</div>' : '')
+      + '<div style="font-size:10px;color:#94a3b8;margin-top:4px;">'+spec.note+'</div>'
+      + '</div>'
+      + (targetAir !== null ? '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">'
+        + '<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:9px;color:#64748b;">Target Air %</div><div style="font-size:20px;font-weight:700;color:#f59e0b;">'+targetAir+'%</div></div>'
+        + '<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:9px;color:#64748b;">Tolerance</div><div style="font-size:20px;font-weight:700;color:#60a5fa;">±'+tolerance+'%</div></div>'
+        + '<div style="background:#1e293b;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:9px;color:#64748b;">Acceptable Range</div><div style="font-size:16px;font-weight:700;color:#22c55e;">'+(targetAir-tolerance)+'–'+(targetAir+tolerance)+'%</div></div>'
+        + '</div>' : '')
+      + fieldCheck
+      + (locationNote ? '<div style="background:#1e293b;border-radius:8px;padding:10px;font-size:10px;color:#fcd34d;margin-top:8px;">'+locationNote+'</div>' : '')
+      + (strengthNote ? '<div style="background:#431407;border-radius:8px;padding:10px;font-size:10px;color:#fdba74;margin-top:8px;">'+strengthNote+'</div>' : '')
+      + '<div style="background:#1e293b;border-radius:8px;padding:10px;font-size:10px;margin-top:8px;">'
+      + '<div style="color:#4ade80;font-weight:700;margin-bottom:4px;">📋 Testing Notes</div>'
+      + '<div style="color:#94a3b8;">• Test per ASTM C231 (pressure method) for normal-weight concrete</div>'
+      + '<div style="color:#94a3b8;">• ASTM C173 (volumetric method) for lightweight or slag mixes</div>'
+      + '<div style="color:#94a3b8;">• Sample per ASTM C172 (composite sample from middle of load)</div>'
+      + '<div style="color:#94a3b8;">• Test every 150 yd³ or each pour day per ACI 301-16</div>'
+      + (element==='elevated' ? '<div style="color:#fbbf24;">• Elevated slab: air loss of 1–2% during placement — consider ordering at top of range</div>' : '')
+      + '</div>';
+
+    document.getElementById('air-results').innerHTML = html;
+  };
+
+  window.airPrint = function(){
+    var exposure = document.getElementById('airExposure').options[document.getElementById('airExposure').selectedIndex].text;
+    var aggSize = document.getElementById('airAggSize').value;
+    var fc = document.getElementById('airFc').value;
+    var location = document.getElementById('airLocation').options[document.getElementById('airLocation').selectedIndex].text;
+    var w = window.open('','_blank'); if(!w) return;
+    w.document.write('<!DOCTYPE html><html><head><title>Air Entrainment Spec</title><style>body{font-family:Arial;font-size:10px;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:5px;}</style></head><body>'
+      +'<h2>💨 Air Entrainment Specification Sheet</h2>'
+      +'<p>Exposure: '+exposure+' | Agg Max Size: '+aggSize+'" | f\'c: '+fc+' PSI | Location: '+location+'</p>'
+      +'<p>Project: '+(window.projectName||'')+'  |  Printed: '+new Date().toLocaleDateString()+'</p>'
+      +'<table><thead><tr><th>Agg Size</th><th>F1 Target</th><th>F2 Target</th><th>Tolerance</th><th>Test Method</th></tr></thead>'
+      +'<tbody><tr><td>3/8"</td><td>6%</td><td>7.5%</td><td>±1.5%</td><td>ASTM C231</td></tr>'
+      +'<tr><td>1/2"</td><td>5.5%</td><td>7%</td><td>±1.5%</td><td>ASTM C231</td></tr>'
+      +'<tr><td>3/4"</td><td>5%</td><td>6%</td><td>±1.5%</td><td>ASTM C231</td></tr>'
+      +'<tr><td>1"</td><td>4.5%</td><td>6%</td><td>±1.5%</td><td>ASTM C231</td></tr>'
+      +'<tr><td>1.5"</td><td>4.5%</td><td>5.5%</td><td>±1.5%</td><td>ASTM C231</td></tr></tbody></table>'
+      +'<p style="font-size:9px;color:#666;margin-top:16px;">ACI 318-19 Table 19.3.3 / ACI 301-16 / ASTM C231 / ASTM C260 (AEA) | CONFIDENTIAL</p>'
+      +'<button onclick="window.print()" style="background:#14532d;color:#fff;border:none;padding:8px 16px;cursor:pointer;border-radius:6px;">🖨 Print</button>'
+      +'</body></html>');
+    w.document.close();
+  };
+
+  // ===========================================================
+  // KEYBOARD SHORTCUTS
+  // ===========================================================
+  document.addEventListener('keydown', function(e){
+    if(e.ctrlKey && e.altKey && !e.shiftKey){
+      if(e.key === '4'){
+        e.preventDefault();
+        var el = document.getElementById('s154-wallthk');
+        el.style.display = el.style.display === 'flex' ? 'none' : 'flex';
+        if(el.style.display === 'flex') wtCalc();
+      }
+      if(e.key === '5'){
+        e.preventDefault();
+        var el = document.getElementById('s154-sieve');
+        el.style.display = el.style.display === 'flex' ? 'none' : 'flex';
+        if(el.style.display === 'flex') svLoad();
+      }
+      if(e.key === '6'){
+        e.preventDefault();
+        var el = document.getElementById('s154-air');
+        el.style.display = el.style.display === 'flex' ? 'none' : 'flex';
+        if(el.style.display === 'flex') airCalc();
+      }
+    }
+  });
+
+  // Backdrop click to close
+  document.getElementById('s154-wallthk').addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
+  document.getElementById('s154-sieve').addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
+  document.getElementById('s154-air').addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
+
+  // ===========================================================
+  // SIDEBAR BUTTONS
+  // ===========================================================
+  document.addEventListener('DOMContentLoaded', function(){
+    var sb = document.querySelector('.sidebar-actions') || document.getElementById('sidebarActions');
+    if(!sb) return;
+    var div = document.createElement('div');
+    div.style.cssText = 'margin-top:6px;display:grid;gap:4px;';
+    div.innerHTML =
+      '<button onclick="var el=document.getElementById(\'s154-wallthk\');el.style.display=el.style.display===\'flex\'?\'none\':\'flex\';if(el.style.display===\'flex\')wtCalc();" style="background:#1e1b4b;border:1px solid #6366f1;color:#a5b4fc;border-radius:6px;padding:7px;cursor:pointer;font-size:10px;text-align:left;">🏗️ Wall Thickness & h/t Checker</button>'
+      +'<button onclick="var el=document.getElementById(\'s154-sieve\');el.style.display=el.style.display===\'flex\'?\'none\':\'flex\';if(el.style.display===\'flex\')svLoad();" style="background:#3b2000;border:1px solid #f59e0b;color:#fde68a;border-radius:6px;padding:7px;cursor:pointer;font-size:10px;text-align:left;">🪨 Aggregate Gradation Checker</button>'
+      +'<button onclick="var el=document.getElementById(\'s154-air\');el.style.display=el.style.display===\'flex\'?\'none\':\'flex\';if(el.style.display===\'flex\')airCalc();" style="background:#052e16;border:1px solid #22c55e;color:#86efac;border-radius:6px;padding:7px;cursor:pointer;font-size:10px;text-align:left;">💨 Air Entrainment Spec Guide</button>';
+    sb.appendChild(div);
+  });
+
+})();
+</script>
+<!-- END SESSION #154 -->
