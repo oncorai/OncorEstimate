@@ -194832,3 +194832,609 @@ setTimeout(function(){bpcInject();hwapInject();matInject();},1500);
 
 })();
 // ==================== END SESSION #139 — Zeus ⚡ Batch Plant Card (Ctrl+Shift+7) + Hot Weather Plan (Ctrl+Shift+8) + Maturity Estimator (Ctrl+Shift+9) ====================
+
+// ==================== SESSION #140 — Zeus ⚡ Joint Sealant Calculator (Ctrl+Alt+F1) + Cylinder Set Planner (Ctrl+Alt+F2) + Field Change Quick Log (Ctrl+Alt+F3) ====================
+(function(){
+'use strict';
+
+// ===== CTRL+ALT+F1: JOINT SEALANT CALCULATOR =====
+function jscInject(){
+  var btn=document.createElement('button');
+  btn.textContent='🔧 Joint Sealant Calc';
+  btn.title='Ctrl+Alt+F1 — Joint Sealant Calculator (ACI 504R / ASTM C920)';
+  btn.style.cssText='display:block;width:100%;margin:4px 0;padding:8px 10px;background:#374151;color:#f1f5f9;border:1px solid #4b5563;border-radius:6px;cursor:pointer;text-align:left;font-size:12px;';
+  btn.addEventListener('click',function(){
+    var m=document.getElementById('jsc-modal');
+    if(m){m.remove();return;}
+    buildJsc();
+  });
+  var sb=document.querySelector('.sidebar-actions')||document.querySelector('#sidebar')||document.body;
+  sb.appendChild(btn);
+  document.addEventListener('keydown',function(e){
+    if(e.ctrlKey&&e.altKey&&(e.key==='F1'||e.code==='F1')){
+      e.preventDefault();
+      var m=document.getElementById('jsc-modal');
+      if(m){m.remove();}else{buildJsc();}
+    }
+  });
+}
+
+function buildJsc(){
+  var m=document.createElement('div');m.id='jsc-modal';
+  m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  m.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;width:820px;max-width:97vw;max-height:92vh;overflow-y:auto;padding:22px;">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
+    +'<div style="font-size:18px;font-weight:700;color:#f97316;">🔧 Joint Sealant Calculator</div>'
+    +'<button onclick="document.getElementById(\'jsc-modal\').remove();" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:18px;">✕</button></div>'
+    +'<div style="color:#94a3b8;font-size:12px;margin-bottom:14px;">ACI 504R / ASTM C920 — Calculate sealant quantities for concrete control joints, expansion joints, and construction joints.</div>'
+    +'<div id="jsc-content"></div></div>';
+  document.body.appendChild(m);
+  m.addEventListener('click',function(e){if(e.target===m)m.remove();});
+  jscRender();
+}
+
+var JSC_SEALANT_TYPES=[
+  {id:'s1',name:'Polyurethane (Self-Leveling)',astm:'ASTM C920 Type S',useFor:'H/L traffic slabs,flatwork',factor:1.0,priceGal:28},
+  {id:'s2',name:'Polyurethane (Non-Sag)',astm:'ASTM C920 Type NS',useFor:'Vertical joints, walls',factor:1.0,priceGal:30},
+  {id:'s3',name:'Silicone',astm:'ASTM C920 Type S',useFor:'Expansion joints, exterior',factor:1.0,priceGal:45},
+  {id:'s4',name:'Epoxy (Rigid)',astm:'ASTM C881',useFor:'Load transfer, industrial',factor:1.0,priceGal:55},
+  {id:'s5',name:'Hot Pour Rubberized Asphalt',astm:'ASTM D6690',useFor:'Exterior pavement joints',factor:1.0,priceGal:18},
+  {id:'s6',name:'Backer Rod (Polyethylene)',astm:'ASTM C1330',useFor:'Backup material for wide joints',factor:0,priceLf:0.08}
+];
+
+function jscLoad(){
+  try{return JSON.parse(localStorage.getItem('oncor_jsc_v1'))||{items:[],sealantType:'s1',backer:true};}catch(e){return {items:[],sealantType:'s1',backer:true};}
+}
+function jscSave(d){localStorage.setItem('oncor_jsc_v1',JSON.stringify(d));}
+
+window.jscAddItem=function(){
+  var d=jscLoad();
+  var type=document.getElementById('jsc-jtype').value||'Control';
+  var lf=parseFloat(document.getElementById('jsc-lf').value)||0;
+  var width=parseFloat(document.getElementById('jsc-width').value)||0.375;
+  var depth=parseFloat(document.getElementById('jsc-depth').value)||0.25;
+  var label=document.getElementById('jsc-label').value||type+' Joint';
+  if(lf<=0){alert('Enter joint length (LF)');return;}
+  if(width<=0){alert('Enter joint width (inches)');return;}
+  d.items=d.items||[];
+  d.items.push({type:type,lf:lf,width:width,depth:depth,label:label});
+  jscSave(d);
+  document.getElementById('jsc-lf').value='';
+  document.getElementById('jsc-label').value='';
+  jscRender();
+};
+
+window.jscDeleteItem=function(i){
+  var d=jscLoad();d.items.splice(i,1);jscSave(d);jscRender();
+};
+
+window.jscChangeSealant=function(v){
+  var d=jscLoad();d.sealantType=v;jscSave(d);jscRender();
+};
+window.jscToggleBacker=function(v){
+  var d=jscLoad();d.backer=v;jscSave(d);jscRender();
+};
+
+function jscCalcItem(item,stype){
+  // Volume in cubic inches = LF * 12 * width(in) * depth(in)
+  var volCuIn=item.lf*12*item.width*item.depth;
+  var volGal=volCuIn/231; // 231 cu in per gallon
+  var st=JSC_SEALANT_TYPES.find(function(x){return x.id===stype;})||JSC_SEALANT_TYPES[0];
+  var cost=volGal*st.priceGal;
+  return {volCuIn:volCuIn,volGal:volGal,cost:cost};
+}
+
+function jscRender(){
+  var el=document.getElementById('jsc-content');if(!el)return;
+  var d=jscLoad();
+  var st=JSC_SEALANT_TYPES.find(function(x){return x.id===d.sealantType;})||JSC_SEALANT_TYPES[0];
+  var totalLf=0,totalGal=0,totalCost=0;
+  (d.items||[]).forEach(function(it){
+    var c=jscCalcItem(it,d.sealantType);
+    totalLf+=it.lf;totalGal+=c.volGal;totalCost+=c.cost;
+  });
+  var backerCost=d.backer?(totalLf*0.08):0;
+  var grandCost=totalCost+backerCost;
+
+  var sealOpts=JSC_SEALANT_TYPES.filter(function(x){return x.id!=='s6'}).map(function(s){
+    return '<option value="'+s.id+'"'+(d.sealantType===s.id?' selected':'')+'>'+s.name+' ('+s.astm+')</option>';
+  }).join('');
+
+  var html='';
+  // KPI
+  html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">'
+    +'<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#f97316;">'+totalLf.toFixed(0)+'</div><div style="color:#94a3b8;font-size:11px;">Total LF</div></div>'
+    +'<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#60a5fa;">'+totalGal.toFixed(2)+'</div><div style="color:#94a3b8;font-size:11px;">Sealant Gallons</div></div>'
+    +'<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#a78bfa;">'+Math.ceil(totalGal/5)+'</div><div style="color:#94a3b8;font-size:11px;">5-Gal Pails</div></div>'
+    +'<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#22c55e;">$'+(grandCost).toFixed(0)+'</div><div style="color:#94a3b8;font-size:11px;">Material Cost</div></div>'
+    +'</div>';
+
+  // Sealant selector
+  html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:12px;">'
+    +'<div style="font-weight:600;color:#f1f5f9;margin-bottom:10px;">Sealant Type</div>'
+    +'<select onchange="jscChangeSealant(this.value)" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px;width:100%;margin-bottom:8px;">'+sealOpts+'</select>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px;">'
+    +'<div style="color:#94a3b8;">Use: <span style="color:#f1f5f9;">'+st.useFor+'</span></div>'
+    +'<div style="color:#94a3b8;">ASTM: <span style="color:#60a5fa;">'+st.astm+'</span></div>'
+    +'<div style="color:#94a3b8;">Price: <span style="color:#22c55e;">$'+st.priceGal+'/gal (El Paso 2025)</span></div>'
+    +'</div>'
+    +'<div style="margin-top:8px;font-size:12px;">'
+    +'<label style="color:#f1f5f9;cursor:pointer;"><input type="checkbox" '+(d.backer?'checked':'')+' onchange="jscToggleBacker(this.checked)" style="margin-right:6px;">Include Backer Rod (Polyethylene, $0.08/LF — ASTM C1330)</label>'
+    +'</div></div>';
+
+  // Add form
+  html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:12px;">'
+    +'<div style="font-weight:600;color:#f1f5f9;margin-bottom:10px;">Add Joint Segment</div>'
+    +'<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;margin-bottom:8px;">'
+    +'<div><div style="color:#94a3b8;font-size:11px;margin-bottom:4px;">Label</div><input id="jsc-label" placeholder="e.g. Building A Control Joints" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px;width:100%;font-size:12px;"></div>'
+    +'<div><div style="color:#94a3b8;font-size:11px;margin-bottom:4px;">Type</div><select id="jsc-jtype" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px;width:100%;font-size:12px;"><option>Control</option><option>Expansion</option><option>Construction</option><option>Isolation</option><option>Saw Cut</option></select></div>'
+    +'<div><div style="color:#94a3b8;font-size:11px;margin-bottom:4px;">Length (LF)</div><input id="jsc-lf" type="number" min="0" placeholder="0" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px;width:100%;font-size:12px;"></div>'
+    +'<div><div style="color:#94a3b8;font-size:11px;margin-bottom:4px;">Width (in)</div><input id="jsc-width" type="number" min="0.125" step="0.125" value="0.375" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px;width:100%;font-size:12px;"></div>'
+    +'<div><div style="color:#94a3b8;font-size:11px;margin-bottom:4px;">Depth (in)</div><input id="jsc-depth" type="number" min="0.125" step="0.125" value="0.25" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px;width:100%;font-size:12px;"></div>'
+    +'</div>'
+    +'<button onclick="jscAddItem()" style="background:#ea580c;color:#fff;border:none;border-radius:6px;padding:7px 18px;cursor:pointer;font-size:12px;">+ Add Joint</button>'
+    +'<span style="color:#64748b;font-size:11px;margin-left:10px;">Depth/Width ratio should be 1:2 per ACI 504R</span></div>';
+
+  // Items list
+  if(d.items&&d.items.length){
+    html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:12px;">'
+      +'<div style="font-weight:600;color:#f1f5f9;margin-bottom:10px;">Joint Segments</div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+      +'<tr style="color:#64748b;border-bottom:1px solid #334155;"><td style="padding:6px;">Label</td><td style="padding:6px;">Type</td><td style="padding:6px;">LF</td><td style="padding:6px;">W×D (in)</td><td style="padding:6px;">Gallons</td><td style="padding:6px;">Cost</td><td style="padding:6px;"></td></tr>';
+    d.items.forEach(function(it,i){
+      var c=jscCalcItem(it,d.sealantType);
+      html+='<tr style="border-bottom:1px solid #1e293b;color:#f1f5f9;">'
+        +'<td style="padding:6px;">'+it.label+'</td>'
+        +'<td style="padding:6px;"><span style="background:#1e3a5f;color:#93c5fd;border-radius:4px;padding:2px 6px;">'+it.type+'</span></td>'
+        +'<td style="padding:6px;">'+it.lf+'</td>'
+        +'<td style="padding:6px;">'+it.width+'" × '+it.depth+'"</td>'
+        +'<td style="padding:6px;color:#60a5fa;">'+c.volGal.toFixed(3)+'</td>'
+        +'<td style="padding:6px;color:#22c55e;">$'+c.cost.toFixed(2)+'</td>'
+        +'<td style="padding:6px;"><button onclick="jscDeleteItem('+i+')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;">🗑</button></td></tr>';
+    });
+    html+='<tr style="border-top:1px solid #334155;font-weight:700;color:#f1f5f9;">'
+      +'<td colspan="2" style="padding:6px;">TOTALS</td>'
+      +'<td style="padding:6px;">'+totalLf.toFixed(0)+' LF</td>'
+      +'<td></td>'
+      +'<td style="padding:6px;color:#60a5fa;">'+totalGal.toFixed(3)+' gal</td>'
+      +'<td style="padding:6px;color:#22c55e;">$'+totalCost.toFixed(2)+'</td><td></td></tr>';
+    if(d.backer){
+      html+='<tr style="color:#94a3b8;font-size:11px;">'
+        +'<td colspan="4" style="padding:4px;">+ Backer Rod ('+totalLf.toFixed(0)+' LF × $0.08)</td>'
+        +'<td></td><td style="padding:4px;color:#94a3b8;">$'+backerCost.toFixed(2)+'</td><td></td></tr>';
+    }
+    html+='</table></div>';
+    // Grand total
+    html+='<div style="background:#164e63;border:1px solid #0891b2;border-radius:8px;padding:14px;margin-bottom:12px;text-align:center;">'
+      +'<div style="font-size:13px;color:#94a3b8;margin-bottom:4px;">ESTIMATED MATERIAL COST</div>'
+      +'<div style="font-size:28px;font-weight:700;color:#22c55e;">$'+grandCost.toFixed(2)+'</div>'
+      +'<div style="font-size:11px;color:#94a3b8;margin-top:4px;">'+totalLf.toFixed(0)+' LF — '+totalGal.toFixed(2)+' gal sealant — '+Math.ceil(totalGal/5)+' pails (5-gal) — El Paso 2025 material pricing</div>'
+      +'</div>';
+  }
+
+  // Print + ref
+  html+='<div style="display:flex;gap:8px;margin-bottom:12px;">'
+    +'<button onclick="jscPrint()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;">🖨 Print Sealant Schedule</button></div>';
+  html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px;">'
+    +'<div style="font-weight:600;color:#f1f5f9;margin-bottom:8px;font-size:12px;">📚 ACI 504R Joint Sealant Reference</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;color:#94a3b8;">'
+    +'<div><strong style="color:#f1f5f9;">Depth/Width Rule:</strong> d:w ratio = 1:2 max (e.g., 3/8" wide → 3/16" deep); prevents adhesion failure</div>'
+    +'<div><strong style="color:#f1f5f9;">Minimum Width:</strong> 1/4" for control joints; 1/2" for expansion joints; 3/4" for thermal joints</div>'
+    +'<div><strong style="color:#f1f5f9;">Backer Rod:</strong> Always use with joints &gt;3/8" wide; compress 25-50% on installation</div>'
+    +'<div><strong style="color:#f1f5f9;">El Paso Notes:</strong> Extreme thermal range +90°F to +20°F — use 50-100% movement capability sealant; polyurethane preferred for flatwork</div>'
+    +'</div></div>';
+  el.innerHTML=html;
+}
+
+window.jscPrint=function(){
+  var d=jscLoad();
+  var st=JSC_SEALANT_TYPES.find(function(x){return x.id===d.sealantType;})||JSC_SEALANT_TYPES[0];
+  var totalLf=0,totalGal=0,totalCost=0;
+  var rows='';
+  (d.items||[]).forEach(function(it){
+    var c=jscCalcItem(it,d.sealantType);
+    totalLf+=it.lf;totalGal+=c.volGal;totalCost+=c.cost;
+    rows+='<tr><td>'+it.label+'</td><td>'+it.type+'</td><td>'+it.lf+'</td><td>'+it.width+'" × '+it.depth+'"</td><td>'+c.volGal.toFixed(3)+'</td><td>$'+c.cost.toFixed(2)+'</td></tr>';
+  });
+  var backerCost=d.backer?(totalLf*0.08):0;
+  var grandCost=totalCost+backerCost;
+  var w2=window.open('','_blank','width=700,height=600');
+  w2.document.write('<html><head><title>Joint Sealant Schedule</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}table{width:100%;border-collapse:collapse;}td,th{border:1px solid #ccc;padding:5px;}th{background:#ea580c;color:#fff;}tfoot td{font-weight:bold;background:#fff3e0;}</style></head><body>');
+  w2.document.write('<div style="font-size:16px;font-weight:bold;color:#ea580c;">🔧 JOINT SEALANT SCHEDULE</div>');
+  w2.document.write('<div>Sealant: <strong>'+st.name+'</strong> ('+st.astm+') — $'+st.priceGal+'/gal</div>');
+  w2.document.write('<table><thead><tr><th>Label</th><th>Type</th><th>LF</th><th>W × D</th><th>Gallons</th><th>Cost</th></tr></thead><tbody>'+rows+'</tbody>');
+  w2.document.write('<tfoot><tr><td colspan="2">TOTALS</td><td>'+totalLf.toFixed(0)+' LF</td><td></td><td>'+totalGal.toFixed(3)+' gal</td><td>$'+totalCost.toFixed(2)+'</td></tr>');
+  if(d.backer)w2.document.write('<tr><td colspan="5">+ Backer Rod</td><td>$'+backerCost.toFixed(2)+'</td></tr>');
+  w2.document.write('<tr><td colspan="5">GRAND TOTAL (Material)</td><td>$'+grandCost.toFixed(2)+'</td></tr></tfoot></table>');
+  w2.document.write('<p style="font-size:10px;color:#666;margin-top:8px;">ACI 504R / ASTM C920 / ASTM C1330 — El Paso 2025 material pricing</p>');
+  w2.document.write('<button onclick="window.print()" style="padding:8px 16px;background:#ea580c;color:#fff;border:none;border-radius:4px;cursor:pointer;">Print</button></body></html>');
+  w2.document.close();
+};
+
+// ===== CTRL+ALT+F2: CYLINDER SET PLANNER =====
+function cspInject(){
+  var btn=document.createElement('button');
+  btn.textContent='🧫 Cylinder Set Planner';
+  btn.title='Ctrl+Alt+F2 — Pre-Pour Cylinder Set Planner (ACI 318-19 §26.12)';
+  btn.style.cssText='display:block;width:100%;margin:4px 0;padding:8px 10px;background:#374151;color:#f1f5f9;border:1px solid #4b5563;border-radius:6px;cursor:pointer;text-align:left;font-size:12px;';
+  btn.addEventListener('click',function(){
+    var m=document.getElementById('csp-modal');
+    if(m){m.remove();return;}
+    buildCsp();
+  });
+  var sb=document.querySelector('.sidebar-actions')||document.querySelector('#sidebar')||document.body;
+  sb.appendChild(btn);
+  document.addEventListener('keydown',function(e){
+    if(e.ctrlKey&&e.altKey&&(e.key==='F2'||e.code==='F2')){
+      e.preventDefault();
+      var m=document.getElementById('csp-modal');
+      if(m){m.remove();}else{buildCsp();}
+    }
+  });
+}
+
+function buildCsp(){
+  var m=document.createElement('div');m.id='csp-modal';
+  m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  m.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;width:820px;max-width:97vw;max-height:92vh;overflow-y:auto;padding:22px;">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
+    +'<div style="font-size:18px;font-weight:700;color:#a78bfa;">🧫 Cylinder Set Planner</div>'
+    +'<button onclick="document.getElementById(\'csp-modal\').remove();" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:18px;">✕</button></div>'
+    +'<div style="color:#94a3b8;font-size:12px;margin-bottom:14px;">ACI 318-19 §26.12 — Plan cylinder sets before a pour. Calculates required sets, break schedule, and cylinder count per ACI minimum sampling requirements.</div>'
+    +'<div id="csp-content"></div></div>';
+  document.body.appendChild(m);
+  m.addEventListener('click',function(e){if(e.target===m)m.remove();});
+  cspRender();
+}
+
+function cspRender(){
+  var el=document.getElementById('csp-content');if(!el)return;
+  var pourYds=parseFloat(document.getElementById('csp-yds')?document.getElementById('csp-yds').value:0)||0;
+  var slabSf=parseFloat(document.getElementById('csp-sf')?document.getElementById('csp-sf').value:0)||0;
+  var fc=parseInt(document.getElementById('csp-fc')?document.getElementById('csp-fc').value:4000)||4000;
+  var pourDate=document.getElementById('csp-date')?document.getElementById('csp-date').value:'';
+  var cyls=parseInt(document.getElementById('csp-cyls')?document.getElementById('csp-cyls').value:4)||4;
+  var breakSched=document.getElementById('csp-sched')?document.getElementById('csp-sched').value:'7+28';
+
+  // ACI 318 §26.12 minimums
+  var setsByYd=pourYds>0?Math.max(1,Math.ceil(pourYds/150)):0;
+  var setsBySf=slabSf>0?Math.max(1,Math.ceil(slabSf/5000)):0;
+  var minSets=Math.max(setsByYd,setsBySf,pourYds>0||slabSf>0?1:0);
+  var totalCyls=minSets*cyls;
+
+  var breakDays=[];
+  if(breakSched==='7+28')breakDays=[7,28];
+  else if(breakSched==='7+14+28')breakDays=[7,14,28];
+  else if(breakSched==='3+7+28')breakDays=[3,7,28];
+  else if(breakSched==='1+7+28')breakDays=[1,7,28];
+  else if(breakSched==='28only')breakDays=[28];
+  else if(breakSched==='7+28+56')breakDays=[7,28,56];
+  var cylsPerSet=Math.ceil(totalCyls/Math.max(minSets,1));
+
+  var html='';
+  // Inputs
+  html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:12px;">'
+    +'<div style="font-weight:600;color:#f1f5f9;margin-bottom:10px;">Pour Information</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px;">'
+    +'<div><div style="color:#94a3b8;font-size:11px;margin-bottom:4px;">Total yd³</div><input id="csp-yds" type="number" min="0" value="'+(pourYds||'')+'" onchange="cspRender()" placeholder="0" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px;width:100%;font-size:13px;"></div>'
+    +'<div><div style="color:#94a3b8;font-size:11px;margin-bottom:4px;">Slab Area (SF)</div><input id="csp-sf" type="number" min="0" value="'+(slabSf||'')+'" onchange="cspRender()" placeholder="0" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px;width:100%;font-size:13px;"></div>'
+    +'<div><div style="color:#94a3b8;font-size:11px;margin-bottom:4px;">Design f\'c (PSI)</div><select id="csp-fc" onchange="cspRender()" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px;width:100%;font-size:12px;"><option'+(fc===2500?' selected':'')+'  value="2500">2500</option><option'+(fc===3000?' selected':'')+' value="3000">3000</option><option'+(fc===3500?' selected':'')+' value="3500">3500</option><option'+(fc===4000?' selected':'')+' value="4000">4000</option><option'+(fc===4500?' selected':'')+' value="4500">4500</option><option'+(fc===5000?' selected':'')+' value="5000">5000</option><option'+(fc===6000?' selected':'')+' value="6000">6000</option></select></div>'
+    +'<div><div style="color:#94a3b8;font-size:11px;margin-bottom:4px;">Pour Date</div><input id="csp-date" type="date" value="'+pourDate+'" onchange="cspRender()" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px;width:100%;font-size:12px;"></div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+    +'<div><div style="color:#94a3b8;font-size:11px;margin-bottom:4px;">Cylinders per Set</div><select id="csp-cyls" onchange="cspRender()" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px;width:100%;font-size:12px;"><option'+(cyls===3?' selected':'')+' value="3">3 cylinders</option><option'+(cyls===4?' selected':'')+' value="4">4 cylinders (standard)</option><option'+(cyls===5?' selected':'')+' value="5">5 cylinders</option><option'+(cyls===6?' selected':'')+' value="6">6 cylinders</option></select></div>'
+    +'<div><div style="color:#94a3b8;font-size:11px;margin-bottom:4px;">Break Schedule</div><select id="csp-sched" onchange="cspRender()" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px;width:100%;font-size:12px;"><option'+(breakSched==='7+28'?' selected':'')+' value="7+28">7d + 28d (standard)</option><option'+(breakSched==='7+14+28'?' selected':'')+' value="7+14+28">7d + 14d + 28d</option><option'+(breakSched==='3+7+28'?' selected':'')+' value="3+7+28">3d + 7d + 28d</option><option'+(breakSched==='1+7+28'?' selected':'')+' value="1+7+28">1d + 7d + 28d</option><option'+(breakSched==='28only'?' selected':'')+' value="28only">28d only</option><option'+(breakSched==='7+28+56'?' selected':'')+' value="7+28+56">7d + 28d + 56d</option></select></div>'
+    +'</div></div>';
+
+  if(minSets>0){
+    // KPI
+    html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">'
+      +'<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#a78bfa;">'+minSets+'</div><div style="color:#94a3b8;font-size:11px;">Min Sets Required</div><div style="color:#64748b;font-size:10px;">ACI 318 §26.12</div></div>'
+      +'<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#60a5fa;">'+totalCyls+'</div><div style="color:#94a3b8;font-size:11px;">Total Cylinders</div><div style="color:#64748b;font-size:10px;">'+minSets+' sets × '+cyls+' ea</div></div>'
+      +'<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#f59e0b;">'+breakDays.length+'</div><div style="color:#94a3b8;font-size:11px;">Break Ages</div><div style="color:#64748b;font-size:10px;">'+breakDays.join('d / ')+'d</div></div>'
+      +'<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#22c55e;">'+fc+'</div><div style="color:#94a3b8;font-size:11px;">PSI Design f\'c</div><div style="color:#64748b;font-size:10px;">ACI 318 §26.12.3</div></div>'
+      +'</div>';
+
+    // Basis of calculation
+    html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;">'
+      +'<div style="font-weight:600;color:#f1f5f9;margin-bottom:6px;">Sampling Basis (ACI 318-19 §26.12.1)</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">'
+      +(pourYds>0?'<div style="background:#0f172a;border-radius:6px;padding:8px;"><div style="color:#94a3b8;">By Volume:</div><div style="color:#f1f5f9;">'+setsByYd+' sets ('+pourYds+' yd³ ÷ 150 = '+setsByYd+')</div></div>':'')
+      +(slabSf>0?'<div style="background:#0f172a;border-radius:6px;padding:8px;"><div style="color:#94a3b8;">By Area:</div><div style="color:#f1f5f9;">'+setsBySf+' sets ('+slabSf.toLocaleString()+' SF ÷ 5,000 = '+setsBySf+')</div></div>':'')
+      +'<div style="background:#0f172a;border-radius:6px;padding:8px;"><div style="color:#a78bfa;">Governs:</div><div style="color:#f1f5f9;font-weight:700;">'+minSets+' sets minimum</div></div>'
+      +'</div></div>';
+
+    // Break schedule
+    if(pourDate){
+      html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:12px;">'
+        +'<div style="font-weight:600;color:#f1f5f9;margin-bottom:10px;">Break Schedule</div>'
+        +'<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+        +'<tr style="color:#64748b;border-bottom:1px solid #334155;"><td style="padding:6px;">Age</td><td style="padding:6px;">Break Date</td><td style="padding:6px;">Day</td><td style="padding:6px;">Cylinders</td><td style="padding:6px;">Target Strength</td><td style="padding:6px;">ACI Acceptance</td></tr>';
+      var pd=new Date(pourDate+'T00:00:00');
+      breakDays.forEach(function(age){
+        var bd=new Date(pd);bd.setDate(bd.getDate()+age);
+        var breakDateStr=bd.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+        var dayName=bd.toLocaleDateString('en-US',{weekday:'long'});
+        var targetPct=age===1?16:age===3?40:age===7?65:age===14?85:age===28?100:110;
+        var targetPsi=Math.round(fc*targetPct/100);
+        var acceptance=age===28?'Avg of 2 ≥ f\'c; min ≥ f\'c−500 psi':age===7?'Approx 65% of 28d (informational)':'Informational';
+        var rowColor=age===28?'#14532d':age===7?'#1e3a5f':'#1e293b';
+        html+='<tr style="background:'+rowColor+';border-bottom:1px solid #1e293b;color:#f1f5f9;">'
+          +'<td style="padding:6px;font-weight:700;">'+age+'d</td>'
+          +'<td style="padding:6px;color:#60a5fa;">'+breakDateStr+'</td>'
+          +'<td style="padding:6px;color:#94a3b8;">'+dayName+'</td>'
+          +'<td style="padding:6px;">'+Math.round(totalCyls/breakDays.length)+' cyls</td>'
+          +'<td style="padding:6px;color:#fbbf24;">'+targetPsi+' PSI ('+targetPct+'%)</td>'
+          +'<td style="padding:6px;font-size:11px;color:#a3e635;">'+acceptance+'</td></tr>';
+      });
+      html+='</table></div>';
+    }
+
+    // Acceptance criteria
+    html+='<div style="background:#14532d;border:1px solid #16a34a;border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;">'
+      +'<div style="font-weight:600;color:#86efac;margin-bottom:6px;">ACI 318-19 §26.12.3 Acceptance Criteria (f\'c = '+fc+' PSI)</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;color:#f1f5f9;">'
+      +'<div>✅ Average of 2 cylinders ≥ <strong>'+fc+' PSI</strong></div>'
+      +'<div>✅ No individual cylinder < <strong>'+(fc-500)+' PSI</strong></div>'
+      +'<div>⚠️ Investigation required (§26.12.4) if BOTH are NOT met</div>'
+      +'<div>📋 Submit results within 7d of each break per most specs</div>'
+      +'</div></div>';
+
+    html+='<div style="display:flex;gap:8px;margin-bottom:12px;">'
+      +'<button onclick="cspPrint()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;">🖨 Print Cylinder Plan</button></div>';
+  }
+
+  // Reference panel
+  html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px;">'
+    +'<div style="font-weight:600;color:#f1f5f9;margin-bottom:8px;font-size:12px;">📚 ACI 318-19 §26.12 Quick Reference</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;color:#94a3b8;">'
+    +'<div><strong style="color:#f1f5f9;">Min Frequency:</strong> 1 sample per 150 yd³ OR 5,000 SF, min 1 per pour</div>'
+    +'<div><strong style="color:#f1f5f9;">Composite Sample:</strong> ASTM C172 — from middle of load, 2-4 increments in 15 min</div>'
+    +'<div><strong style="color:#f1f5f9;">Cylinder Mold:</strong> 4×8" per ASTM C31; cure ≥20°C until transport to lab</div>'
+    +'<div><strong style="color:#f1f5f9;">Slump Test:</strong> ASTM C143 — sample within 5 min of composite</div>'
+    +'</div></div>';
+  el.innerHTML=html;
+}
+
+window.cspRender=function(){cspRender();};
+
+window.cspPrint=function(){
+  var pourYds=parseFloat(document.getElementById('csp-yds').value)||0;
+  var slabSf=parseFloat(document.getElementById('csp-sf').value)||0;
+  var fc=parseInt(document.getElementById('csp-fc').value)||4000;
+  var pourDate=document.getElementById('csp-date').value||'';
+  var cyls=parseInt(document.getElementById('csp-cyls').value)||4;
+  var breakSched=document.getElementById('csp-sched').value;
+  var setsByYd=pourYds>0?Math.max(1,Math.ceil(pourYds/150)):0;
+  var setsBySf=slabSf>0?Math.max(1,Math.ceil(slabSf/5000)):0;
+  var minSets=Math.max(setsByYd,setsBySf,pourYds>0||slabSf>0?1:0);
+  var totalCyls=minSets*cyls;
+  var breakDays={};
+  var bd={'7+28':[7,28],'7+14+28':[7,14,28],'3+7+28':[3,7,28],'1+7+28':[1,7,28],'28only':[28],'7+28+56':[7,28,56]};
+  var bdays=bd[breakSched]||[7,28];
+  var breakRows='';
+  if(pourDate){
+    var pd=new Date(pourDate+'T00:00:00');
+    bdays.forEach(function(age){
+      var d2=new Date(pd);d2.setDate(d2.getDate()+age);
+      var targetPct=age===1?16:age===3?40:age===7?65:age===14?85:age===28?100:110;
+      breakRows+='<tr><td>'+age+'d</td><td>'+d2.toLocaleDateString()+'</td><td>'+Math.round(totalCyls/bdays.length)+'</td><td>'+Math.round(fc*targetPct/100)+' PSI ('+targetPct+'%)</td></tr>';
+    });
+  }
+  var w2=window.open('','_blank','width=700,height=600');
+  w2.document.write('<html><head><title>Cylinder Set Plan</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}table{width:100%;border-collapse:collapse;}td,th{border:1px solid #ccc;padding:5px;}th{background:#7c3aed;color:#fff;}</style></head><body>');
+  w2.document.write('<div style="font-size:16px;font-weight:bold;color:#7c3aed;">🧫 CYLINDER SET PLAN</div>');
+  w2.document.write('<p>Pour: '+pourDate+' | '+pourYds+' yd³ | '+slabSf.toLocaleString()+' SF | f\'c = '+fc+' PSI</p>');
+  w2.document.write('<p><strong>Required Sets: '+minSets+'</strong> | '+totalCyls+' total cylinders | '+cyls+' per set</p>');
+  if(pourDate&&breakRows){w2.document.write('<table><thead><tr><th>Age</th><th>Break Date</th><th>Cylinders</th><th>Target</th></tr></thead><tbody>'+breakRows+'</tbody></table>');}
+  w2.document.write('<p><strong>ACI 318-19 §26.12.3 Acceptance:</strong> Avg ≥ '+fc+' PSI AND min ≥ '+(fc-500)+' PSI</p>');
+  w2.document.write('<p style="font-size:10px;color:#666;">ACI 318-19 §26.12 / ASTM C172 / ASTM C31 / ASTM C39</p>');
+  w2.document.write('<button onclick="window.print()" style="padding:8px 16px;background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer;">Print</button></body></html>');
+  w2.document.close();
+};
+
+// ===== CTRL+ALT+F3: FIELD CHANGE QUICK LOG =====
+function fcqlInject(){
+  var btn=document.createElement('button');
+  btn.textContent='⚡ Field Change Log';
+  btn.title='Ctrl+Alt+F3 — Field Change Quick Log (verbal COs, directed changes, scope shifts)';
+  btn.style.cssText='display:block;width:100%;margin:4px 0;padding:8px 10px;background:#374151;color:#f1f5f9;border:1px solid #4b5563;border-radius:6px;cursor:pointer;text-align:left;font-size:12px;';
+  btn.addEventListener('click',function(){
+    var m=document.getElementById('fcql-modal');
+    if(m){m.remove();return;}
+    buildFcql();
+  });
+  var sb=document.querySelector('.sidebar-actions')||document.querySelector('#sidebar')||document.body;
+  sb.appendChild(btn);
+  document.addEventListener('keydown',function(e){
+    if(e.ctrlKey&&e.altKey&&(e.key==='F3'||e.code==='F3')){
+      e.preventDefault();
+      var m=document.getElementById('fcql-modal');
+      if(m){m.remove();}else{buildFcql();}
+    }
+  });
+}
+
+function buildFcql(){
+  var m=document.createElement('div');m.id='fcql-modal';
+  m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  m.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;width:840px;max-width:97vw;max-height:92vh;overflow-y:auto;padding:22px;">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
+    +'<div style="font-size:18px;font-weight:700;color:#fbbf24;">⚡ Field Change Quick Log</div>'
+    +'<button onclick="document.getElementById(\'fcql-modal\').remove();" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:18px;">✕</button></div>'
+    +'<div style="color:#94a3b8;font-size:12px;margin-bottom:14px;">Capture verbal directives, scope changes, and directed extra work in the field. Every undocumented change is free work. Log it now, CO it later.</div>'
+    +'<div id="fcql-content"></div></div>';
+  document.body.appendChild(m);
+  m.addEventListener('click',function(e){if(e.target===m)m.remove();});
+  fcqlRender();
+}
+
+function fcqlLoad(){
+  var proj=(typeof window.currentProjectName==='string'&&window.currentProjectName)||'default';
+  try{return JSON.parse(localStorage.getItem('oncor_fcql_v1_'+proj))||[];}catch(e){return [];}
+}
+function fcqlSave(d){
+  var proj=(typeof window.currentProjectName==='string'&&window.currentProjectName)||'default';
+  localStorage.setItem('oncor_fcql_v1_'+proj,JSON.stringify(d));
+}
+
+window.fcqlAdd=function(){
+  var desc=document.getElementById('fcql-desc').value.trim();
+  if(!desc){alert('Enter a description of the change');return;}
+  var d=fcqlLoad();
+  var now=new Date();
+  var entry={
+    id:Date.now(),
+    ts:now.toLocaleString(),
+    date:now.toLocaleDateString(),
+    time:now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),
+    type:document.getElementById('fcql-type').value,
+    directed_by:document.getElementById('fcql-by').value.trim(),
+    area:document.getElementById('fcql-area').value.trim(),
+    desc:desc,
+    est_cost:parseFloat(document.getElementById('fcql-cost').value)||0,
+    co_needed:document.getElementById('fcql-coneed').checked,
+    status:'Open',
+    co_ref:''
+  };
+  d.unshift(entry);
+  fcqlSave(d);
+  document.getElementById('fcql-desc').value='';
+  document.getElementById('fcql-by').value='';
+  document.getElementById('fcql-area').value='';
+  document.getElementById('fcql-cost').value='';
+  document.getElementById('fcql-coneed').checked=true;
+  fcqlRender();
+};
+window.fcqlDelete=function(id){
+  if(!confirm('Delete this change log entry?'))return;
+  var d=fcqlLoad().filter(function(x){return x.id!==id;});
+  fcqlSave(d);fcqlRender();
+};
+window.fcqlUpdateStatus=function(id,status){
+  var d=fcqlLoad();
+  var e=d.find(function(x){return x.id===id;});
+  if(e)e.status=status;
+  fcqlSave(d);fcqlRender();
+};
+
+function fcqlRender(){
+  var el=document.getElementById('fcql-content');if(!el)return;
+  var d=fcqlLoad();
+  var totalCost=d.reduce(function(s,e){return s+(e.est_cost||0);},0);
+  var openCo=d.filter(function(e){return e.co_needed&&e.status==='Open';}).length;
+  var totalEntries=d.length;
+
+  // KPI
+  var html='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">'
+    +'<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#fbbf24;">'+totalEntries+'</div><div style="color:#94a3b8;font-size:11px;">Total Changes</div></div>'
+    +'<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#ef4444;">'+openCo+'</div><div style="color:#94a3b8;font-size:11px;">Open CO Needed</div></div>'
+    +'<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#22c55e;">$'+totalCost.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0})+'</div><div style="color:#94a3b8;font-size:11px;">Estimated Change Value</div></div>'
+    +'<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#a78bfa;">'+d.filter(function(e){return e.status==='CO Submitted'||e.status==='CO Signed';}).length+'</div><div style="color:#94a3b8;font-size:11px;">COs Processed</div></div>'
+    +'</div>';
+
+  if(openCo>0){
+    html+='<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#fca5a5;">'
+      +'🔴 <strong>'+openCo+' open change(s) need CO processing.</strong> Do not let these age — process within 7 days of occurrence per ACI 301 §1.6 / AIA A201 §7.3.</div>';
+  }
+
+  // Add form
+  html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:12px;">'
+    +'<div style="font-weight:600;color:#fbbf24;margin-bottom:10px;">⚡ Log Field Change Now</div>'
+    +'<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">'
+    +'<div><div style="color:#94a3b8;font-size:11px;margin-bottom:4px;">Description of Change ★</div><input id="fcql-desc" placeholder="What changed? What was directed?" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px;width:100%;font-size:12px;"></div>'
+    +'<div><div style="color:#94a3b8;font-size:11px;margin-bottom:4px;">Type</div><select id="fcql-type" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px;width:100%;font-size:12px;"><option>GC Verbal Directive</option><option>Owner Request</option><option>Design Change</option><option>Differing Condition</option><option>Scope Addition</option><option>Scope Reduction</option><option>VE Request</option><option>Acceleration</option><option>Unforeseen</option><option>Error/Omission</option><option>Other</option></select></div>'
+    +'<div><div style="color:#94a3b8;font-size:11px;margin-bottom:4px;">Directed By</div><input id="fcql-by" placeholder="Name / Company" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px;width:100%;font-size:12px;"></div>'
+    +'<div><div style="color:#94a3b8;font-size:11px;margin-bottom:4px;">Area/Location</div><input id="fcql-area" placeholder="Grid / Area" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px;width:100%;font-size:12px;"></div>'
+    +'</div>'
+    +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">'
+    +'<div><div style="color:#94a3b8;font-size:11px;margin-bottom:4px;">Est. Cost Impact ($)</div><input id="fcql-cost" type="number" min="0" placeholder="0" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px;width:140px;font-size:12px;"></div>'
+    +'<div style="display:flex;align-items:center;gap:6px;margin-top:12px;"><input type="checkbox" id="fcql-coneed" checked style="cursor:pointer;"><label for="fcql-coneed" style="color:#fbbf24;font-size:12px;cursor:pointer;">CO Required</label></div>'
+    +'<div style="margin-top:12px;"><button onclick="fcqlAdd()" style="background:#d97706;color:#fff;border:none;border-radius:6px;padding:7px 18px;cursor:pointer;font-size:12px;">⚡ Log Change</button></div>'
+    +'</div></div>';
+
+  // Log list
+  if(d.length){
+    var statusColors={'Open':'#ef4444','CO Submitted':'#3b82f6','CO Signed':'#22c55e','Absorbed':'#64748b','Closed':'#64748b'};
+    html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:12px;">'
+      +'<div style="font-weight:600;color:#f1f5f9;margin-bottom:10px;">Change Log ('+d.length+' entries)</div>';
+    d.forEach(function(e){
+      var scol=statusColors[e.status]||'#64748b';
+      var typeColors={'GC Verbal Directive':'#ef4444','Owner Request':'#f97316','Design Change':'#f59e0b','Differing Condition':'#8b5cf6','Scope Addition':'#22c55e','Scope Reduction':'#94a3b8','VE Request':'#06b6d4','Acceleration':'#ec4899','Other':'#64748b'};
+      var tcol=typeColors[e.type]||'#64748b';
+      html+='<div style="background:#0f172a;border:1px solid '+(e.co_needed&&e.status==='Open'?'#ef4444':'#334155')+';border-radius:8px;padding:12px;margin-bottom:8px;">'
+        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">'
+        +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+        +'<span style="background:'+tcol+'20;color:'+tcol+';border-radius:4px;padding:2px 8px;font-size:11px;">'+e.type+'</span>'
+        +(e.co_needed?'<span style="background:#7f1d1d;color:#fca5a5;border-radius:4px;padding:2px 8px;font-size:11px;">CO NEEDED</span>':'')
+        +'<span style="background:'+scol+'20;color:'+scol+';border-radius:4px;padding:2px 8px;font-size:11px;">'+e.status+'</span>'
+        +'</div>'
+        +'<div style="display:flex;gap:6px;align-items:center;">'
+        +'<span style="color:#64748b;font-size:11px;">'+e.date+' '+e.time+'</span>'
+        +'<button onclick="fcqlDelete('+e.id+')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:13px;">🗑</button>'
+        +'</div></div>'
+        +'<div style="color:#f1f5f9;font-size:13px;margin-bottom:6px;">'+e.desc+'</div>'
+        +'<div style="display:flex;gap:14px;font-size:11px;color:#94a3b8;margin-bottom:8px;">'
+        +(e.directed_by?'<span>👤 '+e.directed_by+'</span>':'')
+        +(e.area?'<span>📍 '+e.area+'</span>':'')
+        +(e.est_cost>0?'<span style="color:#22c55e;">💰 $'+e.est_cost.toLocaleString()+'</span>':'')
+        +'</div>'
+        +'<div style="display:flex;gap:6px;">'
+        +'<span style="color:#64748b;font-size:11px;margin-right:6px;">Update:</span>'
+        +['Open','CO Submitted','CO Signed','Absorbed','Closed'].map(function(s){
+          return '<button onclick="fcqlUpdateStatus('+e.id+',\''+s+'\')" style="background:'+(e.status===s?scol+'30':'#1e293b')+';border:1px solid '+(e.status===s?scol:'#334155')+';color:'+(e.status===s?scol:'#94a3b8')+';border-radius:4px;padding:2px 8px;cursor:pointer;font-size:10px;">'+s+'</button>';
+        }).join('')
+        +'</div></div>';
+    });
+    html+='</div>';
+    html+='<div style="display:flex;gap:8px;margin-bottom:12px;">'
+      +'<button onclick="fcqlPrint()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;">🖨 Print Change Log</button></div>';
+  }else{
+    html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:24px;text-align:center;margin-bottom:12px;">'
+      +'<div style="font-size:28px;margin-bottom:8px;">⚡</div>'
+      +'<div style="color:#94a3b8;font-size:13px;">No changes logged yet.<br>Use this log the moment a GC rep makes a verbal directive or scope change request.</div></div>';
+  }
+
+  html+='<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px;">'
+    +'<div style="font-weight:600;color:#f1f5f9;margin-bottom:8px;font-size:12px;">⚠️ Field Change Best Practices</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;color:#94a3b8;">'
+    +'<div><strong style="color:#f1f5f9;">Log Immediately:</strong> Document while the GC rep is still on-site. Memory degrades within hours.</div>'
+    +'<div><strong style="color:#f1f5f9;">Who Directed:</strong> Always capture name and company. "The super told me" is not enforceable without a name.</div>'
+    +'<div><strong style="color:#f1f5f9;">7-Day Rule:</strong> Submit CO within 7 days per AIA A201 §7.3.7 notice requirement or risk waiving claim.</div>'
+    +'<div><strong style="color:#f1f5f9;">No Work = No Pay:</strong> Don\'t start directed extra work without written acknowledgment or signed WO when possible.</div>'
+    +'</div></div>';
+  el.innerHTML=html;
+}
+
+window.fcqlPrint=function(){
+  var d=fcqlLoad();
+  var totalCost=d.reduce(function(s,e){return s+(e.est_cost||0);},0);
+  var rows=d.map(function(e){
+    return '<tr style="'+(e.co_needed&&e.status==='Open'?'background:#fff5f5;':'')+'">'
+      +'<td>'+e.date+' '+e.time+'</td>'
+      +'<td>'+e.type+'</td>'
+      +'<td>'+e.desc+'</td>'
+      +'<td>'+e.directed_by+'</td>'
+      +'<td>'+e.area+'</td>'
+      +'<td>'+(e.est_cost>0?'$'+e.est_cost.toLocaleString():'—')+'</td>'
+      +'<td>'+(e.co_needed?'YES':'No')+'</td>'
+      +'<td>'+e.status+'</td></tr>';
+  }).join('');
+  var w2=window.open('','_blank','width=900,height=600');
+  w2.document.write('<html><head><title>Field Change Log</title><style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}table{width:100%;border-collapse:collapse;}td,th{border:1px solid #ccc;padding:4px;}th{background:#d97706;color:#fff;}</style></head><body>');
+  w2.document.write('<div style="font-size:16px;font-weight:bold;color:#d97706;">⚡ FIELD CHANGE LOG</div>');
+  w2.document.write('<p>Total Changes: '+d.length+' | Estimated Value: $'+totalCost.toLocaleString()+' | CONFIDENTIAL</p>');
+  w2.document.write('<table><thead><tr><th>Date/Time</th><th>Type</th><th>Description</th><th>Directed By</th><th>Area</th><th>Est. Cost</th><th>CO?</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table>');
+  w2.document.write('<p style="font-size:9px;color:#666;background:#fff3cd;padding:6px;margin-top:8px;"><strong>Notice:</strong> This log documents verbal directives and field changes. Submit formal Change Order requests within 7 days per AIA A201 §7.3.7. TX Prompt Payment Act applies to approved COs.</p>');
+  w2.document.write('<button onclick="window.print()" style="padding:8px 16px;background:#d97706;color:#fff;border:none;border-radius:4px;cursor:pointer;">Print</button></body></html>');
+  w2.document.close();
+};
+
+// Init all three
+document.addEventListener('DOMContentLoaded',function(){
+  setTimeout(function(){jscInject();cspInject();fcqlInject();},1100);
+});
+setTimeout(function(){jscInject();cspInject();fcqlInject();},1600);
+
+})();
+// ==================== END SESSION #140 — Zeus ⚡ Joint Sealant Calculator (Ctrl+Alt+F1) + Cylinder Set Planner (Ctrl+Alt+F2) + Field Change Quick Log (Ctrl+Alt+F3) ====================
