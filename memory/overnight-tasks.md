@@ -1,5 +1,212 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 6, 2026 - 12:41 UTC (Overnight Cron #172)
+**Status:** ✅ THREE NEW FEATURES added (+603 lines)
+
+### What Was Added:
+
+---
+
+### 🏦 Job Bid Profitability Log (Ctrl+Alt+Shift+O) — ~185 lines
+- New `🏦 Bid Profit Log` button in sidebar (dark blue color)
+- `Ctrl+Alt+Shift+O` keyboard shortcut opens/closes the modal
+- **Purpose:** Track every bid submitted — project, GC/client, bid date, outcome, bid amount, direct cost, margin %, and yd³. Build a competitive intelligence database and monitor win rate over time.
+
+**Features:**
+- **5-card KPI:** Total Bids / Won-Total / Win Rate (color-coded) / Won Revenue / Avg Won Margin
+- Entry form: Project Name, GC/Client, Bid Date, Outcome (Pending/Won/Lost/No Bid/On Hold), Bid Amount, Direct Cost, Volume yd³, Job Type, Notes
+- **Auto-calculated margin %** = (Bid − Direct Cost) / Bid × 100 per entry
+- Sortable history table — newest bids first
+- Color-coded margin column (green ≥20%, amber ≥12%, red <12%)
+- **Printable Bid Profitability Report** — stats header, full bid table with all columns
+- localStorage global: `oncor_jbp_v1` (cross-project)
+
+---
+
+### 📊 Concrete Waste Cost Analyzer (Ctrl+Alt+Shift+P) — ~195 lines
+- New `📊 Waste Analyzer` button in sidebar (dark green color)
+- `Ctrl+Alt+Shift+P` keyboard shortcut opens/closes the modal
+- **Purpose:** Log every waste event by cause, quantify the cost, and identify which causes are avoidable. Find where money is being left on the site.
+
+**12 Waste Causes:**
+Over-Order Buffer, Form Blowout, Grade Low Spots, Pump Priming, Rejected Load, Short Load Returned, Washout Waste, Over-Excavation, Changed Qty, Weather Delay, Operator Error, Other
+
+**Features:**
+- **4-card KPI:** Waste Events / Total Wasted yd³ / Total Waste Cost / Avoidable Waste Cost
+- Entry form: Date, Cause, yd³ Wasted, Price/yd³, Project/Pour, Notes
+- **Cost auto-calculated:** yd³ × price/yd³ per event
+- **Avoidable cost detection** — Form Blowout, Grade Low Spots, Pump Priming, Washout Waste, Operator Error flagged as avoidable
+- **Visual bar chart** — Waste Cost by Cause sorted by dollar amount
+- **Printable Waste Analysis** — event log table with totals, ACI 304R benchmark reference
+- localStorage global: `oncor_wca_v1`
+
+---
+
+### 🧰 Field Tool Inventory Manager (Ctrl+Alt+Shift+Q) — ~223 lines
+- New `🧰 Tool Inventory` button in sidebar (dark brown color)
+- `Ctrl+Alt+Shift+Q` keyboard shortcut opens/closes the modal
+- **Purpose:** Track all small tools and consumables — quantity on hand vs reorder threshold, location, condition. Never show up to a pour missing knee boards or vibrators.
+
+**Features:**
+- **4-card KPI:** Total Items / Low Stock (amber) / Out of Stock (red) / Needs Repair
+- **20 pre-loaded common tools:** Vibrators, rubber boots, knee boards, bull floats, fresnos, come-alongs, screed boards, hand floats, edgers, groovers, curing sprayer, slump cone kit, cylinder molds, chalk line, tape measures, saw blades, safety glasses
+- Entry form: Item Name, Qty On Hand, Min Qty (reorder threshold), Unit (EA/PR/SET/BOX/etc.), Location, Status (Good/Needs Repair/Damaged/Lost/Retired), Notes
+- **+ / − buttons** to quickly adjust qty without opening a form
+- **Low stock filter** — checkbox to show only items at/below minimum threshold
+- **Live search** by item name or location
+- Color-coded qty: green = adequate, amber = at minimum, red = zero
+- **Printable Inventory Report** — sorted with low stock first, highlighted rows, OSHA 1926.20 reference
+- localStorage global: `oncor_fti_v1`
+
+---
+
+### Session #172 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: f212d76
+- Total new lines: +603
+- New shortcuts: Ctrl+Alt+Shift+O (Bid Profit Log), Ctrl+Alt+Shift+P (Waste Analyzer), Ctrl+Alt+Shift+Q (Tool Inventory)
+- File now at 209,426 lines total
+
+---
+
+## ✅ SESSION: Apr 6, 2026 - 11:28 UTC (Overnight Cron #171)
+**Status:** ✅ THREE NEW FEATURES added (+425 lines)
+
+### What Was Added:
+
+---
+
+### 📋 Retainage Release Tracker (Ctrl+Alt+Shift+L) — ~160 lines
+- New `📋 Retainage Tracker` button in sidebar (dark blue color)
+- `Ctrl+Alt+Shift+L` keyboard shortcut opens/closes the modal
+- **Purpose:** Track retainage held by GCs, monitor release deadlines, and recover cash flow. TX Property Code §53.057 compliant.
+
+**Features:**
+- **4-card KPI:** Total Retainage / Released / Pending / Overdue count
+- Entry form: GC/Client, Project Name, Retainage Amount, Release Due Date, Notes
+- Status tracking: Pending → Released with one-click release button
+- **OVERDUE detection** — entries past due date flagged red with OVERDUE badge
+- Retainage entries sorted by due date
+- **Printable Report** — full table with TX Property Code §53.057 reference (retainage ≤10%, release 30 days after acceptance)
+- localStorage per project: `oncor_rrt_v1_[project]`
+
+---
+
+### 🏗️ Structural Concrete Takeoff Helper (Ctrl+Alt+Shift+M) — ~145 lines
+- New `🏗️ Structural Takeoff` button in sidebar (dark gray color)
+- `Ctrl+Alt+Shift+M` keyboard shortcut opens/closes the modal
+- **Purpose:** Quick volume calculator for structural elements — beams, columns (square/round), walls, grade beams, drilled piers — with automatic rebar weight estimates.
+
+**6 Element Types:**
+1. Beam (L × W × H)
+2. Square Column (W × W × H)
+3. Round Column (Dia × H)
+4. Wall (L × H × Thickness)
+5. Grade Beam (L × W × Depth)
+6. Drilled Pier (Dia × Depth)
+
+**Features:**
+- **Live preview** — volume and rebar estimate update as you type
+- Per-element rebar estimates based on ACI typical densities (beams ~150 lb/yd³, columns ~200 lb/yd³, walls ~100 lb/yd³)
+- PSI selection per element (3000/4000/5000/6000)
+- Label/mark field for element identification
+- **3-card KPI:** Total Volume / Est. Rebar (lbs) / Truck Count
+- Running list of added elements with delete per item
+- **Printable Structural Takeoff** — element table with totals, ACI 318-19 reference
+- Session-based storage (clears on reload)
+
+---
+
+### 📅 Bid Due Date Calendar (Ctrl+Alt+Shift+N) — ~120 lines
+- New `📅 Bid Calendar` button in sidebar (dark purple color)
+- `Ctrl+Alt+Shift+N` keyboard shortcut opens/closes the modal
+- **Purpose:** Track all active bids with due dates, pipeline value, and status. Never miss a bid deadline.
+
+**Features:**
+- **4-card KPI:** Active Bids / Due ≤7 Days (amber alert) / Overdue (red alert) / Pipeline Value
+- Entry form: Project Name, GC/Client, Est. Bid Value, Bid Due Date
+- **5 Status Options:** Preparing → Pending → Submitted → Won / Lost
+- **Due date countdown badges:** TODAY! (red), 3d/7d (amber), X days (blue)
+- **OVERDUE detection** — bids past due date flagged red
+- Inline status dropdown to quickly update bid status
+- Bids sorted by due date (active first, won/lost at bottom)
+- **Printable Pipeline Report** — active bids, pipeline value, status
+- localStorage global: `oncor_bdc_v1` (cross-project bid tracking)
+
+---
+
+### Session #171 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 47a160d
+- Total new lines: +425
+- New shortcuts: Ctrl+Alt+Shift+L (Retainage Tracker), Ctrl+Alt+Shift+M (Structural Takeoff), Ctrl+Alt+Shift+N (Bid Calendar)
+- File now at 208,823 lines total
+
+---
+
+## ✅ SESSION: Apr 6, 2026 - 10:24 UTC (Overnight Cron #170)
+**Status:** ✅ THREE NEW FEATURES added (+366 lines)
+
+### What Was Added:
+
+---
+
+### 🧾 Invoice Quick Printer (Ctrl+Alt+Shift+I) — ~120 lines
+- New `🧾 Invoice Printer` button in sidebar (dark navy color)
+- `Ctrl+Alt+Shift+I` keyboard shortcut opens/closes the modal
+- **Purpose:** Professional invoice generator for concrete sub billing. Enter project/client info, add line items (yd³, SF, LF, EA, LS, HR, Ton), configure retainage %, and print a clean invoice document referencing TX Prompt Payment Act §28.004.
+
+**Features:**
+- Project, GC/Client, Invoice #, Invoice Date, Due Date, Retainage % inputs
+- Dynamic line items: Description, Qty, Unit, Unit Price → live subtotals
+- Live running: Subtotal / Retainage / Net Due
+- **Printable Invoice** — professional header, line item table, NET DUE callout, TX Prompt Payment Act notice (35-day window, 1.5%/month interest, lien rights reserved), dual signature block
+- localStorage NOT used (one-time generator)
+
+---
+
+### 📊 Weekly Concrete Cost Report (Ctrl+Alt+Shift+J) — ~120 lines
+- New `📊 Weekly Cost Rpt` button in sidebar (dark green color)
+- `Ctrl+Alt+Shift+J` keyboard shortcut opens/closes the modal
+- **Purpose:** CFMA cost control — track actual $/yd³ week-by-week vs budget. Log each pour week with material cost, labor cost, and other costs, then see variance vs budget per yd³.
+
+**Features:**
+- 4-card KPI: Total yd³ / Total Material Cost / Total Labor Cost / Avg $/yd³
+- Per-entry: Week date, Pour name, Actual yd³, Material $, Labor $, Other $, Budget yd³, Budget Material $
+- **Auto-calculated columns:** Mat/yd³, Lab/yd³, Total/yd³, Budget/yd³, Variance % (color-coded green/amber/red)
+- Persist across sessions in localStorage (`oncor_wcr_v1`)
+- **Printable Weekly Cost Report** — full table CONFIDENTIAL
+
+---
+
+### 🔐 TX Lien Waiver Generator (Ctrl+Alt+Shift+K) — ~120 lines
+- New `🔐 Lien Waiver Gen` button in sidebar (dark purple color)
+- `Ctrl+Alt+Shift+K` keyboard shortcut opens/closes the modal
+- **Purpose:** Generate all 4 Texas lien waiver types (TX Property Code §53.281/284) with correct conditional/unconditional language. Prints a legal-quality form ready to sign and fax.
+
+**4 Waiver Types:**
+1. Conditional Partial — working draw, use before check clears
+2. Unconditional Partial — after confirmed receipt of partial payment
+3. Conditional Final — final draw pending clearance
+4. Unconditional Final — all work complete, all payments received
+
+**Features:**
+- Inputs: Waiver type, Contractor, GC, Owner, Project, Address, Payment Amount, Through Date, Exceptions
+- Conditional clause auto-adjusts language per type (effective upon receipt vs already received)
+- **Printable TX Lien Waiver** — statutory language, party table, conditional clause, exceptions box, execution date, dual signature block, TX Property Code footer
+- Type guide panel — explains when to use each type
+
+---
+
+### Session #170 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: b236aac
+- Total new lines: +366
+- New shortcuts: Ctrl+Alt+Shift+I (Invoice Printer), Ctrl+Alt+Shift+J (Weekly Cost Report), Ctrl+Alt+Shift+K (Lien Waiver)
+- File now at 208,398 lines total
+
+---
+
 ## ✅ SESSION: Apr 4, 2026 - 16:55 UTC (Overnight Cron #155-159)
 **Status:** ✅ FIFTEEN NEW FEATURES added (+1,977 lines) across 5 sessions
 
