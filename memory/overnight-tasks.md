@@ -1,5 +1,84 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 6, 2026 - 13:47 UTC (Overnight Cron #173)
+**Status:** ✅ THREE NEW FEATURES added (+401 lines)
+
+### What Was Added:
+
+---
+
+### 💬 Pour Day Text Draft Generator (Ctrl+Alt+Shift+R) — ~135 lines
+- New `💬 Text Drafts` button in sidebar (dark navy color)
+- `Ctrl+Alt+Shift+R` keyboard shortcut opens/closes the modal
+- **Purpose:** Generate ready-to-send SMS/text messages for every pour day scenario — fill in project info once, get 10 pre-written professional messages to copy to your phone.
+
+**10 Message Templates:**
+1. Day-Before Confirmation (to GC super)
+2. First Truck Leaving Plant notification
+3. Pour Starting Now alert
+4. Pump/Equipment Issue heads-up
+5. Adding Extra Yardage approval request
+6. Pour Complete wrap-up
+7. Rejected Load Notice (ASTM C94 reference)
+8. Hot Weather Advisory (ACI 305R)
+9. T&M Work Notification (legal notice)
+10. Inspection Notice (with inspector contact)
+
+**Features:**
+- Fill in GC name, batch plant, project, area, yd³, PSI, first truck time, crew size, foreman once — all 10 messages auto-populate
+- One-click 📋 Copy per message — pastes ready-to-send text to clipboard
+- Messages use professional language appropriate for GC communications
+- Legal references embedded (ACI 305R, ASTM C94, TX Prompt Payment Act)
+
+---
+
+### 🎯 Job Profit Goal Tracker (Ctrl+Alt+Shift+S) — ~135 lines
+- New `🎯 Profit Goals` button in sidebar (dark purple color)
+- `Ctrl+Alt+Shift+S` keyboard shortcut opens/closes the modal
+- **Purpose:** Cross-project profit tracking — log goal revenue, actual revenue, and actual cost per job. Monitor which jobs are on track, at risk, or over budget. Track margin trends across the Oncor portfolio.
+
+**Features:**
+- **4-card KPI:** Jobs Tracked / Total Goal Revenue / On Track count / Total Volume yd³
+- Entry form: Job Name, Client/GC, Goal Revenue, Actual Revenue (when complete), Actual Cost, Volume yd³, Status (On Track / At Risk / Over Budget / Complete / Pending), Notes
+- **Auto-calculated:** Target margin % = (Goal Rev − Actual Cost) / Goal Rev, Actual margin when revenue entered
+- **Color-coded status:** On Track = green, At Risk = amber, Over Budget = red
+- **$/yd³** auto-calculated from goal revenue and volume
+- Margin badge compares target vs actual margin when both are available
+- **Printable Job Profit Report** — all jobs in table with margins
+- localStorage global: `oncor_jpgt_v1`
+
+---
+
+### 📐 ACI 318 Concrete Cover Quick Checker (Ctrl+Alt+Shift+T) — ~130 lines
+- New `📐 Cover Checker` button in sidebar (dark blue color)
+- `Ctrl+Alt+Shift+T` keyboard shortcut opens/closes the modal
+- **Purpose:** Instantly look up ACI 318-19 §20.6.1 required concrete cover by element type and exposure condition. Quick pass/fail checker for field use. 20 element types fully referenced.
+
+**Features:**
+- **Cover Check panel:** Enter element type (autocomplete datalist), bar diameter (inches), and actual cover provided → instant PASS/FAIL with required vs provided comparison
+- Also checks that cover ≥ nominal bar diameter (ACI requirement)
+- **Full reference table:** 20 element types × exposure condition × required cover:
+  - Slab interior 0.75", slab cast against earth 3", exposed slab 1.5"-2"
+  - Footing formed 2", footing cast against earth 3"
+  - Column/beam exposed 2", not exposed 1.5"
+  - Grade beam / drilled pier 3"
+  - Tilt-up panels, epoxy-coated bar, precast, post-tension sheath
+- **Color-coded cover values:** green (standard), blue (exposed), amber (earth/weather), red (cast against earth)
+- **Search/filter** the reference table by element or exposure
+- **Printable ACI 318-19 Cover Reference** — complete table with tolerance note (ACI 117-10 §4.3.2)
+- Standards: ACI 318-19 §20.6.1, ACI 117-10 §4.3.2, ACI 551.1R
+
+---
+
+### Session #173 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 6071beb
+- Total new lines: +401
+- New shortcuts: Ctrl+Alt+Shift+R (Text Drafts), Ctrl+Alt+Shift+S (Profit Goals), Ctrl+Alt+Shift+T (Cover Checker)
+- File now at 209,827 lines total
+
+---
+
 ## ✅ SESSION: Apr 6, 2026 - 12:41 UTC (Overnight Cron #172)
 **Status:** ✅ THREE NEW FEATURES added (+603 lines)
 
