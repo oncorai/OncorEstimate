@@ -210952,3 +210952,249 @@ setTimeout(function(){revRender();},200);
 })();
 </script>
 <!-- END SESSION #175 -->
+
+<!-- SESSION #176 — Admixture Dosage Calc + OSHA Safety Metrics + Finishing Window Estimator -->
+<script>
+(function(){
+'use strict';
+
+// =====================================================================
+// SESSION 176 — FEATURE 1: ADMIXTURE DOSAGE & COST CALCULATOR
+// Ctrl+Alt+Shift+A | ~200 lines
+// Standards: ASTM C494 Types A-G, ASTM C260, ACI 212.3R
+// =====================================================================
+
+var admixStyles='<style>.s176-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center;}.s176-box{background:#1e293b;color:#e2e8f0;border-radius:10px;padding:20px;max-width:720px;width:95%;max-height:90vh;overflow-y:auto;position:relative;}.s176-box h2{margin:0 0 14px;font-size:1.1rem;border-bottom:1px solid #334155;padding-bottom:8px;}.s176-close{position:absolute;top:10px;right:14px;background:none;border:none;color:#94a3b8;font-size:1.3rem;cursor:pointer;}.s176-lbl{display:block;font-size:.75rem;color:#94a3b8;margin-bottom:3px;}.s176-inp{background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:4px;padding:5px 8px;width:100%;box-sizing:border-box;font-size:.8rem;}.s176-inp:focus{outline:1px solid #7c3aed;}.s176-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}.s176-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;}.s176-btn{padding:6px 14px;border:none;border-radius:5px;cursor:pointer;font-size:.8rem;font-weight:600;}.s176-kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0;}.s176-card{background:#0f172a;border-radius:6px;padding:10px;text-align:center;}.s176-card .val{font-size:1.1rem;font-weight:700;color:#10b981;}.s176-card .lbl{font-size:.7rem;color:#94a3b8;margin-top:3px;}.s176-table{width:100%;border-collapse:collapse;font-size:.75rem;margin-top:8px;}.s176-table th{background:#334155;color:#e2e8f0;padding:5px 7px;text-align:left;}.s176-table td{border-bottom:1px solid #1e293b;padding:5px 7px;}.s176-ref{background:#0f172a;border-radius:6px;padding:10px;margin-top:12px;font-size:.73rem;color:#94a3b8;}</style>';
+
+var admixHTML='<div class="s176-modal" id="s176-adm">'+admixStyles+'<div class="s176-box"><button class="s176-close" onclick="document.getElementById(\'s176-adm\').style.display=\'none\'">✕</button><h2>🧪 Admixture Dosage & Cost Calculator — ASTM C494 / ACI 212.3R</h2><div class="s176-row"><div><label class="s176-lbl">Project Volume (yd³)</label><input class="s176-inp" id="adm-yds" type="number" min="1" value="100" oninput="admCalc()"></div><div><label class="s176-lbl">Cement Content (lbs/CY)</label><input class="s176-inp" id="adm-cem" type="number" min="300" value="564" oninput="admCalc()"></div></div><div style="margin-bottom:10px;"><label class="s176-lbl">Admixture Type</label><select class="s176-inp" id="adm-type" onchange="admSetDefaults()"><option value="wra">Type A — Water Reducer (WRA) ASTM C494</option><option value="retard">Type B — Retarder ASTM C494</option><option value="accel">Type C — Accelerator ASTM C494</option><option value="wrra">Type D — Water Reducer + Retarder ASTM C494</option><option value="wrea">Type E — Water Reducer + Accelerator ASTM C494</option><option value="hrwr" selected>Type F — HRWR / Superplasticizer ASTM C494</option><option value="hrwrr">Type G — HRWR + Retarder ASTM C494</option><option value="aea">Air-Entraining Agent ASTM C260</option><option value="sra">Shrinkage-Reducing Admixture</option><option value="vma">Viscosity-Modifying Agent</option><option value="corr">Corrosion Inhibitor</option><option value="custom">Custom</option></select></div><div class="s176-row3"><div><label class="s176-lbl">Dosage Rate (oz/cwt)</label><input class="s176-inp" id="adm-dose" type="number" step="0.1" min="0.1" value="6.0" oninput="admCalc()"></div><div><label class="s176-lbl">Cost per Gallon ($)</label><input class="s176-inp" id="adm-cost" type="number" step="0.01" min="0" value="14.50" oninput="admCalc()"></div><div><label class="s176-lbl">Admixture Name (optional)</label><input class="s176-inp" id="adm-name" type="text" placeholder="e.g. Sikament 686" oninput="admCalc()"></div></div><div class="s176-kpi" id="adm-kpi"><div class="s176-card"><div class="val" id="adm-oz">—</div><div class="lbl">Total oz Needed</div></div><div class="s176-card"><div class="val" id="adm-gal">—</div><div class="lbl">Gallons Needed</div></div><div class="s176-card"><div class="val" id="adm-total">—</div><div class="lbl">Material Cost</div></div></div><div class="s176-row"><div><label class="s176-lbl">Oz/cwt → oz per CY</label><div style="font-size:.75rem;color:#7c3aed;padding:6px 8px;background:#1e1b4b;border-radius:4px;" id="adm-formula">Formula: (dose oz/cwt) × (cement lbs/CY) / 100 × volume CY</div></div><div><label class="s176-lbl">Add Second Admixture?</label><button class="s176-btn" style="background:#7c3aed;color:#fff;width:100%;margin-top:6px;" onclick="admAddSecond()">+ Add Second Admixture</button></div></div><div id="adm-second" style="display:none;margin-top:8px;border-top:1px solid #334155;padding-top:8px;"><div class="s176-row3"><div><label class="s176-lbl">2nd Type</label><select class="s176-inp" id="adm-type2"><option value="wra">Type A — WRA</option><option value="retard">Type B — Retarder</option><option value="accel">Type C — Accelerator</option><option value="aea">AEA (ASTM C260)</option><option value="sra">SRA</option><option value="corr">Corrosion Inhibitor</option><option value="custom">Custom</option></select></div><div><label class="s176-lbl">2nd Dose (oz/cwt)</label><input class="s176-inp" id="adm-dose2" type="number" step="0.1" value="3.0" oninput="admCalc()"></div><div><label class="s176-lbl">2nd Cost ($/gal)</label><input class="s176-inp" id="adm-cost2" type="number" step="0.01" value="9.25" oninput="admCalc()"></div></div><div style="font-size:.75rem;color:#10b981;padding:5px 8px;background:#0f172a;border-radius:4px;" id="adm-2nd-result">—</div></div><button class="s176-btn" style="background:#1e3a5f;color:#fff;margin-top:10px;" onclick="admPrint()">🖨️ Print Admixture Spec Sheet</button><div class="s176-ref"><strong style="color:#e2e8f0;">ASTM C494 Types Quick Reference:</strong><table class="s176-table" style="margin-top:6px;"><tr><th>Type</th><th>Function</th><th>Typical Dose (oz/cwt)</th><th>El Paso 2025 ($/gal)</th></tr><tr><td>A — WRA</td><td>Water reduction 5-12%</td><td>2–5</td><td>$8–12</td></tr><tr><td>B — Retarder</td><td>Set delay for hot weather</td><td>2–4</td><td>$9–14</td></tr><tr><td>C — Accelerator</td><td>Set acceleration for cold wx</td><td>16–32</td><td>$6–10</td></tr><tr><td>D — WR+Retard</td><td>Water reduce + set delay</td><td>3–6</td><td>$10–14</td></tr><tr><td>E — WR+Accel</td><td>Water reduce + accelerate</td><td>3–8</td><td>$10–15</td></tr><tr><td>F — HRWR</td><td>High-range water reduction 15-30%</td><td>4–10</td><td>$12–20</td></tr><tr><td>G — HRWR+R</td><td>High-range + retarder</td><td>4–10</td><td>$14–22</td></tr><tr><td>AEA C260</td><td>Air entrainment</td><td>0.3–1.5</td><td>$6–10</td></tr><tr><td>SRA</td><td>Shrinkage reduction 25-50%</td><td>16–32</td><td>$25–40</td></tr><tr><td>Corrosion Inh.</td><td>Rebar corrosion protection</td><td>64–96</td><td>$5–8</td></tr></table><p style="margin-top:6px;">ACI 212.3R Guide for Chemical Admixtures | ASTM C494 | ASTM C260 | Dosage in oz per 100 lbs (cwt) of cementitious material. Verify with local supplier tech data sheet.</p></div></div></div>';
+
+document.body.insertAdjacentHTML('beforeend',admixHTML);
+
+var admDefaults={wra:{dose:3.5,cost:10.00},retard:{dose:3.0,cost:11.50},accel:{dose:24.0,cost:8.00},wrra:{dose:4.5,cost:12.00},wrea:{dose:5.0,cost:12.50},hrwr:{dose:6.0,cost:14.50},hrwrr:{dose:7.0,cost:17.00},aea:{dose:0.8,cost:7.50},sra:{dose:20.0,cost:32.00},vma:{dose:4.0,cost:13.00},corr:{dose:80.0,cost:6.50},custom:{dose:5.0,cost:10.00}};
+
+window.admSetDefaults=function(){var t=document.getElementById('adm-type').value;var d=admDefaults[t]||{dose:5,cost:10};document.getElementById('adm-dose').value=d.dose;document.getElementById('adm-cost').value=d.cost;admCalc();};
+
+window.admCalc=function(){
+  var yds=parseFloat(document.getElementById('adm-yds').value)||0;
+  var cem=parseFloat(document.getElementById('adm-cem').value)||564;
+  var dose=parseFloat(document.getElementById('adm-dose').value)||0;
+  var costG=parseFloat(document.getElementById('adm-cost').value)||0;
+  var totalOz=dose*(cem/100)*yds;
+  var gals=totalOz/128;
+  var totalCost=gals*costG;
+  document.getElementById('adm-oz').textContent=totalOz.toFixed(0)+' oz';
+  document.getElementById('adm-gal').textContent=gals.toFixed(1)+' gal';
+  document.getElementById('adm-total').textContent='$'+totalCost.toFixed(2);
+  // second admix
+  var sec=document.getElementById('adm-second');
+  if(sec.style.display!=='none'){
+    var dose2=parseFloat(document.getElementById('adm-dose2').value)||0;
+    var cost2=parseFloat(document.getElementById('adm-cost2').value)||0;
+    var oz2=dose2*(cem/100)*yds;
+    var g2=oz2/128;
+    var c2=g2*cost2;
+    document.getElementById('adm-2nd-result').textContent='2nd Admix: '+oz2.toFixed(0)+' oz | '+g2.toFixed(1)+' gal | $'+c2.toFixed(2)+' — Combined Total: $'+(totalCost+c2).toFixed(2);
+  }
+};
+
+window.admAddSecond=function(){var s=document.getElementById('adm-second');s.style.display=s.style.display==='none'?'block':'none';admCalc();};
+
+window.admPrint=function(){
+  var yds=parseFloat(document.getElementById('adm-yds').value)||0;
+  var cem=parseFloat(document.getElementById('adm-cem').value)||564;
+  var dose=parseFloat(document.getElementById('adm-dose').value)||0;
+  var costG=parseFloat(document.getElementById('adm-cost').value)||0;
+  var name=document.getElementById('adm-name').value||document.getElementById('adm-type').options[document.getElementById('adm-type').selectedIndex].text;
+  var totalOz=dose*(cem/100)*yds;
+  var gals=totalOz/128;
+  var w=window.open('','_blank');
+  w.document.write('<html><head><title>Admixture Spec</title><style>body{font-family:Arial;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:6px;font-size:11px;}th{background:#1e3a5f;color:#fff;}.total{font-size:1.4rem;font-weight:800;color:#10b981;}</style></head><body>');
+  w.document.write('<h2>🧪 Admixture Dosage Spec Sheet — ONCOR CONCRETE</h2>');
+  w.document.write('<table><tr><th colspan="2">Admixture Order Summary</th></tr>');
+  w.document.write('<tr><td>Product / Type</td><td>'+name+'</td></tr>');
+  w.document.write('<tr><td>Concrete Volume</td><td>'+yds+' yd³</td></tr>');
+  w.document.write('<tr><td>Cement Content</td><td>'+cem+' lbs/CY</td></tr>');
+  w.document.write('<tr><td>Dosage Rate</td><td>'+dose+' oz/cwt</td></tr>');
+  w.document.write('<tr><td>Total oz Required</td><td><strong>'+totalOz.toFixed(0)+' oz</strong></td></tr>');
+  w.document.write('<tr><td>Total Gallons Required</td><td><strong class="total">'+gals.toFixed(1)+' gallons</strong></td></tr>');
+  w.document.write('<tr><td>Est. Material Cost</td><td>$'+(gals*costG).toFixed(2)+'</td></tr>');
+  w.document.write('</table><p style="font-size:.75rem;color:#666;margin-top:16px;">ASTM C494 / ASTM C260 / ACI 212.3R — Verify dosage with supplier TDS before ordering. Dosage = (oz/cwt) × (cement lbs/CY ÷ 100) × volume CY ÷ 128 = gallons.</p>');
+  w.document.write('</body></html>');w.document.close();w.print();
+};
+
+// =====================================================================
+// SESSION 176 — FEATURE 2: OSHA SAFETY METRICS & EMR CALCULATOR
+// Ctrl+Alt+Shift+B | ~180 lines
+// Standards: OSHA 29 CFR 1904, OSHA 300/300A, BLS data
+// =====================================================================
+
+var oshaHTML='<div class="s176-modal" id="s176-osha"><div class="s176-box"><button class="s176-close" onclick="document.getElementById(\'s176-osha\').style.display=\'none\'">✕</button><h2>📊 OSHA Safety Metrics & EMR Calculator — 29 CFR 1904 / BLS</h2><div class="s176-row"><div><label class="s176-lbl">Total Employee Hours Worked (annual)</label><input class="s176-inp" id="osha-hrs" type="number" min="1" value="50000" oninput="oshaCalc()"></div><div><label class="s176-lbl">Number of Full-Time Employees</label><input class="s176-inp" id="osha-fte" type="number" min="1" value="25" oninput="oshaCalc()"></div></div><div class="s176-row3"><div><label class="s176-lbl">OSHA Recordable Incidents</label><input class="s176-inp" id="osha-rec" type="number" min="0" value="2" oninput="oshaCalc()"></div><div><label class="s176-lbl">Days Away Cases (DAFW)</label><input class="s176-inp" id="osha-dafw" type="number" min="0" value="1" oninput="oshaCalc()"></div><div><label class="s176-lbl">Restricted/Transfer Cases</label><input class="s176-inp" id="osha-dart" type="number" min="0" value="0" oninput="oshaCalc()"></div></div><div class="s176-row"><div><label class="s176-lbl">Total Days Away from Work</label><input class="s176-inp" id="osha-days" type="number" min="0" value="5" oninput="oshaCalc()"></div><div><label class="s176-lbl">Current EMR (from insurance)</label><input class="s176-inp" id="osha-emr" type="number" step="0.01" min="0" value="0.95" oninput="oshaCalc()"></div></div><div class="s176-kpi" id="osha-kpi"><div class="s176-card"><div class="val" id="osha-trir">—</div><div class="lbl">TRIR</div></div><div class="s176-card"><div class="val" id="osha-dartv">—</div><div class="lbl">DART Rate</div></div><div class="s176-card"><div class="val" id="osha-sev">—</div><div class="lbl">Severity Rate</div></div></div><div id="osha-grade" style="padding:10px;border-radius:6px;text-align:center;font-weight:700;font-size:.9rem;margin-bottom:10px;"></div><div class="s176-ref"><strong style="color:#e2e8f0;">BLS Industry Benchmarks — Concrete Contractors (NAICS 2381/2382):</strong><table class="s176-table" style="margin-top:6px;"><tr><th>Metric</th><th>Industry Avg</th><th>Good</th><th>Excellent</th><th>Preqal Standard</th></tr><tr><td>TRIR</td><td>~3.5</td><td>&lt;2.5</td><td>&lt;1.5</td><td>≤2.0 most GCs</td></tr><tr><td>DART Rate</td><td>~1.8</td><td>&lt;1.2</td><td>&lt;0.8</td><td>≤1.5 most GCs</td></tr><tr><td>EMR</td><td>1.00</td><td>0.80–0.99</td><td>&lt;0.80</td><td>≤1.25 most GCs</td></tr><tr><td>Severity Rate</td><td>~45</td><td>&lt;30</td><td>&lt;15</td><td>—</td></tr></table><div style="margin-top:8px;"><strong style="color:#e2e8f0;">Formulas:</strong><br>TRIR = (Recordable Incidents × 200,000) ÷ Hours Worked<br>DART Rate = (DAFW + Restricted Cases × 200,000) ÷ Hours Worked<br>Severity Rate = (Days Lost × 200,000) ÷ Hours Worked<br>200,000 = 100 employees × 40 hrs/wk × 50 wks/yr<br><br><strong style="color:#e2e8f0;">Prequalification Impact:</strong><br>• TRIR &gt;4.0 → many national GCs will not prequalify<br>• EMR &gt;1.25 → higher bonding costs, some GCs require waiver<br>• Maintain OSHA 300A summary — post Feb 1 – Apr 30 each year<br><br><strong style="color:#e2e8f0;">Standards:</strong> OSHA 29 CFR 1904 | OSHA 300/300A Log | BLS Survey of Occupational Injuries | AGC SafetyNet</div></div><button class="s176-btn" style="background:#1e3a5f;color:#fff;margin-top:10px;" onclick="oshaPrint()">🖨️ Print Safety Metrics Summary</button></div></div>';
+
+document.body.insertAdjacentHTML('beforeend',oshaHTML);
+
+window.oshaCalc=function(){
+  var hrs=parseFloat(document.getElementById('osha-hrs').value)||1;
+  var rec=parseFloat(document.getElementById('osha-rec').value)||0;
+  var dafw=parseFloat(document.getElementById('osha-dafw').value)||0;
+  var dartC=parseFloat(document.getElementById('osha-dart').value)||0;
+  var days=parseFloat(document.getElementById('osha-days').value)||0;
+  var emr=parseFloat(document.getElementById('osha-emr').value)||1.00;
+  var trir=(rec*200000)/hrs;
+  var dartR=((dafw+dartC)*200000)/hrs;
+  var sev=(days*200000)/hrs;
+  document.getElementById('osha-trir').textContent=trir.toFixed(2);
+  document.getElementById('osha-dartv').textContent=dartR.toFixed(2);
+  document.getElementById('osha-sev').textContent=sev.toFixed(1);
+  var trirColor=trir<=1.5?'#10b981':trir<=2.5?'#f59e0b':'#ef4444';
+  var emrColor=emr<0.8?'#10b981':emr<=1.0?'#3b82f6':emr<=1.25?'#f59e0b':'#ef4444';
+  document.getElementById('osha-trir').style.color=trirColor;
+  document.getElementById('osha-dartv').style.color=dartR<=0.8?'#10b981':dartR<=1.5?'#f59e0b':'#ef4444';
+  var grade=trir<=1.5&&emr<=0.9?'✅ EXCELLENT — Strong prequalification posture. Top-tier safety performance.':trir<=2.5&&emr<=1.0?'✅ GOOD — Above average. Most GC prequalifications will pass.':trir<=3.5&&emr<=1.25?'⚠️ AVERAGE — Review open incidents. Some GCs may require explanation.':'🔴 ACTION REQUIRED — TRIR or EMR above typical GC prequalification limits. Implement formal safety program improvements.';
+  var gColor=trir<=1.5&&emr<=0.9?'#10b981':trir<=2.5&&emr<=1.0?'#3b82f6':trir<=3.5&&emr<=1.25?'#f59e0b':'#ef4444';
+  var gdiv=document.getElementById('osha-grade');
+  gdiv.style.background=gColor+'22';gdiv.style.border='1px solid '+gColor;gdiv.style.color=gColor;gdiv.textContent=grade;
+};
+
+window.oshaPrint=function(){
+  var hrs=parseFloat(document.getElementById('osha-hrs').value)||1;
+  var rec=parseFloat(document.getElementById('osha-rec').value)||0;
+  var dafw=parseFloat(document.getElementById('osha-dafw').value)||0;
+  var dartC=parseFloat(document.getElementById('osha-dart').value)||0;
+  var days=parseFloat(document.getElementById('osha-days').value)||0;
+  var emr=parseFloat(document.getElementById('osha-emr').value)||1.00;
+  var trir=((rec*200000)/hrs).toFixed(2);
+  var dartR=(((dafw+dartC)*200000)/hrs).toFixed(2);
+  var sev=((days*200000)/hrs).toFixed(1);
+  var w=window.open('','_blank');
+  w.document.write('<html><head><title>OSHA Safety Metrics</title><style>body{font-family:Arial;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:6px;font-size:11px;}th{background:#1e3a5f;color:#fff;}</style></head><body>');
+  w.document.write('<h2>📊 OSHA Safety Metrics Summary — ONCOR CONCRETE</h2>');
+  w.document.write('<p>Report Generated: '+new Date().toLocaleDateString()+' | CONFIDENTIAL — INTERNAL USE ONLY</p>');
+  w.document.write('<table><tr><th>Metric</th><th>Value</th><th>Industry Avg</th><th>Assessment</th></tr>');
+  w.document.write('<tr><td>Total Hours Worked</td><td>'+hrs.toLocaleString()+'</td><td>—</td><td>—</td></tr>');
+  w.document.write('<tr><td>Recordable Incidents</td><td>'+rec+'</td><td>—</td><td>—</td></tr>');
+  w.document.write('<tr><td>TRIR</td><td><strong>'+trir+'</strong></td><td>3.5</td><td>'+(trir<=2.5?'✅ Good':'⚠️ Review')+'</td></tr>');
+  w.document.write('<tr><td>DART Rate</td><td><strong>'+dartR+'</strong></td><td>1.8</td><td>'+(dartR<=1.2?'✅ Good':'⚠️ Review')+'</td></tr>');
+  w.document.write('<tr><td>Severity Rate</td><td><strong>'+sev+'</strong></td><td>45</td><td>—</td></tr>');
+  w.document.write('<tr><td>EMR</td><td><strong>'+emr+'</strong></td><td>1.00</td><td>'+(emr<=1.0?'✅ Good':'⚠️ Review')+'</td></tr>');
+  w.document.write('</table><p style="font-size:.75rem;color:#666;margin-top:12px;">OSHA 29 CFR 1904 | BLS Survey of Occupational Injuries and Illnesses | TRIR = (Recordable × 200,000) ÷ Hours Worked | Maintain OSHA 300 Log. Post 300A Feb 1–Apr 30.</p>');
+  w.document.write('</body></html>');w.document.close();w.print();
+};
+
+setTimeout(oshaCalc,100);
+
+// =====================================================================
+// SESSION 176 — FEATURE 3: SLAB FINISHING WINDOW ESTIMATOR
+// Ctrl+Alt+Shift+C | ~195 lines
+// Standards: ACI 302.1R §8.5–§8.6, ACI 305R evaporation
+// =====================================================================
+
+var finishHTML='<div class="s176-modal" id="s176-fin"><div class="s176-box"><button class="s176-close" onclick="document.getElementById(\'s176-fin\').style.display=\'none\'">✕</button><h2>⏱️ Slab Finishing Window Estimator — ACI 302.1R §8.5–§8.6</h2><div class="s176-row3"><div><label class="s176-lbl">Pour Start Time</label><input class="s176-inp" id="fin-start" type="time" value="06:00" oninput="finCalc()"></div><div><label class="s176-lbl">Concrete Temp (°F)</label><input class="s176-inp" id="fin-ctemp" type="number" min="40" max="110" value="85" oninput="finCalc()"></div><div><label class="s176-lbl">Air Temp (°F)</label><input class="s176-inp" id="fin-atemp" type="number" min="30" max="115" value="90" oninput="finCalc()"></div></div><div class="s176-row3"><div><label class="s176-lbl">Relative Humidity (%)</label><input class="s176-inp" id="fin-rh" type="number" min="5" max="100" value="20" oninput="finCalc()"></div><div><label class="s176-lbl">Wind Speed (mph)</label><input class="s176-inp" id="fin-wind" type="number" min="0" max="40" value="10" oninput="finCalc()"></div><div><label class="s176-lbl">Slab Thickness (in)</label><input class="s176-inp" id="fin-thick" type="number" min="2" max="24" value="5" oninput="finCalc()"></div></div><div class="s176-row"><div><label class="s176-lbl">Mix PSI</label><select class="s176-inp" id="fin-psi" onchange="finCalc()"><option value="3000">3000 PSI</option><option value="4000" selected>4000 PSI</option><option value="5000">5000 PSI</option><option value="6000">6000 PSI</option></select></div><div><label class="s176-lbl">W/CM Ratio (approx)</label><select class="s176-inp" id="fin-wcm" onchange="finCalc()"><option value="0.50">0.50</option><option value="0.45" selected>0.45</option><option value="0.40">0.40</option><option value="0.35">0.35</option></select></div></div><div class="s176-kpi"><div class="s176-card"><div class="val" id="fin-bleed">—</div><div class="lbl">Est. Bleed Time</div></div><div class="s176-card"><div class="val" id="fin-window">—</div><div class="lbl">Finishing Window Opens</div></div><div class="s176-card"><div class="val" id="fin-close">—</div><div class="lbl">Finishing Window Closes</div></div></div><div id="fin-evap" style="padding:8px 12px;border-radius:6px;margin-bottom:10px;font-size:.8rem;"></div><div id="fin-alert" style="padding:10px;border-radius:6px;margin-bottom:10px;font-size:.8rem;font-weight:600;"></div><div class="s176-ref"><strong style="color:#e2e8f0;">ACI 302.1R Finishing Sequence:</strong><table class="s176-table" style="margin-top:6px;"><tr><th>Phase</th><th>When</th><th>Action</th><th>Key Rule</th></tr><tr><td>1 — Strike-Off</td><td>Immediately after placement</td><td>Bull float / straight-edge</td><td>ACI 302.1R §8.5: within 30 min</td></tr><tr><td>2 — Bleed Water</td><td>After bull float</td><td>WAIT — do not finish</td><td>No finishing while sheen is present</td></tr><tr><td>3 — Hand/Mag Float</td><td>After bleed dissipates</td><td>Mag float or hand float</td><td>Footprint ≤3/8" sinkage</td></tr><tr><td>4 — Power Trowel Pass 1</td><td>When surface bears weight</td><td>Float pans, low pitch</td><td>Footprint ≤1/4" sinkage</td></tr><tr><td>5 — Power Trowel Final</td><td>30–90 min after pass 1</td><td>Pitched blades, burnish</td><td>Listen for ring of steel</td></tr><tr><td>6 — Curing</td><td>Within 30 min of final finish</td><td>Curing compound or wet</td><td>ACI 308R: 150–200 SF/gal</td></tr></table><p style="margin-top:8px;color:#94a3b8;">El Paso Summer Note: In 100°F+ heat, bleed water evaporates quickly. High evaporation rate (&gt;0.2 lb/ft²/hr) requires fogging or misting and evaporation retarder (ACI 305R). Monitor surface continuously. Consider 5 AM pour start.</p></div><button class="s176-btn" style="background:#1e3a5f;color:#fff;margin-top:10px;" onclick="finPrint()">🖨️ Print Finishing Plan</button></div></div>';
+
+document.body.insertAdjacentHTML('beforeend',finishHTML);
+
+window.finCalc=function(){
+  var startStr=document.getElementById('fin-start').value||'06:00';
+  var ctemp=parseFloat(document.getElementById('fin-ctemp').value)||85;
+  var atemp=parseFloat(document.getElementById('fin-atemp').value)||90;
+  var rh=parseFloat(document.getElementById('fin-rh').value)||20;
+  var wind=parseFloat(document.getElementById('fin-wind').value)||10;
+  var thick=parseFloat(document.getElementById('fin-thick').value)||5;
+  var wcm=parseFloat(document.getElementById('fin-wcm').value)||0.45;
+  // Evaporation rate: simplified ACI 305R Menzel formula approximation
+  // Evap (lb/ft2/hr) ≈ factor based on conditions
+  var cTempC=(ctemp-32)*5/9;
+  var aTempC=(atemp-32)*5/9;
+  var esat_c=610.7*Math.pow(10,(7.5*cTempC)/(237.3+cTempC));
+  var esat_a=610.7*Math.pow(10,(7.5*aTempC)/(237.3+aTempC));
+  var evap=((esat_c-rh/100*esat_a)*4.7*(1+0.4*wind*0.447))/1000;
+  evap=Math.max(0,evap);
+  // Bleed time estimate: ACI 302.1R - influenced by thickness, w/cm, temperature
+  // Higher temp = faster bleeding but faster evaporation
+  // Thicker slab = more bleeding water = longer bleed period
+  var baseBleeding=wcm*thick*60; // rough: 0.45 × 5" × 60 = 135 min base
+  var tempFactor=1+(ctemp-73)*0.015; // warmer = faster
+  if(tempFactor<0.5)tempFactor=0.5;
+  var bleedMins=Math.round(baseBleeding/tempFactor);
+  // Finishing window: opens after bleed time, duration ~90-180 min
+  var windowDurMins=Math.round(150-evap*200);
+  if(windowDurMins<45)windowDurMins=45;
+  if(windowDurMins>240)windowDurMins=240;
+  var finishWindowMins=bleedMins+15; // slight buffer after bleed
+  // Parse start time
+  var parts=startStr.split(':');
+  var startMins=parseInt(parts[0])*60+parseInt(parts[1]);
+  var openMins=startMins+finishWindowMins;
+  var closeMins=openMins+windowDurMins;
+  var fmt=function(m){var h=Math.floor(m/60)%24;var mn=m%60;var ampm=h>=12?'PM':'AM';var hh=h%12||12;return hh+':'+(mn<10?'0':'')+mn+' '+ampm;};
+  document.getElementById('fin-bleed').textContent=bleedMins<60?bleedMins+' min':Math.floor(bleedMins/60)+'h '+(bleedMins%60)+'m';
+  document.getElementById('fin-window').textContent=fmt(openMins);
+  document.getElementById('fin-close').textContent=fmt(closeMins);
+  var evapColor=evap<0.1?'#10b981':evap<0.2?'#f59e0b':'#ef4444';
+  var evapLabel=evap<0.1?'LOW — standard finishing':'⚠️ MODERATE — apply evaporation retarder':evap>=0.2?'🚫 HIGH — fog/mist + retarder required (ACI 305R)':'';
+  document.getElementById('fin-evap').style.background=evapColor+'22';document.getElementById('fin-evap').style.border='1px solid '+evapColor;document.getElementById('fin-evap').style.color=evapColor;
+  document.getElementById('fin-evap').innerHTML='<strong>Evaporation Rate: '+evap.toFixed(3)+' lb/ft²/hr</strong> — '+(evap<0.1?'LOW — standard finishing':evap<0.2?'⚠️ MODERATE — consider evaporation retarder':'🚫 HIGH — fogging + evaporation retarder required (ACI 305R)');
+  var alertDiv=document.getElementById('fin-alert');
+  if(ctemp>90){alertDiv.style.background='#fff3cd22';alertDiv.style.border='1px solid #f59e0b';alertDiv.style.color='#f59e0b';alertDiv.textContent='☀️ ACI 305R Hot Weather: Concrete temp exceeds 90°F. Rapid bleed evaporation risk. Monitor surface continuously. Have fogging/misting ready. Schedule retarder in mix.';}
+  else if(ctemp<50){alertDiv.style.background='#e8f4fd22';alertDiv.style.border='1px solid #3b82f6';alertDiv.style.color='#3b82f6';alertDiv.textContent='❄️ ACI 306R Cold Weather: Concrete temp below 50°F. Extended bleed time expected. Protect from freezing during curing. Heated enclosure may be required.';}
+  else{alertDiv.style.background='#10b98122';alertDiv.style.border='1px solid #10b981';alertDiv.style.color='#10b981';alertDiv.textContent='✅ Favorable finishing conditions. Monitor surface for bleed water dissipation before starting power troweling.';}
+};
+
+window.finPrint=function(){
+  var startStr=document.getElementById('fin-start').value||'06:00';
+  var ctemp=document.getElementById('fin-ctemp').value;
+  var atemp=document.getElementById('fin-atemp').value;
+  var rh=document.getElementById('fin-rh').value;
+  var wind=document.getElementById('fin-wind').value;
+  var bleed=document.getElementById('fin-bleed').textContent;
+  var opens=document.getElementById('fin-window').textContent;
+  var closes=document.getElementById('fin-close').textContent;
+  var evapTxt=document.getElementById('fin-evap').textContent;
+  var w=window.open('','_blank');
+  w.document.write('<html><head><title>Finishing Plan</title><style>body{font-family:Arial;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:6px;font-size:11px;}th{background:#1e3a5f;color:#fff;}.box{border:2px solid #1e3a5f;padding:10px;margin:8px 0;border-radius:4px;}</style></head><body>');
+  w.document.write('<h2>⏱️ Slab Finishing Window Plan — ONCOR CONCRETE</h2>');
+  w.document.write('<div class="box"><strong>Pour Start:</strong> '+startStr+' | <strong>Concrete Temp:</strong> '+ctemp+'°F | <strong>Air Temp:</strong> '+atemp+'°F | <strong>Humidity:</strong> '+rh+'% | <strong>Wind:</strong> '+wind+' mph</div>');
+  w.document.write('<div class="box">'+evapTxt+'</div>');
+  w.document.write('<table><tr><th>Timing</th><th>Action</th></tr>');
+  w.document.write('<tr><td><strong>'+startStr+' — Pour Start</strong></td><td>Concrete placement begins. Immediate strike-off and bull float. ACI 302.1R §8.5.</td></tr>');
+  w.document.write('<tr><td>After bull float — ~'+bleed+' bleed time</td><td>WAIT. Do not float while sheen/bleed water is present.</td></tr>');
+  w.document.write('<tr><td><strong>'+opens+' — Finishing Opens</strong></td><td>Begin mag float / hand float. Test footprint depth (≤3/8").</td></tr>');
+  w.document.write('<tr><td>Power Trowel Pass 1</td><td>Float pans, low pitch angle. Footprint ≤1/4".</td></tr>');
+  w.document.write('<tr><td>Power Trowel Final</td><td>Progressive blade pitch, burnish. Listen for steel ring.</td></tr>');
+  w.document.write('<tr><td><strong>'+closes+' — Window Closes (est.)</strong></td><td>Complete all finishing. Apply curing compound within 30 min (ACI 308R).</td></tr>');
+  w.document.write('</table><p style="font-size:.75rem;color:#666;margin-top:12px;">ACI 302.1R §8.5–§8.6 | ACI 305R (Hot Weather) | ACI 308R (Curing) | Times are estimates — monitor surface conditions continuously.</p>');
+  w.document.write('</body></html>');w.document.close();w.print();
+};
+
+setTimeout(finCalc,100);
+
+// =====================================================================
+// KEYBOARD SHORTCUTS — SESSION 176
+// =====================================================================
+document.addEventListener('keydown',function(e){
+  if(e.ctrlKey&&e.altKey&&e.shiftKey){
+    if(e.code==='KeyA'){e.preventDefault();var m=document.getElementById('s176-adm');m.style.display=m.style.display==='flex'?'none':'flex';}
+    if(e.code==='KeyB'){e.preventDefault();var m=document.getElementById('s176-osha');m.style.display=m.style.display==='flex'?'none':'flex';oshaCalc();}
+    if(e.code==='KeyC'){e.preventDefault();var m=document.getElementById('s176-fin');m.style.display=m.style.display==='flex'?'none':'flex';finCalc();}
+  }
+});
+
+// =====================================================================
+// SIDEBAR BUTTONS — SESSION 176
+// =====================================================================
+var sb176=document.querySelector('.sidebar-actions')||document.querySelector('.controls')||document.querySelector('.sidebar');
+if(!sb176){var sbEl176=document.createElement('div');sbEl176.className='sidebar-actions';document.body.appendChild(sbEl176);sb176=sbEl176;}
+[['🧪 Admixture Dosage Calc','s176-adm','#3d1a78',null],
+ ['📊 OSHA Safety Metrics','s176-osha','#1a3a1a',function(){oshaCalc();}],
+ ['⏱️ Finishing Window','s176-fin','#1a3a3a',function(){finCalc();}]].forEach(function(d){
+  var btn=document.createElement('button');btn.textContent=d[0];
+  btn.style.cssText='display:block;width:100%;padding:7px 10px;margin-bottom:5px;background:'+d[2]+';color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;text-align:left;';
+  btn.onclick=function(){var m=document.getElementById(d[1]);m.style.display=m.style.display==='flex'?'none':'flex';if(m.style.display==='flex'&&d[3])d[3]();};
+  sb176.appendChild(btn);
+});
+
+// Init
+setTimeout(admCalc,150);
+
+})();
+</script>
+<!-- END SESSION #176 -->
