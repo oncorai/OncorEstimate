@@ -204417,3 +204417,546 @@ document.addEventListener('keydown', function(e){
 })();
 </script>
 <!-- END SESSION #161 -->
+
+<!-- ============================================================
+     SESSION #162 — Apr 6, 2026
+     🧾 Concrete Invoice Validator (Ctrl+Shift+Alt+V)
+     📋 Pour Sequence Planner (Ctrl+Shift+Alt+W)
+     🔧 Tool & Equipment Checklist (Ctrl+Shift+Alt+X)
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+
+// Shared styles
+var s162css = document.createElement('style');
+s162css.textContent = `
+.s162-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:none;justify-content:center;align-items:flex-start;padding:30px;z-index:9999;overflow-y:auto;}
+.s162-box{background:linear-gradient(135deg,#0a1628 0%,#1e293b 100%);border:1px solid #334155;border-radius:12px;padding:20px;max-width:800px;width:100%;color:#e2e8f0;box-shadow:0 20px 50px rgba(0,0,0,0.5);}
+.s162-h1{font-size:15px;font-weight:700;color:#7dd3fc;margin:0;}
+.s162-btn{background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.2s;}
+.s162-btn:hover{background:#2563eb;color:#fff;}
+.s162-btn-teal{background:#134e4a;border-color:#14b8a6;color:#5eead4;}
+.s162-btn-teal:hover{background:#0d9488;color:#fff;}
+.s162-btn-red{background:#450a0a;border-color:#dc2626;color:#fca5a5;}
+.s162-btn-red:hover{background:#dc2626;color:#fff;}
+.s162-btn-gray{background:#374151;border-color:#6b7280;color:#d1d5db;}
+.s162-input{background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:4px;padding:6px 10px;font-size:11px;width:100%;box-sizing:border-box;}
+.s162-input:focus{outline:none;border-color:#3b82f6;}
+.s162-select{background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:4px;padding:6px 10px;font-size:11px;}
+.s162-kpi{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+.s162-kpi-card{background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;padding:10px 14px;text-align:center;min-width:100px;flex:1;}
+.s162-kpi-card .val{font-size:18px;font-weight:700;color:#22d3ee;}
+.s162-kpi-card .lbl{font-size:9px;color:#94a3b8;text-transform:uppercase;margin-top:2px;}
+.s162-table{width:100%;border-collapse:collapse;font-size:11px;margin-top:10px;}
+.s162-table th{background:#1e293b;color:#94a3b8;padding:6px 8px;text-align:left;font-weight:600;border-bottom:1px solid #334155;font-size:10px;}
+.s162-table td{padding:6px 8px;border-bottom:1px solid #1e3a5f;color:#e2e8f0;}
+.s162-table tr:hover{background:#1e3a5f33;}
+.s162-ref{background:#0c1929;border:1px solid #1e3a5f;border-radius:6px;padding:10px;margin-top:12px;font-size:10px;color:#64748b;}
+.s162-badge{display:inline-block;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:600;}
+`;
+document.head.appendChild(s162css);
+
+// ===========================================================
+// TOOL 1 — CONCRETE INVOICE VALIDATOR (Ctrl+Shift+Alt+V)
+// ===========================================================
+var ivOverlay = document.createElement('div');
+ivOverlay.id = 's162-invoice';
+ivOverlay.className = 's162-overlay';
+ivOverlay.innerHTML = `<div class="s162-box" style="max-width:780px;">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+  <span class="s162-h1">🧾 Concrete Invoice Validator — Ctrl+Shift+Alt+V</span>
+  <button class="s162-btn s162-btn-gray" onclick="document.getElementById('s162-invoice').style.display='none'">✕ Close</button>
+</div>
+<p style="font-size:11px;color:#94a3b8;margin:0 0 12px;">Cross-check batch plant invoice against your delivery ticket log. Detect discrepancies in yd³, rejected loads not credited, pricing errors, and short load fees before paying.</p>
+
+<div id="s162-iv-kpi" class="s162-kpi"></div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+  <div>
+    <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Invoice Total ($)</label>
+    <input type="number" id="s162-iv-invtotal" class="s162-input" placeholder="e.g. 12500" step="0.01">
+  </div>
+  <div>
+    <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Invoice yd³ Claimed</label>
+    <input type="number" id="s162-iv-invyd" class="s162-input" placeholder="e.g. 85" step="0.5">
+  </div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+  <div>
+    <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Invoice $/yd³</label>
+    <input type="number" id="s162-iv-invrate" class="s162-input" placeholder="e.g. 185" step="0.01">
+  </div>
+  <div>
+    <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Short Load Fees on Invoice ($)</label>
+    <input type="number" id="s162-iv-shortfees" class="s162-input" placeholder="e.g. 150" step="0.01" value="0">
+  </div>
+  <div>
+    <label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:4px;">Fuel/Other Surcharge ($)</label>
+    <input type="number" id="s162-iv-surcharge" class="s162-input" placeholder="e.g. 75" step="0.01" value="0">
+  </div>
+</div>
+
+<button class="s162-btn s162-btn-teal" onclick="s162ValidateInvoice()" style="margin-bottom:12px;">🔍 Validate Against Delivery Tickets</button>
+
+<div id="s162-iv-result"></div>
+
+<div class="s162-ref">
+  <strong>How It Works:</strong> Enter the batch plant invoice totals, then click Validate. This tool pulls all accepted loads from your Delivery Ticket Log (Ctrl+Shift+W) and compares yd³ + cost. Any discrepancy >1% is flagged.<br>
+  <strong>Common Issues:</strong> Rejected loads still billed, wrong mix code pricing, double-billed tickets, short load fees not documented, fuel surcharge not quoted.
+</div>
+</div>`;
+document.body.appendChild(ivOverlay);
+
+window.s162ValidateInvoice = function(){
+  var proj = (window.projectName || localStorage.getItem('oncor_active_project') || 'default').replace(/[^a-zA-Z0-9]/g,'_');
+  var tickets = JSON.parse(localStorage.getItem('oncor_delivery_tickets_v1_'+proj)||'[]');
+  
+  var invTotal = parseFloat(document.getElementById('s162-iv-invtotal').value)||0;
+  var invYd = parseFloat(document.getElementById('s162-iv-invyd').value)||0;
+  var invRate = parseFloat(document.getElementById('s162-iv-invrate').value)||0;
+  var shortFees = parseFloat(document.getElementById('s162-iv-shortfees').value)||0;
+  var surcharge = parseFloat(document.getElementById('s162-iv-surcharge').value)||0;
+
+  // Calc from tickets
+  var acceptedYd = 0, rejectedYd = 0, acceptedCount = 0, rejectedCount = 0;
+  tickets.forEach(function(t){
+    var status = (t.status||'').toLowerCase();
+    var yd = parseFloat(t.yd)||0;
+    if(status==='accepted'||status==='partial use'){
+      acceptedYd += yd;
+      acceptedCount++;
+    } else if(status==='rejected'){
+      rejectedYd += yd;
+      rejectedCount++;
+    }
+  });
+
+  var expectedCost = acceptedYd * invRate + shortFees + surcharge;
+  var ydDiff = invYd - acceptedYd;
+  var costDiff = invTotal - expectedCost;
+
+  // KPIs
+  var kpiEl = document.getElementById('s162-iv-kpi');
+  kpiEl.innerHTML = [
+    {v: acceptedYd.toFixed(1)+' yd³', l:'Your Accepted', c:'#4ade80'},
+    {v: invYd.toFixed(1)+' yd³', l:'Invoice Claims', c: Math.abs(ydDiff)>0.5?'#f87171':'#22d3ee'},
+    {v: rejectedYd.toFixed(1)+' yd³', l:'Rejected (no credit?)', c: rejectedYd>0?'#fbbf24':'#64748b'},
+    {v: '$'+expectedCost.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}), l:'Expected Cost', c:'#22d3ee'},
+    {v: (costDiff>=0?'+':'-')+'$'+Math.abs(costDiff).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}), l:'Variance', c: Math.abs(costDiff)>50?'#f87171':'#4ade80'}
+  ].map(function(k){return '<div class="s162-kpi-card"><div class="val" style="color:'+k.c+'">'+k.v+'</div><div class="lbl">'+k.l+'</div></div>';}).join('');
+
+  // Result panel
+  var issues = [];
+  if(Math.abs(ydDiff)>0.5) issues.push('⚠️ yd³ discrepancy: Invoice claims '+invYd+' but you accepted '+acceptedYd.toFixed(1)+' (Δ '+ydDiff.toFixed(1)+' yd³)');
+  if(rejectedYd>0) issues.push('🚫 '+rejectedCount+' rejected load(s) totaling '+rejectedYd.toFixed(1)+' yd³ — verify credit was applied');
+  if(Math.abs(costDiff)>50) issues.push('💰 Cost variance: $'+Math.abs(costDiff).toFixed(2)+' '+(costDiff>0?'OVER':'UNDER')+' expected');
+  if(invRate>0 && acceptedYd>0){
+    var impliedRate = (invTotal - shortFees - surcharge)/acceptedYd;
+    if(Math.abs(impliedRate-invRate)>1) issues.push('📊 Implied rate ($'+impliedRate.toFixed(2)+'/yd³) differs from stated ($'+invRate.toFixed(2)+'/yd³)');
+  }
+
+  var resEl = document.getElementById('s162-iv-result');
+  if(!tickets.length){
+    resEl.innerHTML = '<div style="background:#1c1917;border:1px solid #78350f;padding:12px;border-radius:6px;color:#fbbf24;font-size:11px;">⚠️ No delivery tickets found. Log tickets in Delivery Ticket Log (Ctrl+Shift+W) first.</div>';
+    return;
+  }
+  if(issues.length===0){
+    resEl.innerHTML = '<div style="background:#052e16;border:1px solid #16a34a;padding:12px;border-radius:6px;color:#4ade80;font-size:11px;">✅ <strong>INVOICE VALIDATED</strong> — No significant discrepancies found. Invoice matches delivery ticket records.</div>';
+  } else {
+    resEl.innerHTML = '<div style="background:#450a0a;border:1px solid #dc2626;padding:12px;border-radius:6px;color:#fca5a5;font-size:11px;">'
+      +'<strong>🔴 DISCREPANCIES FOUND</strong><ul style="margin:8px 0 0 16px;padding:0;">'+issues.map(function(i){return '<li style="margin-bottom:4px;">'+i+'</li>';}).join('')+'</ul>'
+      +'<p style="margin-top:10px;font-size:10px;color:#f87171;">Review invoice line items against your ticket log before payment. Request credit for rejected loads and verify mix code pricing.</p>'
+      +'</div>';
+  }
+};
+
+// ===========================================================
+// TOOL 2 — POUR SEQUENCE PLANNER (Ctrl+Shift+Alt+W)
+// ===========================================================
+var psOverlay = document.createElement('div');
+psOverlay.id = 's162-pourseq';
+psOverlay.className = 's162-overlay';
+psOverlay.innerHTML = `<div class="s162-box" style="max-width:820px;">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+  <span class="s162-h1">📋 Pour Sequence Planner — Ctrl+Shift+Alt+W</span>
+  <button class="s162-btn s162-btn-gray" onclick="document.getElementById('s162-pourseq').style.display='none'">✕ Close</button>
+</div>
+<p style="font-size:11px;color:#94a3b8;margin:0 0 12px;">Plan the order and dependencies of all concrete pours on a project. Drag to reorder, set dependencies, identify critical path. ACI 302.1R sequencing guidance.</p>
+
+<div id="s162-ps-kpi" class="s162-kpi"></div>
+
+<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+  <input type="text" id="s162-ps-name" class="s162-input" placeholder="Pour Name (e.g. SOG Phase 1)">
+  <select id="s162-ps-type" class="s162-select">
+    <option value="Slab-on-Grade">Slab-on-Grade</option>
+    <option value="Footing">Footing</option>
+    <option value="Grade Beam">Grade Beam</option>
+    <option value="Wall">Wall</option>
+    <option value="Column">Column</option>
+    <option value="Elevated Slab">Elevated Slab</option>
+    <option value="Beam">Beam</option>
+    <option value="Pier">Pier</option>
+    <option value="Curb">Curb</option>
+  </select>
+  <input type="number" id="s162-ps-yd" class="s162-input" placeholder="yd³" step="0.5">
+  <input type="date" id="s162-ps-target" class="s162-input" title="Target Date">
+  <button class="s162-btn s162-btn-teal" onclick="s162AddPour()">+ Add</button>
+</div>
+
+<div id="s162-ps-list" style="max-height:320px;overflow-y:auto;"></div>
+
+<div style="display:flex;gap:8px;margin-top:12px;">
+  <button class="s162-btn s162-btn-teal" onclick="s162PrintPourSeq()">🖨️ Print Pour Sequence</button>
+  <button class="s162-btn s162-btn-red" onclick="if(confirm('Clear all pours?')){s162Pours=[];s162SavePours();s162RenderPours();}">🗑 Clear All</button>
+</div>
+
+<div class="s162-ref">
+  <strong>ACI 302.1R Pour Sequencing:</strong> Footings → Grade beams → SOG (interior last) → Walls → Columns → Elevated slabs → Beams. Allow min 7 days cure between dependent pours for formwork loading. Consider construction joints at natural break points.
+</div>
+</div>`;
+document.body.appendChild(psOverlay);
+
+var s162Pours = [];
+(function(){
+  var proj = (window.projectName || localStorage.getItem('oncor_active_project') || 'default').replace(/[^a-zA-Z0-9]/g,'_');
+  s162Pours = JSON.parse(localStorage.getItem('oncor_pourseq_v1_'+proj)||'[]');
+})();
+
+function s162SavePours(){
+  var proj = (window.projectName || localStorage.getItem('oncor_active_project') || 'default').replace(/[^a-zA-Z0-9]/g,'_');
+  localStorage.setItem('oncor_pourseq_v1_'+proj, JSON.stringify(s162Pours));
+}
+
+window.s162AddPour = function(){
+  var name = document.getElementById('s162-ps-name').value.trim();
+  if(!name){alert('Enter pour name');return;}
+  s162Pours.push({
+    seq: s162Pours.length+1,
+    name: name,
+    type: document.getElementById('s162-ps-type').value,
+    yd: parseFloat(document.getElementById('s162-ps-yd').value)||0,
+    target: document.getElementById('s162-ps-target').value||'',
+    status: 'Planned',
+    notes: ''
+  });
+  s162SavePours();
+  s162RenderPours();
+  document.getElementById('s162-ps-name').value='';
+  document.getElementById('s162-ps-yd').value='';
+};
+
+window.s162MovePour = function(idx, dir){
+  var newIdx = idx + dir;
+  if(newIdx<0||newIdx>=s162Pours.length) return;
+  var temp = s162Pours[idx];
+  s162Pours[idx] = s162Pours[newIdx];
+  s162Pours[newIdx] = temp;
+  s162Pours.forEach(function(p,i){p.seq=i+1;});
+  s162SavePours();
+  s162RenderPours();
+};
+
+window.s162SetStatus = function(idx, status){
+  s162Pours[idx].status = status;
+  s162SavePours();
+  s162RenderPours();
+};
+
+window.s162DelPour = function(idx){
+  s162Pours.splice(idx,1);
+  s162Pours.forEach(function(p,i){p.seq=i+1;});
+  s162SavePours();
+  s162RenderPours();
+};
+
+function s162RenderPours(){
+  var totalYd = s162Pours.reduce(function(a,p){return a+p.yd;},0);
+  var planned = s162Pours.filter(function(p){return p.status==='Planned';}).length;
+  var complete = s162Pours.filter(function(p){return p.status==='Complete';}).length;
+  var kpiEl = document.getElementById('s162-ps-kpi');
+  kpiEl.innerHTML = [
+    {v: s162Pours.length, l:'Total Pours', c:'#22d3ee'},
+    {v: totalYd.toFixed(1), l:'Total yd³', c:'#4ade80'},
+    {v: planned, l:'Planned', c:'#fbbf24'},
+    {v: complete, l:'Complete', c:'#4ade80'}
+  ].map(function(k){return '<div class="s162-kpi-card"><div class="val" style="color:'+k.c+'">'+k.v+'</div><div class="lbl">'+k.l+'</div></div>';}).join('');
+
+  var listEl = document.getElementById('s162-ps-list');
+  if(!s162Pours.length){
+    listEl.innerHTML='<p style="color:#64748b;font-size:11px;text-align:center;padding:20px;">No pours planned yet — add pours above to build your sequence.</p>';
+    return;
+  }
+  var statusColors = {'Planned':'#fbbf24','In Progress':'#3b82f6','Complete':'#4ade80','On Hold':'#f87171'};
+  var rows = s162Pours.map(function(p,i){
+    return '<tr>'
+      +'<td style="font-weight:700;color:#7dd3fc;">#'+p.seq+'</td>'
+      +'<td>'+p.name+'</td>'
+      +'<td>'+p.type+'</td>'
+      +'<td style="text-align:right;">'+p.yd.toFixed(1)+'</td>'
+      +'<td>'+(p.target||'—')+'</td>'
+      +'<td><span class="s162-badge" style="background:'+(statusColors[p.status]||'#64748b')+'33;color:'+(statusColors[p.status]||'#64748b')+';">'+p.status+'</span></td>'
+      +'<td style="white-space:nowrap;">'
+        +'<button class="s162-btn" style="padding:2px 6px;font-size:9px;margin-right:2px;" onclick="s162MovePour('+i+',-1)" title="Move Up">↑</button>'
+        +'<button class="s162-btn" style="padding:2px 6px;font-size:9px;margin-right:4px;" onclick="s162MovePour('+i+',1)" title="Move Down">↓</button>'
+        +'<select class="s162-select" style="padding:2px 4px;font-size:9px;" onchange="s162SetStatus('+i+',this.value)">'
+          +'<option'+(p.status==='Planned'?' selected':'')+'>Planned</option>'
+          +'<option'+(p.status==='In Progress'?' selected':'')+'>In Progress</option>'
+          +'<option'+(p.status==='Complete'?' selected':'')+'>Complete</option>'
+          +'<option'+(p.status==='On Hold'?' selected':'')+'>On Hold</option>'
+        +'</select>'
+        +'<button class="s162-btn s162-btn-red" style="padding:2px 6px;font-size:9px;margin-left:4px;" onclick="s162DelPour('+i+')">✕</button>'
+      +'</td>'
+      +'</tr>';
+  }).join('');
+  listEl.innerHTML = '<table class="s162-table"><thead><tr><th>#</th><th>Pour Name</th><th>Type</th><th>yd³</th><th>Target Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+rows+'</tbody></table>';
+}
+s162RenderPours();
+
+window.s162PrintPourSeq = function(){
+  var totalYd = s162Pours.reduce(function(a,p){return a+p.yd;},0);
+  var rows = s162Pours.map(function(p){
+    return '<tr><td style="border:1px solid #d1d5db;padding:5px;font-weight:700;text-align:center;">#'+p.seq+'</td>'
+      +'<td style="border:1px solid #d1d5db;padding:5px;">'+p.name+'</td>'
+      +'<td style="border:1px solid #d1d5db;padding:5px;">'+p.type+'</td>'
+      +'<td style="border:1px solid #d1d5db;padding:5px;text-align:right;">'+p.yd.toFixed(1)+'</td>'
+      +'<td style="border:1px solid #d1d5db;padding:5px;">'+(p.target||'TBD')+'</td>'
+      +'<td style="border:1px solid #d1d5db;padding:5px;">'+p.status+'</td></tr>';
+  }).join('');
+  var w=window.open('','_blank');
+  w.document.write('<html><head><title>Pour Sequence Plan</title><style>body{font-family:Arial,sans-serif;margin:30px;font-size:11px;}table{border-collapse:collapse;width:100%;}th{background:#f3f4f6;border:1px solid #d1d5db;padding:5px;text-align:left;font-size:10px;}</style></head><body>'
+    +'<h1 style="font-size:16px;margin-bottom:4px;">📋 CONCRETE POUR SEQUENCE PLAN</h1>'
+    +'<p style="font-size:11px;color:#666;margin-bottom:12px;">Project: '+(window.projectName||'—')+' | Total Pours: '+s162Pours.length+' | Total yd³: '+totalYd.toFixed(1)+' | Generated: '+new Date().toLocaleString()+'</p>'
+    +'<table><thead><tr><th>Seq</th><th>Pour Name</th><th>Type</th><th>yd³</th><th>Target Date</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +'<p style="font-size:9px;color:#999;margin-top:16px;">Pour Sequence Planner | Oncor Construction | ACI 302.1R Sequencing | CONFIDENTIAL</p>'
+    +'</body></html>');
+  w.document.close();
+};
+
+// ===========================================================
+// TOOL 3 — TOOL & EQUIPMENT CHECKLIST (Ctrl+Shift+Alt+X)
+// ===========================================================
+var teOverlay = document.createElement('div');
+teOverlay.id = 's162-toolcheck';
+teOverlay.className = 's162-overlay';
+teOverlay.innerHTML = `<div class="s162-box" style="max-width:750px;">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+  <span class="s162-h1">🔧 Tool & Equipment Checklist — Ctrl+Shift+Alt+X</span>
+  <button class="s162-btn s162-btn-gray" onclick="document.getElementById('s162-toolcheck').style.display='none'">✕ Close</button>
+</div>
+<p style="font-size:11px;color:#94a3b8;margin:0 0 12px;">Pre-pour tool and equipment checklist — 45 items across 7 categories. Verify all tools are on-site and operational before trucks arrive. ACI 302.1R / OSHA 1926.</p>
+
+<div id="s162-te-kpi" class="s162-kpi"></div>
+
+<div id="s162-te-checklist" style="max-height:380px;overflow-y:auto;"></div>
+
+<div style="display:flex;gap:8px;margin-top:12px;">
+  <button class="s162-btn s162-btn-teal" onclick="s162CheckAll()">✓ Check All</button>
+  <button class="s162-btn" onclick="s162ResetCheck()">↺ Reset</button>
+  <button class="s162-btn s162-btn-teal" onclick="s162PrintToolCheck()">🖨️ Print Checklist</button>
+</div>
+
+<div class="s162-ref">
+  <strong>★ Required items</strong> — must be verified before pour. Missing critical equipment = delay or quality issue. Check and stage all items the day before pour.
+</div>
+</div>`;
+document.body.appendChild(teOverlay);
+
+var s162ToolCategories = {
+  '🏗️ Concrete Placement': [
+    {item:'Concrete Vibrators (2+ on-site)', req:true},
+    {item:'Vibrator Backup / Extra Head', req:false},
+    {item:'Screed Board / Straightedge', req:true},
+    {item:'Bull Float (magnesium)', req:true},
+    {item:'Fresno Trowel', req:true},
+    {item:'Hand Floats (wood/mag)', req:true},
+    {item:'Edgers (inside/outside)', req:true},
+    {item:'Grooving Tool / Jointer', req:false}
+  ],
+  '🔪 Saw Cutting': [
+    {item:'Walk-Behind Saw', req:true},
+    {item:'Diamond Blades (spare)', req:true},
+    {item:'Water Supply / Tank', req:true},
+    {item:'Chalk Line / Snap Line', req:true}
+  ],
+  '📐 Layout & Formwork': [
+    {item:'Laser Level or Transit', req:true},
+    {item:'Grade Pins / Hubs', req:true},
+    {item:'Tape Measures (2+)', req:true},
+    {item:'String Line', req:true},
+    {item:'Form Release Agent', req:true},
+    {item:'Hammer / Stakes', req:false}
+  ],
+  '🦺 Safety & PPE': [
+    {item:'Hard Hats for All', req:true},
+    {item:'Safety Glasses', req:true},
+    {item:'Concrete Boots (rubber)', req:true},
+    {item:'Gloves (waterproof)', req:true},
+    {item:'First Aid Kit', req:true},
+    {item:'Eye Wash Station', req:true},
+    {item:'Drinking Water / Cooler', req:true},
+    {item:'Sunscreen / Shade (summer)', req:false},
+    {item:'Fire Extinguisher', req:true}
+  ],
+  '💊 Curing & Protection': [
+    {item:'Curing Compound + Sprayer', req:true},
+    {item:'Plastic Sheeting', req:false},
+    {item:'Curing Blankets (if cold)', req:false},
+    {item:'Barricades / Caution Tape', req:true},
+    {item:'Traffic Cones', req:false}
+  ],
+  '🧪 Testing & QC': [
+    {item:'Slump Cone + Tamping Rod', req:true},
+    {item:'Air Meter (if air-entrained)', req:false},
+    {item:'Concrete Thermometer', req:true},
+    {item:'Cylinder Molds (6+)', req:true},
+    {item:'Wheelbarrow for Samples', req:true},
+    {item:'Ticket Clipboard + Pen', req:true}
+  ],
+  '🔧 Miscellaneous': [
+    {item:'Knee Boards', req:true},
+    {item:'Shovels / Come-Along', req:true},
+    {item:'Water Hose', req:true},
+    {item:'Generator (if no power)', req:false},
+    {item:'Fuel for Equipment', req:false},
+    {item:'Toolbox / Hand Tools', req:true},
+    {item:'Radios / Communication', req:true}
+  ]
+};
+
+var s162ToolChecked = {};
+(function(){
+  var proj = (window.projectName || localStorage.getItem('oncor_active_project') || 'default').replace(/[^a-zA-Z0-9]/g,'_');
+  s162ToolChecked = JSON.parse(localStorage.getItem('oncor_toolcheck_v1_'+proj)||'{}');
+})();
+
+function s162SaveToolCheck(){
+  var proj = (window.projectName || localStorage.getItem('oncor_active_project') || 'default').replace(/[^a-zA-Z0-9]/g,'_');
+  localStorage.setItem('oncor_toolcheck_v1_'+proj, JSON.stringify(s162ToolChecked));
+}
+
+window.s162ToggleTool = function(key){
+  s162ToolChecked[key] = !s162ToolChecked[key];
+  s162SaveToolCheck();
+  s162RenderToolCheck();
+};
+
+window.s162CheckAll = function(){
+  Object.keys(s162ToolCategories).forEach(function(cat){
+    s162ToolCategories[cat].forEach(function(t){
+      s162ToolChecked[t.item] = true;
+    });
+  });
+  s162SaveToolCheck();
+  s162RenderToolCheck();
+};
+
+window.s162ResetCheck = function(){
+  s162ToolChecked = {};
+  s162SaveToolCheck();
+  s162RenderToolCheck();
+};
+
+function s162RenderToolCheck(){
+  var total=0, done=0, reqTotal=0, reqDone=0;
+  Object.keys(s162ToolCategories).forEach(function(cat){
+    s162ToolCategories[cat].forEach(function(t){
+      total++;
+      if(t.req) reqTotal++;
+      if(s162ToolChecked[t.item]){
+        done++;
+        if(t.req) reqDone++;
+      }
+    });
+  });
+  var pct = total>0 ? Math.round(done/total*100) : 0;
+  var ready = reqDone === reqTotal;
+
+  var kpiEl = document.getElementById('s162-te-kpi');
+  kpiEl.innerHTML = [
+    {v: pct+'%', l:'Completion', c: pct===100?'#4ade80':pct>=80?'#fbbf24':'#f87171'},
+    {v: done+'/'+total, l:'Items Checked', c:'#22d3ee'},
+    {v: reqDone+'/'+reqTotal, l:'★ Required Done', c: reqDone===reqTotal?'#4ade80':'#f87171'},
+    {v: ready?'READY ✅':'NOT READY', l:'Status', c: ready?'#4ade80':'#f87171'}
+  ].map(function(k){return '<div class="s162-kpi-card"><div class="val" style="color:'+k.c+'">'+k.v+'</div><div class="lbl">'+k.l+'</div></div>';}).join('');
+
+  var html = '';
+  Object.keys(s162ToolCategories).forEach(function(cat){
+    var items = s162ToolCategories[cat];
+    var catDone = items.filter(function(t){return s162ToolChecked[t.item];}).length;
+    html += '<div style="margin-bottom:12px;">'
+      +'<div style="font-size:11px;font-weight:700;color:#7dd3fc;margin-bottom:6px;">'+cat+' <span style="color:#64748b;font-weight:400;">('+catDone+'/'+items.length+')</span></div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+    items.forEach(function(t){
+      var checked = s162ToolChecked[t.item];
+      html += '<div onclick="s162ToggleTool(\''+t.item.replace(/'/g,"\\'")+'\')" style="cursor:pointer;background:'+(checked?'#052e16':'#1e293b')+';border:1px solid '+(checked?'#16a34a':'#334155')+';border-radius:6px;padding:5px 10px;font-size:10px;color:'+(checked?'#4ade80':'#94a3b8')+';'+(checked?'text-decoration:line-through;':'')+'">'
+        +(t.req?'<span style="color:#f87171;font-weight:700;">★</span> ':'')
+        +(checked?'✓ ':'')+t.item
+        +'</div>';
+    });
+    html += '</div></div>';
+  });
+  document.getElementById('s162-te-checklist').innerHTML = html;
+}
+s162RenderToolCheck();
+
+window.s162PrintToolCheck = function(){
+  var total=0, done=0;
+  var rows = '';
+  Object.keys(s162ToolCategories).forEach(function(cat){
+    rows += '<tr><td colspan="3" style="background:#f3f4f6;font-weight:700;padding:6px;border:1px solid #d1d5db;">'+cat+'</td></tr>';
+    s162ToolCategories[cat].forEach(function(t){
+      total++;
+      var checked = s162ToolChecked[t.item];
+      if(checked) done++;
+      rows += '<tr><td style="border:1px solid #d1d5db;padding:4px;width:30px;text-align:center;">'+(checked?'✅':'☐')+'</td>'
+        +'<td style="border:1px solid #d1d5db;padding:4px;'+(checked?'text-decoration:line-through;color:#999;':'')+'">'+t.item+'</td>'
+        +'<td style="border:1px solid #d1d5db;padding:4px;text-align:center;color:'+(t.req?'#dc2626':'#999')+';">'+(t.req?'★ Required':'')+'</td></tr>';
+    });
+  });
+  var pct = total>0?Math.round(done/total*100):0;
+  var w=window.open('','_blank');
+  w.document.write('<html><head><title>Tool & Equipment Checklist</title><style>body{font-family:Arial,sans-serif;margin:30px;font-size:11px;}table{border-collapse:collapse;width:100%;}</style></head><body>'
+    +'<h1 style="font-size:16px;margin-bottom:4px;">🔧 TOOL & EQUIPMENT CHECKLIST</h1>'
+    +'<p style="font-size:11px;color:#666;margin-bottom:12px;">Project: '+(window.projectName||'—')+' | Completion: '+pct+'% ('+done+'/'+total+') | Generated: '+new Date().toLocaleString()+'</p>'
+    +'<table><thead><tr><th style="border:1px solid #d1d5db;padding:5px;width:30px;">✓</th><th style="border:1px solid #d1d5db;padding:5px;">Item</th><th style="border:1px solid #d1d5db;padding:5px;width:80px;">Required</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +'<div style="margin-top:20px;border-top:1px solid #ccc;padding-top:10px;display:flex;gap:40px;">'
+    +'<div><strong>Verified By:</strong> ______________________ <span style="font-size:9px;color:#666;">Foreman</span></div>'
+    +'<div><strong>Date:</strong> ______________________</div></div>'
+    +'<p style="font-size:9px;color:#999;margin-top:16px;">Tool & Equipment Checklist | Oncor Construction | ACI 302.1R / OSHA 1926 | CONFIDENTIAL</p>'
+    +'</body></html>');
+  w.document.close();
+};
+
+// ---- SIDEBAR BUTTONS ────────────────────────────────────────
+(function(){
+  var sb = document.getElementById('oncorSidebarActions')||document.querySelector('.sidebar-actions')||document.querySelector('[id*="sidebar"]');
+  if(!sb){var cs=document.querySelectorAll('div');for(var i=0;i<cs.length;i++){if(cs[i].children.length>5&&cs[i].children[0].tagName==='BUTTON'){sb=cs[i];break;}}}
+  if(!sb) return;
+  var div = document.createElement('div');
+  div.style.cssText='display:flex;flex-direction:column;gap:4px;padding:4px 0;border-top:1px solid #1e3a5f;margin-top:4px;';
+  div.innerHTML =
+    '<button onclick="document.getElementById(\'s162-invoice\').style.display=\'flex\';" style="background:#1c1917;border:1px solid #a16207;color:#fcd34d;border-radius:6px;padding:7px;cursor:pointer;font-size:10px;text-align:left;" title="Ctrl+Shift+Alt+V">🧾 Concrete Invoice Validator</button>'
+    +'<button onclick="document.getElementById(\'s162-pourseq\').style.display=\'flex\';s162RenderPours();" style="background:#172554;border:1px solid #3b82f6;color:#93c5fd;border-radius:6px;padding:7px;cursor:pointer;font-size:10px;text-align:left;" title="Ctrl+Shift+Alt+W">📋 Pour Sequence Planner</button>'
+    +'<button onclick="document.getElementById(\'s162-toolcheck\').style.display=\'flex\';s162RenderToolCheck();" style="background:#1c1917;border:1px solid #dc2626;color:#fca5a5;border-radius:6px;padding:7px;cursor:pointer;font-size:10px;text-align:left;" title="Ctrl+Shift+Alt+X">🔧 Tool & Equipment Checklist</button>';
+  sb.appendChild(div);
+})();
+
+// ---- KEYBOARD SHORTCUTS ─────────────────────────────────────
+document.addEventListener('keydown', function(e){
+  if(e.ctrlKey && e.shiftKey && e.altKey){
+    var k = e.key.toUpperCase();
+    if(k==='V'){e.preventDefault();var el=document.getElementById('s162-invoice');el.style.display=el.style.display==='flex'?'none':'flex';}
+    if(k==='W'){e.preventDefault();var el2=document.getElementById('s162-pourseq');el2.style.display=el2.style.display==='flex'?'none':'flex';if(el2.style.display==='flex')s162RenderPours();}
+    if(k==='X'){e.preventDefault();var el3=document.getElementById('s162-toolcheck');el3.style.display=el3.style.display==='flex'?'none':'flex';if(el3.style.display==='flex')s162RenderToolCheck();}
+  }
+});
+
+// ---- BACKDROP CLOSE ─────────────────────────────────────────
+['s162-invoice','s162-pourseq','s162-toolcheck'].forEach(function(id){
+  document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.style.display='none';});
+});
+
+})();
+</script>
+<!-- END SESSION #162 -->
