@@ -1,5 +1,89 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 6, 2026 - 22:52 UTC (Overnight Build Batch)
+**Status:** ✅ FOUR SESSIONS completed (Sessions #185-187 + task file sync)
+
+### Session #185 — 🪨📈🚛 (+332 lines)
+- **Aggregate Gradation Analyzer** (Alt+Shift+F7) — ASTM C33 / ACI 211.1 combined gradation checker for #57/#67/#8/#89/#4 stone; full sieve analysis table vs spec limits; % passing per sieve; PASS/FAIL status per row; overall gradation status; workability/segregation warnings
+- **Maturity Curve Strength Estimator** (Alt+Shift+F8) — ASTM C1074 Nurse-Saul method; estimates strength from maturity index (°F-hr); cement type factors (I/II, III, IP, IS); milestone table for form strip, backfill, load timing; equivalent age calculator
+- **Volumetric Mixer Batch Calculator** (Alt+Shift+F9) — ASTM C685 / ACI 304 batch weights for mobile volumetric trucks; f'c-based proportions; cement/water/sand/stone per yd³; slump adjustment; belt/gate settings for mixer calibration
+
+### Session #186 — 🧪🔪🔧 (+325 lines)
+- **ACI 211 Mix Design Calculator** (Alt+Shift+F10) — Full ACI 211.1-91 proportioning method; f'c, slump, max agg size, air entrainment, exposure class; auto-calculates w/c ratio, cement factor, water content, absolute volumes; trial batch notes
+- **Sawcut Timing Calculator** (Alt+Shift+F11) — ACI 302.1R / ACI 360R optimal sawcutting window; pour finish time, thickness, temps, cement type, saw type (conventional vs early-entry Soff-Cut); cut depth T/4 to T/3; hot/cold weather warnings
+- **Concrete Pump Prime Calculator** (Alt+Shift+F12) — ACI 304.2R priming slurry and waste estimation; pump type (boom 32-52m, line), line size, extra ground line, hose length; line fill volume, hopper fill, washout waste; total waste cost estimate
+
+### Session #187 — 🔨🔗📋 (+280 lines)
+- **Concrete Repair Patch Estimator** (Ctrl+Alt+Shift+1) — ACI 546R / ICRI 310.1R; repair type (patch/spall/overlay/deep/crack), material (polymer-modified, epoxy mortar, microsilica, rapid-set, grout), area/depth; bag count with yield factors; bonding agent/primer needs
+- **Post-Tension Strand Estimator** (Ctrl+Alt+Shift+2) — PTI DC-10.9 / ACI 318 Ch.20; preliminary unbonded PT strand estimate for flat plate/banded/beam; strand size, area, span; LF strand, strand count, anchor count, estimated cost; El Paso sub note (Sunbelt Stressing)
+- **Embed Schedule Generator** (Ctrl+Alt+Shift+3) — ACI 318 Ch.17 / AISC; build embedment schedule for anchor bolts, L-bolts, plates, sleeves, inserts, holdowns; mark/type/qty/size/embed/material/location/dwg ref; running totals; printable schedule
+
+### Commits:
+- afd0a21 (Session #185) — 332 lines
+- c3d1e49 (Session #186) — 325 lines
+- efcebac (Session #187) — 280 lines
+- File now at ~214,880 lines total
+
+---
+
+## ✅ SESSION: Apr 6, 2026 - 21:46 UTC (Overnight Cron #184)
+**Status:** ✅ THREE NEW FEATURES added (+370 lines)
+
+### 👷 Concrete Placing Crew Optimizer (Alt+Shift+F4) — ~130 lines
+- New `👷 Crew Optimizer` button in sidebar (dark blue)
+- `Alt+Shift+F4` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 302.1R / ACI 304R / ACI 309R — Calculate optimal crew size and position assignments for a concrete pour based on volume, duration, method, and element type
+- **Features:** Total yd³, target duration, placement method (boom/line pump, chute, buggy), element type (SOG/elevated slab/wall/column/footing/grade beam), slab SF for finish crew sizing, slump; auto-calculates: required pace CY/hr vs method capacity, vibrator count per ACI 309R (1 per 20 CY/hr + 1 spare), finish crew per ACI 302.1R (1 per 2,500 SF), pump/hose crew, buggy operators, QC tech; warnings when pace exceeds method capacity; printable Crew Plan
+
+### 🔗 Standard Hook Development Length (Alt+Shift+F5) — ~130 lines
+- New `🔗 Hook Dev Length` button in sidebar (dark purple)
+- `Alt+Shift+F5` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 318-19 §25.4.3 Eq. 25.4.3.1a — Calculate tension hook development length ldh with full modification factor breakdown
+- **Features:** Bar size #3–#11, Grade 40/60/80, f'c 3000–6000 psi, side cover, coating (ψe), concrete type λ, confining ties/stirrups (ψr), location factor ψo; full factor table showing each ψ value; 90° and 180° hook geometry output (bend diameter, extension after bend per ACI §25.3.1); code minimum check (max(8db, 6")); printable Hook Schedule
+
+### 🧱 Concrete Surface Profile (CSP) Selector (Alt+Shift+F6) — ~110 lines
+- New `🧱 CSP Selector` button in sidebar (dark green)
+- `Alt+Shift+F6` keyboard shortcut opens/closes the modal
+- **Purpose:** ICRI 310.2 / ICRI No. 03732 — Select correct CSP 1–9 surface profile for overlays, coatings, repairs, waterproofing, and adhesive anchors
+- **Features:** Application type (9: self-leveling, thin polymer overlay, epoxy coating, sealer, bonded overlay, thick overlay, shotcrete, waterproofing membrane, adhesive anchors), traffic/exposure (light/heavy/industrial/exterior), substrate condition (new/laitance/contaminated/carbonated); auto-recommends CSP range with preparation methods; contamination adjustments for oil/carbonated surfaces; full ICRI 9-profile reference table with texture, amplitude, methods, typical applications; printable CSP Spec; El Paso notes on acid etch limitations and comparator chip verification
+
+### Session #184 Summary
+- Commit: e22a82c
+- Total new lines: +370
+- New shortcuts: Alt+Shift+F4 (Crew Optimizer), Alt+Shift+F5 (Hook Dev Length), Alt+Shift+F6 (CSP Selector)
+- File now at ~213,944 lines total
+
+---
+
+## ✅ SESSION: Apr 6, 2026 - 20:38 UTC (Overnight Cron #183)
+**Status:** ✅ THREE NEW FEATURES added (+481 lines)
+
+### 🧲 Anchor Bolt Pattern Calculator (Alt+Shift+F1) — ~130 lines
+- New `🧲 Anchor Bolt Pattern` button in sidebar (dark purple)
+- `Alt+Shift+F1` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 318-19 Chapter 17 / AISC Design Guide 1 — preliminary cast-in-place and post-installed anchor bolt pattern checker for column base plates and holdowns
+- **Features:** Anchor type (cast-in headed, post-installed, L-bolt), diameter (1/2"–1-1/2"), f'c, grade (F1554 Gr 36/55/105), embedment depth hef, pattern (1/2/4/6/8-bolt), edge distance C1, bolt spacing S; auto-calculates: ϕNsa steel tensile capacity, Ncbg concrete breakout group capacity, ϕVsa shear group, edge effect factor Ψed; min edge/spacing/embedment checks with ✅/❌ status per ACI 318-19; El Paso SDC D2 seismic note; printable anchor schedule
+
+### 📏 Slab on Metal Deck Volume Estimator (Alt+Shift+F2) — ~130 lines
+- New `📏 Slab on Deck Volume` button in sidebar (dark navy)
+- `Alt+Shift+F2` keyboard shortcut opens/closes the modal
+- **Purpose:** SDI C-2022 / Vulcraft tables — calculate concrete volume on metal deck accounting for flute fill volume (always MORE than a flat slab)
+- **Features:** Deck profile selector (6 profiles: 1.5"/2"/3"/4.5" depth, various flute pitches and widths), slab above deck thickness, area SF, concrete unit weight (NW/LW/Sand-LW), price/CY, waste %; auto-calculates flute fill CY, slab above CY, total net CY, correction factor vs flat slab, order CY with waste, truck count, dead load psf, material $/SF; volume breakdown table (slab vs flute fill %); key design notes (IBC §1604.3.3, AISC 360 §I3.2d min thickness); printable estimate
+
+### 💧 Bleeding Rate & Finishing Delay Estimator (Alt+Shift+F3) — ~130 lines
+- New `💧 Bleed & Finish Delay` button in sidebar (dark teal/green)
+- `Alt+Shift+F3` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 302.1R §8.6 / ACI 308R / ASTM C232 — estimate bleed water duration and generate time-based finishing schedule to prevent premature finishing (causes delamination, surface scaling)
+- **Features:** W/CM ratio, slab thickness, concrete temp °F, air temp °F, RH %, wind speed mph, pour start time, mix type (Type I/II, fly ash ×1.15, Type III ×0.85, slag ×1.2, silica fume ×0.80); auto-calculates: bleed volume gal/SF, evaporation rate lb/ft²/hr (Menzel/ACI 305R formula), estimated bleed time hrs, temperature adjustment factor; finishing timeline with specific clock times: Strike-Off, Bull Float OK, Mag Float start, Power Trowel Pass 1 & Final, Curing Compound window; evaporation risk badge (LOW/MODERATE/HIGH/CRITICAL per ACI 305R); El Paso summer warning (RH 15-30% + wind = critical); printable finishing plan with ⚠️ DO NOT FINISH WHILE SHEEN IS VISIBLE banner
+
+### Session #183 Summary
+- Commit: 886e363
+- Total new lines: +481
+- New shortcuts: Alt+Shift+F1 (Anchor Bolt Pattern), Alt+Shift+F2 (Slab on Deck), Alt+Shift+F3 (Bleed & Finish)
+- File now at ~213,574 lines total
+
+---
+
 ## ✅ SESSION: Apr 6, 2026 - 19:33 UTC (Overnight Cron #182)
 **Status:** ✅ THREE NEW FEATURES added (+392 lines)
 
