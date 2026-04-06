@@ -1,5 +1,1212 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 4, 2026 - 16:55 UTC (Overnight Cron #155-159)
+**Status:** ✅ FIFTEEN NEW FEATURES added (+1,977 lines) across 5 sessions
+
+### Session #155 — Pour Restart Checklist + Job OH Allocation + Cement Quantity Planner (+338 lines)
+- **🔁 Concrete Pour Restart Checklist (Ctrl+Shift+Alt+A)** — ACI 304R §5.5 / ACI 301-16 §7.3 / ASTM C94 §11.9. 15-item checklist for resuming after interruption (pump breakdown, rejected load, weather). Elapsed time calculator with <30/>30-90/>90 min status. Safety/Concrete/Equipment/Delivery/QC/Communication categories. Printable with foreman/inspector/GC signature block.
+- **💡 Job Overhead Allocation Tool (Ctrl+Shift+Alt+B)** — CFMA / AGC job cost accounting. Allocate monthly overhead (rent, vehicle, insurance, admin, tools) across active jobs. 3 methods: Revenue-Based, Labor Hours, Volume (yd³). Shows OH allocated per job, OH/yd³, OH % of revenue. Printable allocation report.
+- **📊 Cement Quantity Planner (Ctrl+Shift+Alt+C)** — ACI 211.1 / ASTM C150 / ASTM C595. Calculate cement and SCM quantities for project. Inputs: yd³, PSI, cement type (I/II, III, IP, IL), SCM replacement %. Outputs: tons, bags, cost. Full ACI 211.1 reference table by PSI.
+- Commit: b4cf5b5
+
+### Session #156 — Mix Water Calculator + Material Delivery Schedule + Punch List Tracker (+358 lines)
+- **🧮 Concrete Mix Water Calculator (Ctrl+Shift+Alt+D)** — ACI 211.1 / ASTM C94 §11.8 / ACI 318-19 §26.4. Design mix water calculation with batch ticket verification. Field water addition check against ASTM C94 1 gal/yd³ limit. Slump increase estimation. Auto-calculated Accept/Caution/Reject status.
+- **📦 Material Delivery Schedule (Ctrl+Shift+Alt+E)** — Track and coordinate material deliveries (rebar, formwork, curing, vapor barrier, etc.). 15 material types. Schedule with date/time window, vendor, PO#, status tracking. Late delivery alerts. Printable delivery schedule.
+- **🔍 Punch List Quality Tracker (Ctrl+Shift+Alt+F)** — ACI 301-16 concrete defect tracking. 15 defect types (surface/structural crack, spalling, honeycombing, cold joint, etc.). Severity levels (minor/moderate/major). Status workflow. Due date tracking with overdue alerts. Printable punch list report.
+- Commit: c03e804
+
+### Session #157 — Rebar Spacing Calculator + Footer Depth/Size Estimator + Crew Time Card Logger (+383 lines)
+- **📐 Rebar Spacing Calculator (Ctrl+Shift+Alt+G)** — ACI 318-19 §25.2 / ACI 117-10. Calculate rebar count, LF, weight for slabs. ACI min/max spacing verification. Inputs: dimensions, bar size, spacing, cover, stock length. Outputs: bar count both directions, total LF, tons, stock bars needed. Clear/max spacing checks.
+- **🏛️ Footer Depth & Size Estimator (Ctrl+Shift+Alt+H)** — IBC 2021 §1809 / ACI 332. Preliminary footing sizing based on frost depth, soil bearing capacity, and load. 6 frost depth regions. 6 soil types. Continuous vs spread footing. Calculates width, thickness, concrete per LF. El Paso caliche notes. PE/SE disclaimer.
+- **⏱️ Crew Time Card Logger (Ctrl+Shift+Alt+I)** — FLSA / TX Labor Law. Track crew hours by worker and job code. 10 task types. Calculate regular and OT hours. Rate per hour input. CSV export for payroll. Worker name autocomplete. Printable time cards.
+- Commit: fd41422
+
+### Session #158 — Equipment Rental ROI + GPS Pour Location + Spec Comparison (+430 lines)
+- **🔧 Equipment Rental ROI Calculator (Ctrl+Shift+Alt+J)** — Rent vs Buy analysis. 10 equipment presets (walk-behind saw through mini excavator). Calculates break-even months, utilization %, annual rent vs own cost, life-cycle total. Auto-recommendation: BUY / RENT / EVALUATE. Comparison table. IRS Section 179 reference.
+- **📍 GPS Pour Location Logger (Ctrl+Shift+Alt+K)** — Geolocation documentation. Browser GPS capture with accuracy. Log pour name, date, type, coordinates, yd³. Google Maps link per entry. Printable location log for as-built records.
+- **📑 Concrete Specification Comparison Tool (Ctrl+Shift+Alt+L)** — Side-by-side comparison of two jobs' concrete specs. 10 parameters: f'c, w/cm, slump, air, fiber, FF/FL, exposure class, special inspection, cure days, testing frequency. Auto-highlights differences. Printable comparison report.
+- Commit: 0089c00
+
+### Session #159 — Placement Method Selector + Quick CO Pricer + Daily Foreman Report (+412 lines)
+- **🏗️ Concrete Placement Method Selector (Ctrl+Shift+Alt+M)** — ACI 304R / ACI 304.2R. Compare 6 placement methods (boom pump 32m/42m, line pump, direct chute, buggy, conveyor) by reach, rate, cost, and suitability. Auto-filters based on yd³, reach, height, and site access. Recommends cheapest suitable method.
+- **💰 Quick Change Order Pricer (Ctrl+Shift+Alt+N)** — Dynamic line-item CO pricing with inline editing. Default pre-loaded with concrete/labor/pump lines. Configurable markup %. Live KPI: direct cost, markup, total, $/yd³. Copy summary to clipboard for texts/emails. Printable CO pricing sheet.
+- **📋 Daily Foreman Report (Ctrl+Shift+Alt+O)** — AGC/AIA format. Inputs: date, foreman, weather/temp, crew size, hours, yd³, trucks, work performed, issues/delays, tomorrow's plan, safety notes, visitors. Save to history. Print individual reports with dual signature block. localStorage persistence.
+- Commit: 1473f08
+
+**Total Lines Added:** 203,665 (from 201,549)
+**New Shortcuts:** Ctrl+Shift+Alt+A through O (15 new tools)
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 13:26 UTC (Overnight Cron #152)
+**Status:** ✅ THREE NEW FEATURES added (+341 lines)
+
+### What Was Added:
+
+---
+
+### 🔧 Equipment Hours Logger (Ctrl+Alt+1) — ~130 lines
+- New `🔧 Equipment Hours Logger` button in sidebar (blue color)
+- `Ctrl+Alt+1` keyboard shortcut opens/closes the modal
+- **Purpose:** Track rental equipment usage, fuel consumption, and hours for accurate job costing.
+
+**Features:**
+- **15 Equipment Types:** Concrete Pump (Boom/Line), Excavator, Skid Steer, Forklift, Telehandler, Compactor, Generator, Light Tower, Power Screed, Ride-on Trowel, Saw Cutter, Vibrator, Laser Screed, Other
+- **4-card KPI:** Log Entries / Total Hours / Rental Cost / Fuel Used
+- **Entry form:** Date, Equipment Type, Unit ID, Hours, Rate $/hr, Fuel gal, Operator, Notes
+- **Log table** — sorted by date with cost per entry
+- **Printable Equipment Log**
+- localStorage per project: `oncor_ehl_v1_[project]`
+
+---
+
+### 📜 Submittal Register (Ctrl+Alt+2) — ~140 lines
+- New `📜 Submittal Register` button in sidebar (indigo color)
+- `Ctrl+Alt+2` keyboard shortcut opens/closes the modal
+- **Purpose:** Track all project submittals — mix designs, product data, shop drawings — through approval workflow.
+
+**Features:**
+- **9 Submittal Types:** Mix Design, Product Data, Shop Drawing, Sample, Test Report, Manufacturer Cert, Warranty, O&M Manual, Other
+- **7 Status Options:** Not Submitted, Submitted, Under Review, Approved, Approved as Noted, Revise & Resubmit, Rejected
+- **5-card KPI:** Total / Approved / Pending / Action Required / Not Submitted
+- **⚠️ Alert banner** when any submittals require action
+- **Full submittal log** with status badges, dates, reviewer
+- **Printable Submittal Register**
+- localStorage per project: `oncor_sr_v1_[project]`
+
+---
+
+### 💵 Petty Cash Log (Ctrl+Alt+3) — ~120 lines
+- New `💵 Petty Cash Log` button in sidebar (green color)
+- `Ctrl+Alt+3` keyboard shortcut opens/closes the modal
+- **Purpose:** Track job-site petty cash expenses — fuel, supplies, food, small purchases.
+
+**Features:**
+- **9 Categories:** Fuel, Supplies, Food/Drinks, Tools, Parking/Tolls, Safety Gear, Hardware, Delivery Tip, Miscellaneous
+- **Configurable starting fund** — default $500
+- **💵 Replenish Fund** button — log cash additions
+- **4-card KPI:** Total Spent / Balance / Transactions / Top Category
+- **Transaction log** with expense (red) and replenish (green) entries
+- **Printable Petty Cash Report** with fund/balance summary
+- localStorage per project: `oncor_pcl_v1_[project]`
+
+---
+
+### Session #152 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: bc77901
+- Total new lines: +341
+- New shortcuts: Ctrl+Alt+1 (Equipment Hours), Ctrl+Alt+2 (Submittal Register), Ctrl+Alt+3 (Petty Cash)
+- File now at 200,608 lines total
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 13:26 UTC (Overnight Cron #151)
+**Status:** ✅ THREE NEW FEATURES added (+299 lines)
+
+### What Was Added:
+
+---
+
+### 🔄 Concrete Return Material Log (Ctrl+Shift+Alt+0) — ~110 lines
+- New `🔄 Concrete Return Log` button in sidebar (red color)
+- `Ctrl+Shift+Alt+0` keyboard shortcut opens/closes the modal
+- **Purpose:** Track all returned/wasted concrete — over-orders, rejections, pump priming — for waste analysis and calibrating future orders.
+
+**Features:**
+- **8 Return Types:** Over-Order Buffer, Rejected Load, Left on Site (Washout), Returned to Plant, Used Elsewhere, Short Load, Pump Priming Waste, Other
+- **4-card KPI:** Total Wasted yd³ / Waste Cost $ / Rejected yd³ / Returned yd³
+- **Entry form:** Date, Ticket #, Return Type, yd³, Price $/yd³, Pour Area, Notes
+- **Running log table** with type badges, cost per entry, totals row
+- **Printable Log** with ACI 304R / ASTM C94 references
+- localStorage per project: `oncor_crml_v1_[project]`
+
+---
+
+### 📐 Slope & Grade Tolerance Checker (Ctrl+Shift+Alt+-) — ~95 lines
+- New `📐 Slope & Grade Checker` button in sidebar (blue color)
+- `Ctrl+Shift+Alt+-` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 117-10 / ACI 302.1R slope and F-number verification calculator.
+
+**Features:**
+- **Slope Calculator:** Enter run (ft), rise (in), required slope (in/ft) → actual slope with WITHIN TOLERANCE / BELOW / ABOVE spec status
+- **F-Number Checker:** Enter spec FF/FL and achieved FF/FL → PASS/FAIL per ASTM E1155
+- **ACI 117-10 Reference Table:** 5 application classes (Conventional to Superflat) with min FF/FL values
+- **Common slopes reference:** 1/8"/ft = ADA min, 1/4"/ft = standard drainage, 1/2"/ft = aggressive
+
+---
+
+### 🧾 Billing Line Item Builder (Ctrl+Shift+Alt+=) — ~125 lines
+- New `🧾 Billing Line Item Builder` button in sidebar (green color)
+- `Ctrl+Shift+Alt+=` keyboard shortcut opens/closes the modal
+- **Purpose:** Build Schedule of Values (SOV) line items for pay applications — CSI MasterFormat ready.
+
+**Features:**
+- **9 CSI Categories:** 03100 Formwork, 03200 Reinforcement, 03300 Cast-in-Place, 03350 Finishing, 03390 Curing, 03600 Grouts, 02000 Site Work, 99000 Gen Conditions, Other
+- **8 Units:** CY, SF, LF, LS, EA, HR, TON, LB
+- **4-card KPI:** Line Items / Contract Total $ / Categories / SOV Ready
+- **⚡ Seed from Estimate** — auto-pulls from current open estimate
+- **Copy to Clipboard** — tab-delimited for Excel/GC systems
+- **Printable SOV** with AIA G702/G703 reference
+- localStorage per project: `oncor_blib_v1_[project]`
+
+---
+
+### Session #151 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 033a686
+- Total new lines: +299
+- New shortcuts: Ctrl+Shift+Alt+0 (Return Log), Ctrl+Shift+Alt+- (Slope Checker), Ctrl+Shift+Alt+= (Billing Builder)
+- File now at 200,267 lines total — **CROSSED 200K LINES** 🎉
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 13:26 UTC (Overnight Cron #150)
+**Status:** ✅ THREE NEW FEATURES added (+397 lines)
+
+### What Was Added:
+
+---
+
+### 📈 Monthly Revenue Snapshot (Ctrl+Shift+Alt+7) — ~130 lines
+- New `📈 Monthly Revenue Snapshot` button in sidebar (blue color)
+- `Ctrl+Shift+Alt+7` keyboard shortcut opens/closes the modal
+- **Purpose:** Track monthly billings, collections, costs, and retainage across all projects. Cross-project cash flow visibility.
+
+**Features:**
+- **4-card KPI:** Total Billed / Collected / Retainage Held / Gross Margin %
+- **Monthly Entry Form:** Month (YYYY-MM), Project name, Invoiced $, Collected $, Costs $, Retainage $, Notes
+- **Grouped by month** — each month shows totals and per-project breakdown
+- **Margin color-coded:** Green ≥15%, Amber 10-15%, Red <10%
+- **Printable Revenue Report** — full table with TX Prompt Payment Act §28.004 reference
+- localStorage global: `oncor_mrs_v1` (cross-project)
+
+---
+
+### 🧱 Shotcrete & Gunite Cost Calculator (Ctrl+Shift+Alt+8) — ~160 lines
+- New `🧱 Shotcrete & Gunite Cost Calc` button in sidebar (brown/amber color)
+- `Ctrl+Shift+Alt+8` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 506R shotcrete estimator for wet-mix and dry-mix applications — quantity, rebound factor, labor, equipment, total bid.
+
+**Features:**
+- **Process type selector:** Wet-Mix (Gunite/Ready-Mix) vs Dry-Mix (Shotcrete)
+- **Inputs:** Surface area (SF), thickness (in), rebound/waste factor (10-30%), f'c PSI
+- **El Paso 2025-2026 pricing:** Material $/CY, Nozzleman $/hr, Crew $/hr, Equipment $/day, OH&P%, Mobilization
+- **Rebar adder:** WWR light, #4 medium, #5 heavy per SF
+- **4-card KPI:** Net CY / Order CY (with rebound) / Duration (days/hrs) / Total Bid
+- **Cost breakdown table:** Line items with $/SF column
+- **ACI 506R Quick Reference:** Wet vs dry process, min thickness, nozzleman cert (ACI 506.3R)
+- **Printable Estimate** with ASTM C1436 / ACI 506R reference
+
+---
+
+### ⚖️ Contract Risk Score Card (Ctrl+Shift+Alt+9) — ~160 lines
+- New `⚖️ Contract Risk Score Card` button in sidebar (blue color)
+- `Ctrl+Shift+Alt+9` keyboard shortcut opens/closes the modal
+- **Purpose:** 18-item risk assessment for GC/Owner contracts before signing. Auto-scores and grades: LOW RISK / MODERATE / HIGH / DO NOT SIGN.
+
+**18 Risk Factors Across 5 Categories:**
+- **Financial (4):** Pay-if-paid, Retainage >10%, Payment terms >45d, GC reputation
+- **Legal (6):** Conditional lien waivers, Broad indemnification, Short notice period, Flow-down, Venue, Warranty
+- **Scope (3):** Scope undefined, Plans incomplete, CO markup capped
+- **Schedule (3):** LD clause, No-damages-for-delay, Schedule tight
+- **Insurance (2):** Special requirements, Bond required
+
+**Features:**
+- **4-card KPI:** Risk Factors / Flagged Items / Risk Score % / Recommendation
+- **3-state toggle per item:** ✅ OK / 🚩 Flag
+- **Risk score calculation:** Weighted by severity (1-3 points per item)
+- **Grade scale:** ≤20% = LOW RISK ✅ / 21-40% = MODERATE ⚠️ / 41-65% = HIGH 🔴 / >65% = DO NOT SIGN 🚫
+- **TX Law Reference Panel:** Anti-Indemnity Act, Prompt Payment Act, Property Code Ch. 53
+- **Printable Score Card** with all factors, status, and notes
+- localStorage per session: `oncor_crsc_v1`
+
+---
+
+### Session #150 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: c4754f2
+- Total new lines: +397
+- New shortcuts: Ctrl+Shift+Alt+7 (Monthly Revenue), Ctrl+Shift+Alt+8 (Shotcrete Calc), Ctrl+Shift+Alt+9 (Contract Risk)
+- File now at 199,968 lines total
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 05:27 UTC (Overnight Cron #141)
+**Status:** ✅ THREE NEW FEATURES added (+433 lines)
+
+### What Was Added:
+
+---
+
+### 🏗️ Pour Pace Tracker (Ctrl+Alt+F4) — ~145 lines
+- New `🏗️ Pour Pace Tracker` button in sidebar (blue color)
+- `Ctrl+Alt+F4` keyboard shortcut opens/closes the modal
+- **Purpose:** Real-time pour progress tracker for active pours. Log truck arrivals live, track cumulative yd³ placed vs total ordered, calculate yd³/hr pace, and estimate time to completion.
+
+**Features:**
+- **Setup Panel:** Total yd³ ordered, truck size selection
+- **4-card KPI:** Loads Logged / yd³ Accepted / % Complete / yd³/hr Pace
+- **Pour Progress Bar** — color-coded (gray → blue → green at 100%) with remaining yd³ and ETA
+- **Log Truck Arrival:** Ticket #, yd³ on ticket, arrival time (with ⏱ Now button), status (Accepted/Rejected/Partial/Pending)
+- **Running Load Log table** — #, ticket, arrival time, yd³, cumulative yd³, status — shows progress pour-to-pour
+- **Printable Pour Pace Report** — load table with totals, ASTM C94/ACI 304R footer
+- localStorage per project: `oncor_ppace_v1_[project]`
+
+---
+
+### 📋 Spec Deviation Log (Ctrl+Alt+F5) — ~145 lines
+- New `📋 Spec Deviation Log` button in sidebar (purple color)
+- `Ctrl+Alt+F5` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 301-16 §1.6.7 / ACI 318-19 §26 non-conformance log. Document every spec deviation (over-slump, high temp, water addition, cylinder failure, etc.) with corrective actions and reporting trail.
+
+**Features:**
+- **15 Deviation Types:** Over-Slump (ASTM C143), High Temp >90°F (ACI 305R), Low Temp <50°F (ACI 306R), Water Added On-Site (ASTM C94 §11.8), Load Rejection, Cylinder Break Failure, Curing Issues, etc.
+- **4 Severity Levels:** Minor / Moderate / Major / Critical (color-coded)
+- **6 Status Options:** Open → Engineer Notified → Corrective Action Taken → Accepted As-Is → Rejected / Re-Work → Closed
+- **Red alert banner** when open or critical deviations exist
+- **Per-entry fields:** Type, Severity, Date, Description (spec vs actual), Area/Location, Corrective Action, Reported To, Status
+- **Printable Spec Deviation Log** — full table with severity color coding, ACI 301/318/ASTM references
+- localStorage per project: `oncor_sdl_v1_[project]`
+
+---
+
+### 💼 Pre-Bid Cost Intelligence (Ctrl+Alt+F6) — ~145 lines
+- New `💼 Pre-Bid Cost Intelligence` button in sidebar (teal color)
+- `Ctrl+Alt+F6` keyboard shortcut opens/closes the modal
+- **Purpose:** Pull historical bid data from all saved projects to calibrate new estimates. See avg $/yd³, avg overhead %, avg profit %, and total bid volume from past jobs. Compare current open bid against historical averages.
+
+**Features:**
+- **4-card KPI:** Saved Projects / Total Bid Volume / Total yd³ / Avg $/yd³ across all jobs
+- **Secondary KPIs:** Avg OH% / Avg Profit% / Overall $/yd³
+- **⚡ Current Bid vs Historical Avg:** Live comparison if estimate is open — shows current $/yd³ vs historical avg with % deviation flag (⚠️ if >20% off)
+- **Saved Project History Table** — all saved projects with Bid $, yd³, $/yd³, OH%, Profit%, Date
+- **El Paso 2025-2026 Market Benchmarks panel** — RS Means/CFMA reference ranges
+- Pulls from `oncorProjects` localStorage (the main project save system)
+
+---
+
+### Session #141 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 6b8ec27
+- Total new lines: +433
+- New shortcuts: Ctrl+Alt+F4 (Pour Pace), Ctrl+Alt+F5 (Spec Deviation), Ctrl+Alt+F6 (Pre-Bid Intelligence)
+- File now at 195,873 lines total
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 02:54 UTC (Overnight Cron #139)
+**Status:** ✅ SIX NEW FEATURES added across 2 sessions (+853 lines)
+
+### Session #138 — Washout + Form Strip + Placement Map (+504 lines)
+- **🚿 Washout Station SWPPP Log (Ctrl+Shift+4)** — EPA CGP 2022 / TCEQ TXR150000 washout tracking. Log pump washouts, truck chute rinses, tool washes, inspections, and disposal. Printable SWPPP compliance log with signature block.
+- **🏗️ Form Strip Schedule (Ctrl+Shift+5)** — ACI 347R-14 formwork stripping scheduler. 14 element types with min strip times (slab edges 1d, wall forms 1-2d, beam bottoms 7-14d). Auto-calculates strip dates from pour date. Ready/Waiting/Stripped status badges. Cold weather extension warning.
+- **🗺️ Placement Zone Tracker (Ctrl+Shift+6)** — Visual concrete placement progress by zone/area. Card grid with status per zone (Not Started → Forming → Poured → Complete). Overall yd³ progress bar. Pour sequence numbering. Printable zone map report.
+- Commit: 03ca0c6
+
+### Session #139 — Batch Plant Card + Hot Weather Plan + Maturity Estimator (+519 lines)
+- **🏭 Batch Plant Contact Card (Ctrl+Shift+7)** — Store batch plant info globally — dispatch phone, sales contact, hours, address, lead time, notes. Visual card grid. Print pocket cards for field trailer posting.
+- **☀️ ACI 305R Hot Weather Action Plan (Ctrl+Shift+8)** — 27-item checklist across 5 categories (Pre-Pour Planning, Mix Adjustments, Placement, Finishing/Curing, Crew Safety). ★ Critical items for El Paso summer pours. 4-card KPI with READY/NOT READY status. Printable action plan.
+- **📈 Concrete Maturity / Strength Estimator (Ctrl+Shift+9)** — ASTM C1074 Nurse-Saul maturity method. Input f'c, curing temp, cement type → get estimated strength at 1/3/7/14/28/56 days. Visual bar chart. Temperature factor adjustments. Hot/cold weather warnings. Type III cement accelerated gain factor.
+- Commit: 1da7593
+
+### Combined Session Summary
+- File now at 194,834 lines total
+- New shortcuts: Ctrl+Shift+4 through Ctrl+Shift+9 (6 new tools)
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 02:54 UTC (Overnight Cron #137)
+**Status:** ✅ THREE NEW FEATURES added (+467 lines)
+
+### What Was Added:
+
+---
+
+### 📏 Slump & Air Content Field Log (Ctrl+Shift+1) — ~165 lines
+- New `📏 Slump & Air Log` button in sidebar (blue color)
+- `Ctrl+Shift+1` keyboard shortcut opens/closes the modal
+- **Purpose:** Log every load's slump test, air content, and temperature for QC documentation per ASTM C143 / ASTM C231 / ASTM C1064.
+
+**Features:**
+- **Spec Requirements:** Set target slump, max slump, and spec air % per project
+- **5-card KPI:** Tests / Avg Slump / Over Max / Low Slump / Spec Range
+- **Test Entry:** Ticket #, Time, Slump (in), Air %, Temp °F
+- **Auto-status badges:** ✅ OK / 🚫 OVER / ⚠️ LOW based on spec limits
+- **Test Log Table:** Full log with color-coded status per test
+- **Printable Log:** Full table with spec requirements and ASTM references
+- localStorage per project: `oncor_slumplog_v1_[project]`
+
+---
+
+### 🌡️ Concrete Temperature Monitor (Ctrl+Shift+2) — ~170 lines
+- New `🌡️ Concrete Temp Monitor` button in sidebar (red color)
+- `Ctrl+Shift+2` keyboard shortcut opens/closes the modal
+- **Purpose:** Log concrete temperatures and get auto-alerts for ACI 305R (hot weather) and ACI 306R (cold weather) conditions per ASTM C1064.
+
+**Features:**
+- **Temperature Limits:** Set max temp (ACI 305R default 90°F), min temp (ACI 306R default 50°F)
+- **5-card KPI:** Readings / Avg Temp / ☀️ Hot (>max) / ❄️ Cold (<min) / ✅ In Spec
+- **Reading Entry:** Ticket #, Time, Concrete Temp °F, Ambient Temp °F, Notes
+- **Auto-status badges:** ✅ OK / ☀️ HOT / ❄️ COLD with color-coded row backgrounds
+- **Temperature Log Table:** Full log with hot/cold rows highlighted
+- **Printable Log:** Full table with ACI 305R/306R references
+- localStorage per project: `oncor_tempmon_v1_[project]`
+
+---
+
+### 🧾 Daily Delivery Ticket Reconciliation (Ctrl+Shift+3) — ~180 lines
+- New `🧾 Ticket Reconciliation` button in sidebar (green color)
+- `Ctrl+Shift+3` keyboard shortcut opens/closes the modal
+- **Purpose:** Reconcile delivered concrete against ordered. Track accepted, rejected, and short loads for end-of-day billing verification per ASTM C94.
+
+**Features:**
+- **Pour Day Setup:** Pour Date, Ordered yd³, Price $/yd³
+- **6-card KPI:** Tickets / Delivered yd³ / Accepted yd³ / Rejected yd³ / Variance yd³ / Total Cost
+- **Ticket Entry:** Ticket #, Time, yd³ on Ticket, Status (Accepted/Rejected/Partial), Short Load yd³
+- **Status badges:** ACCEPTED (green) / REJECTED (red) / PARTIAL (amber)
+- **Auto-calculated cost:** Based on accepted yd³ × price
+- **Variance tracking:** Shows over/under ordered amount
+- **Ticket Log Table:** Full log with rejected rows highlighted, per-ticket cost
+- **Printable Reconciliation Report:** Summary + full table + total cost
+- localStorage per project: `oncor_recon_v1_[project]`
+
+---
+
+### Session #137 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: c39e8b7
+- Total new lines: +467
+- New shortcuts: Ctrl+Shift+1 (Slump Log), Ctrl+Shift+2 (Temp Monitor), Ctrl+Shift+3 (Ticket Recon)
+- File now at 194,101 lines total
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 02:54 UTC (Overnight Cron #136)
+**Status:** ✅ THREE NEW FEATURES added (+506 lines)
+
+### What Was Added:
+
+---
+
+### 🧪 Cylinder Break Schedule Board (Alt+F10) — ~210 lines
+- New `🧪 Cylinder Break Board` button in sidebar (cyan color)
+- `Alt+F10` keyboard shortcut opens/closes the modal
+- **Purpose:** Visual board for tracking cylinder sets, 7-day and 28-day break dates, results, and upcoming/overdue breaks per ASTM C39 / ACI 318-19 §26.12.
+
+**Features:**
+- **Add Cylinder Set:** Set ID, Cast Date, Spec PSI, Pour Area
+- **6-card KPI:** Sets / Pending 28d / Pass 28d / Fail 28d / Due ≤7d / Overdue
+- **Inline break entry:** Enter 7-day and 28-day PSI results directly in the table
+- **Auto-calculated due dates:** 7 days and 28 days from cast date
+- **Status badges:** ✅ PASS / ❌ FAIL / ⏳ Pending / ⚠️ 7d OVERDUE / 🚨 28d OVERDUE
+- **Color-coded results:** Green for passing (28d ≥ f'c, 7d ≥ 65% f'c), red for failing
+- **Printable Break Schedule:** Full table with Set ID, Cast Date, PSI, Due Dates, Results, Status
+- **ACI 318-19 §26.12 Reference:** Acceptance criteria (avg ≥ f'c, no individual < f'c−500)
+- localStorage per project: `oncor_cylboard_v1_[project]`
+
+---
+
+### 🔧 Pour Day Equipment Checklist (Alt+F11) — ~165 lines
+- New `🔧 Equipment Checklist` button in sidebar (yellow/amber color)
+- `Alt+F11` keyboard shortcut opens/closes the modal
+- **Purpose:** Complete equipment checklist to verify before pour day. 45+ items across 7 categories per ACI 302.1R / OSHA 1926.
+
+**7 Equipment Categories (45 items):**
+1. **🏗️ Concrete Placement (10):** Vibrators, screed, bull float, fresno, hand floats, edgers, groovers, power trowel, laser screed
+2. **🔪 Saw Cutting (4):** Walk-behind saw, blades, water supply, chalk line
+3. **📐 Formwork & Layout (6):** Forms, release agent, stakes, snap ties, levels, tape measures
+4. **🦺 Safety & PPE (10):** Hard hats, glasses, boots, gloves, first aid, eye wash, water, fire extinguisher
+5. **💊 Curing & Protection (5):** Curing compound, sprayer, plastic sheeting, blankets, barricades
+6. **🧪 Testing & QC (6):** Slump cone, air meter, thermometer, cylinder molds, tamping rod, wheelbarrow
+7. **🔧 Miscellaneous (8):** Knee boards, shovels, come-along, water hose, generator, fuel, toolbox, radios
+
+**Features:**
+- **★ Required items** — 25 items marked required (must check before pour)
+- **4-card KPI:** Completion % / Items / ★ Required Done / Status (READY or NOT READY)
+- **Click-to-toggle checkboxes** — checked items strikethrough
+- **Check All / Reset buttons**
+- **Printable Checklist:** Full table with checkbox status, post in trailer
+- localStorage per project: `oncor_equipck_v1_[project]`
+
+---
+
+### 👷 Pour Crew Assignment Sheet (Alt+F12) — ~130 lines
+- New `👷 Crew Assignment Sheet` button in sidebar (purple color)
+- `Alt+F12` keyboard shortcut opens/closes the modal
+- **Purpose:** Generate crew role assignments for pour day. Assign names to 12 standard roles, print, and post in the field trailer.
+
+**12 Standard Pour Roles:**
+1. Foreman — oversee pour, coordinate trucks, manage crew, QC
+2. Lead Finisher — direct finishing sequence, check grade
+3. Finisher — bull float, fresno, hand float, troweling
+4. Vibrator Operator — consolidate concrete, follow placement
+5. Screed Operator — strike-off, check grade
+6. Pump Operator Liaison — direct boom/hose, communicate
+7. Raker / Spreader — spread concrete, fill low spots
+8. Saw Cutter — mark joints, cut control joints
+9. Curing Applicator — apply curing compound
+10. Laborer / Helper — move equipment, assist, cleanup
+11. QC / Testing Tech — slump tests, cylinders, temperature
+12. Safety Observer — monitor PPE, hydration, heat stress
+
+**Features:**
+- **Pour Information:** Pour Name/Area, Pour Date
+- **Name entry per role** — inline text inputs
+- **Crew count badge** — shows total assigned
+- **Printable Assignment Sheet:** Full table with role, assigned name, responsibilities, foreman signature block
+- **Crew Size Guidelines:** Small (<50 yd³) 4-6, Medium (50-150) 6-10, Large (>150) 10-15+
+- localStorage per project: `oncor_crewassign_v1_[project]`
+
+---
+
+### Session #136 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 671b850
+- Total new lines: +506
+- New shortcuts: Alt+F10 (Cylinder Break Board), Alt+F11 (Equipment Checklist), Alt+F12 (Crew Assignment)
+- File now at 193,634 lines total
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 02:54 UTC (Overnight Cron #135)
+**Status:** ✅ THREE NEW FEATURES added (+551 lines)
+
+### What Was Added:
+
+---
+
+### 🪜 Stair & Step Concrete Volume Calculator (Alt+F7) — ~215 lines
+- New `🪜 Stair Volume Calc` button in sidebar (brown/amber color)
+- `Alt+F7` keyboard shortcut opens/closes the modal
+- **Purpose:** Calculate concrete volume for stair flights, landings, and step-downs. Handles the complex geometry of stairs with separate slab volume and step material calculations per ACI 318-19 / IBC §1011.
+
+**Features:**
+- **Flight Entry Form:** Label, # Risers, Riser Height (in), Tread Depth (in), Width (ft), Slab Thickness (in), Waste %
+- **Landing Entry Form:** Label, Length (ft), Width (ft), Thickness (in)
+- **Correct formulas:** Slab volume + step volume (triangular step material = ½ × RH × TD × W × N / 27)
+- **3-card KPI:** Total yd³ / Flights yd³ / Landings yd³
+- **Volume Summary Table:** Label, Type, Details, Net yd³, With Waste
+- **Printable Volume Report:** Professional table with truck count estimate
+- **Quick Reference:** IBC 1011.5 stair geometry (min tread 11", max riser 7")
+- localStorage: `oncor_stair_v1`
+
+---
+
+### 📐 Slab Edge Thickening / Monolithic Haunch Calculator (Alt+F8) — ~200 lines
+- New `📐 Thickened Edge Calc` button in sidebar (teal color)
+- `Alt+F8` keyboard shortcut opens/closes the modal
+- **Purpose:** Calculate concrete volume for monolithic slab-on-grade thickened edges, perimeter haunches, and grade beams. The extra volume below the slab plane for bearing at edges per ACI 360R-10 / IBC §1808.
+
+**4 Edge Types:**
+1. **Monolithic Thickened Edge** — rectangular haunch below slab (extra depth × width × L / 27)
+2. **Perimeter Haunch** — triangular taper (½ × extra depth × width × L / 27)
+3. **Grade Beam** — full rectangular section at edge (depth × width × L / 27)
+4. **Turndown** — stepped edge thickening
+
+**Features:**
+- **Segment Entry:** Label, Type, Length (ft), Slab Thickness (in), Edge Depth (in), Edge Width (in), Waste %
+- **3-card KPI:** Total Order yd³ / Net yd³ / Segments
+- **Segment Table:** Label, Type, Length, Dimensions, Net yd³, Order yd³
+- **Printable Report:** Edge thickening summary with ACI 360R reference
+- **Quick Reference:** IBC 1808.9 monolithic footing 12" min depth, El Paso caliche notes
+- localStorage: `oncor_edge_v1`
+
+---
+
+### 📋 CSI Spec Section 03300 — Concrete Review Checklist (Alt+F9) — ~280 lines
+- New `📋 Spec 03300 Checklist` button in sidebar (purple color)
+- `Alt+F9` keyboard shortcut opens/closes the modal
+- **Purpose:** 48-item checklist to review CSI MasterFormat 03300 (Cast-in-Place Concrete) specification requirements before submitting a bid. Ensures nothing is missed in the spec that could affect pricing or scope.
+
+**6 Checklist Categories (48 items total):**
+1. **Mix Design & Materials (10 items)** — f'c, w/cm, cement type, SCM, aggregate, slump, air, fiber, submittal, exposure class
+2. **Placement & Delivery (10 items)** — ASTM C94, water addition, discharge time, hot/cold weather, pumping, consolidation, lift height
+3. **Finishing & Curing (8 items)** — finish type, FF/FL flatness, bleed water, curing method/duration, sealer, protection
+4. **Quality Control & Testing (8 items)** — special inspection, cylinder frequency, acceptance criteria, sampling, slump/temp tests
+5. **Scope & Exclusions (10 items)** — inclusions/exclusions, testing cost, vapor retarder, rebar, formwork, embeds, saw cutting
+6. **Legal & Contract (6 items)** — spec revision date, Division 1, substitutions, warranty, CO markup limits
+
+**Features:**
+- **3-state toggle per item:** ✓ OK / ⚑ Flag / N/A
+- **★ Critical items** — 22 items marked critical (must confirm before bid)
+- **4-card KPI:** Completion % / Items Done / ★ Critical Done / Bid Status (READY or HOLD)
+- **Progress bar** — color-coded red/amber/green
+- **Critical Items Warning Box** — lists unconfirmed critical items
+- **Printable Checklist:** Full table with status, dual signature block
+- **Standards Reference:** ACI 318-19, 302.1R, 308R, 305R, 306R, ASTM C94, C143, C172, IBC §1905, CSI 03300
+- localStorage per project: `oncor_spec_v1_[project]`
+
+---
+
+### Session #135 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 6eedabd
+- Total new lines: +551
+- New shortcuts: Alt+F7 (Stair Volume), Alt+F8 (Thickened Edge), Alt+F9 (Spec 03300 Checklist)
+- File now at 193,128 lines total
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 01:49 UTC (Overnight Cron #134)
+**Status:** ✅ THREE NEW FEATURES added (+454 lines)
+
+### What Was Added:
+
+---
+
+### 🗓️ Pre-Pour 14-Day Countdown Planner (Alt+F4) — ~155 lines
+- New `🗓️ Pre-Pour Countdown` button in sidebar (purple color)
+- `Alt+F4` keyboard shortcut opens/closes the modal
+- **Purpose:** Generate a phase-by-phase countdown checklist from 14 days before a pour to 1 day after. Input pour name, date, and yd³ — get a 7-phase timeline with tasks organized by day (D-14, D-10, D-7, D-3, D-1, Pour Day, D+1).
+
+**Features:**
+- **Pour metadata:** Name, Date, yd³ — shows days-until countdown with urgency color
+- **7 Phases with tasks:**
+  - D-14 Planning — batch plant reservation, pump truck, crew confirmation
+  - D-10 Logistics — order quantity, site access, testing lab
+  - D-7 Pre-Pour Prep — written confirmations, weather check, embeds on-site
+  - D-3 Site Readiness — site walk, ice for hot weather, curing materials staged
+  - D-1 Final Checks — notifications, first truck confirmation, equipment test
+  - Pour Day — toolbox talk, ACI tech on-site, first truck monitoring
+  - D+1 Post-Pour — curing compound, barricades, documentation
+- **TODAY indicator** — highlights current phase in green
+- **Printable Countdown** — professional table format with checkboxes per task
+- Standards: ACI 302.1R, ACI 305R, ACI 306R, ASTM C94
+
+---
+
+### 📊 Project Benchmark Comparator (Alt+F5) — ~145 lines
+- New `📊 Benchmark Comparator` button in sidebar (cyan color)
+- `Alt+F5` keyboard shortcut opens/closes the modal
+- **Purpose:** Instantly compare your current estimate's key metrics against El Paso 2025 concrete sub industry benchmarks. Catch pricing outliers before submitting a bid.
+
+**6 Benchmarks Checked (auto-pulled from current estimate):**
+1. **Total Bid $/yd³** vs El Paso range $150–$280/yd³
+2. **Total Bid $/SF (slabs)** vs $5.50–$14.00/SF
+3. **Concrete Material %** vs 30–55% of direct cost
+4. **Labor %** vs 20–42% of direct cost
+5. **Overhead %** vs 6–14% of total bid
+6. **Profit Margin %** vs 10–22% target (below 15% flagged)
+
+**Features:**
+- Reads live from `window.lastEstimate` + `window.measurements`
+- Color-coded assessment per metric: ✅ Normal / ⚠️ Watch / ⬇️ Low / ⬆️ High / ⬇️ Below Target
+- 3-card header: Total Bid / Total yd³ / Slab SF
+- "No estimate data" state when calculator not run yet
+- Benchmark sources: RS Means 2025, CFMA Industry Survey, AGC Southwest Chapter
+- No localStorage — pure live estimate analysis
+
+---
+
+### 📈 Oncor Revenue & Backlog Tracker (Alt+F6) — ~195 lines
+- New `📈 Revenue & Backlog` button in sidebar (green color)
+- `Alt+F6` keyboard shortcut opens/closes the modal
+- **Purpose:** Track all Oncor projects across their lifecycle — from "Bid Out" through "In Progress" to "Complete." See active backlog value, bids pending, total revenue billed, win rate, and monthly revenue vs target.
+
+**Features:**
+- **4-card KPI:** Active Backlog ($) / Bids Pending ($) / Total Revenue ($) / Win Rate (%)
+- **Monthly Revenue Target** — input target, see progress bar (red/amber/green) vs billed this month
+- **Project Entry Form:** Name, Client, Contract Value, yd³, Status, Bid Month, Completion Month, Notes
+- **5 Status Types:** Bid Out / Won / In Progress / Complete / Lost
+- **Revenue tracking:** Only "Complete" jobs with a completion month count toward monthly target
+- **Win Rate** — auto-calculated (Won+In Progress+Complete) vs (Won+Lost)
+- **Full project table** — color-coded by status, newest first
+- **Totals row** — total value + total yd³ across all entries
+- localStorage global: `oncor_rbt_v1` (all jobs across all projects)
+
+---
+
+### Session #134 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: a3da2f0
+- Total new lines: +454
+- New shortcuts: Alt+F4 (Pre-Pour Countdown), Alt+F5 (Benchmark Comparator), Alt+F6 (Revenue & Backlog)
+- File now at 192,577 lines total
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 00:43 UTC (Overnight Cron #133)
+**Status:** ✅ THREE NEW FEATURES added (+556 lines)
+
+### What Was Added:
+
+---
+
+### 📅 3-Week Lookahead Schedule Builder (Alt+F1) — ~190 lines
+- New `📅 3-Week Lookahead` button in sidebar (dark blue color)
+- `Alt+F1` keyboard shortcut opens/closes the modal
+- **Purpose:** AGC/CMAA CPM look-ahead schedule tool. Build a rolling 3-week schedule grid with activities assigned to specific days. Coordinate with GC, plan crew deployments, track activity status.
+
+**Features:**
+- **Week picker** — set the starting Monday (or click "This Week")
+- **3-week calendar grid** — shows each day across 3 weeks with activities listed per day
+- **Activity form:** Date, Activity Description, Type (11 types: Forming/Rebar/Pour/Finishing/Curing/Saw/Equipment/Inspection/Crew/Sub/Other), Responsible/Crew
+- **Status tracking per activity:** Planned / In Progress / Complete / Delayed / Cancelled — inline dropdown
+- **TODAY indicator** — current day highlighted in amber
+- **4-card stats:** Total Activities / Complete / Planned / Delayed
+- **Delete per activity**, **Clear All**
+- **Printable 3-Week Lookahead** — full activity table with date, day, description, type, responsible, status; triple signature block (Prepared By / GC Superintendent / Project Manager)
+- localStorage per project: `oncor_lookahead_v1_[project]`
+
+---
+
+### 🚨 Pour Day Emergency Response Guide (Alt+F2) — ~180 lines
+- New `🚨 Pour Emergency Guide` button in sidebar (dark red color)
+- `Alt+F2` keyboard shortcut opens/closes the modal
+- **Purpose:** Field reference for 7 common pour-day emergencies with step-by-step response protocols, who to call, and code references. Post in the field trailer.
+
+**7 Emergency Scenarios:**
+1. 🚚 **Pump Breakdown** — Stop placement, call pump company, assess backup options, log delay
+2. 🚫 **Rejected Concrete Load** — Document ticket, call batch plant QC, assess schedule impact
+3. 💥 **Formwork Blowout** — SAFETY FIRST, evacuate, call EOR, document, OSHA report
+4. ⛈️ **Weather Emergency (Rain/Lightning)** — Lightning shelter protocol, rain cover procedures
+5. ☀️ **Hot Weather Crisis (>95°F)** — ACI 305R immediate actions, ice water, evaporation retarder
+6. ❄️ **Cold Weather Emergency (<40°F)** — ACI 306R protection plan, insulating blankets, temp log
+7. 👷 **Crew Shortage / No-Shows** — Assess critical roles, backup labor, delay decision framework
+
+**Per-Scenario:**
+- Numbered immediate actions (in priority order)
+- Who to call (color-coded)
+- Code references (ACI 304R/305R/306R/347.2R, OSHA 1926)
+- Field note with El Paso-specific guidance
+
+**Printable Field Card** — all 7 scenarios in compact 2-column layout, designed for field trailer posting
+
+---
+
+### 🏷️ DBE/MBE Participation Tracker (Alt+F3) — ~185 lines
+- New `🏷️ DBE/MBE Tracker` button in sidebar (dark green color)
+- `Alt+F3` keyboard shortcut opens/closes the modal
+- **Purpose:** Track DBE/MBE/WBE/SDVOB certified firm participation on federal and TxDOT contracts. Calculate participation % vs goal. Essential for public contracts with 49 CFR Part 26 requirements.
+
+**Features:**
+- **Contract Value + Goal %** inputs → auto-calculates goal dollar amount
+- **9 Certification Types:** DBE / MBE / WBE / SDVOB / SBE / HUBZone / AABE / HBE / Other
+- **Per-firm fields:** Company Name, Cert Type, Scope of Work (16 options), Cert #, Contract Amount, Amount Paid, Contact, Status
+- **4-card KPI:** Certified Firms / Total Committed / Total Paid / Participation %
+- **Progress bar** toward goal — green when met, red when short with % gap shown
+- **Full participation table** with % of job per firm, totals row
+- **Regulatory reference panel:** 49 CFR Part 26, SBA 8(a), TxDOT DBE, Good Faith Effort §26.53, Prompt Payment §26.29, El Paso HUBZone eligibility
+- **Printable Participation Report** — table with all firms, totals, goal vs actual, prime contractor certification signature block + DBE Liaison signature
+- localStorage per project: `oncor_dbe_v1_[project]`
+
+---
+
+### Session #133 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 0e66599
+- Total new lines: +556
+- New shortcuts: Alt+F1 (3-Week Lookahead), Alt+F2 (Pour Emergency Guide), Alt+F3 (DBE/MBE Tracker)
+- File now at 192,123 lines total
+
+---
+
+## ✅ SESSION: Apr 3, 2026 - 18:55 UTC (Overnight Cron #126)
+**Status:** ✅ THREE NEW FEATURES added (+634 lines)
+
+### What Was Added:
+
+---
+
+### 🚛 Concrete Truck Dispatch Tracker (Shift+F4) — ~210 lines
+- New `🚛 Truck Dispatch` button in sidebar (blue color)
+- `Shift+F4` keyboard shortcut opens/closes the modal
+- **Purpose:** Real-time pour-day truck arrival tracker. Log every batch plant truck, track ticket numbers, yardage delivered, transit times, and ASTM C94 90-minute violations. The command center for pour day.
+
+**Features:**
+- Pour setup: Pour Name/Area, Pour Date, Batch Plant Name, Total yd³ Ordered, Truck Size, Expected Interval (min), ASTM C94 Limit (90 min default)
+- **Log Truck Arrival form:** Ticket #, yd³ on Ticket, Batch Time, Arrival Time, Status (Accepted/Rejected/Partial Use/Pending), Notes
+- Quick "Set Arrival = Now" and "Set Batch = Now" buttons for rapid logging
+- Auto-calculated transit time (arrival - batch) per truck
+- **Auto-Warning Badges:**
+  - 🔴 C94 OVER — transit time exceeds ASTM C94 90-minute limit
+  - Status color-coded: Accepted (green), Rejected (red), Partial (amber), Pending (gray)
+- 5-card KPI stats: Loads Logged / Accepted yd³ / Remaining yd³ / Rejected / C94 Violations
+- **Pour Progress Bar** — shows % complete vs total ordered yd³
+- Truck log list sorted by load number
+- **Printable Dispatch Log** — full table with ticket, yd³, batch time, arrival, transit, C94 status, notes; rejected rows highlighted red, C94 violations highlighted orange
+- localStorage per project: `oncor_tddispatch_v1_[project]`
+
+---
+
+### ❄️ Cold Weather Protection Plan Generator (Shift+F5) — ~240 lines
+- New `❄️ Cold Weather Plan` button in sidebar (light blue color)
+- `Shift+F5` keyboard shortcut opens/closes the modal
+- **Purpose:** Generate ACI 306R-16 compliant cold weather concrete protection plans. Input forecast temps and protection methods, get risk assessment and printable protection plan with temperature monitoring log.
+
+**Features:**
+- **Conditions & Mix Panel:** Project Name, Pour Date, Forecast Low/High Temp (°F), Wind Speed (mph), Design f'c, Cement Type (I/II, III High Early, IP Blended), Section Thickness (in)
+- **Protection Methods Checklist (9 options):**
+  - Heated Mix Water, Heated Aggregates, Accelerating Admixture (ASTM C494 Type C/E)
+  - Insulating Blankets / Curing Blankets, Heated Enclosure, Windbreaks
+  - Heated Subgrade (if frozen), Temperature Monitoring (ACI 306R §8.5), Reduced w/cm ≤0.45
+- Minimum Protection Duration (days) and Responsible Party / Foreman
+- **Risk Assessment (auto-calculated):**
+  - EXTREME RISK (low ≤20°F or low ≤30°F with wind >15mph) — consider postponing
+  - HIGH RISK (low ≤30°F or low ≤40°F with wind >10mph) — full protection required
+  - MODERATE RISK (low ≤40°F) — protection measures required
+  - LOW RISK (>40°F) — standard precautions
+- **ACI 306R Table 1 Reference:** Min Concrete Temp and Min Placing Temp based on section thickness
+- **Required Actions List** — auto-generated recommendations per ACI 306R
+- **Printable Cold Weather Protection Plan:** Project info table, weather forecast, protection methods checklist with verification checkboxes, temperature monitoring log (blank rows), warning box with ACI 306R critical requirements, triple signature block (Foreman, GC, Contractor)
+- Standards footer: ACI 306R-16, ASTM C94, ASTM C494, ACI 318-19 §19.3
+
+---
+
+### 🧵 Fiber Dosage & Cost Calculator (Shift+F6) — ~185 lines
+- New `🧵 Fiber Dosage Calc` button in sidebar (purple color)
+- `Shift+F6` keyboard shortcut opens/closes the modal
+- **Purpose:** Calculate fiber quantities and costs for synthetic macro, synthetic micro, steel, glass, and natural fibers per ACI 544.1R and ASTM C1116. Compare blended fiber systems.
+
+**Features:**
+- **Pour Quantities:** Total yd³, Element Type (Slab-on-Grade, Footings, Walls, Beams, Columns, Tilt-Up, Industrial Floor, Precast), Spec f'c
+- **Dual Fiber Type System:** Fiber A (primary) + Fiber B (blended/optional)
+- **5 Fiber Categories per type:**
+  - Synthetic Macro (ASTM C1116 Type III) — 3-8 lb/yd³, crack control
+  - Synthetic Micro (ASTM C1116 Type III) — 0.75-1.5 lb/yd³, plastic shrinkage
+  - Steel Fiber (ASTM C1116 Type I) — 50-100 lb/yd³, high toughness
+  - Glass Fiber (ASTM C1116 Type II) — 0.75-1.5 lb/yd³, thin sections
+  - Natural/Cellulose (ASTM C1116 Type IV) — 0.5-1.0 lb/yd³, low cost
+- **Auto-fill default dose rates and El Paso 2025 costs** per fiber type
+- **Per-fiber results:** Dose Rate (lb/yd³), Total Pounds, Approx Bags (50-lb), Material Cost
+- **3-card totals:** Total Fiber Pounds / Total Material Cost / Fiber Adder $/yd³
+- **ACI 544.1R Reference Table** — typical dose rates, ASTM standards, primary purpose, El Paso 2025 costs for all fiber types
+- **Printable Fiber Spec Sheet:** Pour summary, fiber type table with dose/lbs/bags/cost, totals row, fiber adder per yd³, spec notes box with ASTM C1116 / ACI 544.1R compliance language
+- Standards footer: ACI 544.1R-96, ASTM C1116, ACI 360R-10, TR-34
+
+---
+
+### Session #126 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 96f730e
+- Total new lines: +634
+- New shortcuts: Shift+F4 (Truck Dispatch), Shift+F5 (Cold Weather Plan), Shift+F6 (Fiber Dosage Calc)
+- File now at 187,603 lines total
+
+---
+
+## ✅ SESSION: Apr 3, 2026 - 18:55 UTC (Overnight Cron #127)
+**Status:** ✅ THREE NEW FEATURES added (+492 lines)
+
+### What Was Added:
+
+---
+
+### 🔄 Concrete Return & Excess Tracker (Shift+F7) — ~155 lines
+- New `🔄 Return/Excess Log` button in sidebar (orange color)
+- `Shift+F7` keyboard shortcut opens/closes the modal
+- **Purpose:** Track returned loads, excess concrete, and washout waste. Calculate material loss cost. Document every yd³ that doesn't get placed.
+
+**Features:**
+- **Log Entry Form:** Date, Type (6 options), yd³, Price/yd³, Pour/Area, Ticket #, Reason/Notes
+- **6 Entry Types:** Returned to Plant, Left on Site (Washout), Used Elsewhere, Rejected Load, Short Load Received, Over-Order Buffer
+- **Auto-calculated cost** per entry (yd³ × price)
+- **5-card stats:** Entries / Total yd³ Lost / Total Cost / Returned / Washout
+- Color-coded type badges in list view
+- **Printable Return Log** — full table with totals, ACI 304R benchmark note (3-8% acceptable waste)
+- localStorage per project: `oncor_concretereturn_v1_[project]`
+
+---
+
+### 📋 Pour Day Briefing Sheet Generator (Shift+F8) — ~195 lines
+- New `📋 Pour Day Briefing` button in sidebar (cyan color)
+- `Shift+F8` keyboard shortcut opens/closes the modal
+- **Purpose:** Generate one-page foreman pocket reference document for pour day. Everything the foreman needs on one printable sheet.
+
+**Features:**
+- **Pour Information:** Pour Name/Area, Pour Date, First Truck Time, Crew Report Time
+- **Concrete Specifications:** Total yd³, PSI, Slump, Batch Plant, Mix Code, Fiber dose
+- **Crew Information:** Foreman, Crew Size, Crew Roster (names)
+- **Key Contacts:** GC Super/PM, Batch Plant Dispatch, Pump Company, Testing Lab/ACI Tech
+- **Equipment & Placement:** Placement Method, Truck Interval, Equipment Checklist
+- **Special Instructions / Notes** text area
+
+**Printable Briefing Sheet includes:**
+- All entered information in compact table format
+- **Pre-Pour Checklist (10 items):** Toolbox talk, Rebar inspection, Forms checked, Pump set up, Vibrators on-site, Testing tech present, Curing compound staged, Control joints marked, Weather check, GC notified
+- **Blank Ticket Log table** (6 rows) for recording trucks on-site
+- Standards footer: ACI 304R, 305R, 306R
+
+---
+
+### 🎚️ Slump Adjustment Calculator (Shift+F9) — ~142 lines
+- New `🎚️ Slump Adjustment` button in sidebar (blue color)
+- `Shift+F9` keyboard shortcut opens/closes the modal
+- **Purpose:** Calculate ASTM C94 §11.8 compliant water addition for slump adjustment. Know instantly if water can be added or if load must be rejected.
+
+**Features:**
+- **Inputs:** Load Size (yd³), Current Slump, Target Slump, Spec Max Slump
+- **Live calculation** as you type
+- **4 Status Results:**
+  - ✅ NO WATER NEEDED — current slump meets target
+  - ✅ WATER ADDITION OK — with gallons needed and instructions
+  - 🚫 REJECT — EXCEEDS ASTM C94 LIMIT — >1 gal/yd³ required
+  - 🚫 REJECT — OVER MAX SLUMP — target exceeds spec
+- **4-card results:** Slump Increase / Water Needed (gal) / Per yd³ / ASTM C94 Limit
+- **ASTM C94 §11.8 Quick Reference Panel:**
+  - Water addition limits (1 gal/yd³ max, 30 revolution re-mix)
+  - When to reject load (>1 gal/yd³, >90 min transit, >300 revolutions)
+- **Alternative suggestion:** HRWR/Superplasticizer from batch plant
+- Green instruction box when water addition is OK
+
+---
+
+### Session #127 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 5b0c84f
+- Total new lines: +492
+- New shortcuts: Shift+F7 (Return/Excess), Shift+F8 (Pour Briefing), Shift+F9 (Slump Adjustment)
+- File now at 188,095 lines total
+
+---
+
+## ✅ SESSION: Apr 3, 2026 - 18:55 UTC (Overnight Cron #128)
+**Status:** ✅ THREE NEW FEATURES added (+527 lines)
+
+### What Was Added:
+
+---
+
+### 🧮 Control Joint Spacing Calculator (Shift+F10) — ~165 lines
+- New `🧮 Joint Spacing Calc` button in sidebar (lime green color)
+- `Shift+F10` keyboard shortcut opens/closes the modal
+- **Purpose:** Calculate ACI 360R-10 compliant control joint spacing to prevent random shrinkage cracking. Includes aspect ratio checks.
+
+**Features:**
+- **Inputs:** Slab Thickness (in), Aggregate Type (Crushed/River Gravel/Synthetic), Panel Length/Width (ft), Reinforcement Type, Exposure Conditions, Shrinkage Potential
+- **3 Aggregate Multipliers:** Crushed limestone (24×), River gravel (30×), Synthetic lightweight (36×)
+- **4 Reinforcement Types:** Plain (no rebar), WWF 6×6, Fiber Only, Rebar Grid
+- **Adjustment factors:** Rebar (+25%), Fiber (+10%), Industrial (-15%), Exterior (-10%), High shrinkage (-15%), Good curing (+10%)
+- **Results:** Max Joint Spacing (ft), Saw Cut Depth (T/4 to T/3), Panel Area (SF), Aspect Ratio check (1.5:1 max)
+- **Warning badges** for aspect ratio violations and oversized panels
+- **ACI 360R-10 Quick Reference Table** — thickness vs spacing for crushed/gravel aggregates
+- Saw cutting timing guidance (4-12 hours after finishing)
+
+---
+
+### 🔥 Hot Weather Concrete Plan Generator (Shift+F11) — ~210 lines
+- New `🔥 Hot Weather Plan` button in sidebar (orange color)
+- `Shift+F11` keyboard shortcut opens/closes the modal
+- **Purpose:** Generate ACI 305R-10 compliant hot weather concrete plans. Calculate evaporation rate and assess risk level.
+
+**Features:**
+- **Conditions & Mix Panel:** Project Name, Pour Date, Air Temperature (°F), Relative Humidity (%), Wind Speed (mph), Concrete Temp (°F), Design f'c, Section Thickness
+- **Mitigation Methods Checklist (9 options):**
+  - Ice Water / Chilled Aggregates, Retarding Admixture (ASTM C494 Type B/D)
+  - Shade Structures / Sunscreens, Windbreaks, Fogging / Misting System
+  - Evaporation Retarder / Monomolecular Film, White-Pigmented Curing Compound
+  - Night/Early Morning Pour, Pre-Wetted Subgrade
+- Max Concrete Temp at Discharge input (default 90°F)
+- **Evaporation Rate Calculator** — simplified Menzel formula per ACI 305R Nomograph
+- **Risk Assessment (auto-calculated):**
+  - EXTREME RISK (evap ≥0.25 or air ≥100°F or concrete ≥95°F)
+  - HIGH RISK (evap ≥0.15 or air ≥90°F or concrete ≥90°F)
+  - MODERATE RISK (evap ≥0.1 or air ≥85°F)
+  - LOW RISK (all conditions normal)
+- **4-card results:** Air Temp / Concrete Temp / Humidity / Evaporation Rate (lb/ft²/hr)
+- **Required Actions List** — auto-generated per conditions
+- **ACI 305R Evaporation Thresholds Reference** — <0.1 low, 0.1-0.2 moderate, 0.2-0.25 high, >0.25 critical
+- **Printable Hot Weather Plan:** Project info, weather conditions, mitigation checklist, triple signature block
+- Standards footer: ACI 305R-10, ASTM C94, ASTM C494, ACI 308R
+
+---
+
+### 📊 Concrete Price Comparison Tool (Shift+F12) — ~152 lines
+- New `📊 Price Comparison` button in sidebar (green color)
+- `Shift+F12` keyboard shortcut opens/closes the modal
+- **Purpose:** Compare batch plant quotes side-by-side. Calculate all-in cost per yd³ including adders.
+
+**Features:**
+- **Pour Setup:** Project/Pour Name, Total yd³, PSI Required, Fiber Required (yes/no)
+- **3 Supplier Columns (A, B, C):**
+  - Batch Plant Name
+  - Base Price ($/yd³)
+  - Fiber Adder ($/yd³)
+  - Fuel/Delivery Surcharge ($/yd³)
+  - Sat/OT Adder ($/yd³)
+  - Short Load Fee ($)
+- **Live calculation** as you type — updates all-in price per supplier
+- **All-In $/yd³** = Base + Fiber (if req) + Fuel + OT
+- **Auto-highlight lowest price** supplier with green border
+- **Summary Stats:** Lowest Price supplier / Total for order / Savings vs highest quote
+- **Printable Comparison Table** — all suppliers with cost breakdown, totals, notes about short load fees
+- localStorage NOT used (one-time comparison tool)
+
+---
+
+### Session #128 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: f97596b
+- Total new lines: +527
+- New shortcuts: Shift+F10 (Joint Spacing), Shift+F11 (Hot Weather Plan), Shift+F12 (Price Comparison)
+- File now at 188,622 lines total
+
+---
+
+## ✅ SESSION: Apr 3, 2026 - 17:48 UTC (Overnight Cron #125)
+**Status:** ✅ THREE NEW FEATURES added (+727 lines)
+
+### What Was Added:
+
+---
+
+### 🧪 Concrete Mix Cost Optimizer (Shift+F1) — ~260 lines
+- New `🧪 Mix Cost Optimizer` button in sidebar (blue color)
+- `Shift+F1` keyboard shortcut opens/closes the modal
+- **Purpose:** Compare multiple mix designs head-to-head by total material cost per CY. ACI 211.1 framework. Know if SCM substitution (fly ash, slag) saves money vs straight cement. Compare batch plant quotes by backing out ingredient costs.
+
+**Features:**
+- Full ACI 211.1 mix design inputs: Cement, Fly Ash, Slag, Silica Fume (lbs/CY)
+- Aggregates: Fine Agg (sand) and Coarse Agg (lbs/CY)
+- Mix water (gal/CY), Fiber (lbs/CY)
+- Admixtures (oz/CY): WR/Mid-Range, HRWR/Super, Retarder, Accelerator, Air-Entraining, Other
+- Overridable unit prices: Cement ($/94-lb bag), Sand ($/ton), Coarse Agg ($/ton) — defaults El Paso 2025
+- Auto-calculated w/cm ratio with ACI 318-19 k-factors (fly ash 0.7, slag 0.9, silica 1.0)
+- Per-mix cost breakdown: Cement $, SCM $, Agg $, Admix $, Fiber $, **Total $/CY**
+- CHEAPEST badge on lowest-cost mix
+- Visual bar chart comparing all mixes by $/CY
+- Add/delete mixes dynamically
+- **Printable Mix Cost Comparison** — table with all mixes, cost breakdown, w/cm column
+- localStorage per project: `oncor_mixcostopt_v1_[project]`
+
+---
+
+### 📐 Footing & Foundation Volume Calculator (Shift+F2) — ~225 lines
+- New `📐 Foundation Volume Calc` button in sidebar (purple color)
+- `Shift+F2` keyboard shortcut opens/closes the modal
+- **Purpose:** Dedicated footing/foundation volume calculator for 8 foundation types. More precise than the general takeoff pad — correct formulas for continuous footings, isolated pads, grade beams, drilled piers, and wall footing+stem combos. Tracks per-element waste factors.
+
+**8 Foundation Types:**
+1. **Continuous Footing (Strip)** — L × W × D"/12 / 27
+2. **Square Isolated Footing** — W² × D"/12 / 27 × qty
+3. **Rectangular Isolated Footing** — L × W × D"/12 / 27 × qty
+4. **Grade Beam** — L × W × D"/12 / 27
+5. **Drilled Pier (Round)** — π × r² × H / 27 × qty
+6. **Wall Footing + Stem** — calculates footing volume + stem wall volume separately, adds together
+7. **Mat / Raft Foundation** — L × W × D"/12 / 27
+8. **Pile Cap** — L × W × D"/12 / 27 × qty
+
+**Features:**
+- Dynamic input fields change per type (shows only relevant dimensions)
+- Per-element label/area ref for job file reference
+- Per-element waste factor % (default 5%) and PSI spec
+- 4-card summary: Elements / Net yd³ / With Waste / Trucks (10 yd³)
+- Running element list with Net yd³ and Order yd³ per element
+- **Printable Foundation Volume Report** — table with element, type, PSI, net yd³, waste%, order yd³, totals row
+
+---
+
+### 💰 Crew Shift Cost Summary (Shift+F3) — ~242 lines
+- New `💰 Crew Shift Cost` button in sidebar (green color)
+- `Shift+F3` keyboard shortcut opens/closes the modal
+- **Purpose:** Plan a pour day crew before the job starts — know your labor cost before the first truck arrives. Compare shifts over time to track labor productivity. See yd³/hr production rate and labor cost per yd³.
+
+**Features:**
+- Shift info: Name/Pour, Date, Estimated yd³
+- **Crew Builder** — dynamic rows per worker:
+  - 13 trade types with El Paso 2025 auto-fill rates (Foreman $90 → Helper $46)
+  - Rate $/hr (auto-populated, overridable)
+  - Regular Hours + OT Hours (1.5× auto-applied)
+- **Live shift cost** — updates as you type each row
+- Save shift to history
+- Saved shifts list with:
+  - Total labor cost per shift
+  - Total hours, OT hours
+  - Productivity: yd³/hr (when yd³ entered)
+  - Labor cost per yd³ (when yd³ entered)
+  - Per-worker breakdown pill list
+- 3-card summary: Total Shifts / Total Labor Cost / Avg yd³/hr
+- **Printable Crew Shift Report** — per-shift crew table with reg/OT/cost, productivity metrics, FLSA footer
+- localStorage global: `oncor_shiftcost_v1`
+
+---
+
+### Session #125 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 37fea4a
+- Total new lines: +727
+- New shortcuts: Shift+F1 (Mix Cost Optimizer), Shift+F2 (Foundation Volume Calc), Shift+F3 (Crew Shift Cost)
+- File now at 186,969 lines total
+
+---
+
+## ✅ SESSION: Apr 3, 2026 - 16:42 UTC (Overnight Cron #124)
+**Status:** ✅ THREE NEW FEATURES added (+625 lines)
+
+### What Was Added:
+
+---
+
+### 🎯 Job Viability Scorer (F1) — ~215 lines
+- New `🎯 Job Viability` button in sidebar (purple color)
+- `F1` keyboard shortcut opens/closes the modal
+- **Purpose:** Go/No-Go scoring tool for bid opportunities. Score 11 weighted criteria, get an automatic recommendation: GO ✅ / CAUTION ⚠️ / HIGH RISK 🔴 / NO BID 🚫
+
+**11 Weighted Criteria (100 total points):**
+1. **Target Margin Achievable ≥15%** (15 pts) — Can you hit 15%+ GP at competitive price?
+2. **Crew & Equipment Available** (12 pts) — Do you have the people and gear?
+3. **GC Reputation / Pay History** (12 pts) — Does this GC pay on time?
+4. **Scope Clearly Defined** (10 pts) — Drawings/specs complete? Ambiguity = risk.
+5. **Schedule Realistic** (10 pts) — Timeline achievable without overtime burn?
+6. **Competitive Landscape Favorable** (8 pts) — 1-2 competitors vs 5-6?
+7. **Lien Rights Protected** (8 pts) — Private bonded job? NTO plan ready?
+8. **Cash Flow OK** (8 pts) — Net 30 or better? Retainage ≤10%?
+9. **Site Conditions Acceptable** (7 pts) — Access, soils, conflicts clear?
+10. **Relationship / Familiarity** (5 pts) — Worked with this GC/owner before?
+11. **Strategic Value / Growth** (5 pts) — Opens new market or relationship?
+
+**Features:**
+- 3-button scoring per criterion: ✗ No (0) / ~ Maybe (50%) / ✓ Yes (100%)
+- Live score updates after each selection
+- Score hero: Viability Score / Recommendation / Criteria Answered
+- Color-coded: Green ≥80% (GO), Amber 60-79% (CAUTION), Red 40-59% (HIGH RISK), Dark Red <40% (NO BID)
+- Progress bar color-coded to grade
+- Notes / Reasoning textarea
+- **Printable Viability Report** — score, grade, criteria table with scores/points, notes, signature block
+- Per-project localStorage: `oncor_viability_v1_[project]`
+
+---
+
+### 💹 Bid Price Reverse Calculator (F2) — ~195 lines
+- New `💹 Bid Reverse Calc` button in sidebar (cyan color)
+- `F2` keyboard shortcut opens/closes the modal
+- **Purpose:** Work backwards from target gross margin to required bid price. Also: enter a bid price and see resulting margin. Auto-loads direct cost from current estimate.
+
+**Features:**
+- Direct Cost input (auto-populated from `window.lastEstimate` when available)
+- Total yd³ input (auto-populated from estimate)
+- **4 scenario cards**: 10% / 15% / 20% / 25% margin — shows required bid price, profit amount, and $/yd³ for each
+- **Custom target margin input** — type any % → see exact bid price needed and $/yd³
+- **Reverse check** — enter a bid price → instantly shows gross profit $ and gross margin %
+- Color-coded margins: ≥20% green, ≥15% cyan, ≥10% amber, <10% red
+- ⚡ "Auto-loaded from estimate" notice when seeded
+
+---
+
+### ⏱️ Pour Day Timeline Generator (F3) — ~215 lines
+- New `⏱️ Pour Day Timeline` button in sidebar (amber/brown color)
+- `F3` keyboard shortcut opens/closes the modal
+- **Purpose:** Generate a minute-by-minute pour day schedule from truck count, interval, and first truck time. Print it for the foreman's pocket.
+
+**Inputs:**
+- Pour Name / Area, Pour Date, First Truck Time
+- Truck Count, Truck Size (yd³), Truck Interval (min), Pump Setup time (min)
+- Foreman name, Special notes
+
+**Auto-Generated Timeline (5 phases):**
+1. **Pre-Pour Setup** — crew arrives, toolbox talk, pump setup, final inspection, batch plant call
+2. **Concrete Placement** — each truck arrival with ticket inspection note, ACI tech sample on Truck 1, cylinders cast, grade check, vibration
+3. **Finishing** — strike-off/bull float, wait for bleed water, first/second trowel pass, final finish
+4. **Curing & Protection** — compound application (30 min of final finish), barricades, photo documentation
+5. **Wrap-Up** — pump washout, delivery ticket log, crew debrief, site lockdown
+
+**Features:**
+- All times calculated from first truck arrival (pre-pour tasks go backward in time)
+- Grouped by phase with color-coded timeline display
+- ACI code references inline (ACI 302.1R §8.5, §8.6, ACI 308R)
+- **Printable Pour Day Timeline** — professional table format, truck count/yd³/interval summary, signature block
+- Per-project localStorage: `oncor_pourtime_v1_[project]`
+
+---
+
+### Session #124 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 700b78f
+- Total new lines: +625
+- New shortcuts: F1 (Job Viability), F2 (Bid Reverse Calc), F3 (Pour Day Timeline)
+- File now at 186,242 lines total
+
+---
+
+## ✅ SESSION: Apr 3, 2026 - 15:28 UTC (Overnight Cron #123)
+**Status:** ✅ THREE NEW FEATURES added (+692 lines)
+
+### What Was Added:
+
+---
+
+### 🧹 Concrete Finishing Checklist (F12) — ~260 lines
+- New `🧹 Finishing Checklist` button in sidebar (teal color)
+- `F12` keyboard shortcut opens/closes the modal
+- **Purpose:** Pre-finishing and post-finishing quality checklist for flatwork per ACI 302.1R-15 Guide to Concrete Floor and Slab Construction. Ensures proper strike-off, bull float, bleed water wait, power troweling, surface texture, curing, and final inspection.
+
+**7 Checklist Sections (35 items total):**
+1. 🔧 **Pre-Finishing Setup** (7 items) — strike-off equipment, bull float, power trowels, edging tools, curing compound staged, knee boards, fresno
+2. 📏 **Strike-Off & Bull Float** (5 items) — ACI 302.1R §8.5 — immediate strike-off, bull float while plastic, perpendicular work, no bleed water worked in, surface free of voids
+3. 💧 **Wait for Bleed Water** (3 items) — ACI 302.1R §8.6 — waited for evaporation, no finishing with sheen, footprint test
+4. 🔄 **Power Troweling / Hand Finish** (5 items) — flat blades first pass, progressive tilt, no burn/chatter, edge work complete, control joints
+5. 🎨 **Surface Texture** (4 items) — broom/hard trowel/exposed/stamp as specified
+6. 💊 **Curing & Protection** (5 items) — ACI 308R — compound within 30 min, coverage rate 150-200 SF/gal, wet cure alternative, protection, barricades
+7. ✅ **Final Inspection** (6 items) — no defects, edges clean, FF/FL acceptable, photos, documented
+
+**Features:**
+- Per-pour tracking: Load any pour by name, track completion per pour
+- Progress bar with % complete (color-coded green/amber/red)
+- ★ Critical items marked (26 critical items must be checked)
+- Click-to-toggle checkbox interface
+- History of recent checklists with completion %
+- **Printable Finishing Checklist** — sections with checkboxes, ★ Critical column, completion %, dual signature block (Foreman/Finisher + QC/Inspector)
+- localStorage per project: `oncor_finishcheck_v1_[project]`
+
+---
+
+### 📊 Live Cure Coverage Tracker (F9) — ~220 lines
+- New `📊 Cure Coverage` button in sidebar (purple color)
+- `F9` keyboard shortcut opens/closes the modal
+- **Purpose:** Track curing compound application rate and coverage in real-time per ACI 308R-16. Log gallons used, area covered, calculate SF/gal rate, flag under-coverage.
+
+**Features:**
+- 4-card KPI header: Total Gallons / Total SF Covered / Avg Rate SF/Gal / Status
+- Status indicator: ✅ Good (≥150 SF/gal) / ⚠️ Light (100-150) / 🚫 Under-applied (<100)
+- **Log Cure Application form:** Pour/Area name, Gallons Used, Area (SF), Compound Type (White Pigmented, Clear/Resin, Dissipating, Wax-Based, Wet Cure, Other)
+- Application log with per-entry: area, type, gallons, SF, calculated rate, timestamp
+- Delete individual entries, Clear All
+- ACI 308R-16 Coverage Guidelines reference panel (150-200 SF/gal standard)
+- **Printable Coverage Log** — 3-card KPI grid, full log table with rate per entry, color-coded rates, ACI 308R/ASTM C309 footer
+- localStorage per project: `oncor_curecov_v1_[project]`
+
+---
+
+### 🏁 Pour Wrap-Up Report Generator (F4) — ~210 lines
+- New `🏁 Pour Wrap-Up` button in sidebar (green color)
+- `F4` keyboard shortcut opens/closes the modal
+- **Purpose:** Generate end-of-pour summary report capturing key metrics. Create professional pour completion document for job files.
+
+**Report Entry Form (18 fields):**
+- Pour Name/Area (required), Pour Date, Element Type (9 types)
+- Est yd³, Actual yd³ (auto-calculates variance %), Truck Count, PSI Spec
+- Start Time, End Time (auto-calculates duration)
+- Crew Size, Foreman name
+- Placement Method (Boom Pump, Line Pump, Direct Chute, Conveyor, Buggy, Other)
+- Weather (Clear, Cloudy, Hot >90°F, Cold <50°F, Windy, Rain Delay)
+- QC/Testing Notes, Issues/Delays, General Notes
+
+**Features:**
+- Save Report + Save & Print workflow
+- Saved reports list with key metrics preview
+- Variance % shown (color-coded: >5% over = red, <-5% under = green)
+- Issues field highlighted when present
+- **Printable Pour Wrap-Up Report** — professional format with:
+  - Pour name/element type banner (green)
+  - 4-card KPI: Actual yd³ / Est yd³ / Variance / Trucks
+  - 4-card secondary: PSI / Duration / Crew / Method
+  - Details table: Foreman, Start-End time, QC/Testing notes, Issues (amber highlight), Notes
+  - Triple signature block (Foreman / QC-Inspector / Project Manager)
+  - Generated timestamp + CONFIDENTIAL footer
+- localStorage per project: `oncor_wrapup_v1_[project]`
+
+---
+
+### Session #123 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: e164033
+- Total new lines: +692
+- New shortcuts: F4 (Pour Wrap-Up), F9 (Cure Coverage), F12 (Finishing Checklist)
+- All three are practical field-facing tools for pour day operations
+
+---
+
 ## ✅ SESSION: Apr 3, 2026 - 14:20 UTC (Overnight Cron #122)
 **Status:** ✅ THREE NEW FEATURES added (+929 lines)
 
@@ -5790,3 +6997,1108 @@ Project Start, Project Completion, Pour Day, Inspection, Pay Application Due, Li
 - a4eeddb: ⚡ Job Flash Report & Morning Briefing (Alt+Z) (+338 lines) [Session #88]
 
 **Total Lines:** ~163,612 | **Alt+ Shortcuts:** All 26 (A-Z) now used ✅ COMPLETE
+
+---
+
+## ✅ SESSION: Apr 3, 2026 - 20:13 UTC (Overnight Cron #129)
+**Status:** ✅ THREE NEW FEATURES added (+821 lines)
+
+### What Was Added:
+
+---
+
+### 🧱 Tilt-Up Panel Design Helper (Ctrl+F1) — ~280 lines
+- New `🧱 Tilt-Up Panel Design` button in sidebar (purple color)
+- `Ctrl+F1` keyboard shortcut opens/closes the modal
+- **Purpose:** Preliminary ACI 551.1R-14 tilt-up panel design check. Input panel geometry, wind load, rebar selection, and roof loads — get instant slenderness, flexure, and steel ratio checks. Critical for concrete contractors bidding tilt-up warehouse and industrial jobs in El Paso.
+
+**Features:**
+- **Panel Geometry:** Height (ft), Width (ft), Thickness (in), f'c PSI, Rebar grade/size
+- **Loads & Conditions:** Wind speed (90-130 mph, default 110 mph El Paso), Exposure category (B/C/D), Roof load (kips), Ledger height, Embed depth, Opening %
+- **Auto-calculated:**
+  - Panel weight (kips) and volume (yd³)
+  - Net panel area accounting for openings
+  - Wind pressure (psf) per ASCE 7-22 simplified
+  - Slenderness ratio h/t vs ACI 551 limit of 50
+  - Min thickness (h/50 or 3.5" min)
+  - Factored moment Mu (wind + P-delta)
+  - Panel moment capacity φMn (ACI 318-19)
+  - DCR = Mu/φMn with PASS/FAIL
+  - Steel ratio ρ vs min 0.0012 requirement
+  - Crane pick load (1.5 DLF)
+- **4-card KPI:** Panel Weight / Wind Pressure / Mu/φMn / Slenderness h/t
+- **Status badge:** PRELIMINARY OK ✅ or REVIEW REQUIRED ⚠️
+- **Printable Panel Design Summary** — geometry table, 4-check table (slenderness/thickness/flexure/steel), crane/erection data, ACI 551.1R-14 disclaimer
+- **Quick Reference:** ACI 551.1R key requirements (min thickness, min steel, cover, brace design, crane picks)
+- Standards: ACI 551.1R-14, TCA Tilt-Up Guidelines, ASCE 7-22, ACI 318-19
+
+---
+
+### 💧 Admixture Compatibility Checker (Ctrl+F2) — ~290 lines
+- New `💧 Admixture Compatibility` button in sidebar (cyan color)
+- `Ctrl+F2` keyboard shortcut opens/closes the modal
+- **Purpose:** Select multiple admixtures and instantly check for known ASTM C494/ACI 212.3R compatibility conflicts, hot weather warnings, and get batch dosage calculations. Prevents costly job-site problems from incompatible admixtures.
+
+**Features:**
+- **Mix Design Inputs:** Cement type (I/II, III, IP, IS), Target PSI, Air-entrained, Ambient temp, w/cm ratio, Batch size (yd³)
+- **8 Admixture Types (checkbox selection):**
+  - WR (Type A) — Water Reducer
+  - HRWR/Superplasticizer (Type F/G)
+  - Retarder (Type B/D)
+  - Accelerator (Type C/E)
+  - Air-Entraining (ASTM C260)
+  - VMA (Viscosity Modifier)
+  - SRA (Shrinkage-Reducing)
+  - Corrosion Inhibitor (Calcium Nitrite)
+- **Compatibility Analysis:**
+  - WR + HRWR combined: warning on over-reduction
+  - Retarder + Accelerator: ❌ INCOMPATIBLE — flags immediately
+  - Accelerator in hot weather (>75°F): flash set risk alert
+  - Hot weather without retarder (>85°F): ACI 305R recommendation
+  - Air-entraining + HRWR (polycarboxylate): air loss warning
+  - 5000+ PSI without HRWR: optimization recommendation
+  - Type III cement + retarder: dose caution
+- **Dosage Calculator:** Based on batch size and estimated cement content
+  - Per-admixture: min/max oz/cwt (or oz/yd³) → total batch min/max in oz and gallons
+  - El Paso hot weather dose adjustments
+- **ASTM C494 Type Reference Table** — all 8 types with function, typical dose, El Paso use case
+- **Printable Admixture Schedule** — compatibility issues + dosage table, ASTM C494/ACI 212.3R footer
+- Standards: ASTM C494, ASTM C260, ACI 212.3R-16, ACI 305R-10
+
+---
+
+### 📐 RC Beam Quick Design (Ctrl+F3) — ~250 lines
+- New `📐 RC Beam Quick Design` button in sidebar (amber color)
+- `Ctrl+F3` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 318-19 preliminary reinforced concrete beam flexure and shear check. For field verification — "can this beam carry this load with this rebar?" Check DCRs before calling the engineer. Critical for concrete contractors building beams, grade beams, and spandrels.
+
+**Features:**
+- **Beam Geometry:** Clear span (ft), Width b (in), Total depth h (in), Cover (in), f'c PSI, fy (40/60/80 ksi)
+- **Loading:** Dead load wD (klf), Live load wL (klf)
+- **Tension Steel:** 10 selections (#5-#10, 2-4 bars)
+- **Stirrups:** 6 selections (#3-#5 @ 6"-12")
+- **End Conditions:** Simply supported or continuous (coefficient reduction)
+- **Auto-calculated (ACI 318-19):**
+  - wu factored load (1.2D + 1.6L)
+  - Mu = wu × L²/8 (or ×0.7 for continuous)
+  - Effective depth d, stress block depth a, neutral axis depth c
+  - Strain εt and φ factor (tension-controlled / transition)
+  - φMn moment capacity and DCR = Mu/φMn
+  - Min As (ρ_min = max(3√f'c/fy, 200/fy))
+  - Max As (0.75ρb for ductility)
+  - Vc = 2λ√f'c × bw × d (simplified shear)
+  - Vs from stirrups; φVn = 0.75(Vc+Vs)
+  - Shear DCR at d from face
+  - Max stirrup spacing (d/2 or 24")
+  - Min depth for deflection (L/16 simple, L/18.5 continuous)
+- **6 simultaneous checks:** Flexure / Shear / Min Steel / Max Steel / Stirrup Spacing / Min Depth
+- **4-card KPI:** Mu/φMn / Vu/φVn / φMn (k-ft) / φVn (kips)
+- **Printable Beam Design Summary** — properties table, 6-check result table with DCRs, PE disclaimer
+- Standards: ACI 318-19 §9 & §22, ASCE 7-22, CRSI Design Handbook
+
+---
+
+### Session #129 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 582dbcf
+- Total new lines: +821
+- New shortcuts: Ctrl+F1 (Tilt-Up Panel), Ctrl+F2 (Admixture Compat), Ctrl+F3 (RC Beam)
+- File now at 189,443 lines total
+
+---
+
+## ✅ SESSION: Apr 3, 2026 - 21:22 UTC (Overnight Cron #130)
+**Status:** ✅ THREE NEW FEATURES added (+751 lines)
+
+### What Was Added:
+
+---
+
+### 🏗️ Slab Reinforcement Selector (Ctrl+F4) — ~280 lines
+- New `🏗️ Slab Reinforcement Selector` button in sidebar (brown color)
+- `Ctrl+F4` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 360R-10 / ACI 318-19 slab-on-grade reinforcement selection tool. Input slab thickness, f'c, use type, subgrade k-value, exposure, and joint spacing — get optimal rebar spacing or WWR designation with cost estimate.
+
+**Features:**
+- **Slab Properties:** Thickness (in), f'c PSI, Slab Type (Residential/Commercial/Industrial/Warehouse/Exterior), Subgrade k-value (50-300 pci), Exposure/Environment, Joint Spacing (ft), Slab Area (SF)
+- **Two-formula approach:**
+  - ACI 318-19 §24.4.3.2 shrinkage/temp steel: As,min = 0.0018 × b × h (Grade 60)
+  - Subgrade drag formula (ACI 360R §6.5.2): As = (μ × w × L) / (2 × fs)
+  - Governs: maximum of both
+- **Rebar Options:** #3 through #6 — calculates required spacing vs max allowed (min(5h, 18")), flags tight spacing
+- **WWR Options:** 5 standard designations (6×6 W1.4 through 4×4 W4.0) with lb/100SF weight
+- **Cover recommendation** by exposure class
+- **Material cost estimate** for full slab area (El Paso 2025 installed rates)
+- **4-card KPI:** Min As (ACI 318) / Drag Formula As / Design As (governs) / Max Spacing
+- **Printable Spec Sheet** — all rebar/WWR options with PASS/OK status, cover, cost estimate, ACI 360R/318 reference
+- **Quick Reference Panel:** shrinkage steel, drag formula, cover requirements, El Paso notes (caliche k=150-200, 90°F thermal range)
+
+---
+
+### 📏 Flatwork Production Rate Estimator (Ctrl+F5) — ~270 lines
+- New `📏 Flatwork Production Rate` button in sidebar (dark purple color)
+- `Ctrl+F5` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 302.1R / AGC labor productivity reference. Input pour scope and conditions, get estimated pour duration, crew size, and total labor cost. Plan before the pour starts.
+
+**Features:**
+- **Pour Scope:** Total yd³, Pour Type (Interior/Exterior Slab, Footings, Walls, Curb, Sidewalk), Placement Method (Boom Pump/Line Pump/Direct Chute/Buggy), Finish Complexity (Broom/Trowel/Exposed/Stamped/Hard Trowel)
+- **Conditions:** Weather (Ideal/Hot/Extreme/Cold), Truck Interval (min), Truck Size (yd³), Foreman Rate, Finisher Rate
+- **Calculation:**
+  - Base placement rate by method (Boom 30/Line 20/Chute 14/Buggy 9 yd³/hr)
+  - Weather factor (Ideal 1.0 / Hot 0.85 / Extreme 0.70 / Cold 0.90)
+  - Pour type factor (wall 0.65 / footing 0.75 / slab 1.0)
+  - Delivery span from truck count × interval
+  - Finishing hours by finish type and approx SF
+  - Total crew day = pour + finish + 1hr setup
+- **Auto-crew sizing** by pour type (scales up for >150 and >300 yd³ pours)
+- **4-card KPI:** Pour Duration / Total Crew Day / Crew Size / Labor Cost
+- **Detailed breakdown:** Delivery schedule, adj. placement rate, productivity (yd³/labor-hr), labor $/yd³, weather alert
+- **Crew cost table** with Foreman/Finishers/Laborers, rates, hours, individual cost, totals + man-hours
+- **Printable Production Plan** — all details, crew breakdown, productivity metrics, ACI 302.1R/305R reference
+- **Quick Reference Panel:** placement rates by method, crew productivity benchmarks by work type
+
+---
+
+### 🔑 Project Turnover Checklist (Ctrl+F6) — ~270 lines
+- New `🔑 Project Turnover Checklist` button in sidebar (dark green color)
+- `Ctrl+F6` keyboard shortcut opens/closes the modal
+- **Purpose:** Concrete sub project closeout, GC handoff, and retainage release checklist. Tracks 40 items across 6 categories. Get a professional turnover package — signed, filed, paid.
+
+**Features:**
+- **Project metadata:** Project Name, GC/Owner, Turnover Date, Final Contract Value
+- **6 Checklist Categories (40 items total):**
+  1. 📋 **Documentation** (8 items) — delivery tickets, cylinder breaks, ACI 318 acceptance, mix design approvals, pre-pour checklists, photo log, ACI compliance monitor
+  2. 💰 **Financial** (7 items) — final pay app, CO log reconciled, final contract value, retainage confirmed, T&M signed, AP paid, job cost final
+  3. ⚖️ **Legal / Lien** (6 items) — conditional/unconditional final lien waivers (TX §53.281), sub lien waivers collected, NTO compliance, no open disputes
+  4. ✔️ **Field / Quality** (7 items) — punch list 100%, site clean, saw cuts complete, curing verified, defects repaired, safety barriers removed, equipment returned
+  5. 📐 **Submittals & Closeout** (6 items) — warranty letter, as-builts, O&M manual, product data sheets, special inspection closed, AIA G704 signed
+  6. 🛡️ **Insurance & Admin** (6 items) — sub COIs filed, OSHA records archived, lessons learned, bid history archived, project file packaged
+- **★ Critical items** (26 of 40) — marked red, must all be ✅ before turnover is "READY"
+- **3-state toggle:** ✅ Done / ☐ Open / ➖ N/A (click item or N/A button)
+- **Live progress bar** — X/N complete + % + READY FOR TURNOVER / NOT READY status badge
+- **Per-project localStorage** (keyed by project name)
+- **Printable Turnover Checklist** — project info table, all 6 categories with items, Done/Open/N/A status, ★ Critical column, notes section, **triple signature block** (Contractor / GC-PM / Owner), ACI/AGC/AIA G704/TX §53 footer
+
+---
+
+### Session #130 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: ef501a0
+- Total new lines: +751
+- New shortcuts: Ctrl+F4 (Slab Reinforcement), Ctrl+F5 (Flatwork Production), Ctrl+F6 (Turnover Checklist)
+- File now at 190,194 lines total
+
+---
+
+## ✅ SESSION: Apr 3, 2026 - 22:28 UTC (Overnight Cron #131)
+**Status:** ✅ THREE NEW FEATURES added (+673 lines)
+
+### What Was Added:
+
+---
+
+### 🌱 Concrete Sustainability Scorecard (Ctrl+F7) — ~225 lines
+- New `🌱 Sustainability Scorecard` button in sidebar (dark green color)
+- `Ctrl+F7` keyboard shortcut opens/closes the modal
+- **Purpose:** Score a concrete mix/project on sustainability per LEED v4.1 MR Credits, ASHRAE 189.1, and ACI 301-16. 12 scored criteria covering SCM usage, recycled content, local sourcing, low-carbon cement, EPD availability, curing efficiency, waste rate, and washout recycling.
+
+**Features:**
+- **12 Scoring Criteria (100 pts total):**
+  - SCM Replacement % (20 pts) — fly ash, slag, silica fume substitution
+  - Recycled Coarse Aggregate % (10 pts) — post-consumer/post-industrial
+  - Local Cement Sourcing miles (8 pts) — ≤100mi=8, ≤250mi=5, ≤500mi=2
+  - Local Aggregate miles (5 pts) — same radius tiers
+  - EPD Available? (10 pts) — Environmental Product Declaration from batch plant
+  - Low-Carbon Cement? (10 pts) — Type IL, geopolymer, or SCM ≥30%
+  - Mix Optimization? (8 pts) — ACI 211.1 w/cm ≤0.45
+  - Curing Method (5 pts) — 6 options from open-air to white-pigmented compound
+  - Pump Efficiency (4 pts) — direct chute > line pump > boom pump
+  - Target Waste Rate % (10 pts) — ≤3%=10, ≤5%=7, ≤8%=4
+  - No On-Site Water Addition (5 pts) — ASTM C94 §11.8 compliance
+  - Concrete Washout Recycling (5 pts) — reclaimer system
+- **Sustainability Grades:** Platinum ✨ (≥85%) / Gold 🥇 (≥70%) / Silver 🥈 (≥55%) / Bronze 🥉 (≥40%) / Baseline
+- **CO₂e Estimate:** Calculates kg CO2e/yd³ based on SCM % (base 370 kg/yd³, −3.5 per 1% SCM)
+- **Per-criterion breakdown table** with points, progress bar, reference standard
+- **Printable Scorecard Report** — criteria table with points, grade, CO2e, LEED/ACI references
+- **El Paso Notes:** Martin Marietta/Cemex EPD availability; Type IL cement; Class C fly ash; local aggregate sources ~40 miles
+- Standards: LEED v4.1 MR Credits, ACI 301-16, ACI 211.1, ASTM C595, ACI 308R, EPA SWPPP, TCEQ TXR150000
+
+---
+
+### 🧮 Partial Pour Volume Calculator (Ctrl+F8) — ~240 lines
+- New `🧮 Partial Pour Volume Calc` button in sidebar (dark purple color)
+- `Ctrl+F8` keyboard shortcut opens/closes the modal
+- **Purpose:** Field tool to calculate concrete volumes for irregular partial shapes where L×W×D doesn't work. Sum multiple shapes for total pour order.
+
+**12 Supported Shapes:**
+1. **Rectangle / Slab** — L × W × D
+2. **Trapezoid Slab** — (L1+L2)/2 × W × D
+3. **L-Shape Slab** — Rectangle A + Rectangle B
+4. **T-Shape Slab** — Stem + Flange
+5. **Wedge / Tapered Pour** — L × W × ½ × avg D
+6. **Circular Slab** — π × r² × D / 27
+7. **Annulus (Ring Slab)** — π × (R²−r²) × D / 27
+8. **Trapezoidal Footing** — ((B1+B2)/2) × H × L / 27
+9. **Stepped Footing** — Two-step: step1 + step2
+10. **Curb Return (quarter-circle)** — Radius sweep at intersection
+11. **Wall with Tapered Top** — Rectangular + triangular taper
+12. **Drilled Pier / Column** — π × r² × H × qty / 27
+
+**Features:**
+- Dynamic field inputs that change per shape selection
+- Per-element label for identification
+- Running element list with yd³ per item
+- **Total yd³** with truck count estimate (10 yd³ loads)
+- Delete individual elements
+- **Printable Volume Summary** — elements table, grand total, truck count
+- ±2% accuracy note
+
+---
+
+### 📱 Crew Communication Log (Ctrl+F9) — ~210 lines
+- New `📱 Crew Communication Log` button in sidebar (dark pink color)
+- `Ctrl+F9` keyboard shortcut opens/closes the modal
+- **Purpose:** Document every field communication — GC verbal directives, owner requests, foreman instructions, verbal CO requests. Timestamped, categorized, printable. Turns verbal conversations into written records for claim support.
+
+**10 Communication Types:**
+- GC Directive (red) / Owner Request (orange) / Foreman Instruction (green)
+- Sub Coordination (blue) / Field Change (amber) / Verbal CO Request (purple)
+- Safety Stop / Hold (red) / Delivery / Batch Plant (cyan)
+- QC / Spec Issue (amber) / General Note (gray)
+
+**Features:**
+- Auto-timestamp (date + time) on every entry
+- Parties / People Involved field
+- Location / Area field
+- ⚡ Follow-Up Required checkbox — highlighted badge on entry
+- Action Required / Next Step field
+- **Live search** across all log entries
+- **4-card stats:** Total Entries / Today / GC Directives / Verbal CO Requests
+- **Printable Communication Log** — full table with type, parties, location, note, action, follow-up flag
+- CONFIDENTIAL footer
+- localStorage per project: `oncor_ccl_v1_[project]`
+- **Why it matters:** "He told me to do it" doesn't become a CO without documentation. This log creates the written record.
+
+---
+
+### Session #131 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 560f4b8
+- Total new lines: +673
+- New shortcuts: Ctrl+F7 (Sustainability Scorecard), Ctrl+F8 (Partial Pour Volume), Ctrl+F9 (Crew Communication Log)
+- File now at 190,867 lines total
+
+---
+
+## ✅ SESSION: Apr 3, 2026 - 23:38 UTC (Overnight Cron #132)
+**Status:** ✅ THREE NEW FEATURES added (+700 lines)
+
+### What Was Added:
+
+---
+
+### 🧰 Pre-Construction Risk Checklist (Ctrl+F10) — ~240 lines
+- New `🧰 Pre-Con Risk Checklist` button in sidebar (purple color)
+- `Ctrl+F10` keyboard shortcut opens/closes the modal
+- **Purpose:** 50-item pre-construction Go/No-Go risk assessment across 6 categories (Contract & Scope, Financial, Schedule & Logistics, Technical/QC, Safety & Compliance, Operational + Relationship & Strategic). Score each item Yes/Partial/No. Get overall risk score, percentage, and GO / CAUTION / HIGH RISK / NO-GO recommendation.
+
+**Features:**
+- **50 Risk Items** across 7 categories with icons
+- **3-state toggle per item:** ✅ Yes (no risk) / ⚠️ Partial (some risk) / ✗ No (full risk flag)
+- **Risk score:** 0=Yes, 1=Partial, 2=No per item → total / maxScore → risk %
+- **4-card KPI:** Answered / Risk Score / Risk Level % / Recommendation
+- **Recommendation thresholds:** ≤20% = GO, ≤40% = CAUTION, ≤60% = HIGH RISK, >60% = NO-GO
+- **Color-coded progress bar** (green → amber → red)
+- **Notes / Risk Mitigation Plans** textarea (persisted)
+- **Reset All** button
+- **Printable Risk Checklist** — all 50 items by category with Yes/Partial/No status, KPI grid, dual signature block, CONFIDENTIAL footer
+- localStorage per project: `oncor_pcr_v1_[project]`
+
+---
+
+### 📊 Material Quantity Crosscheck (Ctrl+F11) — ~220 lines
+- New `📊 Quantity Crosscheck` button in sidebar (dark cyan color)
+- `Ctrl+F11` keyboard shortcut opens/closes the modal
+- **Purpose:** Validate takeoff quantities against industry rule-of-thumb benchmarks per element type. Automatically flags yd³/SF, yd³/LF, average depth, and labor cost/yd³ outliers that suggest calculation errors before submitting a bid.
+
+**Features:**
+- **Reads live measurements** from `window.measurements` + `window.lastEstimate`
+- **Per element type:** Slab, Footing, Wall, Grade Beam, Pier, Curb — each with type-specific benchmarks
+- **4-card KPI:** Element Types / Total yd³ / Total Measurements / Est $/yd³
+- **Benchmarks checked:**
+  - Slab: yd³/SF vs 0.005–0.025 (2"–8" thick range), avg depth sanity (2"–16")
+  - Footing/Grade Beam/Curb: yd³/LF
+  - Labor $/yd³ per type from estimate (cross-referenced vs El Paso 2025 range)
+- **Per-type card:** element count, yd³, % of job, flags with detail and status (⬇️ LOW / ⬆️ HIGH)
+- **Expandable item list** per type
+- **Global summary:** ✅ All pass or ⚠️ X flag(s) detected
+- **References:** ACI 302.1R, ACI 318-19, RS Means, El Paso 2025 labor rates
+
+---
+
+### 🏆 Project Profitability Tracker (Ctrl+F12) — ~240 lines
+- New `🏆 Profitability Tracker` button in sidebar (dark green color)
+- `Ctrl+F12` keyboard shortcut opens/closes the modal
+- **Purpose:** Track actual revenue billed and costs (concrete, labor, other) per pour/phase over the life of a project. See cumulative gross profit and margin in real time. Know exactly how the job is performing financially pour by pour.
+
+**Features:**
+- **Contract value** input (auto-seeds from `window.lastEstimate.totalBid`)
+- **4-card KPI:** Revenue Billed / Total Costs / Gross Profit / Gross Margin %
+- **Completion progress bar** (revenue billed vs contract value)
+- **Pour/Phase log form:**
+  - Label, Date, Revenue Billed ($), Concrete Cost ($), Labor Cost ($), Other Costs ($), yd³ Placed, Notes
+  - One-click Add entry
+- **Entry table** with per-pour: Revenue / Concrete / Labor / Other / Total Cost / Margin % / yd³ / **Cumulative GP**
+- **Totals row** with overall margin color-coded (green ≥20%, amber ≥15%, red <10%)
+- **Delete individual entries**
+- **Printable Profitability Report** — KPI grid + full entry table with cumulative GP column, CONFIDENTIAL footer
+- localStorage per project: `oncor_ppt_v1_[project]`
+
+---
+
+### Session #132 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 0d65683
+- Total new lines: +700
+- New shortcuts: Ctrl+F10 (Pre-Con Risk Checklist), Ctrl+F11 (Quantity Crosscheck), Ctrl+F12 (Profitability Tracker)
+- File now at 191,567 lines total
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 04:20 UTC (Overnight Cron #140)
+**Status:** ✅ THREE NEW FEATURES added (+606 lines)
+
+### What Was Added:
+
+---
+
+### 🔧 Joint Sealant Calculator (Ctrl+Alt+F1) — ~200 lines
+- New `🔧 Joint Sealant Calc` button in sidebar
+- `Ctrl+Alt+F1` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 504R / ASTM C920 sealant quantity estimator for concrete control joints, expansion joints, and construction joints. Calculate gallons needed, pails, and material cost.
+
+**Features:**
+- **6 sealant types:** Polyurethane Self-Leveling/Non-Sag, Silicone, Epoxy Rigid, Hot Pour Rubberized Asphalt — all with ASTM standards and El Paso 2025 pricing
+- **Backer rod option** (ASTM C1330, $0.08/LF) — checkbox toggle
+- **Per-segment entry:** Label, Joint Type (Control/Expansion/Construction/Isolation/Saw Cut), Length (LF), Width (in), Depth (in)
+- **Volume formula:** LF × 12 × W × D / 231 = gallons per joint segment
+- **4-card KPI:** Total LF / Gallons / 5-gal Pails / Material Cost
+- Running segment table with delete
+- Grand total box with pail count
+- **Printable Sealant Schedule** — full segment table + totals, ASTM C920/ACI 504R footer
+- **Quick Reference Panel:** depth/width ratio rule (1:2 max), min widths, backer rod guidance, El Paso thermal range notes (+90°F to +20°F)
+
+---
+
+### 🧫 Cylinder Set Planner (Ctrl+Alt+F2) — ~200 lines
+- New `🧫 Cylinder Set Planner` button in sidebar
+- `Ctrl+Alt+F2` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 318-19 §26.12 pre-pour cylinder set calculation. Input yd³ and SF, get required sets, total cylinders, break schedule with exact dates.
+
+**Features:**
+- **Inputs:** Total yd³, Slab Area (SF), f'c PSI, Pour Date, Cylinders per Set (3-6), Break Schedule (7+28d standard, plus 5 other options)
+- **ACI 318-19 §26.12 calculation:** Sets by volume (1 per 150 yd³) and by area (1 per 5,000 SF) — governs the greater
+- **4-card KPI:** Min Sets / Total Cylinders / Break Ages / Design f'c
+- **Break schedule table** (when pour date entered): exact break date per age, day of week, target strength %, expected PSI, and ACI acceptance note
+- **Acceptance criteria callout:** Avg ≥ f'c AND no individual < f'c−500 PSI
+- **Printable Cylinder Plan** — pour info, sets/cylinders, break schedule with dates
+- Standards: ACI 318-19 §26.12, ASTM C172, ASTM C31, ASTM C39
+
+---
+
+### ⚡ Field Change Quick Log (Ctrl+Alt+F3) — ~205 lines
+- New `⚡ Field Change Log` button in sidebar
+- `Ctrl+Alt+F3` keyboard shortcut opens/closes the modal
+- **Purpose:** Capture verbal directives, scope changes, and directed extra work in real-time. Timestamped automatically. Every undocumented change is free work — log it now, CO it later.
+
+**Features:**
+- **11 Change Types:** GC Verbal Directive, Owner Request, Design Change, Differing Condition, Scope Addition/Reduction, VE Request, Acceleration, Unforeseen, Error/Omission, Other
+- **5 Statuses:** Open / CO Submitted / CO Signed / Absorbed / Closed (one-click update buttons per entry)
+- **4-card KPI:** Total Changes / Open CO Needed / Estimated Change Value / COs Processed
+- **Red alert banner** when open changes needing CO exceed 0 (cites AIA A201 §7.3 7-day notice rule)
+- **Auto-timestamp** on every entry (date + time)
+- **CO NEEDED badge** — entries flagged as requiring CO highlighted with red border
+- **Printable Change Log** — full table with highlighted open CO rows, TX Prompt Payment Act / AIA A201 §7.3.7 footer
+- localStorage per project: `oncor_fcql_v1_[project]`
+- **Best Practices panel:** log immediately, capture who directed, 7-day CO rule, no-work-no-pay guidance
+
+---
+
+### Session #140 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 5b980d1
+- Total new lines: +606
+- New shortcuts: Ctrl+Alt+F1 (Joint Sealant Calc), Ctrl+Alt+F2 (Cylinder Set Planner), Ctrl+Alt+F3 (Field Change Log)
+- File now at 195,440 lines total
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 06:36 UTC (Overnight Cron #142)
+**Status:** ✅ THREE NEW FEATURES added (+564 lines)
+
+### What Was Added:
+
+---
+
+### 📊 Bid Sensitivity Matrix (Ctrl+Alt+F7) — ~185 lines
+- New `📊 Bid Sensitivity Matrix` button in sidebar (purple color)
+- `Ctrl+Alt+F7` keyboard shortcut opens/closes the modal
+- **Purpose:** Show the full margin impact when concrete, labor, or other direct costs swing ±5% to ±20%. A 9-column × 4-row matrix giving JFS instant visibility into bid risk exposure before submission.
+
+**Features:**
+- **3-card header:** Total Bid / Base Margin % (color-coded green ≥15%, amber ≥10%, red <10%) / Direct Cost
+- **Sensitivity Matrix Table:** Columns = -20% to +20% swings (in 5% increments); Rows = Concrete Material / Labor / Other Direct / All Direct Costs
+- Each cell shows: resulting margin % / new bid amount / Δ margin from baseline
+- **Color-coded cells:** Green = margin held (≥-1%), Amber = margin shrinking (>-3%), Red = margin <10%
+- Auto-reads from `window.lastEstimate` (concreteCost, laborCost, subtotal, overhead, profit)
+- Prompt to run estimate if no data loaded
+- **Printable Sensitivity Report** — table with background coloring by health zone
+- Standards reference: RS Means / CFMA
+
+---
+
+### 🕐 Pour & Cure Timeline Calculator (Ctrl+Alt+F8) — ~220 lines
+- New `🕐 Pour & Cure Timeline` button in sidebar (blue color)
+- `Ctrl+Alt+F8` keyboard shortcut opens/closes the modal
+- **Purpose:** Input pour date/time, element type, f'c, curing temp, cement type, and thickness → get a full chronological event timeline: first truck, finishing window, curing compound deadline, saw cut window, form strip dates, foot/vehicle traffic clearance, cure complete date.
+
+**Features:**
+- **Inputs:** Pour datetime, element type (8 types: Slab-on-Grade, Elevated Slab, Wall one/two-sided, Column, Beam, Footing), f'c PSI, avg curing temp (°F), cement type (I/II, III, IP Blended), slab thickness
+- **Temperature factor** (ACI 308R / ACI 209) — adjusts all durations for hot/cold conditions
+- **4-card KPI:** First Truck / Min Cure Days / Cure Complete Date / Temp Factor %
+- **Chronological timeline (color-coded dots):**
+  - 🚚 First Truck Arrives
+  - ⏱ Pour Complete (estimated)
+  - 💧 Curing Compound Deadline (30 min after final finish per ACI 308R)
+  - 🔪 Saw Cut Window Open / Close (4-12hr range, temp-adjusted)
+  - 🏗️ Form Strip Date per element type (ACI 347R-14)
+  - 🦶 Foot Traffic OK (Day 1-3 dep. on cement type/temp)
+  - 🚜 Light Vehicle OK (Day 5-7 dep. on temp)
+  - ✅ Min Cure Period Complete (ACI 308R Day 7/14)
+- **Estimated Strength Gain Table** — ACI 209R hyperbolic, temperature-adjusted: Day 1/3/7/14/28/56 PSI estimates
+- **Printable Timeline** — all events in table format with notes
+- Standards: ACI 308R-16, ACI 302.1R, ACI 347R-14, ACI 209R-92, ACI 305R, ACI 306R
+
+---
+
+### 🏦 Cross-Project Retainage Dashboard (Ctrl+Alt+F9) — ~210 lines
+- New `🏦 Retainage Dashboard` button in sidebar (amber/gold color)
+- `Ctrl+Alt+F9` keyboard shortcut opens/closes the modal
+- **Purpose:** Aggregate all retainage held across every project into one view. Auto-scans all AR tracker localStorage keys (oncor_ar_v1_*) plus supports manual entries. Know total retainage at risk company-wide.
+
+**Features:**
+- **4-card KPI:** Total Retainage Held / Total Invoiced / Outstanding AR / Active Projects
+- **Auto-pulls from AR Tracker** (Alt+R) — scans all project AR keys, sums retainage, invoiced, outstanding per project
+- **Project breakdown table** — each project with invoiced / outstanding / retainage held / ret %
+- **Overdue release detection** — flags entries where expected release date has passed (⚠️ OVERDUE)
+- **Manual entry form** — add retainage entries for projects not in AR tracker: project/GC name, contract value, retainage held ($), expected release date
+- **TX Prompt Payment Act reference panel:**
+  - Max 10% retainage cap (§28.003)
+  - GC must release sub retainage within 30 days of owner release (§28.005)
+  - 1.5%/month interest on overdue retainage
+  - Release conditions (not punch list alone)
+- **Printable Retainage Report** — project table + manual entries + TX law reference
+- localStorage: `oncor_ret_manual_v1` (manual entries, global)
+
+---
+
+### Session #142 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: b3f0893
+- Total new lines: +564
+- New shortcuts: Ctrl+Alt+F7 (Bid Sensitivity Matrix), Ctrl+Alt+F8 (Pour & Cure Timeline), Ctrl+Alt+F9 (Retainage Dashboard)
+- File now at 196,437 lines total
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 07:42 UTC (Overnight Cron #143)
+**Status:** ✅ THREE NEW FEATURES added (+585 lines)
+
+### What Was Added:
+
+---
+
+### 📋 Weekly Cost Burn Rate Tracker (Ctrl+Alt+F10) — ~195 lines
+- New `📋 Weekly Cost Burn Rate` button in sidebar (teal color)
+- `Ctrl+Alt+F10` keyboard shortcut opens/closes the modal
+- **Purpose:** Track actual project spend week-by-week against total project budget. See burn rate, budget %, remaining weeks of budget, and category breakdown. CFMA/AGC financial control reference.
+
+**Features:**
+- **4-card KPI:** Total Budget / Total Spent / Budget Used % / Avg Per Week
+- **Burn progress bar** — color-coded (green <80%, amber 80-100%, red >100%) with remaining weeks estimate
+- **Project budget input** — set total budget, auto-saved
+- **Weekly entry form:** Week Ending date, Category (14 options: Concrete Materials, Labor, Formwork, Rebar, Pump, Saw Cutting, Fiber, Base Course, Equipment Rental, Subcontractor, Testing, Mobilization, Overhead, Other), Amount Spent, Notes
+- **Spend by Category table** — breakdown with % share
+- **Weekly Entry Log** — sorted newest-first, delete individual entries
+- **Printable Burn Rate Report** — full table with CFMA reference
+- localStorage per project: `oncor_burn_v1_[project]`
+- **Reference Panel:** Front-loaded job patterns, S-curve peak weeks, alert threshold (>80% budget at <60% completion)
+
+---
+
+### 🏗️ Multi-Phase Pour Scheduler (Ctrl+Alt+F11) — ~215 lines
+- New `🏗️ Multi-Phase Pour Scheduler` button in sidebar (purple color)
+- `Ctrl+Alt+F11` keyboard shortcut opens/closes the modal
+- **Purpose:** Plan all concrete pour phases for a project — dates, yd³, element type, pump assignment, crew — with automatic resource conflict detection (same-day pours, same pump on same day).
+
+**Features:**
+- **4-card KPI:** Total Phases / Total yd³ / Pour Days / Conflicts (red when any)
+- **Conflict Detection:**
+  - Same-date pours flagged as potential crew/equipment conflict
+  - Same pump name on same date = confirmed equipment conflict
+  - Red alert banner listing all detected conflicts
+- **Add Phase form:** Phase Name, Pour Date, First Truck Time, yd³, Element Type (9 options), Pump/Method (9 options: 32-47m Boom, Line Pump, Direct Chute, Conveyor), Foreman/Crew, Notes
+- **Pour Schedule table** — sorted chronologically, conflicted rows highlighted red with ⚠️
+- Totals row (total yd³ across all phases)
+- **Printable Multi-Phase Pour Schedule** — all phases in table format
+- localStorage per project: `oncor_mps_v1_[project]`
+- **Conflict Reference Panel:** ACI 305R back-to-back pour rules, El Paso summer guidance
+
+---
+
+### 🔐 Job Site Access Log (Ctrl+Alt+F12) — ~235 lines
+- New `🔐 Job Site Access Log` button in sidebar (red color)
+- `Ctrl+Alt+F12` keyboard shortcut opens/closes the modal
+- **Purpose:** OSHA 1926.20(b) site access documentation. Log every person entering/exiting the job site — crew, visitors, inspectors, owners, architects. Flag unauthorized or notable entries.
+
+**Features:**
+- **4-card KPI:** Total Log Entries / Today On-Site / Visitor/Inspector Visits / Flagged Entries
+- **Flagged Entries Alert** — red banner listing all flagged entries with names/dates
+- **Log Entry form:** Full Name, Company, Type (11 types: Crew/Worker, Foreman, Subcontractor, Delivery Driver, Visitor, Inspector, Owner, Architect/Engineer, GC Representative, Safety Officer, Other), Date, Time In, Time Out, Notes, ⚑ Flag checkbox
+- **Today's Log** — dedicated section showing current day entries with in/out times
+- **Full Access History** — reverse chronological, all prior dates
+- **⚑ Flag system** — flagged entries get red border highlight and ⚑ icon
+- **Printable Access Log** — all entries in professional table format, flagged rows highlighted, OSHA reference footer
+- localStorage per project: `oncor_acc_v1_[project]`
+- **OSHA Reference Panel:** 1926.20(b) employer logging requirements, inspector documentation, unauthorized visitor protocol, 3-year record retention per 29 CFR 1904
+
+---
+
+### Session #143 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 3612acf
+- Total new lines: +585
+- New shortcuts: Ctrl+Alt+F10 (Weekly Cost Burn Rate), Ctrl+Alt+F11 (Multi-Phase Pour Scheduler), Ctrl+Alt+F12 (Job Site Access Log)
+- File now at 197,022 lines total
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 08:48 UTC (Overnight Cron #144)
+**Status:** ✅ THREE NEW FEATURES added (+447 lines)
+
+### What Was Added:
+
+---
+
+### 🗂️ Bid Document Archive (Ctrl+Shift+F1) — ~150 lines
+- New `🗂️ Bid Document Archive` button in sidebar (purple color)
+- `Ctrl+Shift+F1` keyboard shortcut opens/closes the modal
+- **Purpose:** Store and organize all bid-related documents, links, and references per project. Google Drive links, Dropbox, file paths, addenda, sub quotes, drawings, specs — all in one place with one-click access.
+
+**Features:**
+- **3-card KPI:** Total Documents / Clickable Links / Categories Used
+- **12 Document Categories:** Bid Package, Drawings, Specifications, Addenda, Pre-Bid RFI, Scope Clarification, Sub Quotes, Bond, Insurance, Proposal/Bid, Change Order, Other
+- **7 Document Types:** Link/URL, Local File Ref, Google Drive, Dropbox, Email Thread, Verbal Note, Other
+- **Add Document form:** Title, Category, Type, Date Added, URL/Path, Notes
+- **Auto-detects clickable URLs** — Google Drive and http links open directly in new tab
+- **Grouped by category** with item count per group
+- **Category filter chips** for quick navigation
+- **Printable Archive** — full document table grouped by category with clickable links, CONFIDENTIAL footer
+- localStorage per project: `oncor_bda_v1_[project]`
+- **Why it matters:** When bid day hits, JFS has 15+ documents scattered across email, Drive folders, and his desktop. This puts everything in one searchable, organized list — click one link to open the IFC drawings, another for the geotech report.
+
+---
+
+### 📊 Daily Concrete Cost Journal (Ctrl+Shift+F2) — ~155 lines
+- New `📊 Daily Concrete Cost Journal` button in sidebar (blue color)
+- `Ctrl+Shift+F2` keyboard shortcut opens/closes the modal
+- **Purpose:** Log every concrete purchase ticket by date with running cumulative total vs budget. See exactly how much concrete spend is accumulating day by day vs estimated.
+
+**Features:**
+- **4-card KPI:** Total Spent / Budgeted / Remaining (green or red) / $/yd³ Avg
+- **Budget progress bar** — color-coded red/amber/green with % used
+- **Configurable budget** — set concrete material budget, persisted per project
+- **Per-ticket entry:** Date, Ticket/Invoice #, Batch Plant, yd³ on Ticket, $/yd³ Unit Price, Total Amount, PSI, Pour Area/Notes
+- **Auto-calculate amount** — enter yd³ × $/yd³ → auto-fills total
+- **Running cumulative total column** — sorted chronologically, see spend grow ticket by ticket
+- **Totals row:** Total yd³ / Avg $/yd³ / Total Spent / Remaining
+- **Printable Cost Journal** — full table with running column, budget summary header
+- localStorage per project: `oncor_dccj_v1_[project]`
+- **Why it matters:** Concrete is 30-55% of direct cost on most jobs. Without a daily log, JFS doesn't know he's trending over budget until the final invoice arrives. This gives him real-time purchase tracking vs his bid estimate.
+
+---
+
+### ⚡ Onsite Emergency Quick Guide (Ctrl+Shift+F3) — ~240 lines
+- New `⚡ Onsite Emergency Quick Guide` button in sidebar (red color)
+- `Ctrl+Shift+F3` keyboard shortcut opens/closes the modal
+- **Purpose:** 7 field emergency response cards for concrete jobs — Medical Emergency, Fire, Formwork Failure, Chemical/Concrete Burns, Electrical Strike, Heat Illness, Trench Collapse. OSHA-compliant step-by-step protocols.
+
+**7 Emergency Scenarios with numbered action steps:**
+1. 🏥 Medical Emergency / Injury — 12 steps (OSHA 1904/1926.50, OSHA reporting timelines)
+2. 🔥 Fire on Jobsite — 10 steps (OSHA 1926.150, PASS method, propane protocol)
+3. 🏗️ Formwork / Structure Failure — 10 steps (OSHA 1926.703, secondary collapse)
+4. 💧 Chemical / Concrete Burn — 10 steps (pH 12-13 warning, eye flush, no acid neutralization)
+5. ⚡ Electrical Strike / Power Line Contact — 10 steps (OSHA 1926.403, EP Electric #)
+6. 🌡️ Heat Illness — El Paso specific (OSHA 1926.50, ACI 305R, 95-105°F context)
+7. 🚧 Excavation / Trench Collapse (OSHA 1926.651-652, no-equipment-rescue rule)
+
+**Features:**
+- **Quick Contact Strip:** 911 / OSHA Hotline / EP Electric Emergency / Poison Control / UMC ER / 811
+- **Each card:** Color-coded border, numbered action steps, OSHA/ACI code reference, El Paso-specific field note
+- **Printable Emergency Cards** — 2-column print layout, designed for field trailer posting
+  - Contact strip at top (all emergency numbers)
+  - All 7 cards in compact format
+  - "POST IN FIELD TRAILER" header note
+  - OSHA reference footer
+
+---
+
+### Session #144 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 4c5bdf1
+- Total new lines: +447
+- New shortcuts: Ctrl+Shift+F1 (Bid Document Archive), Ctrl+Shift+F2 (Daily Concrete Cost Journal), Ctrl+Shift+F3 (Onsite Emergency Quick Guide)
+- File now at 197,469 lines total
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 09:55 UTC (Overnight Cron #145-147)
+**Status:** ✅ NINE NEW FEATURES added (+983 lines total)
+
+### Session #145 Summary
+- **Volume Variance Analyzer** (Ctrl+Shift+F4) — Compare takeoff vs ordered vs placed per pour, track waste %, ACI 304R benchmark
+- **Site Photo Log** (Ctrl+Shift+F5) — Document photos by category/pour/date, evidence for disputes, 15 categories
+- **Daily Foreman Report Generator** (Ctrl+Shift+F6) — Professional end-of-day report for GC/file with printable format
+- Commit: ef1f54a (+357 lines)
+
+### Session #146 Summary
+- **Concrete Pump Selection Guide** (Ctrl+Shift+F7) — Boom vs line selector, El Paso 2025-2026 pricing, reach/rate tables
+- **Job Profitability Snapshot** (Ctrl+Shift+F8) — Quick bid vs actual P&L view, cost/revenue variance
+- **Pour Day Communication Log** (Ctrl+Shift+F9) — Calls, texts, decisions timestamped — evidence documentation
+- Commit: d31ec3c (+313 lines)
+
+### Session #147 Summary
+- **Concrete Mix Submittal Status** (Ctrl+Shift+F10) — Track mix design approvals per ACI 318-19, plant/code/PSI
+- **Daily Progress Photo Board** (Ctrl+Shift+F11) — Visual timeline of work by date, % complete tracking
+- **Site Incident Report** (Ctrl+Shift+F12) — Injuries, near misses, property damage, OSHA 300 log compliance
+- Commit: b3c5a4a (+313 lines)
+
+### Combined Session #145-147 Summary
+- Total new lines: +983
+- File now at 198,452 lines
+- New keyboard shortcuts: Ctrl+Shift+F4 through Ctrl+Shift+F12 (9 new features)
+- All features include localStorage persistence, printable reports, and OSHA/ACI code references where applicable
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 11:12 UTC (Overnight Cron #148)
+**Status:** ✅ THREE NEW FEATURES added (+461 lines)
+
+### What Was Added:
+
+---
+
+### 📊 Bid Win/Loss Analytics Dashboard (Ctrl+Shift+Alt+1) — ~155 lines
+- New `📊 Bid Analytics` button in sidebar (indigo color)
+- `Ctrl+Shift+Alt+1` keyboard shortcut opens/closes the modal
+- **Purpose:** Cross-bid business intelligence — log every bid outcome, track win rate, analyze by GC/client and project type, see total revenue won vs lost.
+
+**Features:**
+- **8-card KPI header:** Total Bids / Win Rate (color-coded) / Revenue Won / Pipeline Value / Avg Bid Size / Avg Won Job / Jobs Lost / Value Lost
+- **Log Bid Outcome form:** Project name, GC/Client, Bid Amount, Outcome (Won/Lost/Pending/No Bid/Withdrawn), Project Type (8 types), Date, Winner (if lost), Notes
+- **Top GC/Client Performance table** — ranked by won revenue: GC name, total bids, won count, win rate %, total revenue
+- **Win Rate by Project Type** — pill grid showing win rate per type (Commercial, Industrial, Municipal, Tilt-Up, etc.) with color-coded health
+- **Bid History list** — sorted newest-first with outcome badges and amounts
+- **Printable Analytics Report** — full bid history table with win/loss stats header
+- `window._getBWAStats()` exposed for integrations
+- localStorage global: `oncor_bwa_v1` (cross-project, all bids)
+
+---
+
+### 🔩 Anchor Bolt & Embed Cost Estimator (Ctrl+Shift+Alt+2) — ~175 lines
+- New `🔩 Anchor & Embed Calc` button in sidebar (orange color)
+- `Ctrl+Shift+Alt+2` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 318 §17 / ASTM F1554 anchor bolt, embed plate, and cast-in item estimator. 16 pre-priced item types with El Paso 2025-2026 material and install costs.
+
+**16 Pre-Loaded Anchor/Embed Types:**
+- L-Bolt Standard/Heavy (ASTM F1554 Gr36/55)
+- Headed Bolt 3/4" and 1" (ASTM A307 cast-in-place)
+- Expansion Anchor 3/4" (Hilti HSL-3, post-installed)
+- Epoxy Anchor 5/8" and 7/8" (Hilti HIT-RE500, ASTM C881 / ACI 318 §17)
+- Embed Plate 6"×6"×3/8" and 12"×12"×1/2" (ASTM A36)
+- Conduit Sleeve 2" / Pipe Sleeve 4"
+- Column Base Plate 12"×12" (AISC / ASTM A36)
+- Rebar Dowel #5 and #6 24" (ASTM A615 Gr60 epoxy)
+- J-Bolt 1/2" (galvanized) / Blockout Form 12"×12"
+
+**Features:**
+- **4-card KPI:** Line Items / Total Units / Material Cost / Total w/ Install
+- **Add item form:** Select type, Qty, Price override (for supplier quotes), Area/Location
+- **Running item table:** Label, Area, Qty, $/EA, Material, Install, Total — with delete
+- **Totals row** with all three columns
+- **Auto-calculated install cost** from estimated install time (min) × $68/hr labor rate
+- **Reference price panel** — first 8 types with material price and install time
+- **Printable Embed Estimate** — full table with ASTM F1554 / ACI 318 §17 / AISC standards footer
+- localStorage per project: `oncor_ace_v1_[project]`
+
+---
+
+### 📋 ACI 301 Spec Compliance Tracker (Ctrl+Shift+Alt+3) — ~230 lines
+- New `📋 ACI 301 Compliance` button in sidebar (emerald color)
+- `Ctrl+Shift+Alt+3` keyboard shortcut opens/closes the modal
+- **Purpose:** 22-item ACI 301-16 specification compliance checklist organized into 4 categories. Track confirmation status through the full concrete lifecycle: Mix Design → Placement → Finishing/Curing → QC/Inspection.
+
+**22 Spec Requirements Across 4 Categories:**
+- **Mix Design & Materials (5 items):** Mix design approved, w/cm compliant, slump in spec, air content tested, concrete temp compliant
+- **Placement & Delivery (6 items):** Pre-pour notification, placement rate per plan, no free fall >5ft, vibration documented, no water added on-site, cylinder sets cast per ASTM C172
+- **Finishing & Curing (6 items):** Finish type per spec, no finishing on bleed water, F-number tolerances, curing method per spec, curing duration satisfied, curing compound coverage (150-200 SF/gal)
+- **QC & Inspection (5 items):** 28-day breaks passed (ACI 318 §26.12.3), low break investigation done (§26.12.4), special inspection signed (IBC §1705), deviation log closed
+
+**Features:**
+- **3-state toggle per item:** ✅ Confirmed / ⬜ Open / N/A
+- **4-card KPI:** Total Items / Confirmed / N/A / Compliance % (color-coded)
+- **Progress bar** — red/amber/green with "ACI 301 READY ✅" when 100%
+- **Mark All Done / Reset All** buttons
+- **Grouped by category** with done/total counter per group
+- **ACI 301 READY badge** when all active items confirmed
+- `window._getACTStats()` exposed for Project Status Card
+- **Printable Compliance Report** — all 22 requirements with ACI/ASTM reference, status, CONFIDENTIAL footer
+- localStorage per project: `oncor_act_v1_[project]`
+- Standards: ACI 301-16, ACI 318-19, ACI 302.1R/304R/308R/309R/117, ASTM C94/C172/C143/C231/C1064/C31/C39/E1155, IBC §1705
+
+---
+
+### Session #148 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 0b56682
+- Total new lines: +461
+- New shortcuts: Ctrl+Shift+Alt+1 (Bid Analytics), Ctrl+Shift+Alt+2 (Anchor/Embed Calc), Ctrl+Shift+Alt+3 (ACI 301 Compliance)
+- File now at 198,913 lines total
+- **New shortcut pattern:** Ctrl+Shift+Alt+[num] — first session using this modifier combination
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 12:20 UTC (Overnight Cron #149)
+**Status:** ✅ THREE NEW FEATURES added (+658 lines)
+
+### What Was Added:
+
+---
+
+### 📊 Job Variance Summary Report (Ctrl+Shift+Alt+4) — ~165 lines
+- New `📊 Job Variance Summary` button in sidebar (indigo color)
+- `Ctrl+Shift+Alt+4` keyboard shortcut opens/closes the modal
+- **Purpose:** Cross-module variance dashboard — aggregates data from Job Cost Tracker, AR & Invoices, and Delivery Tickets to compare estimated vs actual for all key line items (bid total, direct cost, concrete materials, labor, other, and yd³ placed).
+
+**Features:**
+- **4-card KPI:** Est. Bid / Total Billed (AR) / Actual Costs Tracked / Variance Flags count
+- **Variance Table:** 6 line items (Total Bid, Direct Cost, Concrete Materials, Labor, Other Direct, Volume Placed) with Est / Actual / Variance $ / Var % / Status badge
+- **Auto-flags** when variance >5% with ⬆️ OVER or ⬇️ UNDER badge
+- **Financial Summary box** — when both AR and Job Cost data exist: Revenue Billed / Costs Tracked / Gross Profit / Gross Margin %
+- **No-data guidance** — clearly tells JFS which modules to log data in
+- **Printable Variance Report** — full table with CONFIDENTIAL footer
+- Data sources: `window.lastEstimate` + `oncor_job_cost_v1_*` + `oncor_ar_v1_*` + `oncor_delivery_tickets_v1_*`
+
+---
+
+### 🔨 Concrete Repair Cost Estimator (Ctrl+Shift+Alt+5) — ~255 lines
+- New `🔨 Repair Cost Estimator` button in sidebar (brown/amber color)
+- `Ctrl+Shift+Alt+5` keyboard shortcut opens/closes the modal
+- **Purpose:** ICRI 310.1R / ACI 546R repair cost estimator for 12 concrete repair types. Build a line-item repair estimate with auto-fill unit pricing, waste/mobilization markup, and printable output.
+
+**12 Repair Types with Auto-Fill Pricing (El Paso 2025–2026):**
+1. Crack Routing & Sealing (LF, $12) — ASTM C920 / ACI 504R
+2. Epoxy Injection (LF, $40) — ASTM C881 / ACI 224.1R
+3. Partial-Depth Patching (SF, $28) — ICRI 310.2 / ASTM C928
+4. Full-Depth Patch (SF, $75) — ICRI 310.2 / ACI 546R
+5. Surface Grinding (SF, $3.75) — ACI 302.1R / ASTM E1155
+6. Bonded Overlay 1–2" (SF, $9) — ACI 302.1R / ICRI 310.3
+7. Unbonded Overlay 2–4" (SF, $12) — ACI 302.1R
+8. Joint Resealing (LF, $7.50) — ACI 504R / ASTM C920
+9. Spall Repair Vertical (SF, $50) — ACI 546R / ICRI 310.1R
+10. Delamination Repair (SF, $18) — ACI 302.1R / ICRI
+11. Carbon Fiber Strap (LF, $75) — ACI 440.2R (EOR required)
+12. Demo & Replace Slab (SF, $40) — ACI 302.1R / IBC
+
+**Features:**
+- **Form:** Repair type → auto-fills unit, price, and ACI/ICRI code reference note (overridable price)
+- **Label/Location** field for area identification
+- **Waste/Mob %** configurable per item (default 15%)
+- **4-card KPI:** Items / Direct Cost / Total w/ Waste+Mob / Avg Per Item
+- **Running line items table** with direct cost, waste %, total, delete
+- **ICRI/ACI Reference Table** — all 12 types with typical range, standard, El Paso notes
+- **Printable Repair Estimate** — numbered line items, totals row, ICRI 310.1R / ACI 546R footer
+- No localStorage (one-shot estimating tool)
+
+---
+
+### 📅 Permit Application Tracker (Ctrl+Shift+Alt+6) — ~235 lines
+- New `📅 Permit App Tracker` button in sidebar (teal/green color)
+- `Ctrl+Shift+Alt+6` keyboard shortcut opens/closes the modal
+- **Purpose:** Track every permit application for a project from submission through approval — with fee tracking, expiry monitoring, and El Paso Development Services reference data.
+
+**18 Permit Types:** Building (Commercial/Residential), Grading, Utility Connections (Water/Sewer/Electric), ROW, Demo, Sign, Special Inspection Program, SWPPP/Stormwater, Fire Sprinkler, M/E/P, TxDOT Access, TCEQ Environmental, Other
+
+**Features:**
+- **Form:** Type, Permit #, Status (9 statuses from "Not Applied" through "Closed"), Fee ($), Applied Date, Issued Date, Expiry Date, Issuing Authority, Notes
+- **9 Status Options:** Not Applied / Application Submitted / Under Review / Additional Info Requested / Approved-Not Issued / Active-Issued / Expired / Rejected / Closed
+- **4-card KPI:** Total Permits / Active+Issued / Expiring ≤30d (amber) / Total Fees Paid
+- **Auto-alerts:** 🚨 EXPIRED banner (active permit past expiry) + ⚠️ expiring-soon banner
+- **Expiry badges** on table rows: "EXPIRES IN Xd" (amber) / "EXPIRED" (red)
+- **El Paso Development Services Reference Table** — 8 permit types with typical review times, fee ranges, contacts
+- **Printable Permit Log** — full table with IBC 2021 §105 / EP Dev Services / TxDOT footer
+- Per-project localStorage: `oncor_pat_v1_[project]`
+
+---
+
+### Session #149 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 0aa78bd
+- Total new lines: +658
+- New shortcuts: Ctrl+Shift+Alt+4 (Job Variance Summary), Ctrl+Shift+Alt+5 (Repair Cost Estimator), Ctrl+Shift+Alt+6 (Permit App Tracker)
+- File now at 199,571 lines total
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 14:42 UTC (Overnight Cron #153)
+**Status:** ✅ THREE NEW FEATURES added (+317 lines)
+
+### What Was Added:
+
+---
+
+### 🌡️ Concrete Curing Progress Tracker (Ctrl+Alt+7) — ~120 lines
+- New `🌡️ Curing Progress Tracker` button in sidebar (cyan color)
+- `Ctrl+Alt+7` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 308R-16 curing compliance tracker. Log every pour with cement type, curing method, and temperature — auto-calculates minimum cure days and shows a live progress bar per pour.
+
+**Features:**
+- **Cement-Aware Min Days:** Type III = 3d, Type I/II OPC = 7d, Blended/SCM ≥30% = 14d
+- **Cold Weather Alert:** Flags temps <50°F with ACI 306R warning (cure periods don't apply)
+- **Live Progress Bar** per pour — color-coded: blue (active), green (complete), red (cold weather)
+- **4-card KPI:** Total Pours / Curing Complete / Active Curing / Avg Days Cured
+- **Mark Ended** button when curing is manually stopped
+- **Printable Curing Log** with ACI 308R / ASTM C309 / ACI 305R references
+- localStorage per project: `oncor_curing_prog_v1_[project]`
+
+---
+
+### 🧱 CMU & Masonry Estimator (Ctrl+Alt+8) — ~115 lines
+- New `🧱 CMU & Masonry Estimator` button in sidebar (amber color)
+- `Ctrl+Alt+8` keyboard shortcut opens/closes the modal
+- **Purpose:** CMU block count, mortar bag, and grout estimate for wall segments. ASTM C90 / ACI 530. El Paso 2025 material pricing.
+
+**Features:**
+- **5 Block Sizes:** 8×8×16 (standard), 6×8×16, 12×8×16, 4×8×16, 8×4×16 (half)
+- **Grout Options:** No Grout / Partial (Bond Beams) / Fully Grouted — auto-calculates grout yd³
+- **Openings Deduction** — subtract window/door SF from gross wall area
+- **Waste Factor** — configurable, default 5%
+- **4-card KPI:** Net Wall SF / Total Blocks / Mortar Bags / Material Cost
+- **Totals Row** across all wall segments
+- **Printable Masonry Estimate** — ASTM C90 / ACI 530-22 / TMS 402-22 footer, labor note (~$4.50/SF installed)
+- localStorage per project: `oncor_cmu_v1_[project]`
+
+---
+
+### 📊 Job Profitability Summary (Ctrl+Alt+9) — ~130 lines
+- New `📊 Job Profitability Summary` button in sidebar (green color)
+- `Ctrl+Alt+9` keyboard shortcut opens/closes the modal
+- **Purpose:** Cross-module P&L dashboard. Auto-pulls from AR & Invoices, Job Cost Tracker, Change Orders, and current Estimate — shows gross profit, cash profit, and margin % in one view.
+
+**Features:**
+- **Contract Summary:** Original Bid / Signed COs / Revised Contract
+- **Revenue vs Cost Table:** Total Invoiced / Collected / Retainage / Overdue / Total Costs / Gross Profit (billed) / Cash Profit (collected)
+- **Status Badge:** ✅ On Track (≥15%) / ⚠️ Watch (8-15%) / 🔴 Problem (<8%)
+- **No Data State** guides user to AR and Job Cost tools
+- **Printable Profitability Report** — KPI grid with CONFIDENTIAL footer
+- Live refresh button — re-reads all localStorage sources on demand
+
+---
+
+### Session #153 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: a8958a5
+- Total new lines: +317
+- New shortcuts: Ctrl+Alt+7 (Curing Tracker), Ctrl+Alt+8 (CMU Estimator), Ctrl+Alt+9 (Job Profitability)
+- File now at 200,925 lines total
+
+---
+
+## ✅ SESSION: Apr 4, 2026 - 15:48 UTC (Overnight Cron #154)
+**Status:** ✅ THREE NEW FEATURES added (+624 lines)
+
+### What Was Added:
+
+---
+
+### 🏗️ Wall Thickness & h/t Checker (Ctrl+Alt+4) — ~210 lines
+- New `🏗️ Wall Thickness & h/t Checker` button in sidebar (indigo color)
+- `Ctrl+Alt+4` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 318-19 §11.3 / IBC 2021 §1905.1.8 wall thickness adequacy checker. Input wall type, height, proposed thickness, f'c, restraint, and wind/seismic zone — get minimum thickness, h/t ratio, PASS/FAIL status, and design notes.
+
+**Features:**
+- **5 Wall Types:** Bearing Wall, Shear Wall/Lateral, Non-Bearing, Basement/Below-Grade, Tilt-Up Panel
+- **Inputs:** Wall Height (ft), Proposed Thickness (in), f'c PSI, Restraint (both ends vs cantilever), Wind/Seismic zone
+- **Auto-calculated:**
+  - h/t ratio vs ACI max (25 for bearing, 30 for non-bearing, 50 for tilt-up, 16 for high seismic shear walls)
+  - Min thickness from absolute code minimums (4"-7.5") and from h/t rule — governs greater
+  - Margin over minimum or deficiency in inches
+  - yd³/100 SF volume reference
+- **4-card KPI:** h/t Ratio / Min Required (in) / Proposed (in) / yd³/100 SF
+- **Status badge:** ✅ WITHIN LIMITS or ❌ BELOW MINIMUM
+- **ACI Quick Reference Table** — 5 wall types with h/t limits and IBC minimums
+- **El Paso note:** ASCE 7-22 110 mph wind, Exposure C, SDC B typical
+- **Printable Report** with PE disclaimer note
+- Standards: ACI 318-19 §11.3, §18.10.2.3, ACI 551.1R-14, IBC 2021 §1905.1.8, ASCE 7-22
+
+---
+
+### 🪨 Aggregate Gradation Checker (Ctrl+Alt+5) — ~210 lines
+- New `🪨 Aggregate Gradation Checker` button in sidebar (amber color)
+- `Ctrl+Alt+5` keyboard shortcut opens/closes the modal
+- **Purpose:** ASTM C33 / ASTM C136 aggregate sieve analysis compliance checker. Enter % passing per sieve for coarse or fine aggregate — get instant pass/fail vs ASTM C33 limits and Fineness Modulus for sand.
+
+**Features:**
+- **4 Aggregate Types:**
+  - Coarse #57 — 1" Nominal Max
+  - Coarse #67 — 3/4" Nominal Max (most common for pump mixes)
+  - Coarse #7 — 1/2" Nominal Max
+  - Fine Aggregate / Sand
+- **Dynamic sieve inputs** — changes per aggregate type selection
+- **Per-sieve compliance:** % Passing vs ASTM C33 min/max, % Retained calculated, ✅/❌ status
+- **Fineness Modulus** (sand only) — calculated and flagged vs 2.3–3.1 target
+- **Overall verdict:** COMPLIES or FAILS with count of failed sieves
+- **Printable Gradation Report** — full sieve table with ASTM C33 / C136 reference
+- **El Paso Notes:** Caliche gradation variability, supplier cert recommendations
+
+---
+
+### 💨 Air Entrainment Spec Guide (Ctrl+Alt+6) — ~230 lines
+- New `💨 Air Entrainment Spec Guide` button in sidebar (green color)
+- `Ctrl+Alt+6` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 318-19 Table 19.3.3 air entrainment target calculator. Select exposure class, aggregate max size, f'c, location, and element type — get required air % range and check field test results.
+
+**Features:**
+- **13 Exposure Classes:** F0/F1/F2 (freeze-thaw), S0-S3 (sulfate), W0-W2 (moisture), C0-C2 (chloride)
+- **5 Aggregate Sizes:** 3/8" through 1.5"
+- **Location presets:** El Paso TX / N. Texas-Amarillo / Colorado / Coastal
+- **Field Test Checker:** Enter measured air % from ASTM C231 test → instant IN SPEC / OUT OF SPEC result
+- **High Strength Warning:** f'c ≥ 5000 PSI — alerts to strength penalty from air entrainment
+- **Element-specific note:** Elevated slabs lose 1-2% air during placement
+- **ACI 318-19 Reference Table** — all 5 aggregate sizes with F1/F2 targets built-in
+- **Testing Notes Panel:** ASTM C231, C173, C172 sampling guidance
+- **El Paso context:** F0-F1 typical, most jobs non-air-entrained or 3% protective
+- **Printable Spec Sheet** — full ACI Table 19.3.3 with ASTM references
+
+---
+
+### Session #154 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: ef21875
+- Total new lines: +624
+- New shortcuts: Ctrl+Alt+4 (Wall h/t Checker), Ctrl+Alt+5 (Aggregate Gradation), Ctrl+Alt+6 (Air Entrainment)
+- File now at 201,549 lines total
+
+## ✅ SESSION: Apr 4, 2026 - 18:24 UTC (Overnight Cron #160 — Verification Pass)
+**Status:** ✅ Sessions #145-159 CONFIRMED complete (verified by subagent)
+
+### Summary
+All 15 sessions (45 tools) were already implemented by a prior subagent run earlier today.
+This verification pass confirmed all sessions are present and clean in the git history.
+
+**Git history verified clean:**
+- Session #145: 📊 Volume Variance Analyzer (Ctrl+Shift+F4) + 📸 Site Photo Log (Ctrl+Shift+F5) + 📋 Daily Foreman Report (Ctrl+Shift+F6)
+- Session #146: 🚚 Concrete Pump Selection Guide (Ctrl+Shift+F7) + 💰 Job Profitability Snapshot (Ctrl+Shift+F8) + 📱 Pour Day Comm Log (Ctrl+Shift+F9)
+- Session #147: 📋 Mix Submittal Status (Ctrl+Shift+F10) + 📅 Daily Progress Photo Board (Ctrl+Shift+F11) + 🦺 Site Incident Report (Ctrl+Shift+F12)
+- Session #148: 📊 Bid Win/Loss Analytics (Ctrl+Shift+Alt+1) + 🔩 Anchor Bolt Estimator (Ctrl+Shift+Alt+2) + 📋 ACI 301 Tracker (Ctrl+Shift+Alt+3)
+- Session #149: 📊 Job Variance Summary (Ctrl+Shift+Alt+4) + 🔨 Concrete Repair Estimator (Ctrl+Shift+Alt+5) + 📅 Permit Tracker (Ctrl+Shift+Alt+6)
+- Session #150: 📈 Monthly Revenue Snapshot (Ctrl+Shift+Alt+7) + 🧱 Shotcrete Calculator (Ctrl+Shift+Alt+8) + ⚖️ Contract Risk Card (Ctrl+Shift+Alt+9)
+- Session #151: 🔄 Return Material Log (Ctrl+Shift+Alt+0) + 📐 Slope Checker (Ctrl+Shift+Alt+-) + 🧾 Billing Line Items (Ctrl+Shift+Alt+=)
+- Session #152: 🔧 Equipment Hours Logger (Ctrl+Alt+1) + 📜 Submittal Register (Ctrl+Alt+2) + 💵 Petty Cash Log (Ctrl+Alt+3)
+- Session #153: 🌡️ Curing Progress Tracker (Ctrl+Alt+7) + 🧱 CMU Estimator (Ctrl+Alt+8) + 📊 Job Profitability Summary (Ctrl+Alt+9)
+- Session #154: 🏗️ Wall h/t Checker (Ctrl+Alt+4) + 🪨 Aggregate Gradation (Ctrl+Alt+5) + 💨 Air Entrainment Guide (Ctrl+Alt+6)
+- Session #155: 🔁 Pour Restart Checklist (Ctrl+Shift+Alt+A) + 💡 Job OH Allocation (Ctrl+Shift+Alt+B) + 📊 Cement Planner (Ctrl+Shift+Alt+C)
+- Session #156: 🧮 Mix Water Calculator (Ctrl+Shift+Alt+D) + 📦 Material Delivery Schedule (Ctrl+Shift+Alt+E) + 🔍 Punch List Tracker (Ctrl+Shift+Alt+F)
+- Session #157: 📐 Rebar Spacing Calc (Ctrl+Shift+Alt+G) + 🏛️ Footer Depth Estimator (Ctrl+Shift+Alt+H) + ⏱️ Crew Time Card (Ctrl+Shift+Alt+I)
+- Session #158: 🔧 Equipment Rental ROI (Ctrl+Shift+Alt+J) + 📍 GPS Pour Logger (Ctrl+Shift+Alt+K) + 📑 Spec Comparison (Ctrl+Shift+Alt+L)
+- Session #159: 🏗️ Placement Method Selector (Ctrl+Shift+Alt+M) + 💰 Quick CO Pricer (Ctrl+Shift+Alt+N) + 📋 Daily Foreman Report (Ctrl+Shift+Alt+O)
+
+**Cleanup performed:** Force-pushed to fix bloated file (1.2M line duplicates caused by git rebase conflict)
+- Final commit: 1473f08
+- Total lines: 203,665
+- File size: ~19MB (within GitHub 100MB limit)
+
+---
+
+## ✅ SESSION: Apr 6, 2026 - 00:19 UTC (Overnight Cron #160)
+**Status:** ✅ THREE NEW FEATURES added (+308 lines)
+
+### What Was Added:
+
+---
+
+### 📝 Sub Scope Letter Generator (Ctrl+Shift+Alt+P) — ~130 lines
+- New `📝 Sub Scope Letter Generator` button in sidebar (indigo color)
+- `Ctrl+Shift+Alt+P` keyboard shortcut opens/closes the modal
+- **Purpose:** Generate a professional scope letter / bid proposal cover to submit alongside a concrete sub bid. One click, pre-filled from project data, print-ready PDF or copy to clipboard for email/text.
+
+**Features:**
+- **Form Fields:** Project Name, GC/Owner, GC Contact, Bid Date, Base Bid ($), Total yd³, Validity Period (days), Payment Terms, Concrete Specification
+- **Dynamic Inclusions/Exclusions:** Multi-line text areas for scope inclusions and exclusions
+- **Qualifications/Notes** textarea
+- **Auto-calculations:** $/yd³ computed live, Expiry Date calculated from validity period
+- **🖨️ Print Scope Letter** — Full professional letter with:
+  - Company header (right-aligned)
+  - Dear [GC Contact] intro paragraph
+  - BASE BID callout box (dark blue, large $amount + yd³ + $/yd³)
+  - Concrete Specification section
+  - Scope Inclusions (bulleted)
+  - Exclusions (bulleted)
+  - Payment Terms section (TX Prompt Payment Act citation)
+  - Bid Validity with expiry date
+  - Dual signature block (Contractor / GC Representative)
+- **📋 Copy to Clipboard** — formatted text summary for quick paste to email/text
+
+---
+
+### 📊 Labor Efficiency Dashboard (Ctrl+Shift+Alt+Q) — ~110 lines
+- New `📊 Labor Efficiency Dashboard` button in sidebar (stone/gray color)
+- `Ctrl+Shift+Alt+Q` keyboard shortcut opens/closes the modal
+- **Purpose:** Cross-module labor productivity analytics. Auto-pulls from Crew Time Cards (Ctrl+Shift+H) and Delivery Tickets (Ctrl+Shift+W) to calculate yd³/labor-hr, labor cost per yd³, and per-worker cost breakdown.
+
+**Features:**
+- **4-card KPI:** Total yd³ Placed / Labor Hours Logged / yd³/Labor-Hr (color-coded: green ≥1.2 / amber ≥0.8 / red <0.8) / Labor Cost per yd³
+- **Worker Breakdown Table:** Name, Trade, Hours, Cost, $/hr avg — sorted by cost descending
+- **🔄 Refresh Data** button re-reads localStorage for current project
+- **No-data guidance:** When empty, directs user to Crew Time Cards and Delivery Tickets
+- **ACI Benchmarks Panel:** Flatwork 0.8-1.5 / Foundations 0.4-0.8 / Walls 0.2-0.5 yd³/labor-hr reference
+- Falls back to Field Log yd³ if no delivery tickets logged
+
+---
+
+### 🔔 Pre-Pour Notification Log (Ctrl+Shift+Alt+R) — ~120 lines
+- New `🔔 Pre-Pour Notification Log` button in sidebar (cyan color)
+- `Ctrl+Shift+Alt+R` keyboard shortcut opens/closes the modal
+- **Purpose:** Document every pre-pour notification sent per ACI 302.1R. Who was notified, when, how, and what was communicated. Creates the notification paper trail for GC, inspector, testing lab, and EOR.
+
+**Features:**
+- **4-card KPI:** Total Notifications / Pour Events / Parties Notified / Confirmed
+- **Form:** Pour Name/Area, Pour Date, Notified Party (11 options), Contact Name, Method (Phone/Text/Email/In-Person/Radio/Written), Date & Time, Message, Confirmation/Response
+- **Notifications grouped by pour** — each pour event shows its notification chain
+- **Confirmation badge** — green ✅ when a response/confirmation was entered
+- **Delete per notification**
+- **🖨️ Print Notification Log** — full table format with:
+  - #, Pour/Area, Notified Party, Method, Date/Time, What Was Communicated, Confirmation
+  - ACI 302.1R/305R compliance footer
+  - Triple signature block (Prepared By / GC Review / Inspector Review)
+- **🗑 Clear All** with confirmation
+- localStorage global: `oncor_s160_notify_v1`
+
+---
+
+### Session #160 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 3499c48
+- Total new lines: +308
+- New shortcuts: Ctrl+Shift+Alt+P (Scope Letter), Ctrl+Shift+Alt+Q (Labor Efficiency), Ctrl+Shift+Alt+R (Pre-Pour Notification)
+- File now at 203,973 lines total
