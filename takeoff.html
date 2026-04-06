@@ -207532,3 +207532,501 @@ if(!sb168){var sbEl168=document.createElement('div');sbEl168.className='sidebar-
 })();
 </script>
 <!-- END SESSION #168 -->
+
+<!-- BEGIN SESSION #169 -->
+<script>
+(function(){
+'use strict';
+
+// ══════════════════════════════════════════════════════════════
+// SESSION #169 — THREE NEW FEATURES
+// 1) 🏗️ Grade Beam Layout & Estimator (Ctrl+Alt+Shift+F)
+// 2) 📊 Job Profit Dashboard (Ctrl+Alt+Shift+G)
+// 3) ⚡ Quick SF Bid Calculator (Ctrl+Alt+Shift+H)
+// ══════════════════════════════════════════════════════════════
+
+// ── SHARED MODAL STYLES ─────────────────────────────────────
+var s169Style=document.createElement('style');
+s169Style.textContent=`
+.s169-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9400;justify-content:center;align-items:flex-start;padding:20px;overflow-y:auto;}
+.s169-box{background:#1a1a2e;border:1px solid #334155;border-radius:10px;width:100%;max-width:900px;margin:auto;padding:24px;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
+.s169-h1{font-size:1.3rem;font-weight:700;margin:0 0 16px;color:#f1f5f9;}
+.s169-close{float:right;background:#374151;border:none;color:#9ca3af;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:13px;}
+.s169-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:16px;}
+.s169-kpi{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;text-align:center;}
+.s169-kpi .val{font-size:1.2rem;font-weight:700;color:#38bdf8;}
+.s169-kpi .lbl{font-size:.7rem;color:#64748b;margin-top:3px;}
+.s169-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+.s169-form label{display:block;font-size:.75rem;color:#94a3b8;margin-bottom:3px;}
+.s169-form input,.s169-form select,.s169-form textarea{width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;}
+.s169-form .full{grid-column:1/-1;}
+.s169-btn{background:#1e40af;color:#fff;border:none;border-radius:6px;padding:7px 14px;cursor:pointer;font-size:.8rem;font-weight:600;margin-right:6px;}
+.s169-btn-green{background:#15803d;}
+.s169-btn-red{background:#991b1b;}
+.s169-table{width:100%;border-collapse:collapse;font-size:.78rem;margin-top:10px;}
+.s169-table th{background:#0f172a;padding:7px;text-align:left;border:1px solid #334155;color:#94a3b8;}
+.s169-table td{padding:6px 7px;border:1px solid #1e293b;color:#cbd5e1;}
+.s169-table tr:nth-child(even) td{background:#0f172a;}
+.s169-total-row td{font-weight:700;background:#1e293b!important;color:#f1f5f9;}
+.s169-ref{background:#0f172a;border:1px solid #334155;border-radius:6px;padding:12px;margin-top:12px;font-size:.75rem;color:#94a3b8;}
+.s169-ref h4{color:#38bdf8;margin:0 0 6px;font-size:.8rem;}
+.s169-alert{border-radius:6px;padding:10px 14px;margin-bottom:10px;font-size:.82rem;font-weight:600;}
+.s169-alert-red{background:#450a0a;border:1px solid #7f1d1d;color:#fca5a5;}
+.s169-alert-amber{background:#431407;border:1px solid #92400e;color:#fcd34d;}
+.s169-alert-green{background:#052e16;border:1px solid #166534;color:#86efac;}
+.s169-print-btn{background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:5px;padding:5px 12px;cursor:pointer;font-size:.76rem;margin-left:8px;}
+`;
+document.head.appendChild(s169Style);
+
+// ══════════════════════════════════════════════════════════════
+// TOOL 1 — GRADE BEAM LAYOUT & ESTIMATOR
+// ══════════════════════════════════════════════════════════════
+var gbHtml=`
+<div id="s169-gb" class="s169-modal">
+<div class="s169-box">
+<button class="s169-close" onclick="document.getElementById('s169-gb').style.display='none'">✕ Close</button>
+<h2 class="s169-h1">🏗️ Grade Beam Layout &amp; Estimator</h2>
+<p style="font-size:.75rem;color:#64748b;margin:-8px 0 14px">ACI 318-19 / IBC 2021 §1808.9 — Continuous &amp; Isolated Grade Beams</p>
+
+<div class="s169-kpis">
+  <div class="s169-kpi"><div class="val" id="gb-kpi-vol">0.00</div><div class="lbl">Net yd³</div></div>
+  <div class="s169-kpi"><div class="val" id="gb-kpi-ord">0.00</div><div class="lbl">Order yd³ (w/ waste)</div></div>
+  <div class="s169-kpi"><div class="val" id="gb-kpi-lf">0</div><div class="lbl">Total LF</div></div>
+  <div class="s169-kpi"><div class="val" id="gb-kpi-cost">$0</div><div class="lbl">Est. Material Cost</div></div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px;align-items:end;">
+  <div><label style="font-size:.73rem;color:#94a3b8;">Label / Area</label><input id="gb-label" type="text" placeholder="e.g. Perimeter GB" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;"></div>
+  <div><label style="font-size:.73rem;color:#94a3b8;">Length (ft)</label><input id="gb-len" type="number" placeholder="120" min="0" step="0.5" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;"></div>
+  <div><label style="font-size:.73rem;color:#94a3b8;">Width (in)</label><input id="gb-w" type="number" placeholder="18" min="6" max="72" step="1" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;"></div>
+  <div><label style="font-size:.73rem;color:#94a3b8;">Depth (in)</label><input id="gb-d" type="number" placeholder="24" min="6" max="120" step="1" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;"></div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px;align-items:end;">
+  <div><label style="font-size:.73rem;color:#94a3b8;">PSI Spec</label>
+    <select id="gb-psi" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;">
+      <option value="3000">3000 PSI</option><option value="3500">3500 PSI</option>
+      <option value="4000" selected>4000 PSI</option><option value="4500">4500 PSI</option>
+      <option value="5000">5000 PSI</option>
+    </select></div>
+  <div><label style="font-size:.73rem;color:#94a3b8;">Waste % (default 7)</label><input id="gb-waste" type="number" value="7" min="3" max="20" step="1" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;"></div>
+  <div><label style="font-size:.73rem;color:#94a3b8;">Price $/yd³ (El Paso 2025)</label><input id="gb-price" type="number" value="190" min="100" step="1" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;"></div>
+  <div style="padding-top:18px;"><button class="s169-btn s169-btn-green" onclick="gbAdd()">+ Add Segment</button></div>
+</div>
+
+<table class="s169-table" id="gb-table">
+  <thead><tr><th>#</th><th>Label</th><th>L (ft)</th><th>W×D (in)</th><th>PSI</th><th>Net yd³</th><th>Order yd³</th><th>Mat. Cost</th><th></th></tr></thead>
+  <tbody id="gb-tbody"><tr><td colspan="9" style="text-align:center;color:#475569;padding:20px;">No segments yet — add a grade beam segment above.</td></tr></tbody>
+</table>
+
+<div class="s169-ref">
+  <h4>📐 ACI 318-19 / IBC Grade Beam Quick Reference</h4>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:.73rem;">
+    <div><strong style="color:#e2e8f0;">Min Dimensions:</strong><br>IBC §1808.9: min 12" deep × 8" wide<br>ACI 318-19 §13.3: min 12" deep continuous</div>
+    <div><strong style="color:#e2e8f0;">Min Steel (ACI 318-19):</strong><br>ρ_min = max(3√f'c/fy, 200/fy)<br>Grade 60: ρ_min ≈ 0.0033 @ 4000 PSI</div>
+    <div><strong style="color:#e2e8f0;">El Paso Notes:</strong><br>Caliche: k=150-200 pci<br>Frost depth ~12" (IBC Table R403.1)<br>Sulfate Class S0-S1 typical</div>
+  </div>
+</div>
+
+<div style="margin-top:14px;">
+  <button class="s169-print-btn" onclick="gbPrint()">🖨 Print Grade Beam Estimate</button>
+  <button class="s169-btn s169-btn-red" style="margin-left:8px;" onclick="gbClear()">Clear All</button>
+</div>
+</div></div>`;
+document.body.insertAdjacentHTML('beforeend',gbHtml);
+
+var gbItems=[];
+function gbAdd(){
+  var lbl=document.getElementById('gb-label').value.trim()||('Seg-'+(gbItems.length+1));
+  var len=parseFloat(document.getElementById('gb-len').value)||0;
+  var w=parseFloat(document.getElementById('gb-w').value)||0;
+  var d=parseFloat(document.getElementById('gb-d').value)||0;
+  var psi=parseInt(document.getElementById('gb-psi').value)||4000;
+  var waste=parseFloat(document.getElementById('gb-waste').value)||7;
+  var price=parseFloat(document.getElementById('gb-price').value)||190;
+  if(len<=0||w<=0||d<=0){alert('Enter length, width, and depth.');return;}
+  var net=Math.round(len*(w/12)*(d/12)/27*1000)/1000;
+  var ord=Math.round(net*(1+waste/100)*1000)/1000;
+  var cost=Math.round(ord*price);
+  gbItems.push({lbl,len,w,d,psi,waste,price,net,ord,cost});
+  gbRender();
+  document.getElementById('gb-label').value='';
+  document.getElementById('gb-len').value='';
+}
+function gbRender(){
+  var tb=document.getElementById('gb-tbody');
+  if(!gbItems.length){tb.innerHTML='<tr><td colspan="9" style="text-align:center;color:#475569;padding:20px;">No segments yet.</td></tr>';gbUpdateKPIs(0,0,0,0);return;}
+  var totalNet=0,totalOrd=0,totalLF=0,totalCost=0;
+  tb.innerHTML=gbItems.map(function(it,i){
+    totalNet+=it.net;totalOrd+=it.ord;totalLF+=it.len;totalCost+=it.cost;
+    return '<tr><td>'+(i+1)+'</td><td>'+it.lbl+'</td><td>'+it.len+'</td><td>'+it.w+'×'+it.d+'</td><td>'+it.psi+'</td><td>'+it.net.toFixed(3)+'</td><td>'+it.ord.toFixed(3)+'</td><td>$'+it.cost.toLocaleString()+'</td><td><button class="s169-btn s169-btn-red" style="padding:2px 7px;font-size:.7rem;" onclick="gbDel('+i+')">✕</button></td></tr>';
+  }).join('')+'<tr class="s169-total-row"><td colspan="2">TOTAL</td><td>'+totalLF.toFixed(0)+'</td><td>—</td><td>—</td><td>'+totalNet.toFixed(3)+'</td><td>'+totalOrd.toFixed(3)+'</td><td>$'+totalCost.toLocaleString()+'</td><td></td></tr>';
+  gbUpdateKPIs(totalNet,totalOrd,totalLF,totalCost);
+}
+function gbUpdateKPIs(n,o,lf,c){
+  document.getElementById('gb-kpi-vol').textContent=n.toFixed(2);
+  document.getElementById('gb-kpi-ord').textContent=o.toFixed(2);
+  document.getElementById('gb-kpi-lf').textContent=Math.round(lf);
+  document.getElementById('gb-kpi-cost').textContent='$'+c.toLocaleString();
+}
+function gbDel(i){gbItems.splice(i,1);gbRender();}
+function gbClear(){if(confirm('Clear all segments?')){gbItems=[];gbRender();}}
+function gbPrint(){
+  var rows=gbItems.map(function(it,i){return '<tr><td>'+(i+1)+'</td><td>'+it.lbl+'</td><td>'+it.len+'</td><td>'+it.w+'" × '+it.d+'"</td><td>'+it.psi+'</td><td>'+it.net.toFixed(3)+'</td><td>'+it.ord.toFixed(3)+'</td><td>$'+it.cost.toLocaleString()+'</td></tr>';}).join('');
+  var tNet=gbItems.reduce(function(a,b){return a+b.net;},0),tOrd=gbItems.reduce(function(a,b){return a+b.ord;},0),tCost=gbItems.reduce(function(a,b){return a+b.cost;},0),tLF=gbItems.reduce(function(a,b){return a+b.len;},0);
+  var w=window.open('','_blank');
+  w.document.write('<html><head><title>Grade Beam Estimate</title><style>body{font-family:Arial,sans-serif;margin:20px;font-size:11pt;}h2{color:#1e3a5f;}table{width:100%;border-collapse:collapse;}th{background:#1e3a5f;color:#fff;padding:7px;}td{border:1px solid #ccc;padding:6px;}tr.tot{background:#e8f5e9;font-weight:700;}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}.kpi{border:1px solid #ccc;border-radius:5px;padding:10px;text-align:center;}.kpi .v{font-size:1.2em;font-weight:700;color:#1e3a5f;}.kpi .l{font-size:.75em;color:#666;}@media print{button{display:none;}}</style></head><body>');
+  w.document.write('<h2>🏗️ GRADE BEAM ESTIMATE — CONFIDENTIAL</h2>');
+  w.document.write('<p style="font-size:9pt;color:#666;">ACI 318-19 / IBC 2021 §1808.9 | Generated: '+new Date().toLocaleString()+'</p>');
+  w.document.write('<div class="kpis"><div class="kpi"><div class="v">'+tNet.toFixed(2)+'</div><div class="l">Net yd³</div></div><div class="kpi"><div class="v">'+tOrd.toFixed(2)+'</div><div class="l">Order yd³</div></div><div class="kpi"><div class="v">'+Math.round(tLF)+'</div><div class="l">Total LF</div></div><div class="kpi"><div class="v">$'+tCost.toLocaleString()+'</div><div class="l">Material Cost</div></div></div>');
+  w.document.write('<table><thead><tr><th>#</th><th>Label</th><th>L (ft)</th><th>W × D (in)</th><th>PSI</th><th>Net yd³</th><th>Order yd³</th><th>Mat. Cost</th></tr></thead><tbody>'+rows+'<tr class="tot"><td colspan="2">TOTAL</td><td>'+Math.round(tLF)+'</td><td></td><td></td><td>'+tNet.toFixed(3)+'</td><td>'+tOrd.toFixed(3)+'</td><td>$'+tCost.toLocaleString()+'</td></tr></tbody></table>');
+  w.document.write('<p style="font-size:8pt;color:#666;margin-top:14px;">Formula: Net yd³ = L × (W/12) × (D/12) / 27 | Min IBC §1808.9: 12" deep × 8" wide | ACI 318-19 §13.3 continuous | Material cost estimate only — add labor, pump, forms per project. CONFIDENTIAL.</p>');
+  w.document.write('<button onclick="window.print()">🖨 Print / Save PDF</button></body></html>');
+  w.document.close();
+}
+
+// ══════════════════════════════════════════════════════════════
+// TOOL 2 — JOB PROFIT DASHBOARD
+// ══════════════════════════════════════════════════════════════
+var jpHtml=`
+<div id="s169-jp" class="s169-modal">
+<div class="s169-box">
+<button class="s169-close" onclick="document.getElementById('s169-jp').style.display='none'">✕ Close</button>
+<h2 class="s169-h1">📊 Job Profit Dashboard</h2>
+<p style="font-size:.75rem;color:#64748b;margin:-8px 0 14px">Real-time job P&amp;L — track billed, collected, costs → see actual profit</p>
+
+<div class="s169-kpis" id="jp-kpis">
+  <div class="s169-kpi"><div class="val" id="jp-k1">$0</div><div class="lbl">Contract Value</div></div>
+  <div class="s169-kpi"><div class="val" id="jp-k2">$0</div><div class="lbl">Total Billed</div></div>
+  <div class="s169-kpi"><div class="val" id="jp-k3">$0</div><div class="lbl">Collected</div></div>
+  <div class="s169-kpi"><div class="val" id="jp-k4" style="color:#f87171;">$0</div><div class="lbl">AR Outstanding</div></div>
+  <div class="s169-kpi"><div class="val" id="jp-k5">$0</div><div class="lbl">Total Costs</div></div>
+  <div class="s169-kpi"><div class="val" id="jp-k6" style="color:#34d399;">$0</div><div class="lbl">Gross Profit</div></div>
+  <div class="s169-kpi"><div class="val" id="jp-k7" style="color:#fbbf24;">0%</div><div class="lbl">Gross Margin</div></div>
+  <div class="s169-kpi"><div class="val" id="jp-k8">0%</div><div class="lbl">% Complete</div></div>
+</div>
+
+<div id="jp-alert" style="display:none;" class="s169-alert"></div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+<div>
+  <h3 style="font-size:.85rem;color:#94a3b8;margin-bottom:8px;">💰 Revenue Inputs</h3>
+  <div style="display:grid;gap:7px;">
+    <div><label style="font-size:.72rem;color:#94a3b8;">Contract Value ($)</label><input id="jp-contract" type="number" value="0" step="1000" oninput="jpCalc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;"></div>
+    <div><label style="font-size:.72rem;color:#94a3b8;">Total Billed / Invoiced ($)</label><input id="jp-billed" type="number" value="0" step="1000" oninput="jpCalc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;"></div>
+    <div><label style="font-size:.72rem;color:#94a3b8;">Collected / Paid Received ($)</label><input id="jp-collected" type="number" value="0" step="1000" oninput="jpCalc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;"></div>
+    <div><label style="font-size:.72rem;color:#94a3b8;">Retainage Held ($)</label><input id="jp-retainage" type="number" value="0" step="500" oninput="jpCalc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;"></div>
+    <div><label style="font-size:.72rem;color:#94a3b8;">Signed Change Orders ($)</label><input id="jp-cos" type="number" value="0" step="500" oninput="jpCalc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;"></div>
+  </div>
+</div>
+<div>
+  <h3 style="font-size:.85rem;color:#94a3b8;margin-bottom:8px;">💸 Cost Inputs</h3>
+  <div style="display:grid;gap:7px;">
+    <div><label style="font-size:.72rem;color:#94a3b8;">Concrete Materials ($)</label><input id="jp-c1" type="number" value="0" step="500" oninput="jpCalc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;"></div>
+    <div><label style="font-size:.72rem;color:#94a3b8;">Labor — Self-Performed ($)</label><input id="jp-c2" type="number" value="0" step="500" oninput="jpCalc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;"></div>
+    <div><label style="font-size:.72rem;color:#94a3b8;">Subcontractors Paid ($)</label><input id="jp-c3" type="number" value="0" step="500" oninput="jpCalc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;"></div>
+    <div><label style="font-size:.72rem;color:#94a3b8;">Equipment / Rentals ($)</label><input id="jp-c4" type="number" value="0" step="500" oninput="jpCalc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;"></div>
+    <div><label style="font-size:.72rem;color:#94a3b8;">Other Costs (Misc/OH) ($)</label><input id="jp-c5" type="number" value="0" step="500" oninput="jpCalc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:6px 8px;font-size:.8rem;"></div>
+  </div>
+</div>
+</div>
+
+<div id="jp-breakdown" style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:14px;">
+  <h3 style="font-size:.85rem;color:#94a3b8;margin:0 0 10px;">P&amp;L Summary</h3>
+  <table class="s169-table">
+    <thead><tr><th>Line</th><th>Amount</th><th>% of Contract</th><th>Notes</th></tr></thead>
+    <tbody id="jp-summary-rows"></tbody>
+  </table>
+</div>
+
+<div style="margin-top:12px;">
+  <button class="s169-print-btn" onclick="jpPrint()">🖨 Print P&amp;L Report</button>
+  <button class="s169-btn" onclick="jpSeed()" style="margin-left:8px;background:#1d4ed8;">⚡ Seed from Estimate</button>
+</div>
+
+<div class="s169-ref" style="margin-top:12px;">
+  <h4>📊 CFMA Concrete Sub Benchmarks (2025)</h4>
+  <span style="margin-right:14px;">Gross Margin Target: ≥15%</span>
+  <span style="margin-right:14px;">Materials: 30-50% of costs</span>
+  <span style="margin-right:14px;">Labor: 25-40% of costs</span>
+  <span>OH+Profit: 18-28% of direct cost</span>
+</div>
+</div></div>`;
+document.body.insertAdjacentHTML('beforeend',jpHtml);
+
+function jpCalc(){
+  var contract=parseFloat(document.getElementById('jp-contract').value)||0;
+  var cos=parseFloat(document.getElementById('jp-cos').value)||0;
+  var billed=parseFloat(document.getElementById('jp-billed').value)||0;
+  var collected=parseFloat(document.getElementById('jp-collected').value)||0;
+  var retainage=parseFloat(document.getElementById('jp-retainage').value)||0;
+  var c1=parseFloat(document.getElementById('jp-c1').value)||0;
+  var c2=parseFloat(document.getElementById('jp-c2').value)||0;
+  var c3=parseFloat(document.getElementById('jp-c3').value)||0;
+  var c4=parseFloat(document.getElementById('jp-c4').value)||0;
+  var c5=parseFloat(document.getElementById('jp-c5').value)||0;
+  var totalContract=contract+cos;
+  var ar=billed-collected;
+  var totalCosts=c1+c2+c3+c4+c5;
+  var grossProfit=collected-totalCosts;
+  var margin=totalContract>0?Math.round(grossProfit/totalContract*1000)/10:0;
+  var pctComplete=totalContract>0?Math.round(billed/totalContract*1000)/10:0;
+  document.getElementById('jp-k1').textContent='$'+(totalContract).toLocaleString();
+  document.getElementById('jp-k2').textContent='$'+billed.toLocaleString();
+  document.getElementById('jp-k3').textContent='$'+collected.toLocaleString();
+  document.getElementById('jp-k4').textContent='$'+ar.toLocaleString();
+  document.getElementById('jp-k4').style.color=ar>0?'#f87171':'#34d399';
+  document.getElementById('jp-k5').textContent='$'+totalCosts.toLocaleString();
+  document.getElementById('jp-k6').textContent='$'+grossProfit.toLocaleString();
+  document.getElementById('jp-k6').style.color=grossProfit>=0?'#34d399':'#f87171';
+  document.getElementById('jp-k7').textContent=margin+'%';
+  document.getElementById('jp-k7').style.color=margin>=15?'#34d399':margin>=10?'#fbbf24':'#f87171';
+  document.getElementById('jp-k8').textContent=pctComplete+'%';
+  var alertEl=document.getElementById('jp-alert');
+  if(margin<10&&totalContract>0){alertEl.style.display='block';alertEl.className='s169-alert s169-alert-red';alertEl.textContent='⚠️ Gross margin is below 10% — review costs urgently.';}
+  else if(margin<15&&totalContract>0){alertEl.style.display='block';alertEl.className='s169-alert s169-alert-amber';alertEl.textContent='⚡ Gross margin is below 15% target. Monitor costs closely.';}
+  else{alertEl.style.display='none';}
+  var fmt=function(n){return'$'+n.toLocaleString();};
+  var pct=function(n){return totalContract>0?Math.round(n/totalContract*100)+'%':'—';};
+  var rows=[
+    ['Contract Value (base)',fmt(contract),pct(contract),'Base bid'],
+    ['Signed Change Orders',fmt(cos),pct(cos),'Authorized extras'],
+    ['Revised Contract',fmt(totalContract),pct(totalContract),'base + COs'],
+    ['— — —','','',''],
+    ['Total Billed',fmt(billed),pct(billed),'All invoices issued'],
+    ['Collected',fmt(collected),pct(collected),'Cash received'],
+    ['AR Outstanding',fmt(ar),pct(ar),ar>30000?'⚠️ Review overdue AR':''],
+    ['Retainage Held',fmt(retainage),pct(retainage),'Release at completion'],
+    ['— — —','','',''],
+    ['Concrete Materials',fmt(c1),pct(c1),''],
+    ['Labor (self-performed)',fmt(c2),pct(c2),''],
+    ['Subcontractors',fmt(c3),pct(c3),''],
+    ['Equipment / Rentals',fmt(c4),pct(c4),''],
+    ['Other / OH',fmt(c5),pct(c5),''],
+    ['TOTAL COSTS',fmt(totalCosts),pct(totalCosts),''],
+    ['— — —','','',''],
+    ['GROSS PROFIT',fmt(grossProfit),margin+'%','Target ≥15%'],
+  ];
+  document.getElementById('jp-summary-rows').innerHTML=rows.map(function(r){
+    if(r[0]==='— — —')return'<tr><td colspan="4" style="border-color:transparent;padding:2px;"></td></tr>';
+    var bold=(r[0]==='TOTAL COSTS'||r[0]==='GROSS PROFIT'||r[0]==='Revised Contract')?'font-weight:700;':'';
+    var color=r[0]==='GROSS PROFIT'?(grossProfit>=0?'color:#34d399;':'color:#f87171;'):'';
+    return'<tr><td style="'+bold+'">'+r[0]+'</td><td style="'+bold+color+'">'+r[1]+'</td><td>'+r[2]+'</td><td style="font-size:.7rem;color:#64748b;">'+r[3]+'</td></tr>';
+  }).join('');
+}
+function jpSeed(){
+  var est=window.lastEstimate||{};
+  var meas=window.measurements||[];
+  if(est.totalBid){document.getElementById('jp-contract').value=Math.round(est.totalBid);}
+  if(est.concreteCost){document.getElementById('jp-c1').value=Math.round(est.concreteCost||0);}
+  if(est.laborCost){document.getElementById('jp-c2').value=Math.round(est.laborCost||0);}
+  jpCalc();
+}
+function jpPrint(){
+  var w=window.open('','_blank');
+  var k=function(id){return document.getElementById(id).textContent;};
+  w.document.write('<html><head><title>Job Profit Dashboard</title><style>body{font-family:Arial,sans-serif;margin:20px;font-size:11pt;}h2{color:#1e3a5f;}table{width:100%;border-collapse:collapse;}th{background:#1e3a5f;color:#fff;padding:7px;}td{border:1px solid #ccc;padding:6px;}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0;}.kpi{border:1px solid #ccc;border-radius:5px;padding:10px;text-align:center;}.kpi .v{font-size:1.2em;font-weight:700;color:#1e3a5f;}.kpi .l{font-size:.75em;color:#666;}@media print{button{display:none;}}</style></head><body>');
+  w.document.write('<h2>📊 JOB PROFIT DASHBOARD — CONFIDENTIAL</h2>');
+  w.document.write('<p style="font-size:9pt;color:#666;">Generated: '+new Date().toLocaleString()+'</p>');
+  w.document.write('<div class="kpis">');
+  ['jp-k1','jp-k2','jp-k3','jp-k4','jp-k5','jp-k6','jp-k7','jp-k8'].forEach(function(id,i){
+    var lbls=['Contract Value','Total Billed','Collected','AR Outstanding','Total Costs','Gross Profit','Gross Margin','% Complete'];
+    w.document.write('<div class="kpi"><div class="v">'+k(id)+'</div><div class="l">'+lbls[i]+'</div></div>');
+  });
+  w.document.write('</div>');
+  w.document.write(document.getElementById('jp-breakdown').outerHTML);
+  w.document.write('<p style="font-size:8pt;color:#666;margin-top:14px;">CFMA Benchmark: Gross Margin ≥15%. Materials 30-50% of costs. Labor 25-40%. OH+Profit 18-28%. CONFIDENTIAL — INTERNAL USE ONLY.</p>');
+  w.document.write('<button onclick="window.print()">🖨 Print / Save PDF</button></body></html>');
+  w.document.close();
+}
+
+// ══════════════════════════════════════════════════════════════
+// TOOL 3 — QUICK SF BID CALCULATOR
+// ══════════════════════════════════════════════════════════════
+var qbHtml=`
+<div id="s169-qb" class="s169-modal">
+<div class="s169-box" style="max-width:700px;">
+<button class="s169-close" onclick="document.getElementById('s169-qb').style.display='none'">✕ Close</button>
+<h2 class="s169-h1">⚡ Quick SF Bid Calculator</h2>
+<p style="font-size:.75rem;color:#64748b;margin:-8px 0 14px">Instant bid from SF + element type — El Paso 2025-2026 unit rates</p>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+<div>
+  <label style="font-size:.75rem;color:#94a3b8;display:block;margin-bottom:4px;">Element / Work Type</label>
+  <select id="qb-type" oninput="qbCalc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:8px;font-size:.85rem;">
+    <option value="slab-broom">4" Slab — Broom Finish</option>
+    <option value="slab-trowel">5" Slab — Machine Trowel</option>
+    <option value="slab-hard">6" Slab — Hard Trowel Industrial</option>
+    <option value="slab-stamp">4" Slab — Stamped Decorative</option>
+    <option value="slab-exposed">4" Slab — Exposed Aggregate</option>
+    <option value="sidewalk">4" Sidewalk — Broom Finish</option>
+    <option value="curb">CG-1 Curb &amp; Gutter (per LF)</option>
+    <option value="footing">Continuous Footing (per LF)</option>
+    <option value="parking-lot">Parking Lot 5" (SF)</option>
+    <option value="driveway">6" Residential Driveway (SF)</option>
+    <option value="patio">4" Patio / Flatwork (SF)</option>
+    <option value="dock">6" Truck Dock Approach (SF)</option>
+  </select>
+</div>
+<div>
+  <label style="font-size:.75rem;color:#94a3b8;display:block;margin-bottom:4px;">Quantity (SF or LF based on type)</label>
+  <input id="qb-qty" type="number" value="1000" min="1" step="100" oninput="qbCalc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:8px;font-size:.85rem;">
+</div>
+<div>
+  <label style="font-size:.75rem;color:#94a3b8;display:block;margin-bottom:4px;">PSI Override (0 = default)</label>
+  <select id="qb-psi" oninput="qbCalc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:8px;font-size:.85rem;">
+    <option value="0">Default for type</option>
+    <option value="3000">3000 PSI</option><option value="4000">4000 PSI</option>
+    <option value="4500">4500 PSI</option><option value="5000">5000 PSI</option>
+  </select>
+</div>
+<div>
+  <label style="font-size:.75rem;color:#94a3b8;display:block;margin-bottom:4px;">Markup Scenario</label>
+  <select id="qb-markup" oninput="qbCalc()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:8px;font-size:.85rem;">
+    <option value="std">Standard (OH 10% + Profit 15%)</option>
+    <option value="tight">Competitive (OH 8% + Profit 10%)</option>
+    <option value="premium">Premium (OH 12% + Profit 20%)</option>
+  </select>
+</div>
+</div>
+
+<div class="s169-kpis" style="grid-template-columns:repeat(4,1fr);">
+  <div class="s169-kpi"><div class="val" id="qb-k1">—</div><div class="lbl">Est. yd³</div></div>
+  <div class="s169-kpi"><div class="val" id="qb-k2">—</div><div class="lbl">Direct Cost</div></div>
+  <div class="s169-kpi"><div class="val" id="qb-k3" style="color:#fbbf24;">—</div><div class="lbl">Total Bid</div></div>
+  <div class="s169-kpi"><div class="val" id="qb-k4">—</div><div class="lbl">$/Unit</div></div>
+</div>
+
+<table class="s169-table" style="margin-top:10px;" id="qb-breakdown-table">
+  <thead><tr><th>Cost Line</th><th>Rate</th><th>Amount</th><th>Notes</th></tr></thead>
+  <tbody id="qb-rows"></tbody>
+</table>
+
+<div id="qb-benchmarks" class="s169-ref" style="margin-top:12px;">
+  <h4>📊 El Paso 2025-2026 Market Reference</h4>
+  <div id="qb-bench-text" style="font-size:.73rem;color:#94a3b8;"></div>
+</div>
+
+<div style="margin-top:12px;">
+  <button class="s169-print-btn" onclick="qbPrint()">🖨 Print Quick Bid</button>
+  <button class="s169-btn s169-btn-green" onclick="qbCopy()" style="margin-left:8px;">📋 Copy Summary</button>
+</div>
+</div></div>`;
+document.body.insertAdjacentHTML('beforeend',qbHtml);
+
+var QB_DATA={
+  'slab-broom':    {label:'4" Slab — Broom Finish',    unit:'SF', thick:4,  psi:3000, labor:1.80, pump:0.40, saw:0.20, form:0.15, cure:0.10, mob:500,  bench:'Typical range $6.50–$9.00/SF installed. 3000 PSI. Common for residential, light commercial, sidewalks.'},
+  'slab-trowel':   {label:'5" Slab — Machine Trowel',  unit:'SF', thick:5,  psi:4000, labor:2.20, pump:0.45, saw:0.22, form:0.18, cure:0.12, mob:750,  bench:'Typical range $8.50–$12.00/SF installed. 4000 PSI. Commercial office, retail, school.'},
+  'slab-hard':     {label:'6" Slab — Hard Trowel Industrial',unit:'SF',thick:6,psi:4000,labor:2.60, pump:0.50, saw:0.25, form:0.20, cure:0.13, mob:1000, bench:'Typical range $10.00–$14.00/SF installed. 4000–5000 PSI fiber. Warehouse, industrial, distribution.'},
+  'slab-stamp':    {label:'4" Slab — Stamped Decorative',unit:'SF', thick:4, psi:3500, labor:5.50, pump:0.45, saw:0.20, form:0.20, cure:0.10, mob:500,  bench:'Typical range $14.00–$22.00/SF installed. Includes color, stamp pattern, sealer.'},
+  'slab-exposed':  {label:'4" Slab — Exposed Aggregate',unit:'SF', thick:4, psi:3500, labor:3.50, pump:0.40, saw:0.18, form:0.15, cure:0.10, mob:500,  bench:'Typical range $10.00–$15.00/SF installed. Includes seeding and revealing.'},
+  'sidewalk':      {label:'4" Sidewalk — Broom Finish', unit:'SF', thick:4,  psi:3000, labor:2.10, pump:0.30, saw:0.15, form:0.25, cure:0.10, mob:400,  bench:'Typical range $7.00–$10.00/SF. ADA cross-slope ≤2%. IBC §1009.'},
+  'curb':          {label:'CG-1 Curb & Gutter',         unit:'LF', thick:0,  psi:3500, labor:18,   pump:4,    saw:0,    form:2.50, cure:0.80, mob:600,  bench:'Typical range $28–$45/LF installed. TxDOT CG-1 12" face × 18" gutter.', ydPerUnit:0.056},
+  'footing':       {label:'Continuous Footing',          unit:'LF', thick:0,  psi:3000, labor:12,   pump:3,    saw:0,    form:3.00, cure:0.50, mob:500,  bench:'Typical $35–$65/LF depending on width/depth. Includes forming, pour, strip.', ydPerUnit:0.074},
+  'parking-lot':   {label:'Parking Lot 5"',              unit:'SF', thick:5,  psi:3500, labor:1.90, pump:0.42, saw:0.22, form:0.16, cure:0.11, mob:800,  bench:'Typical range $9.00–$13.00/SF. TxDOT, ADA accessible.'},
+  'driveway':      {label:'6" Residential Driveway',     unit:'SF', thick:6,  psi:3500, labor:2.40, pump:0.38, saw:0.20, form:0.30, cure:0.11, mob:400,  bench:'Typical range $9.00–$13.00/SF installed. Residential permit required.'},
+  'patio':         {label:'4" Patio / Flatwork',         unit:'SF', thick:4,  psi:3000, labor:1.90, pump:0.30, saw:0.15, form:0.25, cure:0.10, mob:350,  bench:'Typical range $7.00–$11.00/SF. Often no pump needed on small pours.'},
+  'dock':          {label:'6" Truck Dock Approach',      unit:'SF', thick:6,  psi:4500, labor:2.80, pump:0.52, saw:0.28, form:0.20, cure:0.14, mob:800,  bench:'Typical range $11.00–$16.00/SF. Fiber reinforced, heavy truck loading.'},
+};
+var QB_CONCRETE={3000:175,3500:182,4000:192,4500:205,5000:218};
+var QB_MARKUP={std:{oh:10,prof:15},tight:{oh:8,prof:10},premium:{oh:12,prof:20}};
+
+function qbCalc(){
+  var type=document.getElementById('qb-type').value;
+  var qty=parseFloat(document.getElementById('qb-qty').value)||1000;
+  var psiOv=parseInt(document.getElementById('qb-psi').value)||0;
+  var mkKey=document.getElementById('qb-markup').value;
+  var d=QB_DATA[type];
+  if(!d)return;
+  var psi=psiOv||d.psi;
+  var priceYd=QB_CONCRETE[psi]||192;
+  var mk=QB_MARKUP[mkKey];
+  var ydPerSF,yd3;
+  if(d.ydPerUnit){ydPerSF=d.ydPerUnit;yd3=ydPerSF*qty;}
+  else{ydPerSF=(d.thick/12)/27;yd3=ydPerSF*qty;}
+  var concCost=Math.round(yd3*(1.06)*priceYd);
+  var laborCost=Math.round(d.labor*qty);
+  var pumpCost=Math.round(d.pump*qty);
+  var sawCost=Math.round(d.saw*qty);
+  var formCost=Math.round(d.form*qty);
+  var cureCost=Math.round(d.cure*qty);
+  var mobCost=d.mob;
+  var directCost=concCost+laborCost+pumpCost+sawCost+formCost+cureCost+mobCost;
+  var ohAmt=Math.round(directCost*mk.oh/100);
+  var profAmt=Math.round((directCost+ohAmt)*mk.prof/100);
+  var total=directCost+ohAmt+profAmt;
+  var perUnit=total/qty;
+  document.getElementById('qb-k1').textContent=yd3.toFixed(2);
+  document.getElementById('qb-k2').textContent='$'+directCost.toLocaleString();
+  document.getElementById('qb-k3').textContent='$'+total.toLocaleString();
+  document.getElementById('qb-k4').textContent='$'+perUnit.toFixed(2)+'/'+d.unit;
+  var rows=[
+    ['Concrete ('+psi+' PSI w/ 6% waste)','$'+priceYd+'/yd³ × '+yd3.toFixed(2),'$'+concCost.toLocaleString(),yd3.toFixed(2)+' yd³'],
+    ['Labor — '+d.label,'$'+d.labor+'/'+d.unit,'$'+laborCost.toLocaleString(),'El Paso 2025'],
+    ['Pump / Placement','$'+d.pump+'/'+d.unit,'$'+pumpCost.toLocaleString(),'Boom or line pump'],
+    ['Saw Cutting','$'+d.saw+'/'+d.unit,'$'+sawCost.toLocaleString(),'Control joints'],
+    ['Formwork','$'+d.form+'/'+d.unit,'$'+formCost.toLocaleString(),'Edge forms'],
+    ['Curing','$'+d.cure+'/'+d.unit,'$'+cureCost.toLocaleString(),'Compound + labor'],
+    ['Mobilization','Lump Sum','$'+mobCost.toLocaleString(),'Setup/breakdown'],
+    ['─────','','',''],
+    ['Direct Cost Subtotal','','$'+directCost.toLocaleString(),''],
+    ['Overhead ('+mk.oh+'%)','','$'+ohAmt.toLocaleString(),''],
+    ['Profit ('+mk.prof+'%)','','$'+profAmt.toLocaleString(),''],
+    ['TOTAL BID','','$'+total.toLocaleString(),'$'+perUnit.toFixed(2)+'/'+d.unit],
+  ];
+  document.getElementById('qb-rows').innerHTML=rows.map(function(r){
+    if(r[0]==='─────')return'<tr><td colspan="4" style="border-color:transparent;padding:1px;"></td></tr>';
+    var bold=(r[0]==='TOTAL BID'||r[0]==='Direct Cost Subtotal')?'font-weight:700;':'';
+    var color=r[0]==='TOTAL BID'?'color:#fbbf24;':'';
+    return'<tr><td style="'+bold+'">'+r[0]+'</td><td style="font-size:.7rem;color:#64748b;">'+r[1]+'</td><td style="'+bold+color+'">'+r[2]+'</td><td style="font-size:.7rem;color:#64748b;">'+r[3]+'</td></tr>';
+  }).join('');
+  document.getElementById('qb-bench-text').textContent=d.bench;
+  window._qbLastResult={type,label:d.label,unit:d.unit,qty,psi,yd3,directCost,ohAmt,profAmt,total,perUnit,mk};
+}
+function qbCopy(){
+  var r=window._qbLastResult;
+  if(!r){alert('Run calculation first.');return;}
+  var txt=r.label+'\nQty: '+r.qty+' '+r.unit+' | '+r.yd3.toFixed(2)+' yd³ | '+r.psi+' PSI\nDirect: $'+r.directCost.toLocaleString()+' | OH: $'+r.ohAmt.toLocaleString()+' | Profit: $'+r.profAmt.toLocaleString()+'\nTOTAL BID: $'+r.total.toLocaleString()+' ($'+r.perUnit.toFixed(2)+'/'+r.unit+')';
+  navigator.clipboard.writeText(txt).then(function(){alert('Copied!');}).catch(function(){});
+}
+function qbPrint(){
+  var r=window._qbLastResult;
+  if(!r){alert('Run calculation first.');return;}
+  var w=window.open('','_blank');
+  w.document.write('<html><head><title>Quick Bid — '+r.label+'</title><style>body{font-family:Arial,sans-serif;margin:20px;font-size:11pt;}h2{color:#1e3a5f;}table{width:100%;border-collapse:collapse;}th{background:#1e3a5f;color:#fff;padding:7px;}td{border:1px solid #ccc;padding:6px;}.tot{background:#1e3a5f!important;color:#fff!important;font-weight:700;}.bid-box{background:#1e3a5f;color:#fff;padding:16px;border-radius:8px;text-align:center;margin:16px 0;}.bid-box .amt{font-size:2em;font-weight:700;}.bid-box .per{font-size:.9em;margin-top:4px;}@media print{button{display:none;}}</style></head><body>');
+  w.document.write('<h2>⚡ QUICK BID — CONFIDENTIAL</h2>');
+  w.document.write('<p><strong>Work Type:</strong> '+r.label+' | <strong>Quantity:</strong> '+r.qty+' '+r.unit+' | <strong>PSI:</strong> '+r.psi+' | <strong>Date:</strong> '+new Date().toLocaleDateString()+'</p>');
+  w.document.write('<div class="bid-box"><div class="amt">$'+r.total.toLocaleString()+'</div><div class="per">$'+r.perUnit.toFixed(2)+'/'+r.unit+' | '+r.yd3.toFixed(2)+' yd³</div></div>');
+  w.document.write(document.getElementById('qb-breakdown-table').outerHTML);
+  w.document.write('<p style="font-size:8pt;color:#666;margin-top:14px;">El Paso 2025-2026 unit rates. Estimate only — verify with current supplier quotes. CONFIDENTIAL — INTERNAL USE ONLY.</p>');
+  w.document.write('<button onclick="window.print()">🖨 Print / Save PDF</button></body></html>');
+  w.document.close();
+}
+qbCalc(); // initial render
+
+// ── BACKDROP CLICK TO CLOSE ──────────────────────────────────
+['s169-gb','s169-jp','s169-qb'].forEach(function(id){
+  document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.style.display='none';});
+});
+
+// ── KEYBOARD SHORTCUTS ──────────────────────────────────────────────────────
+document.addEventListener('keydown',function(e){
+  if(e.ctrlKey&&e.altKey&&e.shiftKey){
+    if(e.code==='KeyF'){e.preventDefault();var m=document.getElementById('s169-gb');m.style.display=m.style.display==='flex'?'none':'flex';}
+    if(e.code==='KeyG'){e.preventDefault();var m=document.getElementById('s169-jp');m.style.display=m.style.display==='flex'?'none':'flex';}
+    if(e.code==='KeyH'){e.preventDefault();var m=document.getElementById('s169-qb');m.style.display=m.style.display==='flex'?'none':'flex';}
+  }
+});
+
+// ── SIDEBAR BUTTONS ─────────────────────────────────────────────────────────
+var sb169=document.querySelector('.sidebar-actions')||document.querySelector('.controls')||document.querySelector('.sidebar');
+if(!sb169){var sbEl169=document.createElement('div');sbEl169.className='sidebar-actions';document.body.appendChild(sbEl169);sb169=sbEl169;}
+[['🏗️ Grade Beam Calc','s169-gb','#1e40af'],['📊 Job Profit','s169-jp','#166534'],['⚡ Quick SF Bid','s169-qb','#92400e']].forEach(function(d){
+  var btn=document.createElement('button');btn.textContent=d[0];
+  btn.style.cssText='display:block;width:100%;padding:7px 10px;margin-bottom:5px;background:'+d[2]+';color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;text-align:left;';
+  btn.onclick=function(){var m=document.getElementById(d[1]);m.style.display=m.style.display==='flex'?'none':'flex';};
+  sb169.appendChild(btn);
+});
+
+})();
+</script>
+<!-- END SESSION #169 -->
