@@ -1,5 +1,463 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 6, 2026 - 19:33 UTC (Overnight Cron #182)
+**Status:** ✅ THREE NEW FEATURES added (+392 lines)
+
+### 🔄 Pour Sequence Optimizer (Ctrl+Alt+Shift+S) — ~130 lines
+- New `🔄 Pour Sequence Plan` button in sidebar (dark purple)
+- `Ctrl+Alt+Shift+S` keyboard shortcut opens/closes the modal
+- **Purpose:** Plan optimal pour order for large slabs — minimize cold joint risk, maximize crew efficiency per ACI 302.1R / ACI 304R.
+- **Features:** Total yd³, placement rate, truck size/interval, method (Boom Pump/Line Pump/Chute/Buggy), first truck time, slab SF; auto-calculates truck count, effective yd³/hr, pour duration, estimated wrap time, cold joint risk assessment, min crew size; Add pour zones with priority order → generates zone-by-zone start/end time sequence; printable pour sequence plan
+
+### 🌡️ Concrete Temperature Monitoring Log (Ctrl+Alt+Shift+T) — ~130 lines
+- New `🌡️ Temp Monitor Log` button in sidebar (dark amber)
+- `Ctrl+Alt+Shift+T` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 305R-10 (hot >90°F) / ACI 306R-16 (cold <50°F) field temperature documentation per ASTM C1064.
+- **Features:** Log ticket #, time, concrete temp, ambient temp, yd³ per load; auto-assigns HOT/COLD/OK status; stats bar (readings, avg temp, hot loads, cold loads); localStorage persistence; HOT rows highlighted red, COLD rows blue; ACI 305R and ACI 306R action panels; printable temperature log with signature block
+
+### 🔁 Volume Cross-Check Calculator (Ctrl+Alt+Shift+U) — ~130 lines
+- New `🔁 Volume Cross-Check` button in sidebar (dark green)
+- `Ctrl+Alt+Shift+U` keyboard shortcut opens/closes the modal
+- **Purpose:** Verify concrete volumes using 3 independent methods — catch errors before they cost money.
+- **Features:** Method 1 = Takeoff estimate (net + ordered with waste%); Method 2 = Field measurement (SF × thickness ÷ 27); Method 3 = Delivery tickets (loads × avg yd³ - rejected); side-by-side comparison table with % variance from takeoff; variance status EXCELLENT/ACCEPTABLE/WATCH/INVESTIGATE with color coding; printable volume reconciliation; ACI 304R benchmark ±3–5% acceptable
+
+### Session #182 Summary
+- Commit: 2f36085
+- Total new lines: +392
+- New shortcuts: Ctrl+Alt+Shift+S (Pour Sequence), Ctrl+Alt+Shift+T (Temp Monitor), Ctrl+Alt+Shift+U (Volume Cross-Check)
+- File now at ~213,093 lines total
+
+---
+
+## ✅ SESSION: Apr 6, 2026 - 18:13 UTC (Overnight Cron #177)
+**Status:** ✅ THREE NEW FEATURES added (+274 lines)
+
+### What Was Added:
+
+---
+
+### 📦 Concrete Order Summary Sheet Generator (Ctrl+Alt+Shift+D) — ~95 lines
+- New `📦 Concrete Order Sheet` button in sidebar (dark amber color)
+- `Ctrl+Alt+Shift+D` keyboard shortcut opens/closes the modal
+- **Purpose:** Generate a one-page batch plant order summary with all pour specifications. Fill in details, print, and fax/email to batch plant for order confirmation.
+
+**Features:**
+- Inputs: Project Name, Pour Area, Pour Date, First Truck Time, Total yd³, Truck Size, Truck Interval
+- Mix specs: Design f'c (PSI), Slump spec, Air content, Max aggregate size, Cement type
+- Admixtures/fiber textarea for custom dose specifications
+- Placement method selector (Boom Pump, Line Pump, Direct Chute, Conveyor, Buggy)
+- Special instructions/notes for hot weather ice, Saturday delivery, access notes
+- Contact name and phone for order confirmation
+- Auto-calculates truck count from yd³ and truck size
+- **Printable Order Summary:** Color-coded sections (Delivery Schedule, Quantity & Mix Spec, Admixtures, Special Instructions)
+- Confirmation required warning box with contact phone
+- Standards: ASTM C94 / ACI 318-19
+
+---
+
+### 🔢 Steel Fiber Volume Calculator (Ctrl+Alt+Shift+E) — ~85 lines
+- New `🔢 Steel Fiber Calc` button in sidebar (dark indigo color)
+- `Ctrl+Alt+Shift+E` keyboard shortcut opens/closes the modal
+- **Purpose:** Calculate steel fiber quantities and costs for high-performance concrete applications per ASTM C1116 Type I / ACI 544.1R.
+
+**Features:**
+- Inputs: Project Volume (yd³), Application Type, Steel Fiber Type, Dosage Rate (lb/yd³), Cost ($/lb), Aspect Ratio (L/d)
+- **5 Application Types:** Industrial Slab-on-Grade, Thin Overlay, Shotcrete, Precast, Jointless Floor — auto-fills default dose rates
+- **4 Fiber Types:** Hooked-End (Dramix), Crimped/Corrugated, Melt Extract, Slit Sheet
+- **4-card results:** Total Pounds, Tons, Material Cost, $/yd³ Adder
+- Volume fraction calculation with status: LOW (<0.25%), STANDARD (0.25-0.5%), MODERATE (0.5-0.75%), HIGH (0.75-1%), VERY HIGH (>1%)
+- Aspect ratio guidance (optimal 50-80, warnings for low/high)
+- **Reference table:** Application vs typical dose vs volume % vs purpose
+- **Printable Steel Fiber Spec** with all parameters and quantities
+- Standards: ASTM C1116 Type I, ACI 544.1R, TR-34 Industrial Floors
+
+---
+
+### 📋 Pre-Pour Inspection Form Generator (Ctrl+Alt+Shift+F) — ~105 lines
+- New `📋 Pre-Pour Inspection` button in sidebar (dark teal color)
+- `Ctrl+Alt+Shift+F` keyboard shortcut opens/closes the modal
+- **Purpose:** Generate an official pre-pour inspection form for GC/inspector sign-off. ACI 301-16 / ACI 318-19 compliant documentation.
+
+**Features:**
+- Inputs: Project Name, Pour Area, Inspection Date/Time, Scheduled Pour Date, First Truck Time
+- Pour specs: Est. yd³, Design f'c, Element Type (7 types), Special Inspection Required toggle
+- Personnel: GC Superintendent, Inspector Name, Oncor Foreman
+- Drawing/Spec Reference field
+- Notes/Conditions/Deficiencies textarea
+- **15-item Pre-Pour Checklist** (displayed in modal and on printed form):
+  - Subgrade compacted & approved
+  - Forms aligned, braced, oiled
+  - Rebar size, spacing, cover per drawing
+  - Rebar tied, chaired, clean
+  - Embeds placed per plan
+  - Vapor barrier (if req'd)
+  - Expansion/control joint layout
+  - MEP sleeves/blockouts
+  - Mix design submittal approved
+  - Testing lab notified
+  - Pump/placement equipment ready
+  - Curing materials staged
+  - And more...
+- **Printable Pre-Pour Form:** Full checklist with checkbox columns, Inspection Result (APPROVED / NOT APPROVED), triple signature block (GC Super, Inspector, Oncor Foreman)
+- Standards: ACI 301-16 §1.6, ACI 318-19 §26.5, IBC §1905
+
+---
+
+### Session #177 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 0df8ac9
+- Total new lines: +274
+- New shortcuts: Ctrl+Alt+Shift+D (Concrete Order Sheet), Ctrl+Alt+Shift+E (Steel Fiber Calc), Ctrl+Alt+Shift+F (Pre-Pour Inspection)
+
+---
+
+## ✅ SESSION: Apr 6, 2026 - 18:13 UTC (Overnight Cron #178)
+**Status:** ✅ THREE MORE FEATURES added (+359 lines)
+
+### 🚛 Concrete Pump Cost Estimator (Ctrl+Alt+Shift+G) — ~100 lines
+- Estimate pump costs based on boom size, duration, and El Paso 2025-2026 market rates
+- Inputs: Pump Type (Boom 32m-52m, Line Pump), Duration, yd³, Min Call hours, Setup/Washout, Extra Line (ft), OT/Saturday adder
+- **4-card results:** Total Pump Cost, $/yd³, Billable Hours, yd³/hr Rate
+- Detailed cost breakdown with line-by-line calculation
+- **Reference table:** El Paso 2025-2026 pump rate benchmarks
+- Printable pump estimate with ACI 304.2R reference
+
+### 🌤️ Pour Day Weather Briefing (Ctrl+Alt+Shift+H) — ~95 lines
+- Generate weather briefing with ACI 305R (hot) / ACI 306R (cold) compliance alerts
+- Inputs: Pour Date, First Truck Time, High/Low temp, Humidity, Wind, Rain %, Expected Concrete Temp
+- **Automatic status determination:** FAVORABLE / HOT WEATHER CAUTION / ACI 305R ALERT / COLD WEATHER CAUTION / ACI 306R ALERT
+- Smart alert generation for heat, cold, wind, rain, low humidity conditions
+- **Recommended actions list** for each alert type (ice water, retarders, fogging, blankets, etc.)
+- Printable weather briefing with all parameters and compliance references
+
+### 📝 Daily T&M Work Ticket Generator (Ctrl+Alt+Shift+I) — ~95 lines
+- Generate Time & Materials work tickets for extra work authorization
+- **Dynamic line items:** Add/remove Labor, Materials, and Equipment lines
+- Auto-calculates extensions and subtotals as you type
+- Configurable markup % for OH&P
+- Inputs: Project, Ticket #, Date, GC, Work Description, Directed By
+- **Printable T&M Ticket:** Professional format with signature blocks
+- TX Prompt Payment Act compliant (§28.004 — 35-day payment, 1.5%/month interest, lien rights)
+
+### Session #178 Summary
+- Commit: b9a1478
+- Total new lines: +359
+- New shortcuts: Ctrl+Alt+Shift+G (Pump Cost), Ctrl+Alt+Shift+H (Weather Briefing), Ctrl+Alt+Shift+I (T&M Ticket)
+
+---
+
+## ✅ SESSION: Apr 6, 2026 - 18:13 UTC (Overnight Cron #179)
+**Status:** ✅ THREE MORE FEATURES added (+328 lines)
+
+### 🏗️ Formwork Quantity Estimator (Ctrl+Alt+Shift+J) — ~105 lines
+- Calculate form materials for walls, footings, columns, grade beams, pits
+- Inputs: Element Type, Form Material, Length, Height, Width, Reuses, Waste Factor, Plywood Cost
+- **6 Element Types:** Wall (2-sided), Footing (4-sided), Column Square, Column Round (Sonotube), Grade Beam, Pit/Sump
+- **5 Form Materials:** Plywood HDO, Steel Panel, Aluminum, Symons Steel-Ply, Sonotube
+- **4-card results:** SFCA (w/ waste), Plywood Sheets, Plywood Cost, $/SFCA
+- Materials breakdown: Plywood, Lumber (2x4/2x6 BF), Form Ties, Form Oil
+- Printable estimate with ACI 347R-14 reference
+
+### 💵 Concrete Price Comparison Tool (Ctrl+Alt+Shift+K) — ~90 lines
+- Compare up to 3 batch plant quotes side-by-side
+- Inputs per supplier: Base $/yd³, Fuel Surcharge, Environmental Fee, Short Load Fee, OT Rate
+- Auto-calculates all-in $/yd³ and total cost for each supplier
+- **Winner determination:** Highlights lowest-cost supplier with savings calculation
+- Visual comparison with color-coded supplier cards
+- Printable comparison table for records/negotiations
+
+### 📄 Change Order Request Generator (Ctrl+Alt+Shift+L) — ~95 lines
+- Generate formal COR documents (AIA G701 format)
+- Inputs: Project, COR #, Date, Contract #, GC/Owner, Requested By
+- **4 Change Types:** ADD, DEDUCT, REVISE, TIME
+- Description and Justification text fields
+- **Cost breakdown:** Labor, Material, Equipment, Subcontract, Markup %
+- Schedule impact (days)
+- Supporting documents list
+- Real-time total calculation with OH&P
+- **Printable COR:** Professional format with triple signature block (Oncor PM, GC/Owner, Architect)
+- TX Prompt Payment Act compliant
+
+### Session #179 Summary
+- Commit: 696d6b8
+- Total new lines: +328
+- New shortcuts: Ctrl+Alt+Shift+J (Formwork), Ctrl+Alt+Shift+K (Price Comparison), Ctrl+Alt+Shift+L (Change Order)
+
+---
+
+## ✅ SESSION: Apr 6, 2026 - 18:13 UTC (Overnight Cron #180)
+**Status:** ✅ THREE MORE FEATURES added (+287 lines)
+
+### 📐 Slope & Grade Calculator (Ctrl+Alt+Shift+M) — ~90 lines
+- Calculate slopes, grades, elevation changes for concrete flatwork
+- Inputs: Horizontal Run (ft), Vertical Rise (in), Application Type, High Elevation
+- **6 Application Types:** SOG Drainage, ADA Ramp, ADA Sidewalk, Parking Lot, Driveway, Industrial Floor
+- **4-card results:** Grade %, Inches per Foot, Slope Ratio, Low Elevation
+- **ADA/IBC compliance checking:** Auto-detects violations for ADA ramps (max 1:12), ADA walks (max 1:20), min drainage
+- Reference table with common slopes and code citations (ADA 405.2, ADA 403.3, ACI 302.1R, MUTCD)
+- Printable grade calculation
+
+### 🎯 Control Joint Spacing Calculator (Ctrl+Alt+Shift+N) — ~85 lines
+- Calculate control joint spacing per ACI 360R-10 / ACI 302.1R
+- Inputs: Slab Thickness, Aggregate Type (with multiplier), Reinforcement, Exposure/Shrinkage, Panel W×L
+- **3 Aggregate Types:** Crushed Limestone (24×), River Gravel (30×), Synthetic Lightweight (36×)
+- **Reinforcement adjustments:** Plain, Fiber Only (+10%), Rebar/WWF (+25%)
+- **4-card results:** Max Spacing, Saw Cut Depth (T/4 to T/3), Aspect Ratio, Panel Area
+- **Aspect ratio check:** Warning when >1.5:1 (cracking risk)
+- Saw cutting guide with timing (4-12 hrs) and tool selection
+- ACI 360R reference table by thickness
+- Printable joint layout
+
+### 🧾 Concrete Invoice Generator (Ctrl+Alt+Shift+O) — ~105 lines
+- Generate professional concrete sub invoices with line items
+- Inputs: Company Name, Invoice #, Date, Due Date, Bill To, Project, Contract/PO #, Retainage %
+- Dynamic line items: Description, Qty, Unit (CY/SF/LF/EA/LS/HR), Unit Price — auto-extends
+- **3-card totals:** Subtotal, Retainage deduction, NET DUE (highlighted)
+- **Printable Invoice:** Professional layout with company header, line item table, retainage, NET DUE callout
+- TX Prompt Payment Act notice (35-day, 1.5%/month, lien rights)
+- Dual signature block
+
+### Session #180 Summary
+- Commit: 3224057
+- Total new lines: +287
+- New shortcuts: Ctrl+Alt+Shift+M (Slope/Grade), Ctrl+Alt+Shift+N (Joint Spacing), Ctrl+Alt+Shift+O (Invoice)
+
+---
+
+## ✅ SESSION: Apr 6, 2026 - 18:13 UTC (Overnight Cron #181)
+**Status:** ✅ THREE MORE FEATURES added (+253 lines)
+
+### 🧱 CMU Grout Fill Calculator (Ctrl+Alt+Shift+P) — ~80 lines
+- Calculate concrete/grout fill for CMU walls per ASTM C476 / TMS 402
+- Inputs: Wall Length, Height, CMU Width (6/8/10/12"), Fill Type, Rebar Spacing, Bond Beam Courses, Cost, Waste
+- **3 Fill Types:** Fully Grouted (all cells), Partially Grouted (rebar cells only), Bond Beams Only
+- **4-card results:** Total CF, yd³ Grout, Wall SF, Grout Cost
+- Reference table with CF per 100 SF by CMU width
+- Printable grout estimate
+
+### ⚡ Quick Bid Summary Generator (Ctrl+Alt+Shift+Q) — ~80 lines
+- Generate a text-format bid summary for quick text/email to GC
+- Inputs: Project, GC, Date, Valid Until, Total Bid, yd³, Scope, Exclusions, Conditions
+- **Copy to Clipboard** — one click copies formatted summary ready for SMS/email
+- Live preview updates as you type
+- Includes TX Prompt Payment Act and lien rights notices
+- Print option for formal records
+
+### 🔩 Dowel Bar Quantity Calculator (Ctrl+Alt+Shift+R) — ~75 lines
+- Calculate dowel bars for construction joints per ACI 302.1R / FHWA
+- Inputs: Joint Length, Slab Thickness, Bar Size (#4-#8), Spacing, Dowel Length, Number of Joints, Price, Coating
+- **4-card results:** Total Dowels, Linear Feet, Pounds, Material Cost
+- Epoxy coating multiplier option (+15%)
+- Sizing reference table by slab thickness (ACI 302.1R / FHWA)
+- Printable dowel estimate
+
+### Session #181 Summary
+- Commit: 43f6f29
+- Total new lines: +253
+- New shortcuts: Ctrl+Alt+Shift+P (CMU Grout), Ctrl+Alt+Shift+Q (Quick Bid), Ctrl+Alt+Shift+R (Dowel Bars)
+- File now at ~212,990 lines total
+
+---
+
+## ✅ SESSION: Apr 6, 2026 - 17:08 UTC (Overnight Cron #176)
+**Status:** ✅ THREE NEW FEATURES added (+246 lines)
+
+### What Was Added:
+
+---
+
+### 🧪 Admixture Dosage & Cost Calculator (Ctrl+Alt+Shift+A) — ~80 lines
+- New `🧪 Admixture Dosage Calc` button in sidebar (dark purple color)
+- `Ctrl+Alt+Shift+A` keyboard shortcut opens/closes the modal
+- **Purpose:** Calculate exact admixture quantity (oz → gallons) and material cost for any ASTM C494 type or ASTM C260 AEA. Enter project volume, cement content, dosage rate, and cost per gallon — get total oz needed, gallons to order, and material cost.
+
+**Features:**
+- Inputs: Project yd³, cement content (lbs/CY), admixture type, dosage rate (oz/cwt), cost $/gal, product name
+- **11 Admixture Types:** ASTM C494 Types A–G (WRA, Retarder, Accelerator, WR+Retard, WR+Accel, HRWR, HRWR+Retard), AEA (ASTM C260), SRA, VMA, Corrosion Inhibitor, Custom
+- Auto-fill default dose rates and El Paso 2025 pricing per type
+- Formula: (oz/cwt) × (cement lbs/CY ÷ 100) × volume CY ÷ 128 = gallons
+- 3-card results: Total oz needed, Gallons needed, Material cost
+- **+ Add Second Admixture** panel for dual-admixture mixes (e.g. HRWR + Retarder) with combined cost
+- ASTM C494 Type quick reference table: function, typical dose range, El Paso 2025 $/gal
+- Printable Admixture Spec Sheet with all order quantities
+- Standards: ASTM C494 Types A–G, ASTM C260, ACI 212.3R
+
+---
+
+### 📊 OSHA Safety Metrics & EMR Calculator (Ctrl+Alt+Shift+B) — ~85 lines
+- New `📊 OSHA Safety Metrics` button in sidebar (dark green color)
+- `Ctrl+Alt+Shift+B` keyboard shortcut opens/closes the modal
+- **Purpose:** Calculate TRIR, DART Rate, and Severity Rate from incident data. Assess prequalification posture against GC thresholds. Compare to BLS concrete contractor industry benchmarks.
+
+**Features:**
+- Inputs: Annual hours worked, FTE count, OSHA recordable incidents, DAFW cases, restricted/transfer cases, total days lost, current EMR
+- **3 calculated metrics:** TRIR = (Recordable × 200,000) ÷ Hours | DART Rate = ((DAFW + Restricted) × 200,000) ÷ Hours | Severity Rate = (Days Lost × 200,000) ÷ Hours
+- Color-coded results: green (excellent) / blue (good) / amber (average) / red (action required)
+- **Prequalification grade box:** EXCELLENT / GOOD / AVERAGE / ACTION REQUIRED with specific guidance
+- **BLS Benchmark Table:** Concrete contractors NAICS 2381/2382 — TRIR industry avg 3.5, DART 1.8, EMR 1.00; Good/Excellent/Preqal standard thresholds
+- EMR impact notes: >1.25 = higher bonding costs, some GC waivers required; TRIR >4.0 = many GCs won't prequalify
+- Printable Safety Metrics Summary for prequalification packages
+- Standards: OSHA 29 CFR 1904, OSHA 300/300A Log, BLS Survey of Occupational Injuries, AGC SafetyNet
+
+---
+
+### ⏱️ Slab Finishing Window Estimator (Ctrl+Alt+Shift+C) — ~105 lines
+- New `⏱️ Finishing Window` button in sidebar (dark teal color)
+- `Ctrl+Alt+Shift+C` keyboard shortcut opens/closes the modal
+- **Purpose:** Estimate when the finishing window opens and closes based on pour start time, concrete/air temperature, humidity, wind speed, slab thickness, and W/CM ratio. Never start power troweling too early (plastic shrinkage cracking) or too late (concrete too stiff).
+
+**Features:**
+- Inputs: Pour start time, concrete temp °F, air temp °F, RH %, wind speed mph, slab thickness in, mix PSI, W/CM ratio
+- **Evaporation rate:** ACI 305R Menzel formula approximation — lb/ft²/hr
+- **Estimated bleed time:** based on W/CM × thickness × temp factor
+- 3-card results: Estimated bleed time, Finishing window OPENS (time), Finishing window CLOSES (est. time)
+- Evaporation rate badge: LOW (<0.1) / MODERATE (0.1–0.2) / HIGH (>0.2 lb/ft²/hr) with color-coded action
+- Hot/cold weather alerts: ACI 305R >90°F / ACI 306R <50°F
+- **ACI 302.1R Finishing Sequence table:** 6 phases (Strike-Off, Bleed Wait, Mag Float, Power Trowel Pass 1, Power Trowel Final, Curing) with timing rules, footprint depth tests, code references
+- El Paso summer note: 5 AM pour start, fogging, evaporation retarder guidance
+- Printable Finishing Window Plan with pour schedule and action sequence
+- Standards: ACI 302.1R §8.5–§8.6, ACI 305R, ACI 306R, ACI 308R
+
+---
+
+### Session #176 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: c7cb14a
+- Total new lines: +246
+- New shortcuts: Ctrl+Alt+Shift+A (Admixture Dosage), Ctrl+Alt+Shift+B (OSHA Metrics), Ctrl+Alt+Shift+C (Finishing Window)
+- File now at 211,200 lines total
+
+---
+
+## ✅ SESSION: Apr 6, 2026 - 15:58 UTC (Overnight Cron #175)
+**Status:** ✅ THREE NEW FEATURES added (+652 lines)
+
+### What Was Added:
+
+---
+
+### 🌡️ ACI 308R Minimum Curing Duration Calculator (Ctrl+Alt+Shift+X) — ~220 lines
+- New `🌡️ Curing Duration Calc` button in sidebar (dark blue color)
+- `Ctrl+Alt+Shift+X` keyboard shortcut opens/closes the modal
+- **Purpose:** Calculate minimum concrete curing duration per ACI 308R-16 based on cement type, curing temp, element type, curing method, and exposure class. Know exactly how many days before you can strip forms, open to traffic, or remove protection.
+
+**Features:**
+- Inputs: Cement Type (I/II, III, IP, IS, IL), Design f'c, Avg Curing Temp °F, Element Type (7 types), Curing Method (6 options), Exposure Class (Normal/Moderate/Severe/Sulfate)
+- **Auto-calculated results:** Minimum Curing Days (with all factors applied), ACI base minimum at 73°F reference, temperature factor (×), exposure multiplier (×)
+- Temperature logic: <40°F = CANNOT CURE (red alert); 40-50°F = 2.0× multiplier (ACI 306R); >90°F = hot weather warning (compound + fogging)
+- Printable ACI 308R Curing Plan with 3-column signature block (Foreman / QC Tech / GC Rep)
+- Standards: ACI 308R-16, ACI 305R-10, ACI 306R-16, ASTM C309, ASTM C1315, ACI 318-19 §26.5
+
+---
+
+### 📏 Rebar Lap Splice Length Calculator (Ctrl+Alt+Shift+Y) — ~200 lines
+- New `📏 Lap Splice Calc` button in sidebar (dark green color)
+- `Ctrl+Alt+Shift+Y` keyboard shortcut opens/closes the modal
+- **Purpose:** Calculate ACI 318-19 §25.5 tension lap splice lengths for any bar size, grade, f'c, and condition. Never eyeball a splice again — get the exact length with all modification factors shown.
+
+**Features:**
+- Inputs: Bar Size (#3-#11), Grade (40/60/75/80), f'c (3000-6000 PSI), Splice Class (A or B), Bar Coating (uncoated/epoxy-cover/epoxy-less/galvanized), Bar Position (top/other), Concrete Type (NW/LW), Transverse Reinforcement, Splice Count (for waste calc)
+- **Full ACI 318-19 factor breakdown:** ψt (bar position 1.0/1.3), ψe (coating 1.0/1.2/1.5), ψt×ψe capped at 1.7, ψs (bar size 0.8/#6 smaller or 1.0/#7 larger), λ (lightweight), confinement term, ld calculation (Eq. 25.4.2.3), class multiplier (A=1.0, B=1.3)
+- **4-card results:** Class A/B splice length (inches), splice in feet, development length ld, rebar weight for N splices
+- Full factor breakdown table with ASTM/ACI references
+- Warning for #9+ bars recommending mechanical splices
+- Quick reference table (Grade 60 / 4000 PSI common values)
+
+---
+
+### 💰 Daily Revenue & Billing Tracker (Ctrl+Alt+Shift+Z) — ~235 lines
+- New `💰 Revenue Tracker` button in sidebar (dark navy color)
+- `Ctrl+Alt+Shift+Z` keyboard shortcut opens/closes the modal
+- **Purpose:** Lightweight daily revenue log — track every billing event (pour invoices, pay apps, change orders, retainage releases) with billed vs collected. See outstanding balance at a glance. localStorage persisted globally across sessions.
+
+**Features:**
+- **4-card KPI:** Total Billed / Collected / Outstanding / Entries
+- Entry form: Date, Client/GC, Description/Pour, Invoice Type (8 types), Amount Billed ($), Amount Collected ($), Status (Billed/Partial/Paid/Overdue/Disputed), Notes
+- Log sorted newest-first with color-coded status badges
+- Per-entry: Outstanding shown, % collected, delete button
+- **Printable Revenue Report:** 4-card KPI, full billing table, TX Prompt Payment Act reference footer (35-day, 1.5%/month, lien rights)
+- localStorage global: `oncor_rev175_v1`
+
+---
+
+### Session #175 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: 99e30f9
+- Total new lines: +652
+- New shortcuts: Ctrl+Alt+Shift+X (Curing Duration), Ctrl+Alt+Shift+Y (Lap Splice Calc), Ctrl+Alt+Shift+Z (Revenue Tracker)
+- File now at 210,954 lines total
+
+---
+
+## ✅ SESSION: Apr 6, 2026 - 14:53 UTC (Overnight Cron #174)
+**Status:** ✅ THREE NEW FEATURES added (+475 lines)
+
+### What Was Added:
+
+---
+
+### 🧊 Hot Weather Ice Calculation Calculator (Ctrl+Alt+Shift+U) — ~165 lines
+- New `🧊 Ice Calculator` button in sidebar (dark blue color)
+- `Ctrl+Alt+Shift+U` keyboard shortcut opens/closes the modal
+- **Purpose:** ACI 305R-10 compliant calculator — determine exactly how many pounds of ice (and cost) needed to hit target discharge temperature. El Paso summer concrete cooling tool.
+
+**Features:**
+- Full mix ingredient inputs: Cement (lb/CY + temp), Coarse Agg (lb/CY + temp), Fine Agg (lb/CY + temp), Mix Water (gal/CY + temp)
+- Total order CY, target discharge temp, ACI 305R max allowed temp, ice cost $/ton
+- **ACI 305R weighted average formula:** T = (0.22(WcTc+WcaTca+WfaTfa) + WwTw) / (0.22(Wc+Wca+Wfa)+Ww)
+- **Temperature adjustment** factor for curing temp vs standard 73°F
+- **Auto-calculated results:** Calculated mix temp / ice lb/CY / total tons for order / total cost
+- **% water replacement** with status: ✅ Achievable / ⚠️ High (call 48h ahead) / 🚫 At max (chill aggregates too)
+- Status badges: ✅ WITHIN ACI LIMIT / ⚠️ MARGINAL / 🚫 EXCEEDS MAX
+- ACI 305R quick reference table (reject conditions, evaporation thresholds, El Paso July-Sep notes)
+
+---
+
+### 📐 Irregular Slab Shape Calculator (Ctrl+Alt+Shift+V) — ~165 lines
+- New `📐 Shape Calc` button in sidebar (dark blue color)
+- `Ctrl+Alt+Shift+V` keyboard shortcut opens/closes the modal
+- **Purpose:** Break L-shapes, T-shapes, U-shapes, and complex footprints into rectangular sections and sum concrete volumes.
+
+**Features:**
+- Global settings: default thickness, waste factor %, concrete cost $/CY
+- Add unlimited rectangle sections: label, length, width, optional thickness override
+- Running section list with per-section: SF, CY, dimensions
+- **4-card KPI totals:** Total SF / Net CY / Order CY (with waste) / Est. Material Cost + truck count
+- Remove individual sections
+- **Shape templates:** L-Shape (2 rects), T-Shape (3 rects), U-Shape (3 rects), Dock + Apron
+- **Printable volume report** — table with all sections, totals, truck count
+- Built-in tip: "sketch on paper first, break into simple rectangles"
+
+---
+
+### 🔮 Cylinder Break Strength Projection (Ctrl+Alt+Shift+W) — ~145 lines
+- New `🔮 Strength Proj.` button in sidebar (dark indigo color)
+- `Ctrl+Alt+Shift+W` keyboard shortcut opens/closes the modal
+- **Purpose:** Project 28-day strength from 7-day break results using ACI 209R-92 ratios. Know whether you're going to pass before the GC does.
+
+**Features:**
+- Inputs: Set ID, Spec f'c, Cement Type (Type I/II / Type III / Type IP fly ash / Type IS slag), 7-day break #1 & #2, avg curing temp
+- **4 cement type ratios:** 0.67 (Type I/II), 0.75 (Type III High Early), 0.60 (IP blend), 0.62 (IS slag)
+- **Temperature adjustment factor** — warmer curing = faster early gain (±1.5% per 10°F from 73°F standard)
+- **4-card results:** Avg 7-Day / Projected 28-Day / Required f'c / 7-Day % of f'c
+- **Status:** ✅ PROJECTED PASS / ⚠️ MARGINAL / 🚫 PROJECTED FAILURE — ALERT GC/EOR
+- Save projections to history table (Set ID, date, 7d, projected 28d, status)
+- Delete individual history entries
+- **Printable projection report** with ACI 209R-92 disclaimer
+- "When to be concerned" reference: 7d < 60% of f'c = HIGH RISK
+- ACI 318-19 §26.12.3 acceptance criteria reference
+
+---
+
+### Session #174 Summary
+- Committed and pushed to GitHub (oncorai/OncorEstimate)
+- Commit: ba5dadd
+- Total new lines: +475
+- New shortcuts: Ctrl+Alt+Shift+U (Ice Calc), Ctrl+Alt+Shift+V (Shape Calc), Ctrl+Alt+Shift+W (Strength Projection)
+- File now at 210,302 lines total
+
+---
+
 ## ✅ SESSION: Apr 6, 2026 - 13:47 UTC (Overnight Cron #173)
 **Status:** ✅ THREE NEW FEATURES added (+401 lines)
 
