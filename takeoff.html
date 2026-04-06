@@ -213091,3 +213091,484 @@ if(!sb182){var sbEl182=document.createElement('div');sbEl182.className='sidebar-
 })();
 </script>
 <!-- END SESSION #182 -->
+
+<!-- SESSION #183: 🧲 Anchor Bolt Pattern Calculator (Alt+Shift+F1) + 📏 Slab On Deck Volume Estimator (Alt+Shift+F2) + 💧 Bleeding Rate & Finishing Delay Estimator (Alt+Shift+F3) -->
+<script>
+(function(){
+'use strict';
+
+// =====================================================================
+// FEATURE 1: 🧲 ANCHOR BOLT PATTERN CALCULATOR (Alt+Shift+F1) ~130 lines
+// ACI 318-19 Chapter 17 (Anchoring to Concrete) / AISC Design Guide 1
+// Calculate anchor bolt embedment, spacing, edge distances, breakout capacity
+// =====================================================================
+var abpHTML='<div id="s183-abp" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;">';
+abpHTML+='<div style="background:#1e293b;border:2px solid #7c3aed;border-radius:12px;padding:24px;max-width:680px;width:95%;max-height:90vh;overflow-y:auto;color:#e2e8f0;">';
+abpHTML+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+abpHTML+='<h2 style="margin:0;font-size:18px;color:#a78bfa;">🧲 Anchor Bolt Pattern Calculator</h2>';
+abpHTML+='<button onclick="document.getElementById(\'s183-abp\').style.display=\'none\'" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:4px 12px;cursor:pointer;">✕</button></div>';
+abpHTML+='<div style="background:#0f172a;border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;color:#94a3b8;">';
+abpHTML+='ACI 318-19 Chapter 17 / AISC Design Guide 1 — Cast-in-place and post-installed anchor bolt pattern checker. For preliminary sizing only — EOR governs final design.';
+abpHTML+='</div>';
+abpHTML+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">';
+abpHTML+='<div><label style="font-size:11px;color:#94a3b8;">Anchor Type</label><select id="abp-type" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" onchange="abpCalc()">';
+abpHTML+='<option value="cast">Cast-In-Place (Headed)</option>';
+abpHTML+='<option value="post">Post-Installed (Mechanical)</option>';
+abpHTML+='<option value="cast-l">Cast-In-Place (L-Bolt)</option>';
+abpHTML+='</select></div>';
+abpHTML+='<div><label style="font-size:11px;color:#94a3b8;">Anchor Diameter (in)</label><select id="abp-dia" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" onchange="abpCalc()">';
+abpHTML+='<option value="0.5">1/2" (⌀0.50)</option><option value="0.625">5/8" (⌀0.625)</option>';
+abpHTML+='<option value="0.75">3/4" (⌀0.75)</option><option value="0.875">7/8" (⌀0.875)</option>';
+abpHTML+='<option value="1.0">1" (⌀1.00)</option><option value="1.25">1-1/4" (⌀1.25)</option>';
+abpHTML+='<option value="1.5">1-1/2" (⌀1.50)</option>';
+abpHTML+='</select></div>';
+abpHTML+='<div><label style="font-size:11px;color:#94a3b8;">f\'c — Concrete PSI</label>';
+abpHTML+='<select id="abp-fc" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" onchange="abpCalc()">';
+abpHTML+='<option value="3000">3000 PSI</option><option value="4000" selected>4000 PSI</option>';
+abpHTML+='<option value="5000">5000 PSI</option><option value="6000">6000 PSI</option>';
+abpHTML+='</select></div>';
+abpHTML+='<div><label style="font-size:11px;color:#94a3b8;">Anchor Grade / Fy (ksi)</label>';
+abpHTML+='<select id="abp-fy" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" onchange="abpCalc()">';
+abpHTML+='<option value="36">A307 — 36 ksi</option><option value="58">ASTM F1554 Gr 36 — 58 ksi</option>';
+abpHTML+='<option value="92">ASTM F1554 Gr 55 — 92 ksi</option><option value="125">ASTM F1554 Gr 105 — 125 ksi</option>';
+abpHTML+='</select></div>';
+abpHTML+='<div><label style="font-size:11px;color:#94a3b8;">Embedment Depth hef (in)</label>';
+abpHTML+='<input id="abp-hef" type="number" value="12" min="3" max="48" step="0.5" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" oninput="abpCalc()"></div>';
+abpHTML+='<div><label style="font-size:11px;color:#94a3b8;">Pattern Config</label>';
+abpHTML+='<select id="abp-pat" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" onchange="abpCalc()">';
+abpHTML+='<option value="1">Single Anchor</option><option value="2">2-Bolt (linear)</option>';
+abpHTML+='<option value="4">4-Bolt Square</option><option value="6">6-Bolt (2×3)</option>';
+abpHTML+='<option value="8">8-Bolt (2×4)</option>';
+abpHTML+='</select></div>';
+abpHTML+='<div><label style="font-size:11px;color:#94a3b8;">C1 — Min Edge Distance (in)</label>';
+abpHTML+='<input id="abp-c1" type="number" value="8" min="2" max="36" step="0.5" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" oninput="abpCalc()"></div>';
+abpHTML+='<div><label style="font-size:11px;color:#94a3b8;">S — Bolt Spacing (in)</label>';
+abpHTML+='<input id="abp-s" type="number" value="6" min="2" max="36" step="0.5" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" oninput="abpCalc()"></div>';
+abpHTML+='</div>';
+abpHTML+='<div id="abp-results" style="background:#0f172a;border-radius:8px;padding:12px;"></div>';
+abpHTML+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">';
+abpHTML+='<div style="background:#1e1b4b;border-radius:8px;padding:10px;font-size:11px;color:#a5b4fc;">';
+abpHTML+='<strong style="color:#818cf8;">ACI 318-19 Ch.17 Min Edge (cast-in):</strong><br>';
+abpHTML+='• Min edge distance = 6d or 2hef (larger) for concrete breakout<br>';
+abpHTML+='• Min spacing = 4d anchors (6d preferred)<br>';
+abpHTML+='• Min embedment: Headed bolt ≥ 4d, L-bolt ≥ 12d projection<br>';
+abpHTML+='• ACI 318-19 §17.7.1 supplemental reinf required when cracked concrete</div>';
+abpHTML+='<div style="background:#1e1b4b;border-radius:8px;padding:10px;font-size:11px;color:#a5b4fc;">';
+abpHTML+='<strong style="color:#818cf8;">AISC Design Guide 1 Base Plates:</strong><br>';
+abpHTML+='• Column base plate anchor bolt projection = 3" above concrete min<br>';
+abpHTML+='• F1554 Gr 36 most common; Gr 55/105 for high seismic/load<br>';
+abpHTML+='• El Paso note: Seismic Design Category D2 — verify anchor capacity includes seismic factors (SDC D2 per ASCE 7-22)</div>';
+abpHTML+='</div>';
+abpHTML+='<button onclick="abpPrint()" style="margin-top:10px;background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;font-weight:600;">🖨️ Print Anchor Schedule</button>';
+abpHTML+='</div></div>';
+document.body.insertAdjacentHTML('beforeend',abpHTML);
+
+window.abpCalc=function(){
+  var dia=parseFloat(document.getElementById('abp-dia').value);
+  var fc=parseFloat(document.getElementById('abp-fc').value);
+  var fy=parseFloat(document.getElementById('abp-fy').value);
+  var hef=parseFloat(document.getElementById('abp-hef').value);
+  var pat=parseInt(document.getElementById('abp-pat').value);
+  var c1=parseFloat(document.getElementById('abp-c1').value);
+  var s=parseFloat(document.getElementById('abp-s').value);
+  var type=document.getElementById('abp-type').value;
+
+  // Bolt tensile capacity (ACI 318-19 §17.6.2) ϕNsa = 0.75 * Ase * futa
+  // futa ≈ 1.25*fy for low alloy (approximate)
+  var Ase = Math.PI*(dia*0.85)*(dia*0.85)/4; // in² (approx net tensile area)
+  var futa = Math.min(fy*1.25, 150); // ksi
+  var phiNsa = 0.75 * Ase * futa; // kip single anchor
+
+  // Concrete breakout in tension (ACI 318-19 §17.6.2) — simplified
+  // Nb = kc * sqrt(fc) * hef^1.5  (kc=24 cast-in, 17 post-installed)
+  var kc = (type==='post')?17:24;
+  var Nb = kc * Math.sqrt(fc) * Math.pow(hef,1.5) / 1000; // kip
+
+  // ANc / ANco ratio (simplified — assume no edge effects for now, flag if needed)
+  var ANco = 9 * hef * hef; // in²
+  var caMIN = Math.min(c1, 1.5*hef);
+  var edgeEffect = (c1 < 1.5*hef) ? 0.7 + 0.3*(c1/(1.5*hef)) : 1.0;
+  var Ncbg = Nb * edgeEffect * pat; // group breakout capacity kip
+
+  // Shear capacity (ACI 318-19 §17.7) — steel shear
+  var phiVsa = 0.65 * 0.6 * Ase * futa * pat; // kip group
+
+  // Min edge / spacing checks
+  var minEdge_ACI = Math.max(6*dia, 2*hef);
+  var minSpacing_ACI = 4*dia;
+  var edgeOK = c1 >= minEdge_ACI;
+  var spacingOK = s >= minSpacing_ACI;
+
+  // Embedment min check (headed bolt: 4d; L-bolt: 12d throw + plate)
+  var minEmbed = (type==='cast-l') ? 12*dia : 4*dia;
+  var embedOK = hef >= minEmbed;
+
+  var r='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">';
+  r+='<div style="background:#1e293b;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:16px;font-weight:bold;color:#a78bfa;">'+phiNsa.toFixed(1)+' k</div><div style="font-size:10px;color:#888;">ϕNsa Steel (1 bolt)</div></div>';
+  r+='<div style="background:#1e293b;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:16px;font-weight:bold;color:#60a5fa;">'+Ncbg.toFixed(1)+' k</div><div style="font-size:10px;color:#888;">Ncbg Breakout (group)</div></div>';
+  r+='<div style="background:#1e293b;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:16px;font-weight:bold;color:#34d399;">'+phiVsa.toFixed(1)+' k</div><div style="font-size:10px;color:#888;">ϕVsa Shear (group)</div></div>';
+  r+='<div style="background:#1e293b;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:16px;font-weight:bold;color:#f59e0b;">'+pat+' bolts</div><div style="font-size:10px;color:#888;">Pattern Count</div></div>';
+  r+='</div>';
+
+  r+='<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px;">';
+  r+='<tr style="background:#0f172a;"><th style="padding:6px;text-align:left;color:#94a3b8;border:1px solid #1e293b;">Check</th><th style="padding:6px;color:#94a3b8;border:1px solid #1e293b;">Required</th><th style="padding:6px;color:#94a3b8;border:1px solid #1e293b;">Provided</th><th style="padding:6px;color:#94a3b8;border:1px solid #1e293b;">Status</th></tr>';
+  var rows=[
+    ['Min Edge Distance (C1)','≥ '+minEdge_ACI.toFixed(1)+'"',c1.toFixed(1)+'"',edgeOK,'(ACI §17.7.1)'],
+    ['Min Bolt Spacing (S)','≥ '+minSpacing_ACI.toFixed(1)+'"',s.toFixed(1)+'"',spacingOK,'(ACI §17.7.3)'],
+    ['Min Embedment (hef)','≥ '+minEmbed.toFixed(1)+'"',hef.toFixed(1)+'"',embedOK,'(ACI §17.2.3)'],
+    ['Edge Effect Factor','—',edgeEffect.toFixed(2),null,'(Ψed,N)'],
+  ];
+  rows.forEach(function(row){
+    var statusColor=row[3]===null?'#94a3b8':row[3]?'#4ade80':'#f87171';
+    var statusText=row[3]===null?'—':row[3]?'✅ OK':'❌ CHECK';
+    r+='<tr><td style="padding:6px;border:1px solid #1e293b;color:#e2e8f0;">'+row[0]+' <span style="color:#64748b;">'+row[4]+'</span></td>';
+    r+='<td style="padding:6px;border:1px solid #1e293b;color:#94a3b8;text-align:center;">'+row[1]+'</td>';
+    r+='<td style="padding:6px;border:1px solid #1e293b;color:#e2e8f0;text-align:center;">'+row[2]+'</td>';
+    r+='<td style="padding:6px;border:1px solid #1e293b;color:'+statusColor+';text-align:center;font-weight:bold;">'+statusText+'</td></tr>';
+  });
+  r+='</table>';
+
+  var issues=[];
+  if(!edgeOK)issues.push('Edge distance C1='+c1+'" < required '+minEdge_ACI.toFixed(1)+'" — concrete breakout likely governs');
+  if(!spacingOK)issues.push('Bolt spacing S='+s+'" < required '+minSpacing_ACI.toFixed(1)+'" — reduce or use closer spacing per ACI 318-19 §17.7.3');
+  if(!embedOK)issues.push('Embedment hef='+hef+'" < required '+minEmbed.toFixed(1)+'" for this anchor type');
+  if(hef<8)issues.push('hef < 8" — may not develop full headed bolt bearing; consider deeper embedment');
+
+  if(issues.length>0){
+    r+='<div style="background:#450a0a;border:1px solid #f87171;border-radius:6px;padding:10px;font-size:12px;">';
+    r+='<strong style="color:#f87171;">⚠️ Issues / Check Required:</strong><ul style="margin:4px 0 0 16px;color:#fca5a5;">';
+    issues.forEach(function(i){r+='<li>'+i+'</li>';});
+    r+='</ul></div>';
+  } else {
+    r+='<div style="background:#052e16;border:1px solid #4ade80;border-radius:6px;padding:8px;font-size:12px;color:#86efac;">✅ Anchor pattern meets ACI 318-19 minimum requirements. Verify with EOR for final design loads.</div>';
+  }
+  r+='<p style="font-size:10px;color:#64748b;margin-top:8px;">⚠️ This tool provides preliminary checks only. Final anchor design requires licensed EOR per IBC §1901.3 and ACI 318-19 Chapter 17. El Paso SDC D2 — seismic anchorage provisions apply.</p>';
+  document.getElementById('abp-results').innerHTML=r;
+};
+window.abpPrint=function(){
+  var w=window.open('','_blank');
+  w.document.write('<html><head><title>Anchor Bolt Schedule</title><style>body{font-family:Arial;padding:20px;font-size:12px;} table{width:100%;border-collapse:collapse;} td,th{border:1px solid #ccc;padding:6px;} h1{color:#7c3aed;}</style></head><body>');
+  w.document.write('<h1>🧲 Anchor Bolt Pattern Schedule — ONCOR CONCRETE</h1>');
+  w.document.write('<p><strong>Diameter:</strong> '+document.getElementById('abp-dia').value+'" | <strong>Grade:</strong> F1554 Fy='+document.getElementById('abp-fy').value+'ksi | <strong>f\'c:</strong> '+document.getElementById('abp-fc').value+' PSI | <strong>hef:</strong> '+document.getElementById('abp-hef').value+'"</p>');
+  w.document.write('<p><strong>Pattern:</strong> '+document.getElementById('abp-pat').value+'-bolt | <strong>Edge C1:</strong> '+document.getElementById('abp-c1').value+'" | <strong>Spacing S:</strong> '+document.getElementById('abp-s').value+'"</p>');
+  w.document.write(document.getElementById('abp-results').innerHTML);
+  w.document.write('<p style="font-size:10px;color:#666;margin-top:20px;">PRELIMINARY ONLY — ACI 318-19 Ch.17 / AISC Design Guide 1. EOR final design governs. ONCOR CONCRETE</p>');
+  w.document.write('</body></html>');w.document.close();w.print();
+};
+abpCalc();
+
+// =====================================================================
+// FEATURE 2: 📏 SLAB ON METAL DECK VOLUME ESTIMATOR (Alt+Shift+F2) ~130 lines
+// SDI C-2022 / AISC / ACI 318-19 §26.4.2 / Vulcraft tables
+// Concrete volume on metal deck (normal & LW) per deck profile/flute
+// =====================================================================
+var smdHTML='<div id="s183-smd" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;">';
+smdHTML+='<div style="background:#1e293b;border:2px solid #0891b2;border-radius:12px;padding:24px;max-width:700px;width:95%;max-height:90vh;overflow-y:auto;color:#e2e8f0;">';
+smdHTML+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+smdHTML+='<h2 style="margin:0;font-size:18px;color:#38bdf8;">📏 Slab on Metal Deck Volume Estimator</h2>';
+smdHTML+='<button onclick="document.getElementById(\'s183-smd\').style.display=\'none\'" style="background:#0891b2;color:#fff;border:none;border-radius:6px;padding:4px 12px;cursor:pointer;">✕</button></div>';
+smdHTML+='<div style="background:#0f172a;border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;color:#94a3b8;">';
+smdHTML+='SDI C-2022 / Vulcraft tables — Calculate concrete volume on metal deck accounting for flute fill. More concrete than a flat slab of the same thickness!';
+smdHTML+='</div>';
+smdHTML+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">';
+
+// Deck profile select
+smdHTML+='<div><label style="font-size:11px;color:#94a3b8;">Deck Profile (Flute Depth × Width)</label>';
+smdHTML+='<select id="smd-deck" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" onchange="smdCalc()">';
+smdHTML+='<option value="1.5,6,4.5">1.5" Deck — 6" flute pitch, 4.5" top width (Type B)</option>';
+smdHTML+='<option value="2,6,4">2" Deck — 6" flute pitch, 4" top width (Type B-LOK)</option>';
+smdHTML+='<option value="3,12,6">3" Deck — 12" flute pitch, 6" top width (Type W3 wide rib)</option>';
+smdHTML+='<option value="4.5,12,7.5">4.5" Deck — 12" flute pitch, 7.5" top width (Vulcraft 4.5)</option>';
+smdHTML+='<option value="1.5,6,3">1.5" Deck Narrow Rib — 6" flute, 3" top (Canam)</option>';
+smdHTML+='<option value="2,6,3.5">2" Deck Narrow — 6" flute, 3.5" top (Vulcraft B2)</option>';
+smdHTML+='</select></div>';
+
+smdHTML+='<div><label style="font-size:11px;color:#94a3b8;">Slab Thickness Above Deck (in)</label>';
+smdHTML+='<input id="smd-tc" type="number" value="3.5" min="1" max="8" step="0.25" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" oninput="smdCalc()"></div>';
+smdHTML+='<div><label style="font-size:11px;color:#94a3b8;">Deck Area (SF)</label>';
+smdHTML+='<input id="smd-sf" type="number" value="5000" min="100" step="100" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" oninput="smdCalc()"></div>';
+smdHTML+='<div><label style="font-size:11px;color:#94a3b8;">Concrete Unit Weight (pcf)</label>';
+smdHTML+='<select id="smd-ucw" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" onchange="smdCalc()">';
+smdHTML+='<option value="145">145 pcf — Normal Weight (ACI 318-19)</option>';
+smdHTML+='<option value="115">115 pcf — Lightweight (LW)</option>';
+smdHTML+='<option value="125">125 pcf — Sand-LW</option>';
+smdHTML+='<option value="150">150 pcf — Heavy NW</option>';
+smdHTML+='</select></div>';
+smdHTML+='<div><label style="font-size:11px;color:#94a3b8;">Concrete Price ($/CY)</label>';
+smdHTML+='<input id="smd-price" type="number" value="195" min="100" step="5" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" oninput="smdCalc()"></div>';
+smdHTML+='<div><label style="font-size:11px;color:#94a3b8;">Waste / Buffer %</label>';
+smdHTML+='<input id="smd-waste" type="number" value="8" min="3" max="20" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" oninput="smdCalc()"></div>';
+smdHTML+='</div>';
+smdHTML+='<div id="smd-results" style="background:#0f172a;border-radius:8px;padding:12px;"></div>';
+smdHTML+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">';
+smdHTML+='<div style="background:#0c4a6e;border-radius:8px;padding:10px;font-size:11px;color:#bae6fd;">';
+smdHTML+='<strong style="color:#38bdf8;">Key Design Notes:</strong><br>';
+smdHTML+='• Min slab above deck = 2" for composite (AISC 360 §I3.2d)<br>';
+smdHTML+='• Min total = deck depth + 2" (IBC §1604.3.3)<br>';
+smdHTML+='• 3.5" slab above 1.5" deck = 5" total — typical composite office floor<br>';
+smdHTML+='• LW concrete reduces weight ~17% vs NW but costs 5-10% more per CY</div>';
+smdHTML+='<div style="background:#0c4a6e;border-radius:8px;padding:10px;font-size:11px;color:#bae6fd;">';
+smdHTML+='<strong style="color:#38bdf8;">Volume vs Flat Slab:</strong><br>';
+smdHTML+='• Metal deck slab always has MORE concrete than a flat slab<br>';
+smdHTML+='• The flutes hold extra concrete (the "fill" volume)<br>';
+smdHTML+='• Typical correction factor: 1.08–1.25× flat slab volume depending on profile<br>';
+smdHTML+='• ACI 318-19 §26.4.2 — pumping LW concrete: slump limit 7" max</div>';
+smdHTML+='</div>';
+smdHTML+='<button onclick="smdPrint()" style="margin-top:10px;background:#0891b2;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;font-weight:600;">🖨️ Print Volume Estimate</button>';
+smdHTML+='</div></div>';
+document.body.insertAdjacentHTML('beforeend',smdHTML);
+
+window.smdCalc=function(){
+  var deckVals=document.getElementById('smd-deck').value.split(',').map(Number);
+  var dDepth=deckVals[0], dPitch=deckVals[1], dTop=deckVals[2];
+  var tc=parseFloat(document.getElementById('smd-tc').value)||3.5;
+  var sf=parseFloat(document.getElementById('smd-sf').value)||5000;
+  var ucw=parseFloat(document.getElementById('smd-ucw').value)||145;
+  var price=parseFloat(document.getElementById('smd-price').value)||195;
+  var wastePct=parseFloat(document.getElementById('smd-waste').value)||8;
+
+  // Flat slab volume (above deck only)
+  var volAbove_CY = sf * tc / 12 / 27;
+
+  // Flute fill volume: per flute pair in 1 SF
+  // Approximate: flute = triangular/trapezoidal cross section
+  // Simplification: flute area ≈ (dDepth * (dPitch - dTop) / 2) per pitch repeat
+  // For SDI standard: flute pair occupies full pitch
+  var flutesPerSF = 12 / dPitch; // flutes per linear foot
+  // Flute cross-section (trapezoidal approx): avg width ~(dTop/2 + dPitch/2)/2 * dDepth — simplified
+  var fluteArea_in2 = dDepth * (dPitch - dTop) * 0.5; // in² per flute
+  var fluteVol_CY_perSF = (fluteArea_in2 * flutesPerSF) / 144 / 27; // CY per SF
+
+  var totalNet_CY = volAbove_CY + (fluteVol_CY_perSF * sf);
+  var correctionFactor = (volAbove_CY + fluteVol_CY_perSF*sf) / volAbove_CY;
+  var flatEquiv_CY = sf * (tc + dDepth) / 12 / 27; // flat slab at full thickness equivalent
+  var orderCY = totalNet_CY * (1 + wastePct/100);
+  var trucks10 = Math.ceil(orderCY / 10);
+  var matCost = orderCY * price;
+  var deadLoad_psf = (tc/12 * ucw) + (fluteArea_in2 * flutesPerSF / 144 * ucw); // psf dead load
+
+  var r='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">';
+  r+='<div style="background:#1e293b;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:18px;font-weight:bold;color:#38bdf8;">'+totalNet_CY.toFixed(1)+'</div><div style="font-size:10px;color:#888;">Net CY Needed</div></div>';
+  r+='<div style="background:#1e293b;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:18px;font-weight:bold;color:#4ade80;">'+orderCY.toFixed(1)+'</div><div style="font-size:10px;color:#888;">Order CY (+'+wastePct+'%)</div></div>';
+  r+='<div style="background:#1e293b;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:18px;font-weight:bold;color:#f59e0b;">'+correctionFactor.toFixed(3)+'×</div><div style="font-size:10px;color:#888;">vs Flat Slab</div></div>';
+  r+='<div style="background:#1e293b;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:18px;font-weight:bold;color:#e879f9;">$'+Math.round(matCost/1000)+'k</div><div style="font-size:10px;color:#888;">Mat\'l Cost Est.</div></div>';
+  r+='</div>';
+
+  r+='<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px;">';
+  r+='<tr style="background:#0f172a;"><th style="padding:6px;text-align:left;color:#94a3b8;border:1px solid #1e293b;">Component</th><th style="padding:6px;color:#94a3b8;border:1px solid #1e293b;">CY</th><th style="padding:6px;color:#94a3b8;border:1px solid #1e293b;">% of Total</th></tr>';
+  r+='<tr><td style="padding:6px;border:1px solid #1e293b;color:#e2e8f0;">Slab Above Deck ('+tc+'" × '+sf.toLocaleString()+' SF)</td>';
+  r+='<td style="padding:6px;border:1px solid #1e293b;color:#38bdf8;text-align:center;">'+volAbove_CY.toFixed(1)+'</td>';
+  r+='<td style="padding:6px;border:1px solid #1e293b;text-align:center;color:#94a3b8;">'+(volAbove_CY/totalNet_CY*100).toFixed(1)+'%</td></tr>';
+  r+='<tr><td style="padding:6px;border:1px solid #1e293b;color:#e2e8f0;">Flute Fill ('+dDepth+'" depth, '+dPitch+'" pitch)</td>';
+  r+='<td style="padding:6px;border:1px solid #1e293b;color:#f59e0b;text-align:center;">'+(fluteVol_CY_perSF*sf).toFixed(1)+'</td>';
+  r+='<td style="padding:6px;border:1px solid #1e293b;text-align:center;color:#94a3b8;">'+(fluteVol_CY_perSF*sf/totalNet_CY*100).toFixed(1)+'%</td></tr>';
+  r+='<tr style="background:#0f172a;font-weight:bold;"><td style="padding:6px;border:1px solid #1e293b;color:#e2e8f0;">Total Net CY</td>';
+  r+='<td style="padding:6px;border:1px solid #1e293b;color:#4ade80;text-align:center;">'+totalNet_CY.toFixed(1)+'</td>';
+  r+='<td style="padding:6px;border:1px solid #1e293b;text-align:center;color:#94a3b8;">100%</td></tr>';
+  r+='</table>';
+
+  r+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">';
+  r+='<div style="background:#1e293b;padding:8px;border-radius:6px;text-align:center;font-size:12px;"><strong style="color:#38bdf8;">'+trucks10+'</strong><br><span style="color:#888;font-size:10px;">Trucks @10 CY</span></div>';
+  r+='<div style="background:#1e293b;padding:8px;border-radius:6px;text-align:center;font-size:12px;"><strong style="color:#f59e0b;">'+deadLoad_psf.toFixed(0)+' psf</strong><br><span style="color:#888;font-size:10px;">Concrete Dead Load</span></div>';
+  r+='<div style="background:#1e293b;padding:8px;border-radius:6px;text-align:center;font-size:12px;"><strong style="color:#4ade80;">$'+(matCost/sf).toFixed(2)+'/SF</strong><br><span style="color:#888;font-size:10px;">Material $/SF</span></div>';
+  r+='</div>';
+
+  document.getElementById('smd-results').innerHTML=r;
+};
+window.smdPrint=function(){
+  var w=window.open('','_blank');
+  w.document.write('<html><head><title>Slab on Deck Volume</title><style>body{font-family:Arial;padding:20px;font-size:12px;} table{width:100%;border-collapse:collapse;} td,th{border:1px solid #ccc;padding:6px;} h1{color:#0891b2;}</style></head><body>');
+  w.document.write('<h1>📏 Slab on Metal Deck Volume Estimate — ONCOR CONCRETE</h1>');
+  w.document.write('<p><strong>Deck Profile:</strong> '+document.getElementById('smd-deck').options[document.getElementById('smd-deck').selectedIndex].text+'</p>');
+  w.document.write('<p><strong>Slab above deck:</strong> '+document.getElementById('smd-tc').value+'" | <strong>Area:</strong> '+document.getElementById('smd-sf').value+' SF | <strong>Price:</strong> $'+document.getElementById('smd-price').value+'/CY</p>');
+  w.document.write(document.getElementById('smd-results').innerHTML);
+  w.document.write('<p style="font-size:10px;color:#666;margin-top:20px;">SDI C-2022 / Vulcraft tables. Flute fill volumes are approximate — verify with EOR deck shop drawings. ONCOR CONCRETE</p>');
+  w.document.write('</body></html>');w.document.close();w.print();
+};
+smdCalc();
+
+// =====================================================================
+// FEATURE 3: 💧 BLEEDING RATE & FINISHING DELAY ESTIMATOR (Alt+Shift+F3) ~130 lines
+// ACI 302.1R §8.6 / ACI 308R / ASTM C232 — Bleed water calculator
+// Know when the slab is ready to finish — prevent premature finishing
+// =====================================================================
+var brdHTML='<div id="s183-brd" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;">';
+brdHTML+='<div style="background:#1e293b;border:2px solid #0d9488;border-radius:12px;padding:24px;max-width:700px;width:95%;max-height:90vh;overflow-y:auto;color:#e2e8f0;">';
+brdHTML+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+brdHTML+='<h2 style="margin:0;font-size:18px;color:#2dd4bf;">💧 Bleeding Rate & Finishing Delay Estimator</h2>';
+brdHTML+='<button onclick="document.getElementById(\'s183-brd\').style.display=\'none\'" style="background:#0d9488;color:#fff;border:none;border-radius:6px;padding:4px 12px;cursor:pointer;">✕</button></div>';
+brdHTML+='<div style="background:#0f172a;border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;color:#94a3b8;">';
+brdHTML+='ACI 302.1R §8.6 / ACI 308R / ASTM C232 — Estimate bleed water evaporation time and when safe to start finishing operations. Premature finishing traps bleed water and causes delamination, surface scaling, and reduced wear resistance.';
+brdHTML+='</div>';
+brdHTML+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">';
+brdHTML+='<div><label style="font-size:11px;color:#94a3b8;">W/CM Ratio</label>';
+brdHTML+='<select id="brd-wcm" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" onchange="brdCalc()">';
+brdHTML+='<option value="0.40">0.40 — Low w/cm (high performance)</option>';
+brdHTML+='<option value="0.45">0.45 — Moderate (ACI 318 exposure W1)</option>';
+brdHTML+='<option value="0.50" selected>0.50 — Standard mix</option>';
+brdHTML+='<option value="0.55">0.55 — Higher w/cm (more bleed)</option>';
+brdHTML+='<option value="0.60">0.60 — High water content</option>';
+brdHTML+='</select></div>';
+brdHTML+='<div><label style="font-size:11px;color:#94a3b8;">Slab Thickness (in)</label>';
+brdHTML+='<input id="brd-thick" type="number" value="5" min="2" max="24" step="0.5" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" oninput="brdCalc()"></div>';
+brdHTML+='<div><label style="font-size:11px;color:#94a3b8;">Concrete Temp at Discharge (°F)</label>';
+brdHTML+='<input id="brd-ct" type="number" value="80" min="40" max="100" step="1" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" oninput="brdCalc()"></div>';
+brdHTML+='<div><label style="font-size:11px;color:#94a3b8;">Air Temperature (°F)</label>';
+brdHTML+='<input id="brd-at" type="number" value="85" min="32" max="115" step="1" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" oninput="brdCalc()"></div>';
+brdHTML+='<div><label style="font-size:11px;color:#94a3b8;">Relative Humidity (%)</label>';
+brdHTML+='<input id="brd-rh" type="number" value="25" min="5" max="100" step="1" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" oninput="brdCalc()"></div>';
+brdHTML+='<div><label style="font-size:11px;color:#94a3b8;">Wind Speed (mph)</label>';
+brdHTML+='<input id="brd-ws" type="number" value="10" min="0" max="40" step="1" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" oninput="brdCalc()"></div>';
+brdHTML+='<div><label style="font-size:11px;color:#94a3b8;">Pour Start Time (HH:MM)</label>';
+brdHTML+='<input id="brd-pst" type="time" value="06:00" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" oninput="brdCalc()"></div>';
+brdHTML+='<div><label style="font-size:11px;color:#94a3b8;">Mix Type</label>';
+brdHTML+='<select id="brd-mt" style="width:100%;padding:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;font-size:12px;" onchange="brdCalc()">';
+brdHTML+='<option value="1.0">Normal Portland (Type I/II) — Standard bleed</option>';
+brdHTML+='<option value="1.15">Fly Ash Mix (20-30% FA) — More bleed (bleed×1.15)</option>';
+brdHTML+='<option value="0.85">Type III High Early — Less bleed (sets faster)</option>';
+brdHTML+='<option value="1.2">Slag Cement (GGBFS) — More bleed (×1.2)</option>';
+brdHTML+='<option value="0.80">Silica Fume Mix — Less bleed (dense paste)</option>';
+brdHTML+='</select></div>';
+brdHTML+='</div>';
+brdHTML+='<div id="brd-results" style="background:#0f172a;border-radius:8px;padding:12px;"></div>';
+brdHTML+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">';
+brdHTML+='<div style="background:#042f2e;border-radius:8px;padding:10px;font-size:11px;color:#99f6e4;">';
+brdHTML+='<strong style="color:#2dd4bf;">ACI 302.1R §8.6 — Finishing Rule:</strong><br>';
+brdHTML+='• NEVER finish while sheen (bleed water) is visible<br>';
+brdHTML+='• Footprint test: press shoe 1/4" max → ready for bull float<br>';
+brdHTML+='• Power trowel when no footprint at all (firm surface)<br>';
+brdHTML+='• Bleed water increases at higher W/CM and thicker slabs<br>';
+brdHTML+='• El Paso summer note: low RH 15-30% + wind → evap can exceed bleed → USE EVAPORATION RETARDER!</div>';
+brdHTML+='<div style="background:#042f2e;border-radius:8px;padding:10px;font-size:11px;color:#99f6e4;">';
+brdHTML+='<strong style="color:#2dd4bf;">ASTM C232 Bleed Water — Factors:</strong><br>';
+brdHTML+='• Bleed water ≈ 1–3% of mix water for normal concrete<br>';
+brdHTML+='• High evaporation (>0.20 lb/ft²/hr): fog before finishing, set windbreaks<br>';
+brdHTML+='• Premature finishing = surface scaling within 1-3 years<br>';
+brdHTML+='• ACI 308R: Apply curing compound within 20 min of finishing</div>';
+brdHTML+='</div>';
+brdHTML+='<button onclick="brdPrint()" style="margin-top:10px;background:#0d9488;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;font-weight:600;">🖨️ Print Finishing Plan</button>';
+brdHTML+='</div></div>';
+document.body.insertAdjacentHTML('beforeend',brdHTML);
+
+window.brdCalc=function(){
+  var wcm=parseFloat(document.getElementById('brd-wcm').value)||0.50;
+  var thick=parseFloat(document.getElementById('brd-thick').value)||5;
+  var ct=parseFloat(document.getElementById('brd-ct').value)||80;
+  var at=parseFloat(document.getElementById('brd-at').value)||85;
+  var rh=parseFloat(document.getElementById('brd-rh').value)||25;
+  var ws=parseFloat(document.getElementById('brd-ws').value)||10;
+  var pst=document.getElementById('brd-pst').value||'06:00';
+  var mt=parseFloat(document.getElementById('brd-mt').value)||1.0;
+
+  // Bleed volume estimate: approx 1-3% of mix water
+  // Mix water ~ wcm * 564 lbs/CY cement * ... simplified to gal/CY
+  // ASTM C232 typical bleed: wcm * thick * 0.3 gal/SF (approximate)
+  var bleedVol_galSF = wcm * (thick/12) * 27 * 0.018 * mt; // gal per SF (approximate empirical)
+  var bleedVol_inSF = bleedVol_galSF / 0.0623; // converts to inches equivalent depth on surface
+  
+  // Evaporation rate (simplified Menzel/ACI 305R nomograph)
+  // E = K * (cc - ca) * (1 + 18*V)
+  // cc = concr surface vp, ca = air vp (simplified using temp/rh)
+  var esat_c = 0.0188 * Math.exp(0.0641 * ct); // kPa approx at concrete temp
+  var esat_a = 0.0188 * Math.exp(0.0641 * at); // kPa at air temp
+  var ea = esat_a * (rh/100);
+  var evapRate = Math.max(0.01, 0.44 * (esat_c - ea) * (1 + 0.4*ws/10)); // lb/ft²/hr approx
+
+  // Bleed time: bleed water volume / evaporation rate
+  // Convert bleed depth (in) to lb/SF: water = 5.2 lb/gal, 1 in depth = 0.52 lb/SF
+  var bleedLbSF = bleedVol_inSF * 0.52;
+  var bleedHrs = bleedLbSF / Math.max(evapRate, 0.05); // avoid div by zero
+
+  // Temperature factor (colder → slower set → more bleed time)
+  var tempFactor = (80 - ct) * 0.04; // each 10°F below 80 = +4% more time
+  bleedHrs = bleedHrs * (1 + tempFactor);
+
+  // Power trowel window starts ~1.5× bleed time (empirical)
+  var ptStart = bleedHrs * 1.5;
+  var ptEnd = bleedHrs * 3.5; // concrete stiffens to unworkable
+
+  // Time calculations
+  var pstParts=pst.split(':').map(Number);
+  var pstMin=pstParts[0]*60+pstParts[1];
+  function minToTime(m){
+    var h=Math.floor(m/60)%24;var mm=m%60;
+    return (h<10?'0'+h:h)+':'+(mm<10?'0'+mm:mm);
+  }
+  var finishOpenTime=minToTime(pstMin+Math.round(bleedHrs*60));
+  var ptStartTime=minToTime(pstMin+Math.round(ptStart*60));
+  var ptEndTime=minToTime(pstMin+Math.round(ptEnd*60));
+
+  // Evaporation risk
+  var evapRisk='LOW';var evapColor='#4ade80';
+  if(evapRate>0.25){evapRisk='CRITICAL — ACI 305R §5.3: STOP POUR, set up fogging + windbreaks';evapColor='#ef4444';}
+  else if(evapRate>0.20){evapRisk='HIGH — EVAPORATION RETARDER required (ACI 305R)';evapColor='#f97316';}
+  else if(evapRate>0.10){evapRisk='MODERATE — Monitor closely, fog if rising';evapColor='#f59e0b';}
+  var r='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">';
+  r+='<div style="background:#1e293b;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:16px;font-weight:bold;color:#2dd4bf;">'+bleedHrs.toFixed(1)+' hr</div><div style="font-size:10px;color:#888;">Est. Bleed Time</div></div>';
+  r+='<div style="background:#1e293b;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:16px;font-weight:bold;color:#4ade80;">'+finishOpenTime+'</div><div style="font-size:10px;color:#888;">Bull Float OK Time</div></div>';
+  r+='<div style="background:#1e293b;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:16px;font-weight:bold;color:#f59e0b;">'+ptStartTime+'</div><div style="font-size:10px;color:#888;">Power Trowel Start</div></div>';
+  r+='<div style="background:#1e293b;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:16px;font-weight:bold;color:#e879f9;">'+evapRate.toFixed(3)+' lb/ft²/hr</div><div style="font-size:10px;color:#888;">Evaporation Rate</div></div>';
+  r+='</div>';
+
+  r+='<div style="background:'+(evapRate>0.20?'#450a0a':evapRate>0.10?'#451a03':'#052e16')+';border:1px solid '+(evapRate>0.20?'#f87171':evapRate>0.10?'#fb923c':'#4ade80')+';border-radius:6px;padding:10px;margin-bottom:10px;font-size:12px;color:'+evapColor+';">';
+  r+='<strong>Evaporation Risk: '+evapRisk+'</strong></div>';
+
+  r+='<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  r+='<tr style="background:#0f172a;"><th style="padding:6px;text-align:left;color:#94a3b8;border:1px solid #1e293b;">Finishing Phase</th><th style="padding:6px;color:#94a3b8;border:1px solid #1e293b;">Est. Start</th><th style="padding:6px;color:#94a3b8;border:1px solid #1e293b;">Notes</th></tr>';
+  var phases=[
+    ['Strike-Off / Screed',pst,'Immediately after placement — while concrete is plastic'],
+    ['Bull Float',pst,'Within 10-15 min of strike-off — before bleed sheen appears'],
+    ['Wait for Bleed',finishOpenTime,'Do NOT touch surface until all sheen evaporates'],
+    ['Mag Float / Darby',finishOpenTime,'1/4" footprint depth test — first finish pass'],
+    ['Power Trowel Pass 1',ptStartTime,'Flat blades — surface firm, minimal footprint'],
+    ['Power Trowel Final',minToTime(pstMin+Math.round(ptEnd*60*0.8)),'Pitched blades — final burnish'],
+    ['Curing Compound',ptEndTime,'Apply within 20 min of final trowel (ACI 308R)'],
+  ];
+  phases.forEach(function(p){
+    r+='<tr><td style="padding:6px;border:1px solid #1e293b;color:#e2e8f0;">'+p[0]+'</td>';
+    r+='<td style="padding:6px;border:1px solid #1e293b;color:#2dd4bf;text-align:center;font-weight:bold;">'+p[1]+'</td>';
+    r+='<td style="padding:6px;border:1px solid #1e293b;color:#94a3b8;">'+p[2]+'</td></tr>';
+  });
+  r+='</table>';
+  document.getElementById('brd-results').innerHTML=r;
+};
+window.brdPrint=function(){
+  var w=window.open('','_blank');
+  w.document.write('<html><head><title>Finishing Plan</title><style>body{font-family:Arial;padding:20px;font-size:12px;} table{width:100%;border-collapse:collapse;} td,th{border:1px solid #ccc;padding:6px;} h1{color:#0d9488;} .warn{background:#fff3cd;border:1px solid #ffc107;padding:8px;border-radius:4px;}</style></head><body>');
+  w.document.write('<h1>💧 Concrete Bleeding & Finishing Delay Plan — ONCOR CONCRETE</h1>');
+  w.document.write('<p><strong>Pour Start:</strong> '+document.getElementById('brd-pst').value+' | <strong>W/CM:</strong> '+document.getElementById('brd-wcm').value+' | <strong>Thickness:</strong> '+document.getElementById('brd-thick').value+'" | <strong>Conc. Temp:</strong> '+document.getElementById('brd-ct').value+'°F | <strong>Air:</strong> '+document.getElementById('brd-at').value+'°F | <strong>RH:</strong> '+document.getElementById('brd-rh').value+'% | <strong>Wind:</strong> '+document.getElementById('brd-ws').value+' mph</p>');
+  w.document.write('<div class="warn"><strong>⚠️ DO NOT FINISH WHILE BLEED WATER SHEEN IS VISIBLE — ACI 302.1R §8.6</strong></div><br>');
+  w.document.write(document.getElementById('brd-results').innerHTML);
+  w.document.write('<p style="font-size:10px;color:#666;margin-top:20px;">ACI 302.1R §8.6 / ACI 308R / ASTM C232. Estimated times — field conditions vary. Foreman judgment governs. ONCOR CONCRETE</p>');
+  w.document.write('</body></html>');w.document.close();w.print();
+};
+brdCalc();
+
+// =====================================================================
+// KEYBOARD SHORTCUTS — SESSION 183
+// =====================================================================
+document.addEventListener('keydown',function(e){
+  if(e.altKey&&e.shiftKey&&!e.ctrlKey){
+    if(e.code==='F1'){e.preventDefault();var m=document.getElementById('s183-abp');m.style.display=m.style.display==='flex'?'none':'flex';if(m.style.display==='flex')abpCalc();}
+    if(e.code==='F2'){e.preventDefault();var m=document.getElementById('s183-smd');m.style.display=m.style.display==='flex'?'none':'flex';if(m.style.display==='flex')smdCalc();}
+    if(e.code==='F3'){e.preventDefault();var m=document.getElementById('s183-brd');m.style.display=m.style.display==='flex'?'none':'flex';if(m.style.display==='flex')brdCalc();}
+  }
+});
+
+// =====================================================================
+// SIDEBAR BUTTONS — SESSION 183
+// =====================================================================
+var sb183=document.querySelector('.sidebar-actions')||document.querySelector('.controls')||document.querySelector('.sidebar');
+if(!sb183){var sbEl183=document.createElement('div');sbEl183.className='sidebar-actions';document.body.appendChild(sbEl183);sb183=sbEl183;}
+[['🧲 Anchor Bolt Pattern','s183-abp','#4c1d95',function(){abpCalc();}],
+ ['📏 Slab on Deck Volume','s183-smd','#0c4a6e',function(){smdCalc();}],
+ ['💧 Bleed & Finish Delay','s183-brd','#042f2e',function(){brdCalc();}]].forEach(function(d){
+  var btn=document.createElement('button');btn.textContent=d[0];
+  btn.style.cssText='display:block;width:100%;padding:7px 10px;margin-bottom:5px;background:'+d[2]+';color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;text-align:left;';
+  btn.onclick=function(){var m=document.getElementById(d[1]);m.style.display=m.style.display==='flex'?'none':'flex';if(m.style.display==='flex'&&d[3])d[3]();};
+  sb183.appendChild(btn);
+});
+
+})();
+</script>
+<!-- END SESSION #183 -->
