@@ -222865,3 +222865,495 @@ document.addEventListener('keydown',function(e){
 })();
 </script>
 <!-- END SESSION #207 -->
+
+<!-- SESSION #208 — 🔒🏗️🔓 Joint Sealant Calc + Slab Depression/Pit Calc + Form Strip Strength -->
+<script>
+(function(){
+'use strict';
+
+/* ============================================================
+   SESSION #208 HELPER — KPI row builder
+   ============================================================ */
+function _kpi208(pairs){
+  var html='<div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;">';
+  pairs.forEach(function(p){
+    html+='<div style="background:#1e3a5f;border-radius:6px;padding:6px 10px;min-width:110px;">'
+      +'<div style="font-size:9px;color:#94a3b8;">'+p[0]+'</div>'
+      +'<div style="font-size:13px;font-weight:bold;color:'+p[2]+';">'+p[1]+'</div>'
+      +'</div>';
+  });
+  return html+'</div>';
+}
+
+/* ============================================================
+   TOOL S208-A — Joint Sealant & Backer Rod Calculator
+   Ctrl+Shift+Alt+F10 | ASTM C920 / ACI 504R-90
+   ============================================================ */
+var _sealantTypes=[
+  {name:'Polyurethane (ASTM C920 Type S)',unitCost:28,coverage:80,notes:'Best for moving joints; excellent adhesion; paintable; El Paso interior/exterior'},
+  {name:'Silicone (ASTM C920 Type S)',unitCost:32,coverage:90,notes:'High movement; UV resistant; ideal for exterior El Paso sun exposure; not paintable'},
+  {name:'Epoxy (ASTM C881)',unitCost:65,coverage:70,notes:'Rigid; best for non-moving industrial joints; chemical resistant; cold-apply'},
+  {name:'Polysulfide (ASTM C920)',unitCost:38,coverage:80,notes:'Fuel/chemical resistant; good for industrial slabs; USAF/DOD spec common'},
+  {name:'Acrylic Latex (ASTM C834)',unitCost:14,coverage:100,notes:'Budget option; not for wide moving joints; interior/low-traffic only'},
+  {name:'Hot-Pour Rubberized (ASTM D6690)',unitCost:18,coverage:85,notes:'Common for parking/pavement joints; heat applied; El Paso temp stable 250°F'}
+];
+
+var _sealModalHtml='<div id="s208-seal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:9000;overflow-y:auto;padding:20px;box-sizing:border-box;">'
++'<div style="background:#0f2744;border-radius:12px;padding:20px;max-width:680px;margin:0 auto;color:#e2e8f0;font-family:Arial,sans-serif;">'
++'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'
++'<span style="font-size:15px;font-weight:bold;color:#38bdf8;">🔒 Joint Sealant & Backer Rod Calculator — ACI 504R / ASTM C920</span>'
++'<button onclick="document.getElementById(\'s208-seal\').style.display=\'none\'" style="background:#334155;color:#e2e8f0;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;">✕</button>'
++'</div>'
+
++'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;">'
++'<div><label style="color:#94a3b8;">Sealant Type</label>'
++'<select id="seal-type" onchange="window._calcSeal()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;">'
++_sealantTypes.map(function(t,i){return'<option value="'+i+'">'+t.name+'</option>';}).join('')
++'</select></div>'
+
++'<div><label style="color:#94a3b8;">Total Joint Length (LF)</label>'
++'<input id="seal-lf" type="number" value="500" oninput="window._calcSeal()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;box-sizing:border-box;"></div>'
+
++'<div><label style="color:#94a3b8;">Joint Width (inches)</label>'
++'<input id="seal-w" type="number" value="0.75" step="0.125" oninput="window._calcSeal()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;box-sizing:border-box;"></div>'
+
++'<div><label style="color:#94a3b8;">Sealant Depth (inches) <span style="color:#94a3b8;font-size:9px;">ACI 504R: depth=½ width</span></label>'
++'<input id="seal-d" type="number" value="0.375" step="0.125" oninput="window._calcSeal()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;box-sizing:border-box;"></div>'
+
++'<div><label style="color:#94a3b8;">Backer Rod Factor <span style="color:#94a3b8;font-size:9px;">(1.0=same as LF, 1.05=5% waste)</span></label>'
++'<input id="seal-br" type="number" value="1.05" step="0.01" oninput="window._calcSeal()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;box-sizing:border-box;"></div>'
+
++'<div><label style="color:#94a3b8;">Backer Rod Cost ($/LF)</label>'
++'<input id="seal-brcost" type="number" value="0.18" step="0.01" oninput="window._calcSeal()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;box-sizing:border-box;"></div>'
+
++'<div><label style="color:#94a3b8;">Sealant Cost ($/gal) — override</label>'
++'<input id="seal-cost" type="number" value="" placeholder="auto" oninput="window._calcSeal()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;box-sizing:border-box;"></div>'
+
++'<div><label style="color:#94a3b8;">Waste Factor (%)</label>'
++'<input id="seal-waste" type="number" value="10" oninput="window._calcSeal()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;box-sizing:border-box;"></div>'
++'</div>'
+
++'<div id="seal-results" style="margin-top:10px;"></div>'
+
++'<div style="background:#1e3a5f;border-radius:6px;padding:8px;font-size:10px;color:#94a3b8;margin-top:8px;">'
++'<strong style="color:#38bdf8;">ACI 504R-90 / ASTM C920 Quick Reference:</strong><br>'
++'• Depth:width ratio = 1:2 (depth = ½ joint width) — prevents 3-sided adhesion failure<br>'
++'• Backer rod: closed-cell polyethylene; diameter = 25% larger than joint width<br>'
++'• Joint width design: total movement × safety factor (typ. 25%); min 3/8" for sealant<br>'
++'• El Paso thermal: concrete expansion 0.0000065 in/in/°F × ΔT 80°F × 50 LF slab = ~0.26"<br>'
++'• ACI 504R-90 recommends 4:1 movement capability for polyurethane and silicone'
++'</div>'
+
++'<button onclick="window._printSeal()" style="margin-top:10px;background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;">🖨️ Print Sealant Estimate</button>'
++'</div></div>';
+
+document.body.insertAdjacentHTML('beforeend',_sealModalHtml);
+
+window._calcSeal=function(){
+  var typeIdx=parseInt(document.getElementById('seal-type').value)||0;
+  var t=_sealantTypes[typeIdx];
+  var lf=parseFloat(document.getElementById('seal-lf').value)||500;
+  var w=parseFloat(document.getElementById('seal-w').value)||0.75;
+  var d=parseFloat(document.getElementById('seal-d').value)||0.375;
+  var brFactor=parseFloat(document.getElementById('seal-br').value)||1.05;
+  var brCost=parseFloat(document.getElementById('seal-brcost').value)||0.18;
+  var costOverride=parseFloat(document.getElementById('seal-cost').value)||0;
+  var waste=parseFloat(document.getElementById('seal-waste').value)||10;
+
+  var unitCost=costOverride>0?costOverride:t.unitCost;
+  var volCuIn=lf*12*w*d; // cubic inches
+  var volGal=volCuIn/231; // 1 gal = 231 cu in
+  var volWithWaste=volGal*(1+waste/100);
+  var cartridges=Math.ceil(volWithWaste/0.333); // 10.5 oz = ~0.082 gal; 29 oz = ~0.227 gal; use Qt = 0.25 gal; 1 gal=1 gal
+  // tubes: standard 10.5 oz tube ~ 0.082 gal; 1/10 gal per tube approx
+  var tubes=Math.ceil(volWithWaste*12.2); // ~12 tubes/gal (10.5 oz)
+  var gal5=Math.ceil(volWithWaste/5);
+  var sealCost=volWithWaste*unitCost;
+  var brLf=lf*brFactor;
+  var brTotalCost=brLf*brCost;
+  var totalCost=sealCost+brTotalCost;
+
+  var res=document.getElementById('seal-results');
+  if(!res)return;
+  res.innerHTML=_kpi208([
+    ['Net Sealant Volume',volGal.toFixed(2)+' gal','#38bdf8'],
+    ['Order w/ '+waste+'% Waste',volWithWaste.toFixed(2)+' gal','#f59e0b'],
+    ['Backer Rod',brLf.toFixed(0)+' LF','#22c55e'],
+    ['Sealant Cost','$'+sealCost.toFixed(0),'#38bdf8'],
+    ['Backer Rod Cost','$'+brTotalCost.toFixed(0),'#22c55e'],
+    ['TOTAL MATERIAL','$'+totalCost.toFixed(0),'#fbbf24']
+  ])
+  +'<div style="background:#1e3a5f;border-radius:6px;padding:8px;font-size:10px;color:#e2e8f0;margin-top:4px;">'
+  +'<strong>'+t.name+'</strong> @ $'+unitCost+'/gal<br>'
+  +lf.toFixed(0)+' LF × '+w+'" wide × '+d+'" deep = '+volGal.toFixed(2)+' gal net | Pkg options: <strong>~'+tubes+' tubes (10.5 oz)</strong> or ~'+gal5+' × 5-gal pails<br>'
+  +'<span style="color:#94a3b8;">'+t.notes+'</span>'
+  +'</div>';
+};
+
+window._printSeal=function(){
+  window._calcSeal();
+  var typeIdx=parseInt(document.getElementById('seal-type').value)||0;
+  var t=_sealantTypes[typeIdx];
+  var lf=parseFloat(document.getElementById('seal-lf').value)||500;
+  var w=parseFloat(document.getElementById('seal-w').value)||0.75;
+  var d=parseFloat(document.getElementById('seal-d').value)||0.375;
+  var waste=parseFloat(document.getElementById('seal-waste').value)||10;
+  var costOverride=parseFloat(document.getElementById('seal-cost').value)||0;
+  var brCost=parseFloat(document.getElementById('seal-brcost').value)||0.18;
+  var brFactor=parseFloat(document.getElementById('seal-br').value)||1.05;
+  var unitCost=costOverride>0?costOverride:t.unitCost;
+  var volCuIn=lf*12*w*d;
+  var volGal=volCuIn/231;
+  var volWithWaste=volGal*(1+waste/100);
+  var tubes=Math.ceil(volWithWaste*12.2);
+  var sealCost=volWithWaste*unitCost;
+  var brLf=lf*brFactor;
+  var brTotalCost=brLf*brCost;
+  var totalCost=sealCost+brTotalCost;
+  var w2=window.open('','_blank');
+  w2.document.write('<!DOCTYPE html><html><head><title>Joint Sealant Estimate</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{font-size:13px;color:#1e3a5f;}table{border-collapse:collapse;width:100%;}td,th{border:1px solid #ccc;padding:5px;text-align:left;}th{background:#1e3a5f;color:#fff;}</style></head><body>'
+  +'<h2>🔒 Joint Sealant & Backer Rod Estimate — ACI 504R-90 / ASTM C920</h2>'
+  +'<table><tr><th>Parameter</th><th>Value</th></tr>'
+  +'<tr><td>Sealant Type</td><td>'+t.name+'</td></tr>'
+  +'<tr><td>Joint Length</td><td>'+lf.toFixed(0)+' LF</td></tr>'
+  +'<tr><td>Joint Width × Depth</td><td>'+w+'" × '+d+'"</td></tr>'
+  +'<tr><td>Net Sealant Volume</td><td>'+volGal.toFixed(2)+' gal</td></tr>'
+  +'<tr><td>Order Qty (w/ '+waste+'% waste)</td><td>'+volWithWaste.toFixed(2)+' gal (~'+tubes+' tubes)</td></tr>'
+  +'<tr><td>Sealant Cost @ $'+unitCost+'/gal</td><td>$'+sealCost.toFixed(2)+'</td></tr>'
+  +'<tr><td>Backer Rod</td><td>'+brLf.toFixed(0)+' LF @ $'+brCost+'/LF = $'+brTotalCost.toFixed(2)+'</td></tr>'
+  +'<tr><td><strong>TOTAL MATERIAL</strong></td><td><strong>$'+totalCost.toFixed(2)+'</strong></td></tr>'
+  +'</table>'
+  +'<p style="font-size:9px;color:#666;margin-top:8px;">ACI 504R-90: sealant depth = ½ joint width (2-sided bond only). Backer rod dia = 25% > joint width. ASTM C920 Type S. El Paso thermal movement: plan ±⅜" min joint width for 50-ft slabs.</p>'
+  +'</body></html>');
+  w2.document.close();w2.print();
+};
+
+setTimeout(window._calcSeal,500);
+
+/* ============================================================
+   TOOL S208-B — Slab Depression & Equipment Pad Calculator
+   Ctrl+Shift+Alt+F11 | ACI 302.1R / ACI 360R
+   ============================================================ */
+var _deprModalHtml='<div id="s208-depr" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:9000;overflow-y:auto;padding:20px;box-sizing:border-box;">'
++'<div style="background:#0f2744;border-radius:12px;padding:20px;max-width:680px;margin:0 auto;color:#e2e8f0;font-family:Arial,sans-serif;">'
++'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'
++'<span style="font-size:15px;font-weight:bold;color:#38bdf8;">🏗️ Slab Depression & Equipment Pad Calculator — ACI 302.1R</span>'
++'<button onclick="document.getElementById(\'s208-depr\').style.display=\'none\'" style="background:#334155;color:#e2e8f0;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;">✕</button>'
++'</div>'
+
++'<div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">Calculate concrete volume for recessed areas: trench drains, equipment pads (depressed), dock pits, sumps. Accounts for recess below base slab elevation.</div>'
+
++'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:11px;margin-bottom:8px;">'
++'<div><label style="color:#94a3b8;">Element Type</label>'
++'<select id="depr-type" onchange="window._calcDepr()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;">'
++'<option value="0">Recessed Equipment Pad</option>'
++'<option value="1">Trench Drain (linear)</option>'
++'<option value="2">Sump Pit (rectangular)</option>'
++'<option value="3">Elevator Pit</option>'
++'<option value="4">Dock Leveler Pit</option>'
++'<option value="5">Custom Depression</option>'
++'</select></div>'
+
++'<div><label style="color:#94a3b8;">Length (ft)</label>'
++'<input id="depr-len" type="number" value="10" oninput="window._calcDepr()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;box-sizing:border-box;"></div>'
+
++'<div><label style="color:#94a3b8;">Width (ft)</label>'
++'<input id="depr-wid" type="number" value="8" oninput="window._calcDepr()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;box-sizing:border-box;"></div>'
+
++'<div><label style="color:#94a3b8;">Recess Depth (in) <span style="color:#94a3b8;font-size:9px;">below top of slab</span></label>'
++'<input id="depr-depth" type="number" value="4" oninput="window._calcDepr()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;box-sizing:border-box;"></div>'
+
++'<div><label style="color:#94a3b8;">Wall Thickness (in) <span style="color:#94a3b8;font-size:9px;">for pits only</span></label>'
++'<input id="depr-wall" type="number" value="0" oninput="window._calcDepr()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;box-sizing:border-box;"></div>'
+
++'<div><label style="color:#94a3b8;">Wall Height (ft) <span style="color:#94a3b8;font-size:9px;">below slab (pit walls)</span></label>'
++'<input id="depr-wallh" type="number" value="0" oninput="window._calcDepr()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;box-sizing:border-box;"></div>'
+
++'<div><label style="color:#94a3b8;">Quantity (ea)</label>'
++'<input id="depr-qty" type="number" value="1" oninput="window._calcDepr()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;box-sizing:border-box;"></div>'
+
++'<div><label style="color:#94a3b8;">Concrete Price ($/CY)</label>'
++'<input id="depr-price" type="number" value="190" oninput="window._calcDepr()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;box-sizing:border-box;"></div>'
+
++'<div><label style="color:#94a3b8;">Waste Factor (%)</label>'
++'<input id="depr-waste" type="number" value="8" oninput="window._calcDepr()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;box-sizing:border-box;"></div>'
++'</div>'
+
++'<div id="depr-results" style="margin-top:10px;"></div>'
+
++'<div style="background:#1e3a5f;border-radius:6px;padding:8px;font-size:10px;color:#94a3b8;margin-top:8px;">'
++'<strong style="color:#38bdf8;">El Paso Notes / ACI 302.1R:</strong><br>'
++'• Equipment pads: coordinate recess depth with vendor equipment drawings; typical ½"–2" for drain slope<br>'
++'• Dock leveler pits: standard 6\'×7\'×20" depth (Rite-Hite, Kelley); verify with dock supplier<br>'
++'• Elevator pits: IBC 3001 / ASME A17.1 min 3\' deep; verify with elevator engineer<br>'
++'• Sump pits: plumber specifies size; allow for pump pedestal, concrete mud slab at bottom<br>'
++'• Trench drains: add extra concrete volume for grate haunch each side'
++'</div>'
+
++'<div style="display:flex;gap:8px;margin-top:10px;">'
++'<button onclick="window._addDeprToList()" style="background:#22c55e;color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:12px;">+ Add to List</button>'
++'<button onclick="window._printDepr()" style="background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:12px;">🖨️ Print Estimate</button>'
++'</div>'
+
++'<div id="depr-list" style="margin-top:10px;"></div>'
++'</div></div>';
+
+document.body.insertAdjacentHTML('beforeend',_deprModalHtml);
+
+var _deprItems=[];
+
+window._calcDepr=function(){
+  var len=parseFloat(document.getElementById('depr-len').value)||10;
+  var wid=parseFloat(document.getElementById('depr-wid').value)||8;
+  var depth=parseFloat(document.getElementById('depr-depth').value)||4;
+  var wallT=parseFloat(document.getElementById('depr-wall').value)||0;
+  var wallH=parseFloat(document.getElementById('depr-wallh').value)||0;
+  var qty=parseFloat(document.getElementById('depr-qty').value)||1;
+  var price=parseFloat(document.getElementById('depr-price').value)||190;
+  var waste=parseFloat(document.getElementById('depr-waste').value)||8;
+
+  var depthFt=depth/12;
+  var recessCY=len*wid*depthFt/27;
+  var wallCY=0;
+  if(wallT>0&&wallH>0){
+    var wallTFt=wallT/12;
+    var perim=2*(len+wid);
+    wallCY=perim*wallTFt*wallH/27;
+  }
+  var netCY=(recessCY+wallCY)*qty;
+  var orderCY=netCY*(1+waste/100);
+  var totalCost=orderCY*price;
+  var sfca=(wallT>0&&wallH>0)?2*(len+wid)*wallH*qty:0;
+
+  var res=document.getElementById('depr-results');
+  if(!res)return;
+  res.innerHTML=_kpi208([
+    ['Recess Volume (each)',recessCY.toFixed(2)+' CY','#38bdf8'],
+    ['Wall Volume (each)',wallCY.toFixed(2)+' CY','#22c55e'],
+    ['Net CY (×'+qty+')',netCY.toFixed(2)+' CY','#f59e0b'],
+    ['Order CY (+'+waste+'%)',orderCY.toFixed(2)+' CY','#fbbf24'],
+    ['SFCA (walls)',sfca.toFixed(0)+' SF','#94a3b8'],
+    ['Material Cost','$'+totalCost.toFixed(0),'#22c55e']
+  ]);
+  return{len:len,wid:wid,depth:depth,wallT:wallT,wallH:wallH,qty:qty,netCY:netCY,orderCY:orderCY,sfca:sfca,totalCost:totalCost,price:price,waste:waste};
+};
+
+window._addDeprToList=function(){
+  var r=window._calcDepr();
+  var typeIdx=parseInt(document.getElementById('depr-type').value)||0;
+  var typeNames=['Recessed Equip Pad','Trench Drain','Sump Pit','Elevator Pit','Dock Leveler Pit','Custom Depression'];
+  _deprItems.push({type:typeNames[typeIdx],len:r.len,wid:r.wid,depth:r.depth,qty:r.qty,netCY:r.netCY,orderCY:r.orderCY,cost:r.totalCost});
+  window._renderDeprList();
+};
+
+window._renderDeprList=function(){
+  var list=document.getElementById('depr-list');
+  if(!list)return;
+  if(_deprItems.length===0){list.innerHTML='';return;}
+  var totalNet=0,totalOrder=0,totalCost=0;
+  var rows=_deprItems.map(function(it,i){
+    totalNet+=it.netCY;totalOrder+=it.orderCY;totalCost+=it.cost;
+    return'<tr><td>'+it.type+'</td><td>'+it.len+'×'+it.wid+'</td><td>'+it.depth+'"</td><td>'+it.qty+'</td><td>'+it.netCY.toFixed(2)+'</td><td>'+it.orderCY.toFixed(2)+'</td><td>$'+it.cost.toFixed(0)+'</td><td><button onclick="_deprItems.splice('+i+',1);window._renderDeprList()" style="background:#dc2626;color:#fff;border:none;border-radius:3px;padding:1px 6px;cursor:pointer;font-size:10px;">✕</button></td></tr>';
+  }).join('');
+  list.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:10px;margin-top:6px;">'
+  +'<tr style="background:#1e3a5f;"><th style="padding:4px;border:1px solid #334155;">Type</th><th>L×W(ft)</th><th>Depth</th><th>Qty</th><th>Net CY</th><th>Order CY</th><th>Cost</th><th></th></tr>'
+  +rows
+  +'<tr style="background:#1e3a5f;font-weight:bold;"><td colspan="4" style="padding:4px;border:1px solid #334155;color:#f59e0b;">TOTALS</td><td style="padding:4px;border:1px solid #334155;color:#38bdf8;">'+totalNet.toFixed(2)+' CY</td><td style="padding:4px;border:1px solid #334155;color:#f59e0b;">'+totalOrder.toFixed(2)+' CY</td><td style="padding:4px;border:1px solid #334155;color:#22c55e;">$'+totalCost.toFixed(0)+'</td><td></td></tr>'
+  +'</table>';
+};
+
+window._printDepr=function(){
+  var r=window._calcDepr();
+  var typeIdx=parseInt(document.getElementById('depr-type').value)||0;
+  var typeNames=['Recessed Equip Pad','Trench Drain','Sump Pit','Elevator Pit','Dock Leveler Pit','Custom Depression'];
+  var w2=window.open('','_blank');
+  w2.document.write('<!DOCTYPE html><html><head><title>Slab Depression Estimate</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{font-size:13px;color:#1e3a5f;}table{border-collapse:collapse;width:100%;}td,th{border:1px solid #ccc;padding:5px;}th{background:#1e3a5f;color:#fff;}</style></head><body>'
+  +'<h2>🏗️ Slab Depression & Equipment Pad Estimate — ACI 302.1R</h2>'
+  +'<table><tr><th>Parameter</th><th>Value</th></tr>'
+  +'<tr><td>Element Type</td><td>'+typeNames[typeIdx]+'</td></tr>'
+  +'<tr><td>Dimensions (L×W)</td><td>'+r.len+'ft × '+r.wid+'ft</td></tr>'
+  +'<tr><td>Recess Depth</td><td>'+r.depth+'" below slab</td></tr>'
+  +'<tr><td>Quantity</td><td>'+r.qty+'</td></tr>'
+  +'<tr><td>Net Volume</td><td>'+r.netCY.toFixed(2)+' CY</td></tr>'
+  +'<tr><td>Order Qty (w/ '+r.waste+'% waste)</td><td>'+r.orderCY.toFixed(2)+' CY</td></tr>'
+  +'<tr><td>SFCA (walls)</td><td>'+r.sfca.toFixed(0)+' SF</td></tr>'
+  +'<tr><td><strong>Material Cost @ $'+r.price+'/CY</strong></td><td><strong>$'+r.totalCost.toFixed(2)+'</strong></td></tr>'
+  +'</table>'
+  +'<p style="font-size:9px;color:#666;margin-top:8px;">ACI 302.1R — coordinate recess depth with equipment submittals. Allow for drain slope ¼"/ft min. PE disclaimer: verify dimensions against IFC drawings.</p>'
+  +'</body></html>');
+  w2.document.close();w2.print();
+};
+
+setTimeout(window._calcDepr,500);
+
+/* ============================================================
+   TOOL S208-C — Form Stripping Strength Estimator
+   Ctrl+Shift+Alt+F12 | ACI 347R-14 / ACI 301-16 / ACI 318-19
+   ============================================================ */
+var _cementGain={
+  'I/II':[0,0.15,0.38,0.65,0.84,0.94,1.0,1.05],
+  'III':[0,0.22,0.52,0.80,0.92,0.97,1.0,1.02],
+  'IP':[0,0.10,0.28,0.55,0.75,0.88,1.0,1.08],
+  'IS':[0,0.08,0.22,0.48,0.70,0.85,1.0,1.10]
+};
+var _stripPct={
+  'Slab/Wall edge forms':0.40,
+  'Column forms':0.40,
+  'Wall forms (non-structural)':0.50,
+  'Structural wall forms':0.70,
+  'Beam/Slab side forms':0.50,
+  'Beam bottom (shores remain)':0.70,
+  'Beam bottom (shores removed)':1.00,
+  'Elevated slab bottom':0.75,
+  'Elevated slab bottom (shores 14d)':1.00
+};
+
+var _stripModalHtml='<div id="s208-strip" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:9000;overflow-y:auto;padding:20px;box-sizing:border-box;">'
++'<div style="background:#0f2744;border-radius:12px;padding:20px;max-width:700px;margin:0 auto;color:#e2e8f0;font-family:Arial,sans-serif;">'
++'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'
++'<span style="font-size:15px;font-weight:bold;color:#38bdf8;">🔓 Form Stripping Strength Estimator — ACI 347R-14 / ACI 301</span>'
++'<button onclick="document.getElementById(\'s208-strip\').style.display=\'none\'" style="background:#334155;color:#e2e8f0;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;">✕</button>'
++'</div>'
+
++'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;">'
++'<div><label style="color:#94a3b8;">Design f\'c (PSI)</label>'
++'<select id="strip-fc" onchange="window._calcStrip()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;">'
++'<option value="3000">3000 PSI</option><option value="4000" selected>4000 PSI</option><option value="5000">5000 PSI</option><option value="6000">6000 PSI</option>'
++'</select></div>'
+
++'<div><label style="color:#94a3b8;">Cement Type</label>'
++'<select id="strip-cem" onchange="window._calcStrip()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;">'
++'<option value="I/II">Type I/II (standard)</option>'
++'<option value="III">Type III (high early)</option>'
++'<option value="IP">Type IP (fly ash blend — slower)</option>'
++'<option value="IS">Type IS (slag — slowest)</option>'
++'</select></div>'
+
++'<div><label style="color:#94a3b8;">Avg Curing Temp (°F)</label>'
++'<input id="strip-temp" type="number" value="75" oninput="window._calcStrip()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;box-sizing:border-box;"></div>'
+
++'<div><label style="color:#94a3b8;">Form Type</label>'
++'<select id="strip-form" onchange="window._calcStrip()" style="width:100%;background:#1e3a5f;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px;">'
++Object.keys(_stripPct).map(function(k){return'<option value="'+k+'">'+k+' ('+Math.round(_stripPct[k]*100)+'%)</option>';}).join('')
++'</select></div>'
++'</div>'
+
++'<div id="strip-results" style="margin-top:12px;"></div>'
+
++'<div style="margin-top:10px;background:#1e3a5f;border-radius:6px;padding:8px;font-size:10px;color:#94a3b8;">'
++'<strong style="color:#38bdf8;">ACI 347R-14 / ACI 301-16 Stripping Rules:</strong><br>'
++'• <strong>Slab/Wall edges:</strong> 40% f\'c — typically 12-24 hrs @ 73°F Type I/II<br>'
++'• <strong>Structural wall forms:</strong> 70% f\'c — ACI 301 §4.5<br>'
++'• <strong>Beam bottom / shores:</strong> 100% f\'c — engineer must approve; ACI 347R-14 Table 3<br>'
++'• <strong>Elevated slab bottom:</strong> 75% or per shoring schedule<br>'
++'• <strong>Cold weather (ACI 306R):</strong> below 40°F — protect and extend curing; do NOT strip<br>'
++'• <strong>El Paso hot weather (ACI 305R):</strong> forms act as curing aid — leave walls ≥24 hrs; flatwork exposed to sun = use wet cure or curing compound immediately'
++'</div>'
+
++'<div style="margin-top:8px;background:#1e3a5f;border-radius:6px;padding:8px;font-size:10px;color:#94a3b8;">'
++'<strong style="color:#f59e0b;">⚠️ Disclaimer:</strong> This is a field planning guide. Actual stripping decisions must be verified with project engineer of record and per contract specifications. Never strip structural shores without EOR written approval.'
++'</div>'
+
++'<button onclick="window._printStrip()" style="margin-top:10px;background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;">🖨️ Print Stripping Schedule</button>'
++'</div></div>';
+
+document.body.insertAdjacentHTML('beforeend',_stripModalHtml);
+
+window._calcStrip=function(){
+  var fc=parseFloat(document.getElementById('strip-fc').value)||4000;
+  var cem=document.getElementById('strip-cem').value||'I/II';
+  var temp=parseFloat(document.getElementById('strip-temp').value)||75;
+  var formType=document.getElementById('strip-form').value||'Slab/Wall edge forms';
+  var minPct=_stripPct[formType]||0.40;
+
+  // temperature factor: ACI 209R — maturity
+  // simplified: <50°F = 0.5x rate; 50-65°F = 0.7x; 65-80°F = 1.0x; 80-95°F = 1.1x; >95°F = 1.15x
+  var tempFactor=1.0;
+  if(temp<40){tempFactor=0.35;}
+  else if(temp<50){tempFactor=0.50;}
+  else if(temp<65){tempFactor=0.70;}
+  else if(temp<=80){tempFactor=1.00;}
+  else if(temp<=95){tempFactor=1.10;}
+  else{tempFactor=1.15;}
+
+  var ages=[1,3,7,14,28,56];
+  var ageKeys=[0,1,2,3,4,5]; // indices into _cementGain arrays
+  // days: 0=0, 1=1, 3=3, 7=7, 14=14, 28=28, 56=56
+  // _cementGain[cem] = [0d, 1d, 3d, 7d, 14d, 28d, 56d] but we have 8 entries
+  var gainArr=_cementGain[cem];
+  // ages at indices: gainArr[0]=0d, [1]=1d, [2]=3d, [3]=7d, [4]=14d, [5]=28d, [6]=56d actually mapped below
+  // re-map: index 0=0d,1=1d,2=3d,3=7d,4=14d,5=28d,6=56d
+  var ageMap=[0,1,3,7,14,28,56];
+
+  var rows='';
+  var stripDay=null;
+  for(var i=1;i<ageMap.length;i++){
+    var baseRatio=gainArr[i];
+    var adjRatio=Math.min(baseRatio*tempFactor,1.15); // cap at 115%
+    var psi=Math.round(fc*adjRatio);
+    var pct=Math.round(adjRatio*100);
+    var canStrip=adjRatio>=minPct;
+    var flag=canStrip?'<span style="color:#22c55e;">✅ CAN STRIP</span>':'<span style="color:#ef4444;">⏳ Wait</span>';
+    if(canStrip&&stripDay===null)stripDay=ageMap[i];
+    rows+='<tr style="background:'+(i%2===0?'#1e3a5f':'#0f2744')+';">'
+    +'<td style="padding:4px;border:1px solid #334155;text-align:center;">'+ageMap[i]+'d</td>'
+    +'<td style="padding:4px;border:1px solid #334155;text-align:center;">'+psi.toLocaleString()+' PSI</td>'
+    +'<td style="padding:4px;border:1px solid #334155;text-align:center;">'+pct+'%</td>'
+    +'<td style="padding:4px;border:1px solid #334155;text-align:center;">'+Math.round(minPct*100)+'%</td>'
+    +'<td style="padding:4px;border:1px solid #334155;text-align:center;">'+flag+'</td>'
+    +'</tr>';
+  }
+
+  var stripMsg=stripDay?'<div style="background:#14532d;border-radius:6px;padding:8px;text-align:center;font-size:13px;font-weight:bold;color:#22c55e;margin-bottom:8px;">✅ Earliest Strip: Day <strong>'+stripDay+'</strong> ('+Math.round(minPct*100)+'% f\'c = '+(Math.round(fc*minPct)).toLocaleString()+' PSI required)</div>'
+  :'<div style="background:#7f1d1d;border-radius:6px;padding:8px;text-align:center;font-size:13px;font-weight:bold;color:#ef4444;margin-bottom:8px;">⚠️ No strip date found within 56 days — verify conditions</div>';
+
+  var tempNote='';
+  if(temp<50){tempNote='<div style="background:#1e3a5f;padding:4px 8px;border-radius:4px;color:#f59e0b;font-size:10px;margin-bottom:6px;">⚠️ ACI 306R: concrete ≤50°F cures at ~50% normal rate. Protect forms and extend curing period.</div>';}
+  else if(temp>90){tempNote='<div style="background:#1e3a5f;padding:4px 8px;border-radius:4px;color:#f59e0b;font-size:10px;margin-bottom:6px;">☀️ ACI 305R El Paso: forms act as moisture barrier — benefit to leave wall/column forms 24+ hrs even if strength allows early stripping.</div>';}
+
+  var res=document.getElementById('strip-results');
+  if(!res)return;
+  res.innerHTML=tempNote+stripMsg
+  +'<table style="width:100%;border-collapse:collapse;font-size:11px;">'
+  +'<tr style="background:#1e3a5f;"><th style="padding:4px;border:1px solid #334155;">Age</th><th style="padding:4px;border:1px solid #334155;">Est. PSI</th><th style="padding:4px;border:1px solid #334155;">% of f\'c</th><th style="padding:4px;border:1px solid #334155;">Min Required</th><th style="padding:4px;border:1px solid #334155;">Strip OK?</th></tr>'
+  +rows+'</table>'
+  +'<div style="font-size:9px;color:#94a3b8;margin-top:4px;">Temp factor: ×'+tempFactor.toFixed(2)+' ('+temp+'°F). Base gain: '+cem+'. ACI 209R-92 maturity concept.</div>';
+  return{fc:fc,cem:cem,temp:temp,formType:formType,minPct:minPct,stripDay:stripDay,tempFactor:tempFactor};
+};
+
+window._printStrip=function(){
+  var r=window._calcStrip();
+  if(!r)return;
+  var w2=window.open('','_blank');
+  w2.document.write('<!DOCTYPE html><html><head><title>Form Stripping Schedule</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{font-size:13px;color:#1e3a5f;}table{border-collapse:collapse;width:100%;}td,th{border:1px solid #ccc;padding:5px;}th{background:#1e3a5f;color:#fff;}.pass{color:#166534;font-weight:bold;}.fail{color:#991b1b;}</style></head><body>'
+  +'<h2>🔓 Form Stripping Strength Schedule — ACI 347R-14 / ACI 301-16</h2>'
+  +'<table><tr><th>Parameter</th><th>Value</th></tr>'
+  +'<tr><td>Design f\'c</td><td>'+r.fc.toLocaleString()+' PSI</td></tr>'
+  +'<tr><td>Cement Type</td><td>'+r.cem+'</td></tr>'
+  +'<tr><td>Avg Curing Temp</td><td>'+r.temp+'°F (factor: ×'+r.tempFactor.toFixed(2)+')</td></tr>'
+  +'<tr><td>Form Type</td><td>'+r.formType+'</td></tr>'
+  +'<tr><td>Min Strip Strength</td><td>'+Math.round(r.minPct*100)+'% f\'c = '+(Math.round(r.fc*r.minPct)).toLocaleString()+' PSI</td></tr>'
+  +'<tr><td><strong>Earliest Strip Date</strong></td><td><strong>Day '+r.stripDay+' after pour</strong></td></tr>'
+  +'</table>'
+  +'<p style="font-size:9px;color:#666;margin-top:8px;">ACI 347R-14: Never strip based on calendar time alone — verify with field-cured cylinders or maturity method. Consult Engineer of Record for structural shores. El Paso: ACI 305R hot weather — forms aid early moisture retention.</p>'
+  +'</body></html>');
+  w2.document.close();w2.print();
+};
+
+setTimeout(window._calcStrip,500);
+
+/* ============================================================
+   KEYBOARD SHORTCUTS — Ctrl+Shift+Alt+F10/F11/F12
+   ============================================================ */
+document.addEventListener('keydown',function(e){
+  if(e.ctrlKey&&e.shiftKey&&e.altKey){
+    var k=e.key;
+    if(k==='F10'){e.preventDefault();var m=document.getElementById('s208-seal');if(m)m.style.display=m.style.display==='none'?'flex':'none';}
+    else if(k==='F11'){e.preventDefault();var m=document.getElementById('s208-depr');if(m)m.style.display=m.style.display==='none'?'flex':'none';}
+    else if(k==='F12'){e.preventDefault();var m=document.getElementById('s208-strip');if(m)m.style.display=m.style.display==='none'?'flex':'none';}
+  }
+});
+
+})();
+</script>
+<!-- END SESSION #208 -->
