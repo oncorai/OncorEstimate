@@ -221654,3 +221654,425 @@ document.addEventListener('keydown',function(e){
 })();
 </script>
 <!-- END SESSION #204 -->
+
+<!-- SESSION #205 — Vibrator Spacing Planner (Ctrl+Alt+Shift+F10) + Pour Incident Log (Ctrl+Alt+Shift+F11) + Slump/Air Quick Log (Ctrl+Alt+Shift+F12) -->
+<script>
+(function(){
+'use strict';
+// ─── SESSION #205 HELPERS ────────────────────────────────────────────────────
+function _sb205(label,id,color){
+  var btn=document.createElement('button');
+  btn.textContent=label;
+  btn.style.cssText='display:block;width:100%;margin:2px 0;padding:5px 8px;background:'+color+';color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:10px;text-align:left;';
+  btn.onclick=function(){var m=document.getElementById(id);if(m)m.style.display=m.style.display==='none'?'flex':'none';};
+  var sb=document.querySelector('.sidebar-content')||document.querySelector('#sidebar')||document.querySelector('.controls-panel');
+  if(sb)sb.appendChild(btn);
+}
+function _modal205(id,title,content){
+  var existing=document.getElementById(id);
+  if(existing)return;
+  var m=document.createElement('div');
+  m.id=id;
+  m.style.cssText='display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:99999;flex-direction:column;align-items:center;justify-content:center;';
+  m.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;width:96%;max-width:860px;max-height:92vh;overflow-y:auto;padding:16px;position:relative;">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid #334155;padding-bottom:8px;">'
+    +'<span style="color:#f1f5f9;font-size:14px;font-weight:700;">'+title+'</span>'
+    +'<button onclick="document.getElementById(\''+id+'\').style.display=\'none\';" style="background:#ef4444;border:none;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer;">✕</button>'
+    +'</div>'
+    +'<div id="'+id+'-body">'+content+'</div>'
+    +'</div>';
+  m.addEventListener('click',function(e){if(e.target===m)m.style.display='none';});
+  document.body.appendChild(m);
+}
+function _kpi205(cards){
+  var h='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:12px;">';
+  cards.forEach(function(c){
+    h+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center;">'
+      +'<div style="color:#94a3b8;font-size:9px;margin-bottom:4px;">'+c[0]+'</div>'
+      +'<div style="color:'+(c[2]||'#38bdf8')+';font-size:16px;font-weight:700;">'+c[1]+'</div>'
+      +'</div>';
+  });
+  h+='</div>';
+  return h;
+}
+var s205lsKey='oncor_s205_v1';
+var s205data=JSON.parse(localStorage.getItem(s205lsKey)||'{"incidents":[],"tests":[]}');
+function _saveS205(){localStorage.setItem(s205lsKey,JSON.stringify(s205data));}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOL 1: CONCRETE VIBRATOR SPACING & COVERAGE PLANNER (Ctrl+Alt+Shift+F10)
+// ACI 309R-05 — Radius of action, insertion spacing, vibrator count
+// ═══════════════════════════════════════════════════════════════════════════
+var _vibSizes=[
+  {dia:'1½"',roa:4,wrate:4,note:'Small elements, precast, congested rebar'},
+  {dia:'2"',roa:6,wrate:6,note:'Walls, columns, small footings'},
+  {dia:'2½"',roa:8,wrate:8,note:'Standard flatwork, grade beams'},
+  {dia:'3"',roa:10,wrate:10,note:'General purpose slabs, walls'},
+  {dia:'4"',roa:15,wrate:15,note:'Large slabs, mass concrete'},
+  {dia:'6"',roa:20,wrate:20,note:'Mass concrete only'}
+];
+
+var _vibBody='<div style="font-size:9px;color:#94a3b8;margin-bottom:10px;">ACI 309R-05 vibrator consolidation planning. Select vibrator head diameter → get radius of action (ROA), max insertion spacing, insertion count for element, and vibrator crew sizing. Prevents honeycombing — #1 placement defect.</div>'
+  +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Vibrator Head Diameter</label><br><select id="vib-dia" onchange="window._calcVib();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +_vibSizes.map(function(v,i){return '<option value="'+i+'">'+v.dia+'</option>';}).join('')
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Element Type</label><br><select id="vib-elem" onchange="window._calcVib();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +'<option value="slab">Slab-on-Grade</option><option value="wall">Wall</option><option value="col">Column</option><option value="ftg">Footing</option><option value="beam">Beam</option><option value="mass">Mass Concrete</option>'
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Pour Rate (CY/hr)</label><br><input id="vib-rate" type="number" onchange="window._calcVib();" oninput="window._calcVib();" value="20" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Element Length (ft)</label><br><input id="vib-L" type="number" onchange="window._calcVib();" oninput="window._calcVib();" value="50" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Element Width (ft)</label><br><input id="vib-W" type="number" onchange="window._calcVib();" oninput="window._calcVib();" value="20" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Slab Depth (in)</label><br><input id="vib-D" type="number" onchange="window._calcVib();" oninput="window._calcVib();" value="4" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'</div>'
+  +'<div id="vib-results" style="margin-bottom:12px;"></div>'
+  +'<div style="background:#1e293b;border-radius:6px;padding:10px;">'
+  +'<div style="color:#f59e0b;font-size:10px;font-weight:700;margin-bottom:6px;">📋 ACI 309R-05 Vibrator Reference Table</div>'
+  +'<table style="width:100%;border-collapse:collapse;font-size:9px;">'
+  +'<tr style="background:#0f172a;"><th style="padding:4px;color:#94a3b8;text-align:left;">Head Dia</th><th style="padding:4px;color:#94a3b8;">ROA (in)</th><th style="padding:4px;color:#94a3b8;">Max Spacing (in)</th><th style="padding:4px;color:#94a3b8;">Withdrawal Rate</th><th style="padding:4px;color:#94a3b8;text-align:left;">Best Use</th></tr>'
+  +_vibSizes.map(function(v){
+    return '<tr style="border-bottom:1px solid #0f172a;"><td style="padding:4px;color:#f1f5f9;">'+v.dia+'</td><td style="padding:4px;color:#38bdf8;">'+v.roa+'"</td><td style="padding:4px;color:#22c55e;">'+(v.roa*1.5).toFixed(0)+'"</td><td style="padding:4px;color:#f59e0b;">'+v.wrate+'"/min</td><td style="padding:4px;color:#94a3b8;">'+v.note+'</td></tr>';
+  }).join('')
+  +'</table>'
+  +'<div style="margin-top:8px;color:#64748b;font-size:9px;">Rules: Insert spacing ≤ 1.5× ROA. Insert depth: penetrate previous lift 6". Min vibration time: 5–15 sec per insertion. Withdraw slowly: 3"/sec. Keep vibrator ≥ 3" from forms. Never drag vibrator horizontally.</div>'
+  +'</div>'
+  +'<button onclick="window._printVib();" style="background:#0369a1;border:none;color:#fff;border-radius:4px;padding:7px 16px;cursor:pointer;font-size:11px;margin-top:10px;">🖨️ Print Vibrator Plan</button>';
+
+_modal205('s205-vib','📳 Concrete Vibrator Spacing & Coverage Planner — ACI 309R-05',_vibBody);
+
+window._calcVib=function(){
+  var diaIdx=parseInt(document.getElementById('vib-dia').value)||2;
+  var vib=_vibSizes[diaIdx];
+  var elem=document.getElementById('vib-elem').value;
+  var rate=parseFloat(document.getElementById('vib-rate').value)||20;
+  var L=parseFloat(document.getElementById('vib-L').value)||50;
+  var W=parseFloat(document.getElementById('vib-W').value)||20;
+  var D=parseFloat(document.getElementById('vib-D').value)||4;
+  var maxSpacing=(vib.roa*1.5).toFixed(0);
+  var spacingFt=vib.roa*1.5/12;
+  // Number of insertions across width and length
+  var cols=Math.ceil(W/spacingFt)+1;
+  var rows=Math.ceil(L/spacingFt)+1;
+  var insertionsPerLift=cols*rows;
+  // Lifts needed (ACI 309R max lift = 18" or 3/4 vibrator length)
+  var liftHeight=Math.min(18,D>18?18:D);
+  var lifts=Math.max(1,Math.ceil(D/liftHeight));
+  var totalInsertions=insertionsPerLift*lifts;
+  // Time per insertion: ~10 sec = ~0.17 min; with movement 30 sec/insertion
+  var secPerInsert=30;
+  var totalSec=totalInsertions*secPerInsert;
+  var totalMin=(totalSec/60).toFixed(0);
+  // Vibrators needed for pour rate
+  var vibratorsCap=Math.ceil(rate/20);// ACI 309R: 1 vibrator per ~20 CY/hr + 1 spare
+  var vibCount=vibratorsCap+1;// +1 spare per ACI 309R
+  var res=document.getElementById('vib-results');
+  if(!res)return;
+  res.innerHTML=_kpi205([
+    ['ROA — Radius of Action',vib.roa+'"','#38bdf8'],
+    ['Max Insert Spacing',maxSpacing+'"','#22c55e'],
+    ['Grid: Cols × Rows',cols+' × '+rows,'#a78bfa'],
+    ['Total Insertions',totalInsertions,'#f59e0b'],
+    ['Est. Vibration Time',totalMin+' min','#38bdf8'],
+    ['Vibrators Needed',vibCount+' (incl. spare)','#22c55e']
+  ])
+  +'<div style="background:#1e3a5f;border-radius:4px;padding:8px;font-size:10px;color:#e2e8f0;margin-top:4px;">'
+  +'<strong>Summary:</strong> '+vib.dia+' head vibrator | '+vib.roa+'" ROA | max spacing '+maxSpacing+'" | '+cols+'×'+rows+' grid | '+lifts+' lift(s) | '+totalInsertions+' total insertions | ~'+totalMin+' min continuous vibration needed'
+  +'<br><span style="color:#f59e0b;font-size:9px;">ACI 309R: Assign '+vibratorsCap+' primary vibrators + 1 spare on-site. Do not move vibrator horizontally. Insert perpendicular to surface. Do not allow concrete to free-fall more than 5 ft without vibration.</span>'
+  +'</div>';
+};
+
+setTimeout(window._calcVib,350);
+
+window._printVib=function(){
+  var diaIdx=parseInt(document.getElementById('vib-dia').value)||2;
+  var vib=_vibSizes[diaIdx];
+  var maxSpacing=(vib.roa*1.5).toFixed(0);
+  var L=parseFloat(document.getElementById('vib-L').value)||50;
+  var W=parseFloat(document.getElementById('vib-W').value)||20;
+  var spacingFt=vib.roa*1.5/12;
+  var cols=Math.ceil(W/spacingFt)+1;
+  var rows=Math.ceil(L/spacingFt)+1;
+  var w=window.open('','_blank');
+  w.document.write('<!DOCTYPE html><html><head><title>Vibrator Consolidation Plan</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{font-size:14px;color:#1e3a5f;}table{width:100%;border-collapse:collapse;margin:10px 0;}th,td{border:1px solid #ccc;padding:5px;text-align:left;}th{background:#1e3a5f;color:#fff;}</style></head><body>'
+    +'<h2>Vibrator Consolidation Plan — ACI 309R-05</h2>'
+    +'<table><tr><th>Parameter</th><th>Value</th><th>Source</th></tr>'
+    +'<tr><td>Vibrator Head Diameter</td><td>'+vib.dia+'</td><td>Selected</td></tr>'
+    +'<tr><td>Radius of Action (ROA)</td><td>'+vib.roa+'"</td><td>ACI 309R Table 4.1</td></tr>'
+    +'<tr><td>Max Insertion Spacing</td><td>'+maxSpacing+'" (1.5 × ROA)</td><td>ACI 309R §4.4.1</td></tr>'
+    +'<tr><td>Element Size (L × W)</td><td>'+L+'\' × '+W+'\'</td><td>Job input</td></tr>'
+    +'<tr><td>Insertion Grid</td><td>'+cols+' columns × '+rows+' rows</td><td>Calculated</td></tr>'
+    +'<tr><td>Withdrawal Rate</td><td>'+vib.wrate+'"/min (3"/sec)</td><td>ACI 309R §4.4.3</td></tr>'
+    +'</table>'
+    +'<p><strong>Key Rules (ACI 309R-05):</strong></p>'
+    +'<ul><li>Insert spacing ≤ 1.5 × ROA</li><li>Penetrate previous lift by 6"</li><li>Min vibration time: 5–15 seconds per insertion</li><li>Withdraw slowly at ~3"/sec</li><li>Keep vibrator ≥ 3" from forms</li><li>Never drag vibrator horizontally</li><li>+1 spare vibrator on-site at all times</li></ul>'
+    +'<p style="font-size:9px;color:#666;margin-top:12px;">Standard: ACI 309R-05 Guide for Consolidation of Concrete | Oncor Concrete</p>'
+    +'</body></html>');
+  w.document.close();w.print();
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOL 2: POUR DAY INCIDENT & NEAR-MISS LOG (Ctrl+Alt+Shift+F11)
+// OSHA 29 CFR 1904 / OSHA 1926 — Record and track safety incidents during pours
+// ═══════════════════════════════════════════════════════════════════════════
+var _incTypes=['Near Miss','First Aid','Recordable Injury','Lost Time Injury','Property Damage','Environmental Spill','Equipment Failure','Quality/QC Issue','Other'];
+var _incSeverity=['LOW','MODERATE','HIGH','CRITICAL'];
+var _incColors={LOW:'#22c55e',MODERATE:'#f59e0b',HIGH:'#ef4444',CRITICAL:'#7f1d1d'};
+
+var _incBody='<div style="font-size:9px;color:#94a3b8;margin-bottom:10px;">OSHA 29 CFR 1904 / OSHA 1926 — Document all pour-day safety incidents, near-misses, and equipment failures. Recordable injuries require OSHA 300 Log entry within 7 days. Lost time injuries (LTI) and fatalities have additional reporting requirements.</div>'
+  +'<div id="inc-alert" style="margin-bottom:8px;"></div>'
+  +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Pour / Project</label><br><input id="inc-pour" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;" placeholder="Building A Slab"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Date / Time</label><br><input id="inc-dt" type="datetime-local" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Incident Type</label><br><select id="inc-type" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +_incTypes.map(function(t){return '<option>'+t+'</option>';}).join('')
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Severity</label><br><select id="inc-sev" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +_incSeverity.map(function(s){return '<option>'+s+'</option>';}).join('')
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Person Involved</label><br><input id="inc-person" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;" placeholder="Name or N/A"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Reported By</label><br><input id="inc-reporter" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;" placeholder="Foreman name"></div>'
+  +'<div style="grid-column:1/-1;"><label style="color:#94a3b8;font-size:9px;">Description — What Happened</label><br><textarea id="inc-desc" rows="2" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;resize:vertical;" placeholder="Describe the incident, root cause, and conditions..."></textarea></div>'
+  +'<div style="grid-column:1/-1;"><label style="color:#94a3b8;font-size:9px;">Corrective Actions Taken</label><br><input id="inc-actions" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;" placeholder="Immediate actions, equipment removed, area secured..."></div>'
+  +'</div>'
+  +'<button onclick="window._addInc();" style="background:#dc2626;border:none;color:#fff;border-radius:4px;padding:7px 20px;cursor:pointer;font-size:11px;font-weight:700;margin-bottom:14px;">+ Log Incident</button>'
+  +'<div id="inc-kpi" style="margin-bottom:8px;"></div>'
+  +'<div id="inc-list" style="margin-bottom:12px;"></div>'
+  +'<div style="background:#1e293b;border-radius:6px;padding:10px;">'
+  +'<div style="color:#f59e0b;font-size:10px;font-weight:700;margin-bottom:6px;">⚠️ OSHA Reporting Requirements — Construction (OSHA 1926 / 29 CFR 1904)</div>'
+  +'<table style="width:100%;border-collapse:collapse;font-size:9px;">'
+  +'<tr style="background:#0f172a;"><th style="padding:4px;color:#94a3b8;text-align:left;">Incident Type</th><th style="padding:4px;color:#94a3b8;">OSHA 300 Log</th><th style="padding:4px;color:#94a3b8;">Report to OSHA</th><th style="padding:4px;color:#94a3b8;text-align:left;">Deadline</th></tr>'
+  +'<tr style="border-bottom:1px solid #0f172a;"><td style="padding:4px;color:#f1f5f9;">Fatality</td><td style="padding:4px;color:#ef4444;">Required</td><td style="padding:4px;color:#ef4444;">Yes</td><td style="padding:4px;color:#ef4444;">8 hours — call 1-800-321-OSHA</td></tr>'
+  +'<tr style="border-bottom:1px solid #0f172a;"><td style="padding:4px;color:#f1f5f9;">Inpatient Hospitalization (3+)</td><td style="padding:4px;color:#ef4444;">Required</td><td style="padding:4px;color:#ef4444;">Yes</td><td style="padding:4px;color:#ef4444;">24 hours</td></tr>'
+  +'<tr style="border-bottom:1px solid #0f172a;"><td style="padding:4px;color:#f1f5f9;">Amputation / Eye Loss</td><td style="padding:4px;color:#ef4444;">Required</td><td style="padding:4px;color:#ef4444;">Yes</td><td style="padding:4px;color:#ef4444;">24 hours</td></tr>'
+  +'<tr style="border-bottom:1px solid #0f172a;"><td style="padding:4px;color:#f1f5f9;">Recordable Injury/Illness</td><td style="padding:4px;color:#f59e0b;">Required</td><td style="padding:4px;color:#94a3b8;">No (unless above)</td><td style="padding:4px;color:#94a3b8;">Within 7 days on Form 300</td></tr>'
+  +'<tr style="border-bottom:1px solid #0f172a;"><td style="padding:4px;color:#f1f5f9;">Near Miss</td><td style="padding:4px;color:#22c55e;">Not required</td><td style="padding:4px;color:#22c55e;">No</td><td style="padding:4px;color:#22c55e;">Document internally — best practice</td></tr>'
+  +'<tr><td style="padding:4px;color:#f1f5f9;">First Aid Only</td><td style="padding:4px;color:#22c55e;">Not required</td><td style="padding:4px;color:#22c55e;">No</td><td style="padding:4px;color:#22c55e;">Document internally</td></tr>'
+  +'</table>'
+  +'<div style="margin-top:6px;font-size:9px;color:#94a3b8;">OSHA reporting line: 1-800-321-OSHA (6742) | El Paso Area OSHA Office: (915) 534-6251 | Texas Dept. of Insurance Workers Comp: (800) 372-7713</div>'
+  +'</div>'
+  +'<button onclick="window._printInc();" style="background:#0369a1;border:none;color:#fff;border-radius:4px;padding:7px 16px;cursor:pointer;font-size:11px;margin-top:10px;">🖨️ Print Incident Log</button>';
+
+_modal205('s205-inc','🦺 Pour Day Incident & Near-Miss Log — OSHA 29 CFR 1904 / OSHA 1926',_incBody);
+
+window._addInc=function(){
+  var pour=document.getElementById('inc-pour').value.trim()||'Unknown Pour';
+  var dt=document.getElementById('inc-dt').value||new Date().toISOString().slice(0,16);
+  var type=document.getElementById('inc-type').value;
+  var sev=document.getElementById('inc-sev').value;
+  var person=document.getElementById('inc-person').value.trim();
+  var reporter=document.getElementById('inc-reporter').value.trim();
+  var desc=document.getElementById('inc-desc').value.trim();
+  var actions=document.getElementById('inc-actions').value.trim();
+  s205data.incidents.push({pour:pour,dt:dt,type:type,sev:sev,person:person,reporter:reporter,desc:desc,actions:actions,ts:Date.now()});
+  _saveS205();
+  window._renderInc();
+  document.getElementById('inc-desc').value='';
+  document.getElementById('inc-actions').value='';
+};
+
+window._renderInc=function(){
+  var incs=s205data.incidents;
+  var alertEl=document.getElementById('inc-alert');
+  var kpiEl=document.getElementById('inc-kpi');
+  var listEl=document.getElementById('inc-list');
+  if(!kpiEl)return;
+  var recordable=incs.filter(function(i){return i.type==='Recordable Injury'||i.type==='Lost Time Injury';}).length;
+  var critical=incs.filter(function(i){return i.sev==='CRITICAL'||i.sev==='HIGH';}).length;
+  var nearMiss=incs.filter(function(i){return i.type==='Near Miss';}).length;
+  if(recordable>0||critical>0){
+    alertEl.innerHTML='<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:4px;padding:8px;font-size:10px;color:#fca5a5;margin-bottom:8px;"><strong>⚠️ ATTENTION:</strong> '+recordable+' recordable injuries and/or '+critical+' high/critical incidents on record. Verify OSHA 300 Log entries and reporting requirements. Contact: OSHA 1-800-321-6742.</div>';
+  } else {
+    alertEl.innerHTML='';
+  }
+  kpiEl.innerHTML=(_kpi205([
+    ['Total Incidents',incs.length,'#38bdf8'],
+    ['Near Misses',nearMiss,'#f59e0b'],
+    ['Recordable / LTI',recordable,recordable>0?'#ef4444':'#22c55e'],
+    ['High / Critical',critical,critical>0?'#ef4444':'#22c55e']
+  ]));
+  if(!incs.length){listEl.innerHTML='<div style="color:#22c55e;font-size:11px;padding:10px;">✅ No incidents logged. Keep it that way!</div>';return;}
+  var h='<table style="width:100%;border-collapse:collapse;font-size:10px;">'
+    +'<tr style="background:#1e293b;"><th style="padding:5px;text-align:left;color:#94a3b8;">Date/Time</th><th style="padding:5px;color:#94a3b8;">Pour</th><th style="padding:5px;color:#94a3b8;">Type</th><th style="padding:5px;color:#94a3b8;">Severity</th><th style="padding:5px;color:#94a3b8;">Person</th><th style="padding:5px;color:#94a3b8;">Reporter</th><th style="padding:5px;color:#94a3b8;"></th></tr>';
+  incs.slice().reverse().forEach(function(inc,ri){
+    var i=incs.length-1-ri;
+    var sc=_incColors[inc.sev]||'#f59e0b';
+    h+='<tr style="border-bottom:1px solid #1e293b;">'
+      +'<td style="padding:4px;color:#f1f5f9;">'+inc.dt.replace('T',' ')+'</td>'
+      +'<td style="padding:4px;color:#38bdf8;">'+inc.pour+'</td>'
+      +'<td style="padding:4px;color:#f1f5f9;">'+inc.type+'</td>'
+      +'<td style="padding:4px;"><span style="background:'+sc+';color:#fff;border-radius:3px;padding:1px 6px;font-size:8px;font-weight:700;">'+inc.sev+'</span></td>'
+      +'<td style="padding:4px;color:#94a3b8;">'+inc.person+'</td>'
+      +'<td style="padding:4px;color:#94a3b8;">'+inc.reporter+'</td>'
+      +'<td style="padding:4px;"><button onclick="s205data.incidents.splice('+i+',1);_saveS205();window._renderInc();" style="background:#7f1d1d;border:none;color:#fff;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:9px;">✕</button></td>'
+      +'</tr>';
+    if(inc.desc||inc.actions)
+      h+='<tr><td colspan="7" style="padding:2px 8px 4px;"><div style="color:#e2e8f0;font-size:9px;"><strong>What happened:</strong> '+inc.desc+'</div>'+(inc.actions?'<div style="color:#22c55e;font-size:9px;margin-top:2px;"><strong>Actions:</strong> '+inc.actions+'</div>':'')+'</td></tr>';
+  });
+  h+='</table>';
+  listEl.innerHTML=h;
+};
+
+window._printInc=function(){
+  var w=window.open('','_blank');
+  var incs=s205data.incidents;
+  var rows=incs.map(function(inc){
+    return '<tr><td>'+inc.dt.replace('T',' ')+'</td><td>'+inc.pour+'</td><td>'+inc.type+'</td><td>'+inc.sev+'</td><td>'+inc.person+'</td><td>'+inc.reporter+'</td><td>'+inc.desc+'</td><td>'+inc.actions+'</td></tr>';
+  }).join('');
+  w.document.write('<!DOCTYPE html><html><head><title>Incident Log</title><style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:4px;text-align:left;}th{background:#1e3a5f;color:#fff;}h2{font-size:14px;}</style></head><body><h2>Pour Day Incident & Near-Miss Log</h2><p>OSHA 29 CFR 1904 / OSHA 1926 | Recordable injuries must be entered on OSHA Form 300 within 7 days</p><table><tr><th>Date/Time</th><th>Pour</th><th>Type</th><th>Severity</th><th>Person</th><th>Reporter</th><th>Description</th><th>Actions Taken</th></tr>'+rows+'</table><p style="font-size:9px;color:#666;margin-top:10px;">OSHA Reporting: Fatality = 8 hrs | Hospitalization/Amputation = 24 hrs | Call 1-800-321-OSHA</p></body></html>');
+  w.document.close();w.print();
+};
+
+setTimeout(window._renderInc,250);
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOL 3: SLUMP CONE & AIR TEST QUICK LOG (Ctrl+Alt+Shift+F12)
+// ASTM C143 (Slump) / ASTM C231 (Air Pressure Meter) / ASTM C1064 (Temp)
+// ═══════════════════════════════════════════════════════════════════════════
+var s205lsTests='oncor_s205tests_v1';
+var _tests=JSON.parse(localStorage.getItem(s205lsTests)||'[]');
+function _saveTests(){localStorage.setItem(s205lsTests,JSON.stringify(_tests));}
+
+var _testBody='<div style="font-size:9px;color:#94a3b8;margin-bottom:10px;">Quick field test entry — ASTM C143 slump, ASTM C231 air content, ASTM C1064 temperature. Enter spec limits once, log each test load-by-load. Auto-flags spec violations in real time.</div>'
+  +'<div style="background:#1e293b;border-radius:6px;padding:10px;margin-bottom:10px;">'
+  +'<div style="color:#38bdf8;font-size:10px;font-weight:700;margin-bottom:8px;">📋 Spec Limits (Set Once Per Pour)</div>'
+  +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Min Slump (in)</label><br><input id="ts-slumpmin" type="number" step="0.5" value="3" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Max Slump (in)</label><br><input id="ts-slumpmax" type="number" step="0.5" value="5" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Min Air (%)</label><br><input id="ts-airmin" type="number" step="0.5" value="0" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Max Air (%)</label><br><input id="ts-airmax" type="number" step="0.5" value="6" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Min Temp (°F)</label><br><input id="ts-tempmin" type="number" value="50" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Max Temp (°F)</label><br><input id="ts-tempmax" type="number" value="90" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Design f\'c (PSI)</label><br><input id="ts-fc" type="number" value="4000" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Pour Name</label><br><input id="ts-pour" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;" placeholder="Building A Slab"></div>'
+  +'</div></div>'
+  +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:10px;">'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Ticket #</label><br><input id="ts-ticket" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;" placeholder="12345"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Slump (in) <span style="color:#94a3b8;">C143</span></label><br><input id="ts-slump" type="number" step="0.25" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;" placeholder="4.5"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Air % <span style="color:#94a3b8;">C231</span></label><br><input id="ts-air" type="number" step="0.1" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;" placeholder="2.5"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Temp °F <span style="color:#94a3b8;">C1064</span></label><br><input id="ts-temp" type="number" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;" placeholder="78"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Time</label><br><input id="ts-time" type="time" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"> <button onclick="document.getElementById(\'ts-time\').value=new Date().toTimeString().slice(0,5);" style="background:#0369a1;border:none;color:#fff;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:9px;margin-top:3px;">Now</button></div>'
+  +'</div>'
+  +'<div style="margin-bottom:10px;"><label style="color:#94a3b8;font-size:9px;">Notes (cylinder set ID, tech name, etc.)</label><br><input id="ts-notes" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;" placeholder="Cyl set CYL-001 cast, ACI Tech: John Smith"></div>'
+  +'<button onclick="window._addTest();" style="background:#16a34a;border:none;color:#fff;border-radius:4px;padding:7px 20px;cursor:pointer;font-size:11px;font-weight:700;margin-bottom:14px;">+ Log Test</button>'
+  +'<div id="ts-kpi" style="margin-bottom:8px;"></div>'
+  +'<div id="ts-list" style="margin-bottom:10px;"></div>'
+  +'<button onclick="window._clearTests();" style="background:#475569;border:none;color:#fff;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:10px;margin-right:8px;">Clear All Tests</button>'
+  +'<button onclick="window._printTests();" style="background:#0369a1;border:none;color:#fff;border-radius:4px;padding:7px 16px;cursor:pointer;font-size:11px;">🖨️ Print Field Test Log</button>';
+
+_modal205('s205-tests','🧪 Slump Cone & Air Test Quick Log — ASTM C143 / C231 / C1064',_testBody);
+
+window._addTest=function(){
+  var slumpMin=parseFloat(document.getElementById('ts-slumpmin').value)||0;
+  var slumpMax=parseFloat(document.getElementById('ts-slumpmax').value)||99;
+  var airMin=parseFloat(document.getElementById('ts-airmin').value)||0;
+  var airMax=parseFloat(document.getElementById('ts-airmax').value)||99;
+  var tempMin=parseFloat(document.getElementById('ts-tempmin').value)||0;
+  var tempMax=parseFloat(document.getElementById('ts-tempmax').value)||999;
+  var fc=parseInt(document.getElementById('ts-fc').value)||4000;
+  var pour=document.getElementById('ts-pour').value.trim()||'Active Pour';
+  var ticket=document.getElementById('ts-ticket').value.trim();
+  var slump=parseFloat(document.getElementById('ts-slump').value);
+  var air=parseFloat(document.getElementById('ts-air').value);
+  var temp=parseFloat(document.getElementById('ts-temp').value);
+  var time=document.getElementById('ts-time').value||new Date().toTimeString().slice(0,5);
+  var notes=document.getElementById('ts-notes').value.trim();
+  var flags=[];
+  if(!isNaN(slump)&&slump<slumpMin)flags.push('LOW SLUMP');
+  if(!isNaN(slump)&&slump>slumpMax)flags.push('OVER SLUMP');
+  if(!isNaN(air)&&air<airMin)flags.push('LOW AIR');
+  if(!isNaN(air)&&air>airMax)flags.push('OVER AIR');
+  if(!isNaN(temp)&&temp>90)flags.push('HOT >90°F (ACI 305R)');
+  if(!isNaN(temp)&&temp<50)flags.push('COLD <50°F (ACI 306R)');
+  var pass=flags.length===0;
+  _tests.push({pour:pour,ticket:ticket,slump:slump,air:air,temp:temp,time:time,notes:notes,flags:flags,pass:pass,fc:fc,slumpMin:slumpMin,slumpMax:slumpMax,ts:Date.now()});
+  _saveTests();
+  window._renderTests();
+  document.getElementById('ts-ticket').value='';
+  document.getElementById('ts-slump').value='';
+  document.getElementById('ts-air').value='';
+  document.getElementById('ts-temp').value='';
+  document.getElementById('ts-notes').value='';
+};
+
+window._clearTests=function(){
+  if(confirm('Clear all field tests? This cannot be undone.')){_tests.length=0;_saveTests();window._renderTests();}
+};
+
+window._renderTests=function(){
+  var kpiEl=document.getElementById('ts-kpi');
+  var listEl=document.getElementById('ts-list');
+  if(!kpiEl)return;
+  var total=_tests.length;
+  var passed=_tests.filter(function(t){return t.pass;}).length;
+  var overSlump=_tests.filter(function(t){return t.flags.indexOf('OVER SLUMP')>=0;}).length;
+  var hot=_tests.filter(function(t){return t.flags.indexOf('HOT >90°F (ACI 305R)')>=0;}).length;
+  kpiEl.innerHTML=_kpi205([
+    ['Tests Logged',total,'#38bdf8'],
+    ['✅ Pass',passed,'#22c55e'],
+    ['⚠️ Flagged',total-passed,total-passed>0?'#ef4444':'#22c55e'],
+    ['Over Slump',overSlump,overSlump>0?'#ef4444':'#22c55e'],
+    ['Hot Loads',hot,hot>0?'#f59e0b':'#22c55e']
+  ]);
+  if(!total){listEl.innerHTML='<div style="color:#64748b;font-size:11px;padding:10px;">No tests logged yet. Log your first load below.</div>';return;}
+  var h='<table style="width:100%;border-collapse:collapse;font-size:10px;">'
+    +'<tr style="background:#1e293b;"><th style="padding:5px;text-align:left;color:#94a3b8;">Time</th><th style="padding:5px;color:#94a3b8;">Ticket</th><th style="padding:5px;color:#94a3b8;">Pour</th><th style="padding:5px;color:#94a3b8;">Slump</th><th style="padding:5px;color:#94a3b8;">Air%</th><th style="padding:5px;color:#94a3b8;">Temp°F</th><th style="padding:5px;color:#94a3b8;">Status</th><th style="padding:5px;color:#94a3b8;"></th></tr>';
+  _tests.slice().reverse().forEach(function(t,ri){
+    var i=_tests.length-1-ri;
+    var sc=t.pass?'#22c55e':'#ef4444';
+    var sts=t.pass?'✅ PASS':'❌ FLAG';
+    var slumpColor=!isNaN(t.slump)&&t.slump<t.slumpMin?'#ef4444':(!isNaN(t.slump)&&t.slump>t.slumpMax?'#ef4444':'#22c55e');
+    var tempColor=!isNaN(t.temp)&&(t.temp>90||t.temp<50)?'#ef4444':'#f1f5f9';
+    h+='<tr style="border-bottom:1px solid #1e293b;">'
+      +'<td style="padding:4px;color:#f1f5f9;">'+t.time+'</td>'
+      +'<td style="padding:4px;color:#94a3b8;">'+t.ticket+'</td>'
+      +'<td style="padding:4px;color:#38bdf8;">'+t.pour+'</td>'
+      +'<td style="padding:4px;color:'+slumpColor+';font-weight:700;">'+(isNaN(t.slump)?'—':t.slump+'\"')+'</td>'
+      +'<td style="padding:4px;color:#f1f5f9;">'+(isNaN(t.air)?'—':t.air+'%')+'</td>'
+      +'<td style="padding:4px;color:'+tempColor+';font-weight:700;">'+(isNaN(t.temp)?'—':t.temp+'°F')+'</td>'
+      +'<td style="padding:4px;"><span style="background:'+sc+';color:#fff;border-radius:3px;padding:1px 6px;font-size:8px;font-weight:700;">'+sts+'</span></td>'
+      +'<td style="padding:4px;"><button onclick="_tests.splice('+i+',1);_saveTests();window._renderTests();" style="background:#7f1d1d;border:none;color:#fff;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:9px;">✕</button></td>'
+      +'</tr>';
+    if(t.flags.length||t.notes){
+      var flagStr=t.flags.map(function(f){return '<span style="background:#7f1d1d;color:#fca5a5;border-radius:3px;padding:1px 5px;font-size:8px;margin-right:4px;">'+f+'</span>';}).join('');
+      h+='<tr><td colspan="8" style="padding:2px 8px 4px;font-size:9px;">'+flagStr+(t.notes?'<span style="color:#64748b;">'+t.notes+'</span>':'')+'</td></tr>';
+    }
+  });
+  h+='</table>';
+  listEl.innerHTML=h;
+};
+
+window._printTests=function(){
+  var w=window.open('','_blank');
+  var pour=document.getElementById('ts-pour')?document.getElementById('ts-pour').value:'Active Pour';
+  var fc=document.getElementById('ts-fc')?document.getElementById('ts-fc').value:'4000';
+  var rows=_tests.map(function(t){
+    var flags=t.flags.join(', ')||'PASS';
+    return '<tr style="'+(t.pass?'':'background:#fef2f2;')+'"><td>'+t.time+'</td><td>'+t.ticket+'</td><td>'+(isNaN(t.slump)?'—':t.slump+'"')+'</td><td>'+(isNaN(t.air)?'—':t.air+'%')+'</td><td>'+(isNaN(t.temp)?'—':t.temp+'°F')+'</td><td style="font-weight:700;color:'+(t.pass?'#166534':'#dc2626')+';">'+flags+'</td><td>'+t.notes+'</td></tr>';
+  }).join('');
+  var pass=_tests.filter(function(t){return t.pass;}).length;
+  w.document.write('<!DOCTYPE html><html><head><title>Field Test Log</title><style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:4px;text-align:left;}th{background:#1e3a5f;color:#fff;}h2{font-size:14px;}.sum{margin-bottom:8px;font-size:11px;}</style></head><body><h2>Field Test Log — Slump / Air / Temperature</h2><p class="sum">Pour: '+pour+' | Design f\'c: '+fc+' PSI | Tests: '+_tests.length+' | Passed: '+pass+' / '+_tests.length+'</p><table><tr><th>Time</th><th>Ticket</th><th>Slump (in)</th><th>Air %</th><th>Temp °F</th><th>Status / Flags</th><th>Notes</th></tr>'+rows+'</table><p style="font-size:9px;color:#666;margin-top:12px;">Standards: ASTM C143 (Slump) | ASTM C231 (Air) | ASTM C1064 (Temperature) | ACI 305R (Hot &gt;90°F) | ACI 306R (Cold &lt;50°F)</p></body></html>');
+  w.document.close();w.print();
+};
+
+setTimeout(window._renderTests,300);
+
+
+// ─── SIDEBAR BUTTONS & KEYBOARD SHORTCUTS ───────────────────────────────────
+_sb205('📳 Vibrator Spacing Plan','s205-vib','#7c3aed');
+_sb205('🦺 Pour Incident Log','s205-inc','#b91c1c');
+_sb205('🧪 Slump / Air Quick Log','s205-tests','#065f46');
+
+document.addEventListener('keydown',function(e){
+  if(e.ctrlKey&&e.altKey&&e.shiftKey){
+    var k=e.key;
+    if(k==='F10'){e.preventDefault();var m=document.getElementById('s205-vib');if(m)m.style.display=m.style.display==='none'?'flex':'none';}
+    else if(k==='F11'){e.preventDefault();var m=document.getElementById('s205-inc');if(m)m.style.display=m.style.display==='none'?'flex':'none';}
+    else if(k==='F12'){e.preventDefault();var m=document.getElementById('s205-tests');if(m)m.style.display=m.style.display==='none'?'flex':'none';}
+  }
+});
+
+})();
+</script>
+<!-- END SESSION #205 -->
