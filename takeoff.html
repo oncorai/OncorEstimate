@@ -222076,3 +222076,424 @@ document.addEventListener('keydown',function(e){
 })();
 </script>
 <!-- END SESSION #205 -->
+
+<!-- SESSION #206 — Concrete Curing Compound Coverage Calculator (Ctrl+Shift+Alt+F4) + ACI 347 Formwork Tie Spacing Calculator (Ctrl+Shift+Alt+F5) + Batch Plant Order Confirmation Generator (Ctrl+Shift+Alt+F6) -->
+<script>
+(function(){
+'use strict';
+// ─── SESSION #206 HELPERS ────────────────────────────────────────────────────
+function _sb206(label,id,color){
+  var btn=document.createElement('button');
+  btn.textContent=label;
+  btn.style.cssText='display:block;width:100%;margin:2px 0;padding:5px 8px;background:'+color+';color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:10px;text-align:left;';
+  btn.onclick=function(){var m=document.getElementById(id);if(m)m.style.display=m.style.display==='none'?'flex':'none';};
+  var sb=document.querySelector('.sidebar-content')||document.querySelector('#sidebar')||document.querySelector('.controls-panel');
+  if(sb)sb.appendChild(btn);
+}
+function _modal206(id,title,content){
+  var existing=document.getElementById(id);
+  if(existing)return;
+  var m=document.createElement('div');
+  m.id=id;
+  m.style.cssText='display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:99999;flex-direction:column;align-items:center;justify-content:center;';
+  m.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;width:96%;max-width:880px;max-height:92vh;overflow-y:auto;padding:16px;position:relative;">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid #334155;padding-bottom:8px;">'
+    +'<span style="color:#f1f5f9;font-size:14px;font-weight:700;">'+title+'</span>'
+    +'<button onclick="document.getElementById(\''+id+'\').style.display=\'none\';" style="background:#ef4444;border:none;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer;">✕</button>'
+    +'</div>'
+    +'<div id="'+id+'-body">'+content+'</div>'
+    +'</div>';
+  m.addEventListener('click',function(e){if(e.target===m)m.style.display='none';});
+  document.body.appendChild(m);
+}
+function _kpi206(cards){
+  var h='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:12px;">';
+  cards.forEach(function(c){
+    h+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center;">'
+      +'<div style="color:#94a3b8;font-size:9px;margin-bottom:4px;">'+c[0]+'</div>'
+      +'<div style="color:'+(c[2]||'#38bdf8')+';font-size:16px;font-weight:700;">'+c[1]+'</div>'
+      +'</div>';
+  });
+  h+='</div>';
+  return h;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOL 1: CONCRETE CURING COMPOUND COVERAGE CALCULATOR (Ctrl+Shift+Alt+F4)
+// ACI 308R-16 / ASTM C309 / ASTM C1315 — Coverage rates & quantity estimation
+// ═══════════════════════════════════════════════════════════════════════════
+var _curingTypes=[
+  {type:'White Pigmented (ASTM C309 Type 2)',rate:[150,200],cost:28,note:'Standard — reflects heat, visible coverage verification. Most common for flatwork.'},
+  {type:'Clear/Resin-Based (ASTM C309 Type 1)',rate:[175,225],cost:32,note:'Transparent finish — use for architectural concrete where white is unacceptable.'},
+  {type:'Dissipating (ASTM C309 Type 1-D)',rate:[175,200],cost:45,note:'For surfaces receiving floor coverings, coatings, or adhesives — removes with traffic.'},
+  {type:'Wax-Based (ASTM C171)',rate:[125,175],cost:38,note:'Forms moisture barrier film. Must be removed before coatings. Not for exterior.'},
+  {type:'Water-Based Acrylic Sealer',rate:[200,300],cost:55,note:'Cures + seals in one step. Decorative work. Reapply every 2–3 years.'},
+  {type:'Wet Cure (Burlap + Water)',rate:[1,1],cost:0.15,note:'Per SF — labor-intensive but best cure. Requires continuous wetting 7+ days.'}
+];
+
+var _cureBody='<div style="font-size:9px;color:#94a3b8;margin-bottom:10px;">ACI 308R-16 / ASTM C309 curing compound coverage calculator. Enter slab area, select compound type, get gallons needed and material cost. Manufacturer rate: 150–200 SF/gal typical for spray application.</div>'
+  +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Slab Area (SF)</label><br><input id="cc-area" type="number" onchange="window._calcCure();" oninput="window._calcCure();" value="5000" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Compound Type</label><br><select id="cc-type" onchange="window._calcCure();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +_curingTypes.map(function(c,i){return '<option value="'+i+'">'+c.type+'</option>';}).join('')
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Application Coats</label><br><select id="cc-coats" onchange="window._calcCure();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +'<option value="1">1 Coat (standard)</option><option value="2">2 Coats (high evap)</option>'
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Application Method</label><br><select id="cc-method" onchange="window._calcCure();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +'<option value="spray">Spray (150–200 SF/gal)</option><option value="roller">Roller (125–175 SF/gal)</option><option value="broom">Brush/Broom (100–150 SF/gal)</option>'
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Cost $/gal (override)</label><br><input id="cc-cost" type="number" onchange="window._calcCure();" oninput="window._calcCure();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;" placeholder="Auto"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Waste/Overlap %</label><br><input id="cc-waste" type="number" onchange="window._calcCure();" oninput="window._calcCure();" value="10" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'</div>'
+  +'<div id="cc-results" style="margin-bottom:12px;"></div>'
+  +'<div style="background:#1e293b;border-radius:6px;padding:10px;">'
+  +'<div style="color:#f59e0b;font-size:10px;font-weight:700;margin-bottom:6px;">📋 ASTM C309 / ACI 308R Curing Compound Reference</div>'
+  +'<table style="width:100%;border-collapse:collapse;font-size:9px;">'
+  +'<tr style="background:#0f172a;"><th style="padding:4px;color:#94a3b8;text-align:left;">Type</th><th style="padding:4px;color:#94a3b8;">Rate SF/gal</th><th style="padding:4px;color:#94a3b8;">$/gal (EP 2025)</th><th style="padding:4px;color:#94a3b8;text-align:left;">Notes</th></tr>'
+  +_curingTypes.map(function(c){
+    return '<tr style="border-bottom:1px solid #0f172a;"><td style="padding:4px;color:#f1f5f9;">'+c.type+'</td><td style="padding:4px;color:#38bdf8;">'+c.rate[0]+'–'+c.rate[1]+'</td><td style="padding:4px;color:#22c55e;">$'+c.cost.toFixed(2)+'</td><td style="padding:4px;color:#94a3b8;">'+c.note+'</td></tr>';
+  }).join('')
+  +'</table>'
+  +'<div style="margin-top:8px;color:#64748b;font-size:9px;">Apply within 30 min of final finishing (ACI 308R §4.2). In El Paso summer (July–Sep), apply immediately — evaporation rate 0.25+ lb/ft²/hr. For high evap conditions, use 2 coats or add evaporation retarder first.</div>'
+  +'</div>'
+  +'<button onclick="window._printCure();" style="background:#0369a1;border:none;color:#fff;border-radius:4px;padding:7px 16px;cursor:pointer;font-size:11px;margin-top:10px;">🖨️ Print Curing Estimate</button>';
+
+_modal206('s206-cure','💊 Curing Compound Coverage Calculator — ACI 308R-16 / ASTM C309',_cureBody);
+
+window._calcCure=function(){
+  var area=parseFloat(document.getElementById('cc-area').value)||0;
+  var typeIdx=parseInt(document.getElementById('cc-type').value)||0;
+  var coats=parseInt(document.getElementById('cc-coats').value)||1;
+  var method=document.getElementById('cc-method').value;
+  var costOverride=parseFloat(document.getElementById('cc-cost').value);
+  var waste=parseFloat(document.getElementById('cc-waste').value)||10;
+  var ctype=_curingTypes[typeIdx];
+  // Adjust rate by method
+  var rateRange=ctype.rate.slice();
+  if(method==='roller'){rateRange=[125,175];}
+  else if(method==='broom'){rateRange=[100,150];}
+  var avgRate=(rateRange[0]+rateRange[1])/2;
+  var netGal=area/avgRate;
+  var withWaste=netGal*(1+waste/100);
+  var totalGal=withWaste*coats;
+  var cost=isNaN(costOverride)?ctype.cost:costOverride;
+  var totalCost=totalGal*cost;
+  var costPerSF=totalCost/area;
+  var res=document.getElementById('cc-results');
+  if(!res)return;
+  res.innerHTML=_kpi206([
+    ['Coverage Rate',avgRate.toFixed(0)+' SF/gal','#38bdf8'],
+    ['Net Gallons',netGal.toFixed(1)+' gal','#22c55e'],
+    ['With Waste '+waste+'%',withWaste.toFixed(1)+' gal','#f59e0b'],
+    ['Order Qty ('+coats+' coat'+(coats>1?'s':'')+')',totalGal.toFixed(1)+' gal','#a78bfa'],
+    ['Material Cost','$'+totalCost.toFixed(0),'#22c55e'],
+    ['Cost per SF','$'+costPerSF.toFixed(3)+'/SF','#38bdf8']
+  ])
+  +'<div style="background:#1e3a5f;border-radius:4px;padding:8px;font-size:10px;color:#e2e8f0;margin-top:4px;">'
+  +'<strong>Summary:</strong> '+area.toLocaleString()+' SF slab × '+coats+' coat(s) @ '+avgRate+' SF/gal = <strong>'+totalGal.toFixed(1)+' gallons</strong> (incl. '+waste+'% waste) = <strong>$'+totalCost.toFixed(0)+'</strong>'
+  +'<br><span style="color:#f59e0b;font-size:9px;">ACI 308R: Apply uniformly at manufacturer rate. Do not dilute. Apply in fog spray pattern, perpendicular passes. Wait for bleed water to fully evaporate before application.</span>'
+  +'</div>';
+};
+
+setTimeout(window._calcCure,400);
+
+window._printCure=function(){
+  var area=parseFloat(document.getElementById('cc-area').value)||0;
+  var typeIdx=parseInt(document.getElementById('cc-type').value)||0;
+  var coats=parseInt(document.getElementById('cc-coats').value)||1;
+  var waste=parseFloat(document.getElementById('cc-waste').value)||10;
+  var ctype=_curingTypes[typeIdx];
+  var avgRate=(ctype.rate[0]+ctype.rate[1])/2;
+  var netGal=area/avgRate;
+  var totalGal=netGal*(1+waste/100)*coats;
+  var totalCost=totalGal*ctype.cost;
+  var w=window.open('','_blank');
+  w.document.write('<!DOCTYPE html><html><head><title>Curing Compound Estimate</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{font-size:14px;color:#1e3a5f;}table{width:100%;border-collapse:collapse;margin:10px 0;}th,td{border:1px solid #ccc;padding:5px;text-align:left;}th{background:#1e3a5f;color:#fff;}</style></head><body>'
+    +'<h2>Curing Compound Coverage Estimate — ACI 308R-16 / ASTM C309</h2>'
+    +'<table><tr><th>Parameter</th><th>Value</th></tr>'
+    +'<tr><td>Slab Area</td><td>'+area.toLocaleString()+' SF</td></tr>'
+    +'<tr><td>Compound Type</td><td>'+ctype.type+'</td></tr>'
+    +'<tr><td>Coverage Rate</td><td>'+avgRate+' SF/gal</td></tr>'
+    +'<tr><td>Coats</td><td>'+coats+'</td></tr>'
+    +'<tr><td>Waste/Overlap</td><td>'+waste+'%</td></tr>'
+    +'<tr><td><strong>Order Quantity</strong></td><td><strong>'+totalGal.toFixed(1)+' gallons</strong></td></tr>'
+    +'<tr><td><strong>Material Cost</strong></td><td><strong>$'+totalCost.toFixed(0)+'</strong></td></tr>'
+    +'</table>'
+    +'<p><strong>Application Notes:</strong></p>'
+    +'<ul><li>Apply within 30 minutes of final finishing (ACI 308R §4.2)</li><li>Wait for bleed water to fully evaporate — no sheen</li><li>Apply in perpendicular passes using fog spray pattern</li><li>In El Paso summer: apply immediately after finishing, 2 coats recommended</li></ul>'
+    +'<p style="font-size:9px;color:#666;margin-top:12px;">Standards: ACI 308R-16, ASTM C309, ASTM C1315 | Oncor Concrete</p>'
+    +'</body></html>');
+  w.document.close();w.print();
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOL 2: ACI 347 FORMWORK TIE SPACING CALCULATOR (Ctrl+Shift+Alt+F5)
+// ACI 347.2R-05 — Lateral pressure, tie capacity, spacing calculation
+// ═══════════════════════════════════════════════════════════════════════════
+var _tieCapacities=[
+  {name:'Snap Tie 3/16"',cap:3000},
+  {name:'Snap Tie 1/4"',cap:6000},
+  {name:'She-Bolt 5/8"',cap:12000},
+  {name:'She-Bolt 3/4"',cap:18000},
+  {name:'She-Bolt 1"',cap:26000},
+  {name:'Coil Rod 5/8"',cap:10000},
+  {name:'Coil Rod 3/4"',cap:15000},
+  {name:'Taper Tie 3/4"',cap:9000}
+];
+
+var _tieBody='<div style="font-size:9px;color:#94a3b8;margin-bottom:10px;">ACI 347.2R-05 formwork lateral pressure and tie spacing calculator. Enter wall height, pour rate, concrete temp, tie capacity → get design pressure and recommended tie spacing with safety factor. OSHA 1926.703 compliant.</div>'
+  +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Wall Height (ft)</label><br><input id="tie-H" type="number" step="0.5" onchange="window._calcTie();" oninput="window._calcTie();" value="10" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Pour Rate (ft/hr)</label><br><input id="tie-R" type="number" step="0.5" onchange="window._calcTie();" oninput="window._calcTie();" value="4" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Concrete Temp (°F)</label><br><input id="tie-T" type="number" onchange="window._calcTie();" oninput="window._calcTie();" value="70" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Unit Weight (pcf)</label><br><input id="tie-W" type="number" onchange="window._calcTie();" oninput="window._calcTie();" value="150" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Cement Type Factor Cc</label><br><select id="tie-Cc" onchange="window._calcTie();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +'<option value="1.0">Type I/II (Cc=1.0)</option><option value="1.2">Type III High Early (Cc=1.2)</option><option value="1.4">Retarded Mix (Cc=1.4)</option>'
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Tie Type & Capacity</label><br><select id="tie-cap" onchange="window._calcTie();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +_tieCapacities.map(function(t,i){return '<option value="'+i+'">'+t.name+' ('+t.cap.toLocaleString()+' lbs)</option>';}).join('')
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Vertical Tie Spacing (in)</label><br><input id="tie-vs" type="number" onchange="window._calcTie();" oninput="window._calcTie();" value="24" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Safety Factor</label><br><select id="tie-sf" onchange="window._calcTie();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +'<option value="1.5">1.5 (standard)</option><option value="2.0">2.0 (conservative)</option><option value="1.25">1.25 (engineered)</option>'
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Wall Length (ft)</label><br><input id="tie-L" type="number" onchange="window._calcTie();" oninput="window._calcTie();" value="50" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'</div>'
+  +'<div id="tie-results" style="margin-bottom:12px;"></div>'
+  +'<div style="background:#1e293b;border-radius:6px;padding:10px;">'
+  +'<div style="color:#f59e0b;font-size:10px;font-weight:700;margin-bottom:6px;">📋 ACI 347.2R-05 Lateral Pressure Formula (Walls, R ≤ 7 ft/hr, H ≤ 14 ft)</div>'
+  +'<div style="color:#f1f5f9;font-size:10px;font-family:monospace;background:#0f172a;padding:8px;border-radius:4px;margin-bottom:8px;">p = C<sub>w</sub> × C<sub>c</sub> × [150 + 9000R/T]</div>'
+  +'<div style="color:#64748b;font-size:9px;">Where: p = lateral pressure (psf) | C<sub>w</sub> = unit weight factor (w/150) | C<sub>c</sub> = cement type factor | R = pour rate (ft/hr) | T = concrete temp (°F)</div>'
+  +'<div style="margin-top:8px;color:#ef4444;font-size:9px;font-weight:700;">⚠️ Full hydrostatic applies when: Pour rate R > 7 ft/hr, OR Wall height H > 14 ft, OR Retarded/HRWR mix</div>'
+  +'<table style="width:100%;border-collapse:collapse;font-size:9px;margin-top:8px;">'
+  +'<tr style="background:#0f172a;"><th style="padding:4px;color:#94a3b8;text-align:left;">Tie Type</th><th style="padding:4px;color:#94a3b8;">Capacity (lbs)</th><th style="padding:4px;color:#94a3b8;text-align:left;">Typical Use</th></tr>'
+  +_tieCapacities.map(function(t){
+    return '<tr style="border-bottom:1px solid #0f172a;"><td style="padding:4px;color:#f1f5f9;">'+t.name+'</td><td style="padding:4px;color:#22c55e;">'+t.cap.toLocaleString()+'</td><td style="padding:4px;color:#94a3b8;">'+(t.cap<8000?'Light duty, short walls':'Heavy duty, tall walls')+'</td></tr>';
+  }).join('')
+  +'</table>'
+  +'</div>'
+  +'<button onclick="window._printTie();" style="background:#0369a1;border:none;color:#fff;border-radius:4px;padding:7px 16px;cursor:pointer;font-size:11px;margin-top:10px;">🖨️ Print Tie Spacing Calc</button>';
+
+_modal206('s206-tie','🔩 Formwork Tie Spacing Calculator — ACI 347.2R-05',_tieBody);
+
+window._calcTie=function(){
+  var H=parseFloat(document.getElementById('tie-H').value)||10;
+  var R=parseFloat(document.getElementById('tie-R').value)||4;
+  var T=parseFloat(document.getElementById('tie-T').value)||70;
+  var W=parseFloat(document.getElementById('tie-W').value)||150;
+  var Cc=parseFloat(document.getElementById('tie-Cc').value)||1.0;
+  var capIdx=parseInt(document.getElementById('tie-cap').value)||0;
+  var vs=parseFloat(document.getElementById('tie-vs').value)||24;
+  var sf=parseFloat(document.getElementById('tie-sf').value)||1.5;
+  var L=parseFloat(document.getElementById('tie-L').value)||50;
+  var tieCap=_tieCapacities[capIdx].cap;
+  // ACI 347.2R formula
+  var Cw=W/150;
+  var p_formula=Cw*Cc*(150+9000*R/T);
+  // Hydrostatic pressure
+  var p_hydro=W*H;
+  // Full hydrostatic check
+  var useHydro=(R>7||H>14||Cc>1.2);
+  var p_design=useHydro?Math.min(p_formula,p_hydro):Math.min(p_formula,p_hydro);
+  if(useHydro)p_design=p_hydro;
+  // Calculate horizontal spacing
+  // Load per tie = pressure × trib area = p × (vs/12) × (hs/12) / 144 × SF
+  // hs = tieCap / (p × vs/12 × SF)
+  var hs_max=tieCap/(p_design*(vs/12)*sf);
+  hs_max=Math.min(hs_max,36);// max practical spacing
+  var hs_use=Math.floor(hs_max/6)*6;// round to nearest 6"
+  if(hs_use<6)hs_use=6;
+  if(hs_use>36)hs_use=36;
+  // Load per tie at calculated spacing
+  var loadPerTie=p_design*(vs/12)*(hs_use/12);
+  var utilization=(loadPerTie/tieCap)*100;
+  // Total ties for wall
+  var rows=Math.ceil(H/(vs/12));
+  var cols=Math.ceil(L/(hs_use/12))+1;
+  var totalTies=rows*cols;
+  var res=document.getElementById('tie-results');
+  if(!res)return;
+  var statusColor=utilization>100?'#ef4444':utilization>85?'#f59e0b':'#22c55e';
+  var statusText=utilization>100?'❌ OVER CAPACITY':utilization>85?'⚠️ NEAR LIMIT':'✅ OK';
+  res.innerHTML=_kpi206([
+    ['Design Pressure',p_design.toFixed(0)+' psf',useHydro?'#ef4444':'#38bdf8'],
+    ['Max Horiz. Spacing',hs_max.toFixed(1)+'"','#22c55e'],
+    ['Use Horiz. Spacing',hs_use+'"','#f59e0b'],
+    ['Load per Tie',loadPerTie.toFixed(0)+' lbs',statusColor],
+    ['Tie Utilization',utilization.toFixed(0)+'%',statusColor],
+    ['Total Ties ('+rows+' rows × '+cols+' cols)',totalTies,'#a78bfa']
+  ])
+  +'<div style="background:'+(useHydro?'#7f1d1d':'#1e3a5f')+';border-radius:4px;padding:8px;font-size:10px;color:#e2e8f0;margin-top:4px;">'
+  +(useHydro?'<span style="color:#fca5a5;font-weight:700;">⚠️ FULL HYDROSTATIC PRESSURE: </span>Pour rate >7 ft/hr or wall >14 ft or retarded mix. Using p = w×H = '+p_hydro+' psf.':'<span style="color:#38bdf8;">ACI 347.2R Formula:</span> p = '+Cw.toFixed(2)+' × '+Cc+' × [150 + 9000×'+R+'/'+T+'] = '+p_formula.toFixed(0)+' psf')
+  +'<br><strong>Recommendation:</strong> '+_tieCapacities[capIdx].name+' @ '+hs_use+'" o.c. horizontal × '+vs+'" o.c. vertical. Total: '+totalTies+' ties for '+L+'\' wall. Status: <span style="color:'+statusColor+';">'+statusText+'</span>'
+  +'</div>';
+};
+
+setTimeout(window._calcTie,450);
+
+window._printTie=function(){
+  var H=parseFloat(document.getElementById('tie-H').value)||10;
+  var R=parseFloat(document.getElementById('tie-R').value)||4;
+  var T=parseFloat(document.getElementById('tie-T').value)||70;
+  var W=parseFloat(document.getElementById('tie-W').value)||150;
+  var capIdx=parseInt(document.getElementById('tie-cap').value)||0;
+  var tieCap=_tieCapacities[capIdx].cap;
+  var vs=parseFloat(document.getElementById('tie-vs').value)||24;
+  var Cw=W/150;var Cc=parseFloat(document.getElementById('tie-Cc').value)||1.0;
+  var p_formula=Cw*Cc*(150+9000*R/T);
+  var p_hydro=W*H;
+  var useHydro=(R>7||H>14||Cc>1.2);
+  var p_design=useHydro?p_hydro:Math.min(p_formula,p_hydro);
+  var sf=parseFloat(document.getElementById('tie-sf').value)||1.5;
+  var hs_max=tieCap/(p_design*(vs/12)*sf);
+  var hs_use=Math.floor(hs_max/6)*6;if(hs_use<6)hs_use=6;if(hs_use>36)hs_use=36;
+  var w=window.open('','_blank');
+  w.document.write('<!DOCTYPE html><html><head><title>Formwork Tie Spacing</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{font-size:14px;color:#1e3a5f;}table{width:100%;border-collapse:collapse;margin:10px 0;}th,td{border:1px solid #ccc;padding:5px;text-align:left;}th{background:#1e3a5f;color:#fff;}</style></head><body>'
+    +'<h2>Formwork Tie Spacing Calculation — ACI 347.2R-05</h2>'
+    +'<table><tr><th>Input</th><th>Value</th></tr>'
+    +'<tr><td>Wall Height</td><td>'+H+' ft</td></tr>'
+    +'<tr><td>Pour Rate</td><td>'+R+' ft/hr</td></tr>'
+    +'<tr><td>Concrete Temp</td><td>'+T+' °F</td></tr>'
+    +'<tr><td>Unit Weight</td><td>'+W+' pcf</td></tr>'
+    +'<tr><td>Tie Type</td><td>'+_tieCapacities[capIdx].name+' ('+tieCap.toLocaleString()+' lbs)</td></tr>'
+    +'<tr><td>Safety Factor</td><td>'+sf+'</td></tr>'
+    +'</table>'
+    +'<table><tr><th>Result</th><th>Value</th></tr>'
+    +'<tr><td>Design Pressure</td><td>'+p_design.toFixed(0)+' psf '+(useHydro?'(FULL HYDROSTATIC)':'(ACI 347.2R)')+'</td></tr>'
+    +'<tr><td>Max Horiz. Spacing</td><td>'+hs_max.toFixed(1)+'"</td></tr>'
+    +'<tr><td><strong>Use Horiz. Spacing</strong></td><td><strong>'+hs_use+'" o.c.</strong></td></tr>'
+    +'<tr><td><strong>Vertical Spacing</strong></td><td><strong>'+vs+'" o.c.</strong></td></tr>'
+    +'</table>'
+    +'<p style="font-size:9px;color:#666;margin-top:12px;">Standards: ACI 347.2R-05, OSHA 29 CFR 1926.703, ACI 347R-14 | Oncor Concrete</p>'
+    +'</body></html>');
+  w.document.close();w.print();
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOL 3: BATCH PLANT ORDER CONFIRMATION GENERATOR (Ctrl+Shift+Alt+F6)
+// ASTM C94 — Printable order confirmation for batch plant fax/email
+// ═══════════════════════════════════════════════════════════════════════════
+var _orderBody='<div style="font-size:9px;color:#94a3b8;margin-bottom:10px;">Generate a printable concrete order confirmation to fax/email to the batch plant. Includes all specs, delivery schedule, and special instructions. Per ASTM C94 / ACI 318-19.</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
+  // Left column - Order Info
+  +'<div style="background:#1e293b;border-radius:6px;padding:12px;">'
+  +'<div style="color:#38bdf8;font-size:11px;font-weight:700;margin-bottom:10px;">📋 Order Information</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Project Name</label><br><input id="ord-proj" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;" placeholder="Building A"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Pour Area</label><br><input id="ord-area" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;" placeholder="Slab Grid A-D"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Pour Date</label><br><input id="ord-date" type="date" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">First Truck Time</label><br><input id="ord-time" type="time" value="06:00" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Total yd³</label><br><input id="ord-qty" type="number" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;" placeholder="50"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Truck Size (yd³)</label><br><select id="ord-truck" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;">'
+  +'<option value="8">8 yd³</option><option value="9">9 yd³</option><option value="10" selected>10 yd³</option><option value="11">11 yd³</option>'
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Truck Interval (min)</label><br><input id="ord-int" type="number" value="15" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Delivery Contact</label><br><input id="ord-contact" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;" placeholder="Foreman name"></div>'
+  +'<div style="grid-column:1/-1;"><label style="color:#94a3b8;font-size:9px;">Delivery Contact Phone</label><br><input id="ord-phone" type="tel" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;" placeholder="(915) 555-1234"></div>'
+  +'</div></div>'
+  // Right column - Mix Specs
+  +'<div style="background:#1e293b;border-radius:6px;padding:12px;">'
+  +'<div style="color:#22c55e;font-size:11px;font-weight:700;margin-bottom:10px;">🧪 Mix Specifications</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Design f\'c (PSI)</label><br><select id="ord-fc" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;">'
+  +'<option>3000</option><option selected>4000</option><option>4500</option><option>5000</option><option>6000</option>'
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Mix Code (if known)</label><br><input id="ord-mix" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;" placeholder="4K-1/2-5"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Slump (in)</label><br><input id="ord-slump" type="number" step="0.5" value="5" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Max Agg Size (in)</label><br><select id="ord-agg" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;">'
+  +'<option>3/8"</option><option>1/2"</option><option selected>3/4"</option><option>1"</option>'
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Air Content (%)</label><br><input id="ord-air" value="2-6" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Fiber (lb/yd³)</label><br><input id="ord-fiber" type="number" step="0.5" value="0" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;"></div>'
+  +'<div style="grid-column:1/-1;"><label style="color:#94a3b8;font-size:9px;">Admixtures / Special Requests</label><br><input id="ord-admix" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;" placeholder="HRWR, ice water for hot weather, retarder..."></div>'
+  +'<div style="grid-column:1/-1;"><label style="color:#94a3b8;font-size:9px;">Special Instructions</label><br><textarea id="ord-notes" rows="2" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:4px;font-size:11px;resize:vertical;" placeholder="Saturday delivery, ice required, notify before each truck..."></textarea></div>'
+  +'</div></div>'
+  +'</div>'
+  +'<div style="margin-top:12px;display:flex;gap:8px;">'
+  +'<button onclick="window._genOrder();" style="background:#16a34a;border:none;color:#fff;border-radius:4px;padding:8px 20px;cursor:pointer;font-size:11px;font-weight:700;">📋 Generate Order Confirmation</button>'
+  +'<button onclick="window._printOrder();" style="background:#0369a1;border:none;color:#fff;border-radius:4px;padding:8px 16px;cursor:pointer;font-size:11px;">🖨️ Print Order</button>'
+  +'</div>'
+  +'<div id="ord-preview" style="margin-top:12px;"></div>';
+
+_modal206('s206-order','📦 Batch Plant Order Confirmation Generator — ASTM C94',_orderBody);
+
+window._genOrder=function(){
+  var proj=document.getElementById('ord-proj').value.trim()||'[Project Name]';
+  var area=document.getElementById('ord-area').value.trim()||'[Pour Area]';
+  var date=document.getElementById('ord-date').value||'[Date]';
+  var time=document.getElementById('ord-time').value||'06:00';
+  var qty=parseFloat(document.getElementById('ord-qty').value)||0;
+  var truck=parseInt(document.getElementById('ord-truck').value)||10;
+  var interval=parseInt(document.getElementById('ord-int').value)||15;
+  var contact=document.getElementById('ord-contact').value.trim()||'[Contact]';
+  var phone=document.getElementById('ord-phone').value.trim()||'[Phone]';
+  var fc=document.getElementById('ord-fc').value;
+  var mix=document.getElementById('ord-mix').value.trim();
+  var slump=document.getElementById('ord-slump').value;
+  var agg=document.getElementById('ord-agg').value;
+  var air=document.getElementById('ord-air').value;
+  var fiber=parseFloat(document.getElementById('ord-fiber').value)||0;
+  var admix=document.getElementById('ord-admix').value.trim();
+  var notes=document.getElementById('ord-notes').value.trim();
+  var trucks=Math.ceil(qty/truck);
+  var preview=document.getElementById('ord-preview');
+  if(!preview)return;
+  preview.innerHTML='<div style="background:#f1f5f9;color:#0f172a;border-radius:6px;padding:16px;font-family:Arial,sans-serif;font-size:11px;">'
+    +'<div style="text-align:center;font-size:14px;font-weight:700;margin-bottom:12px;border-bottom:2px solid #1e3a5f;padding-bottom:8px;">CONCRETE ORDER CONFIRMATION</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">'
+    +'<div><strong>Project:</strong> '+proj+'</div>'
+    +'<div><strong>Pour Area:</strong> '+area+'</div>'
+    +'<div><strong>Pour Date:</strong> '+date+'</div>'
+    +'<div><strong>First Truck:</strong> '+time+'</div>'
+    +'<div><strong>Total Quantity:</strong> '+qty+' yd³</div>'
+    +'<div><strong>Truck Size:</strong> '+truck+' yd³ ('+trucks+' loads)</div>'
+    +'<div><strong>Truck Interval:</strong> '+interval+' min</div>'
+    +'<div><strong>Contact:</strong> '+contact+' — '+phone+'</div>'
+    +'</div>'
+    +'<div style="background:#e0f2fe;border-radius:4px;padding:10px;margin-bottom:12px;">'
+    +'<div style="font-weight:700;margin-bottom:6px;color:#0369a1;">MIX SPECIFICATIONS (ASTM C94 / ACI 318-19)</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">'
+    +'<div><strong>Design f\'c:</strong> '+fc+' PSI</div>'
+    +'<div><strong>Mix Code:</strong> '+(mix||'Per spec')+'</div>'
+    +'<div><strong>Slump:</strong> '+slump+'" ± 1"</div>'
+    +'<div><strong>Max Agg:</strong> '+agg+'</div>'
+    +'<div><strong>Air Content:</strong> '+air+'%</div>'
+    +'<div><strong>Fiber:</strong> '+(fiber>0?fiber+' lb/yd³':'None')+'</div>'
+    +'</div>'
+    +(admix?'<div style="margin-top:6px;"><strong>Admixtures:</strong> '+admix+'</div>':'')
+    +'</div>'
+    +(notes?'<div style="background:#fef3c7;border-radius:4px;padding:10px;margin-bottom:12px;"><strong>Special Instructions:</strong> '+notes+'</div>':'')
+    +'<div style="text-align:center;font-size:9px;color:#64748b;margin-top:12px;border-top:1px solid #ccc;padding-top:8px;">ASTM C94 §11.8: Discharge within 90 min of batching | Max water addition 1 gal/yd³ | Verify mix design before first load<br>Order placed: '+new Date().toLocaleString()+'</div>'
+    +'</div>';
+};
+
+window._printOrder=function(){
+  window._genOrder();
+  var preview=document.getElementById('ord-preview');
+  if(!preview)return;
+  var w=window.open('','_blank');
+  w.document.write('<!DOCTYPE html><html><head><title>Concrete Order Confirmation</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}</style></head><body>'+preview.innerHTML+'</body></html>');
+  w.document.close();w.print();
+};
+
+
+// ─── SIDEBAR BUTTONS & KEYBOARD SHORTCUTS ───────────────────────────────────
+_sb206('💊 Curing Compound Calc','s206-cure','#7c3aed');
+_sb206('🔩 Formwork Tie Spacing','s206-tie','#b45309');
+_sb206('📦 Batch Plant Order','s206-order','#065f46');
+
+document.addEventListener('keydown',function(e){
+  if(e.ctrlKey&&e.shiftKey&&e.altKey){
+    var k=e.key;
+    if(k==='F4'){e.preventDefault();var m=document.getElementById('s206-cure');if(m)m.style.display=m.style.display==='none'?'flex':'none';}
+    else if(k==='F5'){e.preventDefault();var m=document.getElementById('s206-tie');if(m)m.style.display=m.style.display==='none'?'flex':'none';}
+    else if(k==='F6'){e.preventDefault();var m=document.getElementById('s206-order');if(m)m.style.display=m.style.display==='none'?'flex':'none';}
+  }
+});
+
+})();
+</script>
+<!-- END SESSION #206 -->
