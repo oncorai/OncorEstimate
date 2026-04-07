@@ -1,5 +1,80 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 7, 2026 - 13:52 UTC (Overnight Cron #207)
+**Status:** ✅ THREE NEW FEATURES added (+368 lines)
+
+### Session #207 — 💰📏🛢️ (+368 lines)
+- **Concrete Mix Cost Breakdown Estimator** (Ctrl+Shift+Alt+F7) — ACI 211.1 / ASTM C94; estimate ready-mix concrete component costs per yd³; inputs: cement/sand/rock quantities (lbs/yd³), unit costs ($/ton), water, admixture (oz/cwt), fiber (lbs/yd³), batch plant OH, delivery cost, plant margin %; calculates per-component costs (cement, sand, rock, water, admix, fiber), materials subtotal, direct cost, selling price with margin, order total; 5-card KPI; El Paso 2025-2026 component reference table; for internal cost understanding
+- **Rebar Development Length Calculator** (Ctrl+Shift+Alt+F8) — ACI 318-19 §25.4.2.4; tension development length for deformed bars; inputs: bar size (#3–#11 with db and Ab), f'c, fy, cover, clear spacing, bar location (top/bottom ψt), coating (uncoated/epoxy ψe), concrete type (NW/LW λ); calculates ψt×ψe product (capped at 1.7), ψs (0.8 for #6 and smaller), ℓd per Eq. 25.4.2.4a; enforces 12" minimum per §25.4.2.1; bar size reference table with db, Ab, ψs; printable calculation
+- **Form Release Agent Coverage Calculator** (Ctrl+Shift+Alt+F9) — ACI 347R-14 / OSHA; calculate release agent quantity for SFCA; select type (oil-based, water-based emulsion, chemical reactive, wax emulsion, vegetable bio, form liner); inputs: SFCA, application method (spray/roller/brush/rag), form material factor, reuse count (less needed after 1st use), waste %; calculates adjusted coverage rate, net gallons, with waste, material cost, $/SFCA; 6-type reference table; application tips
+
+### Commits:
+- 750974a (Session #207) — 368 lines
+- File now at ~222,867 lines total
+- New shortcuts: Ctrl+Shift+Alt+F7 (Mix Cost), Ctrl+Shift+Alt+F8 (Dev Length), Ctrl+Shift+Alt+F9 (Form Release)
+
+---
+
+## ✅ SESSION: Apr 7, 2026 - 13:52 UTC (Overnight Cron #206)
+**Status:** ✅ THREE NEW FEATURES added (+421 lines)
+
+### Session #206 — 💊🔩📦 (+421 lines)
+- **Curing Compound Coverage Calculator** (Ctrl+Shift+Alt+F4) — ACI 308R-16 / ASTM C309 / ASTM C1315; select compound type (white pigmented, clear resin, dissipating, wax-based, water-based acrylic, wet cure burlap); enter slab area, application method (spray/roller/brush), coats, waste%; auto-adjusts coverage rate by method; calculates net gallons, order qty with waste, material cost, cost/SF; 6-card KPI; full reference table with ASTM types, coverage rates, $/gal (El Paso 2025), best use notes; printable curing estimate
+- **Formwork Tie Spacing Calculator** (Ctrl+Shift+Alt+F5) — ACI 347.2R-05; calculate lateral pressure using ACI 347.2R formula p = Cw × Cc × [150 + 9000R/T]; inputs: wall height, pour rate, concrete temp, unit weight, cement type factor (I/II, III, retarded); select tie type (snap tie 3/16"-1/4", she-bolt 5/8"-1", coil rod, taper tie) with working load capacities; auto-detects full hydrostatic condition (R>7, H>14, retarded); calculates max horizontal spacing, recommended spacing (6" increments), load per tie, utilization %, total ties for wall; tie capacity reference table; printable tie spacing calculation
+- **Batch Plant Order Confirmation Generator** (Ctrl+Shift+Alt+F6) — ASTM C94; create printable concrete order confirmation for fax/email to batch plant; inputs: project/pour area, date, first truck time, total yd³, truck size, interval, contact/phone; mix specs: f'c, mix code, slump, max agg, air content, fiber, admixtures; special instructions textarea; generates formatted order confirmation with delivery schedule, mix specifications section, special instructions callout, ASTM C94 reminders; print-ready layout
+
+### Commits:
+- 381b8ca (Session #206) — 421 lines
+- File now at ~222,499 lines total
+- New shortcuts: Ctrl+Shift+Alt+F4 (Curing Compound), Ctrl+Shift+Alt+F5 (Tie Spacing), Ctrl+Shift+Alt+F6 (Batch Order)
+
+---
+
+## ✅ SESSION: Apr 7, 2026 - 13:52 UTC (Overnight Cron #205)
+**Status:** ✅ THREE NEW FEATURES added (+422 lines)
+
+### Session #205 — 📳🦺🧪 (+422 lines)
+- **Concrete Vibrator Spacing & Coverage Planner** (Ctrl+Alt+Shift+F10) — ACI 309R-05; select vibrator head diameter (1½"–6") → get radius of action (ROA), max insertion spacing (1.5×ROA), insertion grid for element dimensions; calculates total insertions, est. vibration time, vibrators needed (+ spare per ACI 309R); lift height logic for walls/columns; ACI 309R full reference table with ROA, withdrawal rate, best use per diameter; key rules (penetrate previous lift 6", 5–15 sec per insertion, 3"/sec withdrawal, ≥3" from forms); printable vibrator consolidation plan
+- **Pour Day Incident & Near-Miss Log** (Ctrl+Alt+Shift+F11) — OSHA 29 CFR 1904 / OSHA 1926; document safety incidents during pours (near miss, first aid, recordable injury, lost time injury, property damage, environmental spill, equipment failure, QC issue); severity levels (LOW/MODERATE/HIGH/CRITICAL); person involved, reporter, description, corrective actions; 4-card KPI (total, near misses, recordable/LTI, high/critical); alert banner when recordable or critical incidents exist; OSHA reporting requirements reference table (fatality 8hr, hospitalization 24hr, recordable 7d on Form 300); El Paso OSHA office contact; printable incident log
+- **Slump Cone & Air Test Quick Log** (Ctrl+Alt+Shift+F12) — ASTM C143 (Slump) / ASTM C231 (Air) / ASTM C1064 (Temp); set spec limits once (min/max slump, min/max air, temp range, f'c); log each load with ticket#, slump, air%, temp, time; auto-flags violations (LOW SLUMP, OVER SLUMP, LOW AIR, OVER AIR, HOT >90°F ACI 305R, COLD <50°F ACI 306R); 5-card KPI (tests, passed, flagged, over slump, hot loads); ⏱ Now button for time; printable field test log with pass/flag status
+
+### Commits:
+- 47a4a5a (Session #205) — 422 lines
+- File now at ~222,078 lines total
+- New shortcuts: Ctrl+Alt+Shift+F10 (Vibrator Plan), Ctrl+Alt+Shift+F11 (Incident Log), Ctrl+Alt+Shift+F12 (Slump/Air Log)
+
+---
+
+## ✅ SESSION: Apr 7, 2026 - 12:47 UTC (Overnight Cron #204)
+**Status:** ✅ THREE NEW FEATURES added (+382 lines)
+
+### Session #204 — ⏱📋🔧 (+382 lines)
+- **Pour Duration & Completion Log** (Ctrl+Alt+Shift+F7) — ACI 304R / ACI 302.1R; log pour start/end times, ordered vs actual yd³, truck count, crew size; auto-calculates duration, placement rate (yd³/hr), waste %; 4-card KPI (events, total yd³, trucks, avg rate); color-coded waste % (green <5%, amber <8%, red >8%); ⏱ Now buttons for quick time capture; printable completion log; ACI benchmark flatwork 0.8–1.5 yd³/labor-hr
+- **Concrete Surface Finish Spec Selector** (Ctrl+Alt+Shift+F8) — ACI 302.1R-15 / ACI 310R-13 / TR-34; 7 finish types (F1 rough broom / F2 light broom / F3 trowel / F4 hard trowel/burnished / F5 exposed aggregate / F6 stamped / F7 superflat VNA); per-type: applications, code reference, F-number requirements, step-by-step procedure, required materials, El Paso specific notes (summer evap, stamping timing, ride-on trowel minimum); printable spec sheet per finish
+- **Field Mix Adjustment Log** (Ctrl+Alt+Shift+F9) — ASTM C94 §11.8 / ACI 212.3R; document every field adjustment to plastic concrete (water addition, HRWR/superplasticizer, retarder, accelerator, AEA, fiber, other); ASTM C94 violation auto-detection when water addition exceeds 1 gal/yd³ limit; risk badges (HIGH/MED/LOW) per adjustment type; ticket # and load size tracking; authorized-by field; per-load violation alert; printable adjustment log for QC/legal records; ASTM C94 / ACI 212.3R reference table
+
+### Commits:
+- d59cfd7 (Session #204) — 382 lines
+- File now at ~221,656 lines total
+- New shortcuts: Ctrl+Alt+Shift+F7 (Pour Duration Log), Ctrl+Alt+Shift+F8 (Surface Finish Spec), Ctrl+Alt+Shift+F9 (Field Mix Adj Log)
+
+---
+
+## ✅ SESSION: Apr 7, 2026 - 11:43 UTC (Overnight Cron #203)
+**Status:** ✅ THREE NEW FEATURES added (+398 lines)
+
+### Session #203 — 🚛📊🔬 (+398 lines)
+- **Ready-Mix Truck Fleet Calculator** (Ctrl+Alt+Shift+F4) — ACI 304R §4.4 / ASTM C94 §11.8; calculate trucks needed for continuous pour based on batch plant distance, speed, batch/load/unload times; cycle time breakdown; trucks in rotation; truck interval; pour duration; ASTM C94 90-min warning when cycle from batch to discharge exceeds limit; per-truck interval warning when <15 min; one-truck alert for standby recommendation; auto-generated delivery schedule (first truck 6:00 AM) up to 15 trucks; total concrete cost; El Paso notes (I-10 congestion, batch queue)
+- **Required Average Strength f'cr Calculator** (Ctrl+Alt+Shift+F5) — ACI 318-19 §26.4.3.1 / ACI 301-16 §4.2.3 / ACI 214R-11; calculate f'cr to provide batch plant based on statistical standard deviation; three data availability modes: 30+ records (Eq.1 vs Eq.2, use max), 15–29 records (ACI 214R-11 Table 5.1 correction factor), <15 records (ACI 318 Table 26.4.3.1 prescribed values); both equations shown with governing highlighted; overage PSI and % over spec; practical note on giving batch plant f'cr not f'c; El Paso batch plant note
+- **Cylinder Set Acceptance Checker** (Ctrl+Alt+Shift+F6) — ACI 318-19 §26.12.3; evaluate 1–5 cylinder sets (2 cylinders each) against both acceptance criteria: Criterion 1 (avg of any 3 consecutive sets ≥ f'c) and Criterion 2 (no set avg below f'c − 500 PSI for f'c ≤ 5000, or f'c − 0.10×f'c for f'c > 5000); per-set table (Cyl A, Cyl B, set avg, vs f'c delta, Crit 2 pass/fail); overall PASS/FAIL verdict; §26.12.4 investigation protocol when failing (cores, core acceptance ≥0.85f'c, structural analysis)
+
+### Commits:
+- 63927a3 (Session #203) — 398 lines
+- File now at ~221,275 lines total
+- New shortcuts: Ctrl+Alt+Shift+F4 (Truck Fleet), Ctrl+Alt+Shift+F5 (f'cr Calc), Ctrl+Alt+Shift+F6 (Cylinder Check)
+
+---
+
 ## ✅ SESSION: Apr 7, 2026 - 10:37 UTC (Overnight Cron #202)
 **Status:** ✅ THREE NEW FEATURES added (+528 lines)
 
