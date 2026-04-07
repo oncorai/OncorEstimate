@@ -222497,3 +222497,371 @@ document.addEventListener('keydown',function(e){
 })();
 </script>
 <!-- END SESSION #206 -->
+
+<!-- SESSION #207 — Concrete Mix Cost Breakdown Estimator (Ctrl+Shift+Alt+F7) + Rebar Development Length Calculator (Ctrl+Shift+Alt+F8) + Form Release Agent Coverage Calculator (Ctrl+Shift+Alt+F9) -->
+<script>
+(function(){
+'use strict';
+// ─── SESSION #207 HELPERS ────────────────────────────────────────────────────
+function _sb207(label,id,color){
+  var btn=document.createElement('button');
+  btn.textContent=label;
+  btn.style.cssText='display:block;width:100%;margin:2px 0;padding:5px 8px;background:'+color+';color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:10px;text-align:left;';
+  btn.onclick=function(){var m=document.getElementById(id);if(m)m.style.display=m.style.display==='none'?'flex':'none';};
+  var sb=document.querySelector('.sidebar-content')||document.querySelector('#sidebar')||document.querySelector('.controls-panel');
+  if(sb)sb.appendChild(btn);
+}
+function _modal207(id,title,content){
+  var existing=document.getElementById(id);
+  if(existing)return;
+  var m=document.createElement('div');
+  m.id=id;
+  m.style.cssText='display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:99999;flex-direction:column;align-items:center;justify-content:center;';
+  m.innerHTML='<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;width:96%;max-width:880px;max-height:92vh;overflow-y:auto;padding:16px;position:relative;">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid #334155;padding-bottom:8px;">'
+    +'<span style="color:#f1f5f9;font-size:14px;font-weight:700;">'+title+'</span>'
+    +'<button onclick="document.getElementById(\''+id+'\').style.display=\'none\';" style="background:#ef4444;border:none;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer;">✕</button>'
+    +'</div>'
+    +'<div id="'+id+'-body">'+content+'</div>'
+    +'</div>';
+  m.addEventListener('click',function(e){if(e.target===m)m.style.display='none';});
+  document.body.appendChild(m);
+}
+function _kpi207(cards){
+  var h='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:12px;">';
+  cards.forEach(function(c){
+    h+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center;">'
+      +'<div style="color:#94a3b8;font-size:9px;margin-bottom:4px;">'+c[0]+'</div>'
+      +'<div style="color:'+(c[2]||'#38bdf8')+';font-size:16px;font-weight:700;">'+c[1]+'</div>'
+      +'</div>';
+  });
+  h+='</div>';
+  return h;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOL 1: CONCRETE MIX COST BREAKDOWN ESTIMATOR (Ctrl+Shift+Alt+F7)
+// ACI 211.1 / ASTM C94 — Estimate ready-mix concrete component costs
+// ═══════════════════════════════════════════════════════════════════════════
+var _mixBody='<div style="font-size:9px;color:#94a3b8;margin-bottom:10px;">Estimate batch plant concrete cost breakdown per yd³. Based on typical El Paso 2025-2026 ready-mix component costs. For internal understanding of concrete pricing — not for plant negotiation.</div>'
+  +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Cement (lbs/yd³)</label><br><input id="mx-cement" type="number" onchange="window._calcMix();" oninput="window._calcMix();" value="564" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Cement Cost ($/ton)</label><br><input id="mx-cementcost" type="number" onchange="window._calcMix();" oninput="window._calcMix();" value="160" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Fine Agg (lbs/yd³)</label><br><input id="mx-sand" type="number" onchange="window._calcMix();" oninput="window._calcMix();" value="1350" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Fine Agg ($/ton)</label><br><input id="mx-sandcost" type="number" onchange="window._calcMix();" oninput="window._calcMix();" value="28" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Coarse Agg (lbs/yd³)</label><br><input id="mx-rock" type="number" onchange="window._calcMix();" oninput="window._calcMix();" value="1800" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Coarse Agg ($/ton)</label><br><input id="mx-rockcost" type="number" onchange="window._calcMix();" oninput="window._calcMix();" value="26" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Water (gal/yd³)</label><br><input id="mx-water" type="number" step="0.5" onchange="window._calcMix();" oninput="window._calcMix();" value="34" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Water ($/1000 gal)</label><br><input id="mx-watercost" type="number" onchange="window._calcMix();" oninput="window._calcMix();" value="8" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Admix (oz/cwt cement)</label><br><input id="mx-admix" type="number" step="0.5" onchange="window._calcMix();" oninput="window._calcMix();" value="6" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Admix ($/gal)</label><br><input id="mx-admixcost" type="number" onchange="window._calcMix();" oninput="window._calcMix();" value="18" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Fiber (lbs/yd³)</label><br><input id="mx-fiber" type="number" step="0.5" onchange="window._calcMix();" oninput="window._calcMix();" value="0" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Fiber ($/lb)</label><br><input id="mx-fibercost" type="number" step="0.1" onchange="window._calcMix();" oninput="window._calcMix();" value="1.50" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Batch Plant OH ($/yd³)</label><br><input id="mx-oh" type="number" onchange="window._calcMix();" oninput="window._calcMix();" value="35" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Delivery ($/yd³)</label><br><input id="mx-delivery" type="number" onchange="window._calcMix();" oninput="window._calcMix();" value="25" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Plant Margin %</label><br><input id="mx-margin" type="number" onchange="window._calcMix();" oninput="window._calcMix();" value="15" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Total Order (yd³)</label><br><input id="mx-qty" type="number" onchange="window._calcMix();" oninput="window._calcMix();" value="50" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'</div>'
+  +'<div id="mx-results" style="margin-bottom:12px;"></div>'
+  +'<div style="background:#1e293b;border-radius:6px;padding:10px;">'
+  +'<div style="color:#f59e0b;font-size:10px;font-weight:700;margin-bottom:6px;">📋 El Paso 2025-2026 Typical Mix Component Reference</div>'
+  +'<table style="width:100%;border-collapse:collapse;font-size:9px;">'
+  +'<tr style="background:#0f172a;"><th style="padding:4px;color:#94a3b8;text-align:left;">Component</th><th style="padding:4px;color:#94a3b8;">Typical Range</th><th style="padding:4px;color:#94a3b8;">Unit Cost</th><th style="padding:4px;color:#94a3b8;">Notes</th></tr>'
+  +'<tr><td style="padding:4px;color:#f1f5f9;">Type I/II Cement</td><td style="padding:4px;color:#38bdf8;">470–658 lbs/yd³</td><td style="padding:4px;color:#22c55e;">$150–175/ton</td><td style="padding:4px;color:#94a3b8;">Higher cement = higher PSI</td></tr>'
+  +'<tr><td style="padding:4px;color:#f1f5f9;">Fine Aggregate (Sand)</td><td style="padding:4px;color:#38bdf8;">1200–1500 lbs/yd³</td><td style="padding:4px;color:#22c55e;">$25–32/ton</td><td style="padding:4px;color:#94a3b8;">ASTM C33 concrete sand</td></tr>'
+  +'<tr><td style="padding:4px;color:#f1f5f9;">Coarse Aggregate</td><td style="padding:4px;color:#38bdf8;">1700–2000 lbs/yd³</td><td style="padding:4px;color:#22c55e;">$24–30/ton</td><td style="padding:4px;color:#94a3b8;">3/4" or 1" limestone/gravel</td></tr>'
+  +'<tr><td style="padding:4px;color:#f1f5f9;">HRWR/Plasticizer</td><td style="padding:4px;color:#38bdf8;">4–8 oz/cwt</td><td style="padding:4px;color:#22c55e;">$15–25/gal</td><td style="padding:4px;color:#94a3b8;">ASTM C494 Type F</td></tr>'
+  +'<tr><td style="padding:4px;color:#f1f5f9;">Synthetic Fiber</td><td style="padding:4px;color:#38bdf8;">1.5–3 lbs/yd³</td><td style="padding:4px;color:#22c55e;">$1.25–2.00/lb</td><td style="padding:4px;color:#94a3b8;">Optional — shrinkage control</td></tr>'
+  +'</table>'
+  +'</div>'
+  +'<button onclick="window._printMix();" style="background:#0369a1;border:none;color:#fff;border-radius:4px;padding:7px 16px;cursor:pointer;font-size:11px;margin-top:10px;">🖨️ Print Cost Breakdown</button>';
+
+_modal207('s207-mix','💰 Concrete Mix Cost Breakdown Estimator — ACI 211.1',_mixBody);
+
+window._calcMix=function(){
+  var cement=parseFloat(document.getElementById('mx-cement').value)||564;
+  var cementCost=parseFloat(document.getElementById('mx-cementcost').value)||160;
+  var sand=parseFloat(document.getElementById('mx-sand').value)||1350;
+  var sandCost=parseFloat(document.getElementById('mx-sandcost').value)||28;
+  var rock=parseFloat(document.getElementById('mx-rock').value)||1800;
+  var rockCost=parseFloat(document.getElementById('mx-rockcost').value)||26;
+  var water=parseFloat(document.getElementById('mx-water').value)||34;
+  var waterCost=parseFloat(document.getElementById('mx-watercost').value)||8;
+  var admix=parseFloat(document.getElementById('mx-admix').value)||6;
+  var admixCost=parseFloat(document.getElementById('mx-admixcost').value)||18;
+  var fiber=parseFloat(document.getElementById('mx-fiber').value)||0;
+  var fiberCost=parseFloat(document.getElementById('mx-fibercost').value)||1.5;
+  var oh=parseFloat(document.getElementById('mx-oh').value)||35;
+  var delivery=parseFloat(document.getElementById('mx-delivery').value)||25;
+  var margin=parseFloat(document.getElementById('mx-margin').value)||15;
+  var qty=parseFloat(document.getElementById('mx-qty').value)||50;
+  // Calculate per-yd³ costs
+  var cementPerYd=cement/2000*cementCost;
+  var sandPerYd=sand/2000*sandCost;
+  var rockPerYd=rock/2000*rockCost;
+  var waterPerYd=water/1000*waterCost;
+  var admixOz=admix*(cement/100);
+  var admixGal=admixOz/128;
+  var admixPerYd=admixGal*admixCost;
+  var fiberPerYd=fiber*fiberCost;
+  var materialsCost=cementPerYd+sandPerYd+rockPerYd+waterPerYd+admixPerYd+fiberPerYd;
+  var directCost=materialsCost+oh+delivery;
+  var sellingPrice=directCost*(1+margin/100);
+  var totalOrder=sellingPrice*qty;
+  var res=document.getElementById('mx-results');
+  if(!res)return;
+  res.innerHTML=_kpi207([
+    ['Materials Cost','$'+materialsCost.toFixed(2)+'/yd³','#38bdf8'],
+    ['+ OH + Delivery','$'+(oh+delivery).toFixed(2)+'/yd³','#f59e0b'],
+    ['Direct Cost','$'+directCost.toFixed(2)+'/yd³','#a78bfa'],
+    ['Selling Price (+'+margin+'%)','$'+sellingPrice.toFixed(2)+'/yd³','#22c55e'],
+    ['Order Total ('+qty+' yd³)','$'+totalOrder.toLocaleString(undefined,{maximumFractionDigits:0}),'#22c55e']
+  ])
+  +'<div style="background:#1e3a5f;border-radius:4px;padding:8px;font-size:10px;color:#e2e8f0;margin-top:4px;">'
+  +'<strong>Cost Breakdown per yd³:</strong>'
+  +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:6px;font-size:9px;">'
+  +'<div>Cement: $'+cementPerYd.toFixed(2)+'</div>'
+  +'<div>Sand: $'+sandPerYd.toFixed(2)+'</div>'
+  +'<div>Rock: $'+rockPerYd.toFixed(2)+'</div>'
+  +'<div>Water: $'+waterPerYd.toFixed(2)+'</div>'
+  +'<div>Admix: $'+admixPerYd.toFixed(2)+'</div>'
+  +'<div>Fiber: $'+fiberPerYd.toFixed(2)+'</div>'
+  +'<div>Batch OH: $'+oh.toFixed(2)+'</div>'
+  +'<div>Delivery: $'+delivery.toFixed(2)+'</div>'
+  +'<div>Margin: $'+(sellingPrice-directCost).toFixed(2)+'</div>'
+  +'</div></div>';
+};
+
+setTimeout(window._calcMix,500);
+
+window._printMix=function(){
+  window._calcMix();
+  var cement=parseFloat(document.getElementById('mx-cement').value)||564;
+  var sellingPrice=parseFloat(document.getElementById('mx-results').querySelector('.font-size\\:16px')?.textContent.replace('$',''))||180;
+  var w=window.open('','_blank');
+  w.document.write('<!DOCTYPE html><html><head><title>Concrete Mix Cost Breakdown</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{font-size:14px;color:#1e3a5f;}table{width:100%;border-collapse:collapse;margin:10px 0;}th,td{border:1px solid #ccc;padding:5px;text-align:left;}th{background:#1e3a5f;color:#fff;}</style></head><body><h2>Concrete Mix Cost Breakdown</h2><p>ACI 211.1 | El Paso 2025-2026 Typical Costs</p><p>See detailed breakdown in app. Cement: '+cement+' lbs/yd³</p><p style="font-size:9px;color:#666;">For internal use only — actual batch plant pricing varies.</p></body></html>');
+  w.document.close();w.print();
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOL 2: REBAR DEVELOPMENT LENGTH CALCULATOR (Ctrl+Shift+Alt+F8)
+// ACI 318-19 §25.4 — Tension development length for deformed bars
+// ═══════════════════════════════════════════════════════════════════════════
+var _barSizes=[
+  {size:'#3',db:0.375,Ab:0.11},
+  {size:'#4',db:0.500,Ab:0.20},
+  {size:'#5',db:0.625,Ab:0.31},
+  {size:'#6',db:0.750,Ab:0.44},
+  {size:'#7',db:0.875,Ab:0.60},
+  {size:'#8',db:1.000,Ab:0.79},
+  {size:'#9',db:1.128,Ab:1.00},
+  {size:'#10',db:1.270,Ab:1.27},
+  {size:'#11',db:1.410,Ab:1.56}
+];
+
+var _devBody='<div style="font-size:9px;color:#94a3b8;margin-bottom:10px;">ACI 318-19 §25.4 tension development length calculator. Enter bar size, f\'c, fy, cover, spacing, coating → get ℓd per ACI 318-19 Eq. 25.4.2.4a with modification factors.</div>'
+  +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Bar Size</label><br><select id="dev-bar" onchange="window._calcDev();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +_barSizes.map(function(b,i){return '<option value="'+i+'">'+b.size+' (d<sub>b</sub>='+b.db+'")</option>';}).join('')
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">f\'c (PSI)</label><br><select id="dev-fc" onchange="window._calcDev();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +'<option>3000</option><option selected>4000</option><option>4500</option><option>5000</option><option>6000</option>'
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">fy (PSI)</label><br><select id="dev-fy" onchange="window._calcDev();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +'<option selected>60000</option><option>40000</option><option>80000</option>'
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Cover (in)</label><br><input id="dev-cover" type="number" step="0.25" onchange="window._calcDev();" oninput="window._calcDev();" value="1.5" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Clear Spacing (in)</label><br><input id="dev-spacing" type="number" step="0.5" onchange="window._calcDev();" oninput="window._calcDev();" value="3" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Bar Location</label><br><select id="dev-loc" onchange="window._calcDev();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +'<option value="1.0">Bottom (ψ<sub>t</sub>=1.0)</option><option value="1.3">Top (>12" concrete below, ψ<sub>t</sub>=1.3)</option>'
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Coating</label><br><select id="dev-coat" onchange="window._calcDev();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +'<option value="1.0">Uncoated (ψ<sub>e</sub>=1.0)</option><option value="1.5">Epoxy, cover<3d<sub>b</sub> (ψ<sub>e</sub>=1.5)</option><option value="1.2">Epoxy, cover≥3d<sub>b</sub> (ψ<sub>e</sub>=1.2)</option>'
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Concrete Type</label><br><select id="dev-lwt" onchange="window._calcDev();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +'<option value="1.0">Normal Weight (λ=1.0)</option><option value="0.75">Lightweight (λ=0.75)</option>'
+  +'</select></div>'
+  +'</div>'
+  +'<div id="dev-results" style="margin-bottom:12px;"></div>'
+  +'<div style="background:#1e293b;border-radius:6px;padding:10px;">'
+  +'<div style="color:#f59e0b;font-size:10px;font-weight:700;margin-bottom:6px;">📋 ACI 318-19 §25.4.2.4 Development Length Formula</div>'
+  +'<div style="color:#f1f5f9;font-size:10px;font-family:monospace;background:#0f172a;padding:8px;border-radius:4px;margin-bottom:8px;">ℓ<sub>d</sub> = [f<sub>y</sub> × ψ<sub>t</sub> × ψ<sub>e</sub> × ψ<sub>s</sub> × ψ<sub>g</sub> / (25 × λ × √f\'c)] × d<sub>b</sub></div>'
+  +'<div style="color:#64748b;font-size:9px;">ψ<sub>t</sub> = bar location factor | ψ<sub>e</sub> = coating factor | ψ<sub>s</sub> = bar size factor (#6 and smaller = 0.8, #7+ = 1.0) | ψ<sub>g</sub> = grade factor (Grade 60 = 1.0) | λ = lightweight factor</div>'
+  +'<table style="width:100%;border-collapse:collapse;font-size:9px;margin-top:8px;">'
+  +'<tr style="background:#0f172a;"><th style="padding:4px;color:#94a3b8;text-align:left;">Bar Size</th><th style="padding:4px;color:#94a3b8;">d<sub>b</sub> (in)</th><th style="padding:4px;color:#94a3b8;">A<sub>b</sub> (in²)</th><th style="padding:4px;color:#94a3b8;">ψ<sub>s</sub></th></tr>'
+  +_barSizes.map(function(b){
+    return '<tr style="border-bottom:1px solid #0f172a;"><td style="padding:4px;color:#f1f5f9;">'+b.size+'</td><td style="padding:4px;color:#38bdf8;">'+b.db+'</td><td style="padding:4px;color:#22c55e;">'+b.Ab+'</td><td style="padding:4px;color:#f59e0b;">'+(b.db<=0.75?'0.8':'1.0')+'</td></tr>';
+  }).join('')
+  +'</table>'
+  +'</div>'
+  +'<button onclick="window._printDev();" style="background:#0369a1;border:none;color:#fff;border-radius:4px;padding:7px 16px;cursor:pointer;font-size:11px;margin-top:10px;">🖨️ Print Dev Length Calc</button>';
+
+_modal207('s207-dev','📏 Rebar Development Length Calculator — ACI 318-19 §25.4',_devBody);
+
+window._calcDev=function(){
+  var barIdx=parseInt(document.getElementById('dev-bar').value)||0;
+  var bar=_barSizes[barIdx];
+  var fc=parseInt(document.getElementById('dev-fc').value)||4000;
+  var fy=parseInt(document.getElementById('dev-fy').value)||60000;
+  var cover=parseFloat(document.getElementById('dev-cover').value)||1.5;
+  var spacing=parseFloat(document.getElementById('dev-spacing').value)||3;
+  var psi_t=parseFloat(document.getElementById('dev-loc').value)||1.0;
+  var psi_e=parseFloat(document.getElementById('dev-coat').value)||1.0;
+  var lambda=parseFloat(document.getElementById('dev-lwt').value)||1.0;
+  var psi_s=(bar.db<=0.75)?0.8:1.0;// #6 and smaller
+  var psi_g=1.0;// Grade 60
+  // ACI 318-19 Eq. 25.4.2.4a (simplified)
+  var sqrtFc=Math.sqrt(fc);
+  var ld_calc=(fy*psi_t*psi_e*psi_s*psi_g/(25*lambda*sqrtFc))*bar.db;
+  // Minimum ℓd = 12" per ACI 318-19 §25.4.2.1
+  var ld=Math.max(ld_calc,12);
+  // Check cb + Ktr / db (use cb = cover + db/2 for simple check)
+  var cb=Math.min(cover+bar.db/2,spacing/2);
+  var cbKtr_db=(cb+0)/bar.db;// Ktr=0 conservative
+  var cbKtr_db_used=Math.min(cbKtr_db,2.5);// capped at 2.5 per ACI 318-19
+  // Products limit
+  var psi_te=psi_t*psi_e;
+  if(psi_te>1.7)psi_te=1.7;
+  // Round up to nearest inch
+  var ld_use=Math.ceil(ld);
+  var res=document.getElementById('dev-results');
+  if(!res)return;
+  res.innerHTML=_kpi207([
+    ['Bar Size',bar.size,'#38bdf8'],
+    ['d<sub>b</sub>',bar.db+'"','#38bdf8'],
+    ['ψ<sub>t</sub> × ψ<sub>e</sub>',psi_te.toFixed(2),'#f59e0b'],
+    ['ψ<sub>s</sub>',psi_s.toFixed(1),'#f59e0b'],
+    ['Calc ℓ<sub>d</sub>',ld_calc.toFixed(1)+'"','#a78bfa'],
+    ['Use ℓ<sub>d</sub>',ld_use+'"','#22c55e']
+  ])
+  +'<div style="background:#1e3a5f;border-radius:4px;padding:8px;font-size:10px;color:#e2e8f0;margin-top:4px;">'
+  +'<strong>Calculation:</strong> ℓ<sub>d</sub> = ['+fy+' × '+psi_t+' × '+psi_e+' × '+psi_s+' × '+psi_g+' / (25 × '+lambda+' × √'+fc+')] × '+bar.db+'" = '+ld_calc.toFixed(1)+'"'
+  +'<br><strong>Min ℓ<sub>d</sub> = 12"</strong> (ACI 318-19 §25.4.2.1) → <strong style="color:#22c55e;">Use ℓ<sub>d</sub> = '+ld_use+'"</strong>'
+  +'<br><span style="color:#f59e0b;font-size:9px;">Note: c<sub>b</sub>+K<sub>tr</sub>/d<sub>b</sub> = '+(cbKtr_db).toFixed(2)+' '+(cbKtr_db>2.5?'(capped at 2.5)':'')+'. For hooked bars or confined conditions, ℓ<sub>d</sub> can be reduced per §25.4.3.</span>'
+  +'</div>';
+};
+
+setTimeout(window._calcDev,550);
+
+window._printDev=function(){
+  window._calcDev();
+  var barIdx=parseInt(document.getElementById('dev-bar').value)||0;
+  var bar=_barSizes[barIdx];
+  var ld_use=Math.ceil(parseFloat(document.getElementById('dev-results').innerText.match(/Use ℓd\s*(\d+)/)?.[1])||12);
+  var w=window.open('','_blank');
+  w.document.write('<!DOCTYPE html><html><head><title>Rebar Development Length</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{font-size:14px;color:#1e3a5f;}</style></head><body><h2>Rebar Development Length — ACI 318-19 §25.4</h2><p>Bar: '+bar.size+' | d<sub>b</sub> = '+bar.db+'" | <strong>ℓ<sub>d</sub> = '+ld_use+'"</strong></p><p style="font-size:9px;color:#666;">Per ACI 318-19 Eq. 25.4.2.4a | Verify with EOR</p></body></html>');
+  w.document.close();w.print();
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOL 3: FORM RELEASE AGENT COVERAGE CALCULATOR (Ctrl+Shift+Alt+F9)
+// ACI 347R-14 / OSHA — Release agent quantity for SFCA
+// ═══════════════════════════════════════════════════════════════════════════
+var _releaseTypes=[
+  {type:'Oil-Based (Diesel/Mineral)',rate:[300,400],cost:4.50,note:'Traditional — inexpensive but stains concrete. Not for architectural.'},
+  {type:'Water-Based Emulsion',rate:[400,600],cost:8.00,note:'Clean, low-odor, easy cleanup. Good for architectural. LEED compliant.'},
+  {type:'Chemical Release (Reactive)',rate:[500,700],cost:12.00,note:'Creates soap film reaction. Premium finish. Best for architectural.'},
+  {type:'Wax Emulsion',rate:[350,500],cost:9.00,note:'Weather-resistant film. Good for multiple reuses.'},
+  {type:'Vegetable Oil-Based (Bio)',rate:[400,550],cost:11.00,note:'Eco-friendly. Biodegradable. LEED points.'},
+  {type:'Form Liner Release',rate:[200,300],cost:18.00,note:'For textured form liners. Heavier application needed.'}
+];
+
+var _relBody='<div style="font-size:9px;color:#94a3b8;margin-bottom:10px;">Calculate form release agent quantity for SFCA. ACI 347R-14: Apply thin, uniform coat — excess causes surface defects. Over-application = bug holes + staining.</div>'
+  +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Total SFCA (SF)</label><br><input id="rel-sfca" type="number" onchange="window._calcRel();" oninput="window._calcRel();" value="5000" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Release Agent Type</label><br><select id="rel-type" onchange="window._calcRel();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +_releaseTypes.map(function(r,i){return '<option value="'+i+'">'+r.type+'</option>';}).join('')
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Application Method</label><br><select id="rel-method" onchange="window._calcRel();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +'<option value="spray">Spray Gun (recommended)</option><option value="roller">Roller</option><option value="brush">Brush</option><option value="rag">Rag Wipe</option>'
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Form Material</label><br><select id="rel-form" onchange="window._calcRel();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +'<option value="1.0">Plywood/MDO (1.0×)</option><option value="0.9">Steel (0.9×)</option><option value="1.2">Fiberglass (1.2×)</option><option value="1.5">Form Liner (1.5×)</option>'
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Reuse Count</label><br><select id="rel-reuse" onchange="window._calcRel();" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;">'
+  +'<option value="1">1st Use</option><option value="2">2nd Use</option><option value="3">3rd+ Use</option>'
+  +'</select></div>'
+  +'<div><label style="color:#94a3b8;font-size:9px;">Waste/Overlap %</label><br><input id="rel-waste" type="number" onchange="window._calcRel();" oninput="window._calcRel();" value="15" style="width:100%;background:#1e293b;color:#f1f5f9;border:1px solid #475569;border-radius:4px;padding:5px;font-size:11px;"></div>'
+  +'</div>'
+  +'<div id="rel-results" style="margin-bottom:12px;"></div>'
+  +'<div style="background:#1e293b;border-radius:6px;padding:10px;">'
+  +'<div style="color:#f59e0b;font-size:10px;font-weight:700;margin-bottom:6px;">📋 ACI 347R-14 Form Release Agent Reference</div>'
+  +'<table style="width:100%;border-collapse:collapse;font-size:9px;">'
+  +'<tr style="background:#0f172a;"><th style="padding:4px;color:#94a3b8;text-align:left;">Type</th><th style="padding:4px;color:#94a3b8;">Coverage SF/gal</th><th style="padding:4px;color:#94a3b8;">$/gal (EP 2025)</th><th style="padding:4px;color:#94a3b8;text-align:left;">Best Use</th></tr>'
+  +_releaseTypes.map(function(r){
+    return '<tr style="border-bottom:1px solid #0f172a;"><td style="padding:4px;color:#f1f5f9;">'+r.type+'</td><td style="padding:4px;color:#38bdf8;">'+r.rate[0]+'–'+r.rate[1]+'</td><td style="padding:4px;color:#22c55e;">$'+r.cost.toFixed(2)+'</td><td style="padding:4px;color:#94a3b8;">'+r.note+'</td></tr>';
+  }).join('')
+  +'</table>'
+  +'<div style="margin-top:8px;color:#64748b;font-size:9px;">Application tips: Apply 24–48 hrs before pour. Wipe excess from form face — only thin film needed. Excess causes bug holes, staining, and bond issues. Protect from rain/dust after application. Re-apply after rain or if forms sit >72 hrs.</div>'
+  +'</div>'
+  +'<button onclick="window._printRel();" style="background:#0369a1;border:none;color:#fff;border-radius:4px;padding:7px 16px;cursor:pointer;font-size:11px;margin-top:10px;">🖨️ Print Release Agent Estimate</button>';
+
+_modal207('s207-rel','🛢️ Form Release Agent Coverage Calculator — ACI 347R-14',_relBody);
+
+window._calcRel=function(){
+  var sfca=parseFloat(document.getElementById('rel-sfca').value)||5000;
+  var typeIdx=parseInt(document.getElementById('rel-type').value)||0;
+  var method=document.getElementById('rel-method').value;
+  var formFactor=parseFloat(document.getElementById('rel-form').value)||1.0;
+  var reuse=parseInt(document.getElementById('rel-reuse').value)||1;
+  var waste=parseFloat(document.getElementById('rel-waste').value)||15;
+  var rel=_releaseTypes[typeIdx];
+  // Method adjustment
+  var methodFactor=1.0;
+  if(method==='roller')methodFactor=1.1;
+  else if(method==='brush')methodFactor=1.2;
+  else if(method==='rag')methodFactor=0.8;
+  // Reuse adjustment (less needed after 1st use)
+  var reuseFactor=reuse===1?1.0:reuse===2?0.9:0.8;
+  var avgRate=(rel.rate[0]+rel.rate[1])/2;
+  var adjRate=avgRate/(formFactor*methodFactor*reuseFactor);
+  var netGal=sfca/adjRate;
+  var withWaste=netGal*(1+waste/100);
+  var totalCost=withWaste*rel.cost;
+  var costPerSFCA=totalCost/sfca;
+  var res=document.getElementById('rel-results');
+  if(!res)return;
+  res.innerHTML=_kpi207([
+    ['Adj. Coverage Rate',adjRate.toFixed(0)+' SF/gal','#38bdf8'],
+    ['Net Gallons',netGal.toFixed(1)+' gal','#22c55e'],
+    ['With Waste '+waste+'%',withWaste.toFixed(1)+' gal','#f59e0b'],
+    ['Material Cost','$'+totalCost.toFixed(0),'#22c55e'],
+    ['Cost per SFCA','$'+costPerSFCA.toFixed(4)+'/SF','#38bdf8']
+  ])
+  +'<div style="background:#1e3a5f;border-radius:4px;padding:8px;font-size:10px;color:#e2e8f0;margin-top:4px;">'
+  +'<strong>Summary:</strong> '+sfca.toLocaleString()+' SFCA × '+formFactor+' form factor × '+methodFactor+' method = <strong>'+withWaste.toFixed(1)+' gallons</strong> (incl. '+waste+'% waste) = <strong>$'+totalCost.toFixed(0)+'</strong>'
+  +'</div>';
+};
+
+setTimeout(window._calcRel,600);
+
+window._printRel=function(){
+  window._calcRel();
+  var sfca=parseFloat(document.getElementById('rel-sfca').value)||5000;
+  var typeIdx=parseInt(document.getElementById('rel-type').value)||0;
+  var rel=_releaseTypes[typeIdx];
+  var w=window.open('','_blank');
+  w.document.write('<!DOCTYPE html><html><head><title>Form Release Agent Estimate</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{font-size:14px;color:#1e3a5f;}</style></head><body><h2>Form Release Agent Coverage Estimate — ACI 347R-14</h2><p>SFCA: '+sfca.toLocaleString()+' SF | Type: '+rel.type+'</p><p>See detailed calculation in app.</p><p style="font-size:9px;color:#666;">Apply thin, uniform coat. Excess causes surface defects.</p></body></html>');
+  w.document.close();w.print();
+};
+
+
+// ─── SIDEBAR BUTTONS & KEYBOARD SHORTCUTS ───────────────────────────────────
+_sb207('💰 Mix Cost Breakdown','s207-mix','#065f46');
+_sb207('📏 Rebar Dev Length','s207-dev','#7c3aed');
+_sb207('🛢️ Form Release Calc','s207-rel','#b45309');
+
+document.addEventListener('keydown',function(e){
+  if(e.ctrlKey&&e.shiftKey&&e.altKey){
+    var k=e.key;
+    if(k==='F7'){e.preventDefault();var m=document.getElementById('s207-mix');if(m)m.style.display=m.style.display==='none'?'flex':'none';}
+    else if(k==='F8'){e.preventDefault();var m=document.getElementById('s207-dev');if(m)m.style.display=m.style.display==='none'?'flex':'none';}
+    else if(k==='F9'){e.preventDefault();var m=document.getElementById('s207-rel');if(m)m.style.display=m.style.display==='none'?'flex':'none';}
+  }
+});
+
+})();
+</script>
+<!-- END SESSION #207 -->
