@@ -1,5 +1,20 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 7, 2026 - 03:41 UTC (Overnight Cron #193)
+**Status:** ✅ THREE NEW FEATURES added (+293 lines)
+
+### Session #193 — 🚿🌡️⚠️ (+293 lines)
+- **Washout Volume Calculator** (Ctrl+Shift+F10) — EPA CGP 2022 §2.3.3 / TCEQ TXR150000 §III.F / ACI 304R; calculates SWPPP washout pit sizing from truck count, drum rinse volume, pump line volume, tool washout; configurable safety factor (1.25/1.5/2.0×); outputs design volume (gal), pit CF, approx dimensions, liner size; TCEQ key requirements (50ft setback from storm drains, no discharge, weekly inspection, El Paso MS4 permit)
+- **Mass Concrete Thermal Gradient Monitor** (Ctrl+Shift+F11) — ACI 207.1R / ACI 207.4R / ACI 301-16 §4.2.4 / ACI 306R §8.5; calculates adiabatic temperature rise from cement content + heat of hydration; estimates center vs surface differential; flags when differential exceeds ACI 207.4R 35°F limit; cement type factors (Type I/II 65 BTU, III 75, IP 55, IS 50); surface protection factor; mass concrete plan parameters (thermocouple required, protection period)
+- **Concrete Delamination Risk Checker** (Ctrl+Shift+F12) — ACI 302.1R §8.6 / ACI 305R / ACI 308R; scored risk assessment for flatwork delamination (0–100); factors: air entrainment (+30), high W/CM (+20), high evaporation (+20), finished early with sheen (+35), thin slab (+10), SCM/fly ash (+15); risk level LOW/MODERATE/HIGH/CRITICAL with remediation advice; El Paso specific notes on high evap + SCM slow set
+
+### Commits:
+- a8d0d8c (Session #193) — 293 lines
+- File now at ~217,297 lines total
+- New shortcuts: Ctrl+Shift+F10 (Washout), Ctrl+Shift+F11 (Thermal Gradient), Ctrl+Shift+F12 (Delamination Risk)
+
+---
+
 ## ✅ SESSION: Apr 7, 2026 - 02:24 UTC (Overnight Cron #192)
 **Status:** ✅ THREE NEW FEATURES added (+345 lines)
 
