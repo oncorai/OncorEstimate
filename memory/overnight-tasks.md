@@ -9586,6 +9586,21 @@ This verification pass confirmed all sessions are present and clean in the git h
 
 ---
 
+## ✅ SESSION: Apr 7, 2026 - 01:16 UTC (Overnight Cron #189)
+**Status:** ✅ THREE NEW FEATURES added (+391 lines)
+
+### Session #189 — 🔢🏗️📋 (+391 lines)
+- **Tie Wire & Rebar Chair Estimator** (Ctrl+Alt+Shift+F4) — CRSI Manual of Standard Practice / ACI 315; element type (SOG single mat, double mat, wall both faces, footing); bar sizes #3–#8 in each direction, spacing, chair spacing; auto-calculates intersections, wire lbs (with 17.5% waste), 3.5-lb rolls to order, chair count; configurable tie wire $/lb (El Paso 2025 $1.85) and chair cost; total material cost and $/SF; reference table with ties/lb by bar size combo; printable estimate
+- **Elevated Deck Concrete / Forming Cost Estimator** (Ctrl+Alt+Shift+F5) — SDI C-2022 / Vulcraft Tables / ACI 347R-14 / ACI 318-19 §I3.2d; deck profile selector (1½" VLR B-Deck, 2" VLI, 3" VLI, 4½" Deep, shored flat); flute fill CY per profile per 100 SF; slab area, thickness above deck, perimeter LF; concrete unit weight (NW/LW/Sand-LW); calculates: slab CY, flute fill CY, total order CY, truck count, dead load psf; cost breakdown: deck supply/install $/SF, edge forming $/LF, concrete $/CY, grand total, $/SF; deck profile reference table; printable estimate
+- **Project Mobilization Checklist** (Ctrl+Alt+Shift+F6) — AGC / OSHA 29 CFR 1926 / ACI 302.1R / TX Property Code; 7 categories, 38 items total (Permits & Approvals, Site Setup, Crew & Safety, Equipment, Materials, Submittals & Approvals, Coordination); project name/GC/mob date/foreman inputs; checkbox per item; live progress bar with % complete and READY/NOT READY status; Check All / Clear All; printable checklist with 3-column signature block (PM, Foreman, GC Rep); TX Property Code §53.056 NTO reminder and OSHA 811 utility locate reminder
+
+### Commits:
+- 5be7b3c (Session #189) — 391 lines
+- File now at ~215,880 lines total
+- New shortcuts: Ctrl+Alt+Shift+F4 (Tie Wire), Ctrl+Alt+Shift+F5 (Deck Forming), Ctrl+Alt+Shift+F6 (Mob Checklist)
+
+---
+
 ## ✅ SESSION: Apr 7, 2026 - 00:09 UTC (Overnight Cron #188)
 **Status:** ✅ THREE NEW FEATURES added (+609 lines)
 
