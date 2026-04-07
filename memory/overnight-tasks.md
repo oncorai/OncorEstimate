@@ -1,5 +1,50 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 7, 2026 - 10:37 UTC (Overnight Cron #202)
+**Status:** ✅ THREE NEW FEATURES added (+528 lines)
+
+### Session #202 — 🧱🚚☂️ (+528 lines)
+- **RC Shear Wall Quick Check** (Ctrl+Alt+Shift+F1) — ACI 318-19 §11.5 / ASCE 7-22 §12.8; preliminary shear wall capacity check; inputs: wall length/height/thickness, f'c, horizontal rebar size/spacing/layers, applied shear Vu; calculates Vc, Vs, ϕVn; D/C ratio; checks ACI max Vn limit (8√f'c·Acv), minimum ρh ≥ 0.25% (ACI §11.6.2), hw/ℓw slender wall flag; concrete quantity / SFCA / est. rebar for bidding; PE disclaimer for El Paso SDC D2
+- **Pump Line Pressure Loss Calculator** (Ctrl+Alt+Shift+F2) — ACI 304.2R §5 / ACPA; calculate total pumping pressure for line layout selection; inputs: horizontal distance, vertical rise, pipe diameter (3"/4"/5"), rubber hose length, 90° elbow count, reducer count, slump, pump type/max PSI; calculates component-by-component losses (horiz pipe, hose at 2.5×, elbows, reducers, hydrostatic vertical); applies 1.25× ACI safety factor; utilization % vs pump max; ADEQUATE/NEAR LIMIT/INSUFFICIENT verdict; El Paso field notes (slump drop in heat, caliche dust in hose)
+- **Post-Pour Weather Protection Planner** (Ctrl+Alt+Shift+F3) — ACI 305R-10 / ACI 306R-16 / ACI 308R-16 / ASTM C309; generate day-by-day protection plan after concrete placement; inputs: pour date/time, forecast high/low temp, rain probability, wind speed, cement type, element type; auto-generates HOT/WIND/COLD/FREEZE/RAIN alerts; calculates adjusted curing days (doubles for cold <40°F, triples for freeze); materials checklist (curing compound, evaporation retarder, insulating blankets, plastic sheeting, windbreaks); day-by-day protection timeline from pour day through cure completion
+
+### Commits:
+- 14d770f (Session #202) — 528 lines
+- File now at ~220,877 lines total
+- New shortcuts: Ctrl+Alt+Shift+F1 (Shear Wall), Ctrl+Alt+Shift+F2 (Pump Loss), Ctrl+Alt+Shift+F3 (Weather Protection)
+
+---
+
+## ✅ SESSION: Apr 7, 2026 - 09:28 UTC (Overnight Cron #201)
+**Status:** ✅ THREE NEW FEATURES added (+336 lines)
+
+### Session #201 — 💧🪨🏭 (+336 lines)
+- **Slump Adjustment Decision Matrix** (Ctrl+Alt+F10) — ASTM C94 §11.8 / ACI 211.1 / ACI 305R; field decision guide for slump out-of-spec loads; inputs: load size, spec slump, actual slump, max slump, concrete temp, drum revs; verdict matrix (REJECT/water addition OK/HRWR recommendation); calculates gallons needed vs ASTM C94 1 gal/yd³ limit; f'c strength loss estimate; flags over-max slump, over-revs, ACI 305R hot weather conditions
+- **Aggregate Moisture Compensation Calculator** (Ctrl+Alt+F11) — ACI 211.1 §6.3 / ASTM C566 / ASTM C70; inputs: cement/water/fine agg/coarse agg SSD quantities + field moisture % and absorption % for each; calculates free surface moisture per aggregate; corrected batch water (gal + lbs); as-batched aggregate weights; adjusted w/cm ratio vs design w/cm; alerts for negative batch water (excess moisture condition); full corrected batch table
+- **Concrete Surface Hardener Selector** (Ctrl+Alt+F12) — ACI 302.1R §9.6 / ASTM C779 / ACI 310R / TR-34; select traffic class (light foot through heavy industrial + freezer + chemical) + area SF + f'c + budget level; recommends specific hardener system with product name, application notes, cost estimate; dry-shake quantity (lbs); El Paso climate notes; full reference table (mineral/metallic dry-shake, silicate/densifier, colloidal silica, epoxy broadcast, polished)
+
+### Commits:
+- 6637008 (Session #201) — 336 lines
+- File now at ~220,349 lines total
+- New shortcuts: Ctrl+Alt+F10 (Slump Matrix), Ctrl+Alt+F11 (Moisture Comp), Ctrl+Alt+F12 (Hardener Selector)
+
+---
+
+## ✅ SESSION: Apr 7, 2026 - 07:16 UTC (Overnight Cron #199)
+**Status:** ✅ THREE NEW FEATURES added (+427 lines)
+
+### Session #199 — 📊🪑💨 (+427 lines)
+- **Concrete Waste Factor Optimizer** (Ctrl+Alt+F4) — ACI 304R §6 / ACI 302.1R / ASTM C94; log historical pour data (estimated CY vs actual ordered); calibrate recommended buffer % from historical data; element type + placement method base factors; 4-scenario comparison table (conservative/recommended/standard/El Paso hot weather); waste cost calculation; status: EXCELLENT/ACCEPTABLE/HIGH/INVESTIGATE
+- **Rebar Chair & Cover Selector** (Ctrl+Alt+F5) — CRSI Manual of Standard Practice / ACI 318-19 §20.6.1 / ACI 315; select element type + bar size + exposure class → auto-determine required cover; recommend correct CRSI chair type and designation (PW, BC, CHC, SB, SBU, FC, JC); calculate chair quantity for entered area (SF) and bags needed; CRSI 7-type reference table; El Paso notes on plastic vs wire chairs; installation checklist
+- **ACI 305R Evaporation Rate Calculator** (Ctrl+Alt+F6) — ACI 305R-10 / Menzel 1954 / Magnus formula; inputs: air temp, RH%, wind speed, concrete temp, slab thickness, pour start time; calculates evaporation rate (lb/ft²/hr) using vapor pressure differential; risk level LOW/MODERATE/HIGH/CRITICAL; estimated bleed time; auto-generated finishing schedule with clock times (evap retarder, bleed water gone, trowel start, curing compound); El Paso summer notes (July–Sep 0.25–0.50 lb/ft²/hr typical = CRITICAL)
+
+### Commits:
+- bd6096e (Session #199) — 427 lines
+- File now at ~219,507 lines total
+- New shortcuts: Ctrl+Alt+F4 (Waste Optimizer), Ctrl+Alt+F5 (Chair Selector), Ctrl+Alt+F6 (Evap Rate)
+
+---
+
 ## ✅ SESSION: Apr 7, 2026 - 05:54 UTC (Overnight Cron #198)
 **Status:** ✅ THREE NEW FEATURES added (+335 lines)
 
@@ -9733,3 +9778,18 @@ This verification pass confirmed all sessions are present and clean in the git h
 - 492d1b4 (Session #188) — 609 lines
 - File now at ~215,489 lines total
 - New shortcuts: Ctrl+Shift+Alt+F1 (Pour Window Planner), Ctrl+Shift+Alt+F2 (Truck Queue Mgr), Ctrl+Shift+Alt+F3 (Batch Plant Card)
+
+---
+
+## ✅ SESSION: Apr 7, 2026 - 08:20 UTC (Overnight Cron #200)
+**Status:** ✅ THREE NEW FEATURES added (+506 lines)
+
+### Session #200 — 🚚🔥📐 (+506 lines)
+- **Concrete Truck Interval Optimizer** (Ctrl+Alt+F7) — ACI 304R / ACI 302.1R / ACI 309R; inputs: total CY, truck size, target pour rate CY/hr, concrete temp, element type, placement method, pour start time; estimates initial set time with temperature factor; max safe interval = 60% of set time (ACI 304R §5.7); compares actual interval to max; cold joint risk status OK/CRITICAL; method capacity check (pump 80/chute 50/buggy 20 CY/hr); 4-card stats (set time, max safe interval, your interval, method OK); automated truck arrival schedule table for first 10 trucks with clock times; cold joint risk matrix by concrete temp (50°F to 100°F); El Paso summer notes (95°F concrete = 39-min max interval = pump required)
+- **Cement Hydration Heat Rise Estimator** (Ctrl+Alt+F8) — ACI 207.1R / ACI 207.2R / ACI 305R; inputs: cement content lb/CY, cement type (I/II 70 BTU/lb, III 80, IP 55, IS 50, IL 60), placing temp, section thickness, SCM replacement %, protection type; calculates adiabatic temp rise using ρ=145 pcf / Cp=0.22 BTU/lb·°F formula; peak center temp; surface temp estimate; center-to-surface differential vs ACI 207.4R 35°F limit; risk LOW/MODERATE/HIGH/CRITICAL; time to peak (~10–24 hrs by cement type); mix thermal analysis table (effective cement, total BTU, protection factor); cement type heat reference table; mass concrete flag for sections ≥36"; El Paso summer notes
+- **Formwork Stripping Strength Calculator** (Ctrl+Alt+F9) — ACI 347R-14 / ACI 318-19 / ACI 209R-92; inputs: design f'c, element type (wall/slab/beam/edge/footing), cement type, avg curing temp, pour date, applied load at strip; minimum strip % by element (wall 40%, slab 40%, beam 75%, footing 35%); load case adjustment (forms only/light/full); ACI 209R-92 hyperbolic strength gain f(t)=f'c×t/(a+bt) with cement type params; temperature-adjusted age factor; calculates required strength PSI, minimum days, estimated strip date; 7-day strength gain table with ✅ STRIP OK per day; ACI 347R-14 minimum strip time reference table
+
+### Commits:
+- 555e63f (Session #200) — 506 lines
+- File now at ~220,013 lines total
+- New shortcuts: Ctrl+Alt+F7 (Truck Interval), Ctrl+Alt+F8 (Hydration Heat), Ctrl+Alt+F9 (Form Strip)
