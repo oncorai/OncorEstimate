@@ -217002,3 +217002,296 @@ if(!sb192){var sbEl192=document.createElement('div');sbEl192.className='sidebar-
 })();
 </script>
 <!-- END SESSION #192 -->
+
+<script>
+// =====================================================================
+// SESSION #193 — Washout Volume Calc + Thermal Gradient Monitor + Delamination Risk Checker
+// New shortcuts: Ctrl+Shift+F10, Ctrl+Shift+F11, Ctrl+Shift+F12
+// =====================================================================
+(function(){
+'use strict';
+
+function kpi193(label,val,note){
+  return '<div style="background:#1e293b;border-radius:6px;padding:8px;text-align:center;">'+
+    '<div style="font-size:10px;color:#94a3b8;">'+label+'</div>'+
+    '<div style="font-size:16px;font-weight:bold;color:#14b8a6;">'+val+'</div>'+
+    '<div style="font-size:9px;color:#64748b;">'+note+'</div></div>';
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// TOOL 1: 🚿 Concrete Washout Volume Calculator (Ctrl+Shift+F10)
+// EPA CGP 2022 §2.3.3 / TCEQ TXR150000 §III.F / ACI 304R
+// ──────────────────────────────────────────────────────────────────────
+document.body.insertAdjacentHTML('beforeend',
+'<div id="s193-wash" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10000;background:#1a2035;border:2px solid #0891b2;border-radius:12px;padding:20px;width:640px;max-height:90vh;overflow-y:auto;color:#e2e8f0;font-family:sans-serif;flex-direction:column;">'+
+'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'+
+'<div style="font-size:16px;font-weight:bold;color:#0891b2;">🚿 Concrete Washout Volume Calculator</div>'+
+'<button onclick="document.getElementById(\'s193-wash\').style.display=\'none\'" style="background:transparent;border:none;color:#94a3b8;cursor:pointer;font-size:18px;">✕</button></div>'+
+'<div style="font-size:10px;color:#64748b;margin-bottom:10px;">EPA CGP 2022 §2.3.3 / TCEQ TXR150000 §III.F / ACI 304R — SWPPP Washout Pit Sizing</div>'+
+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">'+
+'<div><label style="font-size:11px;color:#94a3b8;">Total CY Poured</label>'+
+'<input id="w193-cy" type="number" value="100" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;"></div>'+
+'<div><label style="font-size:11px;color:#94a3b8;">Truck Drum Rinse (gal/truck)</label>'+
+'<input id="w193-drum" type="number" value="220" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;"></div>'+
+'<div><label style="font-size:11px;color:#94a3b8;">Pump Line Length (ft)</label>'+
+'<input id="w193-pline" type="number" value="200" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;"></div>'+
+'<div><label style="font-size:11px;color:#94a3b8;">Pump Line Diameter (in)</label>'+
+'<select id="w193-pdia" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;">'+
+'<option value="4">4" line</option><option value="5" selected>5" line</option><option value="6">6" line</option></select></div>'+
+'<div><label style="font-size:11px;color:#94a3b8;">Tool / Equip Washout (gal)</label>'+
+'<input id="w193-tools" type="number" value="50" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;"></div>'+
+'<div><label style="font-size:11px;color:#94a3b8;">Safety Factor</label>'+
+'<select id="w193-sf" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;">'+
+'<option value="1.25">1.25× standard</option><option value="1.5" selected>1.5× EPA recommended</option><option value="2.0">2.0× conservative</option></select></div>'+
+'</div>'+
+'<button onclick="wCalc193()" style="background:#0891b2;border:none;border-radius:5px;color:#fff;font-weight:bold;padding:8px 20px;cursor:pointer;width:100%;margin-bottom:10px;">📊 Calculate Washout Volume</button>'+
+'<div id="w193-res"></div>'+
+'<div style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:8px;margin-top:8px;font-size:10px;color:#64748b;">'+
+'<div style="color:#0891b2;font-weight:bold;margin-bottom:4px;">📋 TCEQ TXR150000 Key Requirements</div>'+
+'• Lined pit ≥4 mil poly — 6 mil recommended in El Paso caliche soil<br>'+
+'• Located ≥50 ft from storm drains, channels, and water bodies<br>'+
+'• NEVER discharge washout water to storm drain — TCEQ enforcement action<br>'+
+'• Inspect weekly + after 0.5" rain events — log in SWPPP binder<br>'+
+'• El Paso County: TCEQ MS4 permit area — document every washout event in daily log</div>'+
+'</div>');
+
+window.wCalc193=function(){
+  var cy=parseFloat(document.getElementById('w193-cy').value)||100;
+  var drum=parseFloat(document.getElementById('w193-drum').value)||220;
+  var pline=parseFloat(document.getElementById('w193-pline').value)||200;
+  var pdia=parseFloat(document.getElementById('w193-pdia').value)||5;
+  var tools=parseFloat(document.getElementById('w193-tools').value)||50;
+  var sf=parseFloat(document.getElementById('w193-sf').value)||1.5;
+  var trucks=Math.ceil(cy/10);
+  var truckWash=trucks*drum;
+  var plineVol=(Math.PI/4)*Math.pow(pdia/12,2)*pline*7.48;
+  var pumpWash=plineVol*2;
+  var rawTotal=truckWash+pumpWash+tools;
+  var designVol=rawTotal*sf;
+  var designCF=designVol/7.48;
+  var pitSF=designCF/2;
+  var pitDim=Math.ceil(Math.sqrt(pitSF));
+  var status=designVol<500?{c:'#22c55e',t:'SMALL PIT OK'}:designVol<1500?{c:'#f59e0b',t:'MEDIUM PIT'}:{c:'#ef4444',t:'LARGE PIT NEEDED'};
+  var html='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">'+
+    kpi193('Trucks Est.',trucks+' trucks','@ 10 CY avg')+
+    kpi193('Drum Wash',(truckWash/1000).toFixed(1)+'k gal',trucks+'×'+drum+' gal')+
+    kpi193('Pump Wash',pumpWash.toFixed(0)+' gal',pdia+'"×'+pline+'ft×2')+
+    kpi193('Tool Wash',tools+' gal','misc equip')+
+  '</div>'+
+  '<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;margin-bottom:8px;border:2px solid '+status.c+';">'+
+  '<div style="font-size:11px;color:#94a3b8;">REQUIRED WASHOUT CAPACITY ('+sf+'× SF)</div>'+
+  '<div style="font-size:28px;font-weight:bold;color:'+status.c+';">'+designVol.toFixed(0)+' gal</div>'+
+  '<div style="font-size:12px;color:#64748b;">'+designCF.toFixed(0)+' CF | '+status.t+'</div></div>'+
+  '<div style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:8px;font-size:11px;">'+
+  '<div style="color:#0891b2;font-weight:bold;margin-bottom:4px;">📐 Pit Sizing (2 ft deep)</div>'+
+  '<table style="width:100%;border-collapse:collapse;">'+
+  [['Design Volume',designVol.toFixed(0)+' gal'],['Pit Volume (2ft deep)',designCF.toFixed(0)+' CF'],
+   ['Min Pit Footprint',pitSF.toFixed(0)+' SF'],['Approx Dimensions',pitDim+'ft × '+pitDim+'ft × 2ft'],
+   ['Liner Size (10% extra)',(pitDim+4)+'ft × '+(pitDim+4)+'ft min']
+  ].map(function(r,i){return '<tr'+(i%2?' style="background:#1e293b;"':'')+'>'+
+    '<td style="padding:4px;color:#94a3b8;">'+r[0]+'</td>'+
+    '<td style="padding:4px;font-weight:bold;color:#e2e8f0;text-align:right;">'+r[1]+'</td></tr>';}).join('')+
+  '</table></div>';
+  document.getElementById('w193-res').innerHTML=html;
+};
+
+// ──────────────────────────────────────────────────────────────────────
+// TOOL 2: 🌡️ Mass Concrete Thermal Gradient Monitor (Ctrl+Shift+F11)
+// ACI 207.1R / ACI 207.4R / ACI 301-16 §4.2.4 / ACI 306R
+// ──────────────────────────────────────────────────────────────────────
+document.body.insertAdjacentHTML('beforeend',
+'<div id="s193-therm" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10000;background:#1a2035;border:2px solid #ef4444;border-radius:12px;padding:20px;width:640px;max-height:90vh;overflow-y:auto;color:#e2e8f0;font-family:sans-serif;flex-direction:column;">'+
+'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'+
+'<div style="font-size:16px;font-weight:bold;color:#ef4444;">🌡️ Mass Concrete Thermal Gradient Monitor</div>'+
+'<button onclick="document.getElementById(\'s193-therm\').style.display=\'none\'" style="background:transparent;border:none;color:#94a3b8;cursor:pointer;font-size:18px;">✕</button></div>'+
+'<div style="font-size:10px;color:#64748b;margin-bottom:8px;">ACI 207.1R / ACI 207.4R / ACI 301-16 §4.2.4 / ACI 306R §8.5</div>'+
+'<div style="background:#ef4444;border-radius:6px;padding:6px;font-size:11px;color:#fff;font-weight:bold;margin-bottom:10px;">'+
+'⚠️ ACI 207.4R Limit: Max differential ≤35°F (center − surface). Exceeding limit causes thermal cracking in mass pours.</div>'+
+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">'+
+'<div><label style="font-size:11px;color:#94a3b8;">Section Thickness (in)</label>'+
+'<input id="th193-thick" type="number" value="36" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;"></div>'+
+'<div><label style="font-size:11px;color:#94a3b8;">Cement Content (lbs/CY)</label>'+
+'<input id="th193-cem" type="number" value="600" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;"></div>'+
+'<div><label style="font-size:11px;color:#94a3b8;">Placing Temp (°F)</label>'+
+'<input id="th193-place" type="number" value="70" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;"></div>'+
+'<div><label style="font-size:11px;color:#94a3b8;">Ambient Temp (°F)</label>'+
+'<input id="th193-amb" type="number" value="85" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;"></div>'+
+'<div><label style="font-size:11px;color:#94a3b8;">Cement Type / Heat</label>'+
+'<select id="th193-type" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;">'+
+'<option value="65">Type I/II — 65 BTU/lb</option>'+
+'<option value="75">Type III — 75 BTU/lb (high early)</option>'+
+'<option value="55">Type IP — 55 BTU/lb (fly ash blend)</option>'+
+'<option value="50">Type IS — 50 BTU/lb (slag blend)</option></select></div>'+
+'<div><label style="font-size:11px;color:#94a3b8;">Surface Protection</label>'+
+'<select id="th193-prot" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;">'+
+'<option value="1.0">Bare — no insulation</option>'+
+'<option value="0.80">Curing blankets (1 layer)</option>'+
+'<option value="0.65">Foam board 1" + blanket</option>'+
+'<option value="0.50">Foam board 2" + 2 blankets</option></select></div>'+
+'</div>'+
+'<button onclick="thCalc193()" style="background:#ef4444;border:none;border-radius:5px;color:#fff;font-weight:bold;padding:8px 20px;cursor:pointer;width:100%;margin-bottom:10px;">🌡️ Calculate Thermal Risk</button>'+
+'<div id="th193-res"></div>'+
+'<div style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:8px;margin-top:8px;font-size:10px;color:#64748b;">'+
+'<div style="color:#ef4444;font-weight:bold;margin-bottom:4px;">📋 ACI 207.4R — When Mass Concrete Rules Apply</div>'+
+'• Any dimension ≥3 ft (900 mm) — typical ACI 207.1R threshold for thermal control plan<br>'+
+'• Pile caps, mat foundations, thick walls, massive footings, grade beams<br>'+
+'• Install embedded thermocouples — monitor center AND surface every 4 hrs<br>'+
+'• Remedies: reduce cement, add SCMs, pre-cool ingredients, embed cooling pipes<br>'+
+'• El Paso summer: ambient 100°F+ greatly amplifies peak center temperature</div>'+
+'</div>');
+
+window.thCalc193=function(){
+  var thick=parseFloat(document.getElementById('th193-thick').value)||36;
+  var cem=parseFloat(document.getElementById('th193-cem').value)||600;
+  var place=parseFloat(document.getElementById('th193-place').value)||70;
+  var amb=parseFloat(document.getElementById('th193-amb').value)||85;
+  var heat=parseFloat(document.getElementById('th193-type').value)||65;
+  var protF=parseFloat(document.getElementById('th193-prot').value)||1.0;
+  var isMass=thick>=36;
+  // ACI 207 simplified adiabatic temp rise
+  var deltaT=cem*heat/972;
+  var centerTemp=place+deltaT*protF;
+  var surfTemp=amb+5;
+  var diff=centerTemp-surfTemp;
+  var st,sc,rec;
+  if(diff<=25){st='✅ LOW RISK';sc='#22c55e';rec='Differential within safe range. Standard curing protocol adequate.';}
+  else if(diff<=35){st='⚠️ MONITOR CLOSELY';sc='#f59e0b';rec='Near ACI 207.4R 35°F limit. Install thermocouples. Check every 4 hrs. Add insulation layer if differential rises.';}
+  else{st='🚫 EXCEEDS ACI 35°F LIMIT';sc='#ef4444';rec='ACTION REQUIRED: Add insulation, pre-cool mix water/aggregates, reduce cement content (target ≤450 lbs/CY), use Type IP/IS cement or embed post-cooling pipes.';}
+  var protDays=thick<=36?3:thick<=60?5:7;
+  var html='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">'+
+    kpi193('Placing Temp',place+'°F','concrete discharge')+
+    kpi193('Adiabatic Rise','+'+deltaT.toFixed(0)+'°F','heat of hydration')+
+    kpi193('Est Center Temp',centerTemp.toFixed(0)+'°F','with protection')+
+    kpi193('Surface Temp',surfTemp.toFixed(0)+'°F','exposed face')+
+  '</div>'+
+  '<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;margin-bottom:8px;border:2px solid '+sc+';">'+
+  '<div style="font-size:11px;color:#94a3b8;">THERMAL DIFFERENTIAL (CENTER − SURFACE)</div>'+
+  '<div style="font-size:36px;font-weight:bold;color:'+sc+';">'+diff.toFixed(0)+'°F</div>'+
+  '<div style="font-size:13px;font-weight:bold;color:'+sc+';">'+st+'</div>'+
+  '<div style="font-size:10px;color:#64748b;margin-top:2px;">ACI 207.4R max allowed: 35°F</div></div>'+
+  '<div style="background:#1e293b;border-radius:6px;padding:10px;margin-bottom:8px;font-size:11px;">'+
+  '<div style="color:#f59e0b;font-weight:bold;margin-bottom:4px;">💡 Recommendation</div>'+
+  '<div style="color:#e2e8f0;">'+rec+'</div></div>'+
+  '<div style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:8px;font-size:11px;">'+
+  '<div style="color:#14b8a6;font-weight:bold;margin-bottom:4px;">📐 Mass Concrete Plan Parameters</div>'+
+  '<table style="width:100%;border-collapse:collapse;">'+
+  [['Section Thickness',thick+'" ('+( thick/12).toFixed(1)+'ft)',isMass?'✅ Mass concrete rules apply':'ℹ️ Below 3ft threshold'],
+   ['Cement Content',cem+' lbs/CY',cem>450?'⚠️ Reduce to ≤450 lbs/CY':'✅ OK for mass concrete'],
+   ['Protection Period Required',protDays+' days minimum','ACI 207.4R cooling period'],
+   ['Thermocouple Monitoring',isMass?'REQUIRED':'Recommended','ACI 301-16 §4.2.4']
+  ].map(function(r,i){return '<tr'+(i%2?' style="background:#1e293b;"':'')+'>'+
+    '<td style="padding:4px;color:#94a3b8;">'+r[0]+'</td>'+
+    '<td style="padding:4px;font-weight:bold;color:#e2e8f0;">'+r[1]+'</td>'+
+    '<td style="padding:4px;color:#64748b;font-size:10px;">'+r[2]+'</td></tr>';}).join('')+
+  '</table></div>';
+  document.getElementById('th193-res').innerHTML=html;
+};
+
+// ──────────────────────────────────────────────────────────────────────
+// TOOL 3: ⚠️ Concrete Delamination Risk Checker (Ctrl+Shift+F12)
+// ACI 302.1R §8.6 / ACI 305R / ACI 308R — Flatwork Finishing
+// ──────────────────────────────────────────────────────────────────────
+document.body.insertAdjacentHTML('beforeend',
+'<div id="s193-delam" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10000;background:#1a2035;border:2px solid #d97706;border-radius:12px;padding:20px;width:640px;max-height:90vh;overflow-y:auto;color:#e2e8f0;font-family:sans-serif;flex-direction:column;">'+
+'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'+
+'<div style="font-size:16px;font-weight:bold;color:#d97706;">⚠️ Concrete Delamination Risk Checker</div>'+
+'<button onclick="document.getElementById(\'s193-delam\').style.display=\'none\'" style="background:transparent;border:none;color:#94a3b8;cursor:pointer;font-size:18px;">✕</button></div>'+
+'<div style="font-size:10px;color:#64748b;margin-bottom:8px;">ACI 302.1R §8.6 / ACI 305R / ACI 308R — Flatwork Finishing Over Bleed Water</div>'+
+'<div style="background:#d97706;border-radius:6px;padding:6px;font-size:11px;color:#000;font-weight:bold;margin-bottom:10px;">'+
+'⚠️ Delamination = #1 Flatwork Defect in El Paso. Caused by closing the surface BEFORE bleed water evaporates — trapping water/air below the skin.</div>'+
+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">'+
+'<div><label style="font-size:11px;color:#94a3b8;">Air Entrainment in Mix?</label>'+
+'<select id="d193-air" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;">'+
+'<option value="0">No air entrainment</option><option value="1">Air entrained (≥2% air)</option></select></div>'+
+'<div><label style="font-size:11px;color:#94a3b8;">W/CM Ratio</label>'+
+'<input id="d193-wcm" type="number" value="0.45" step="0.01" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;"></div>'+
+'<div><label style="font-size:11px;color:#94a3b8;">Evaporation Rate (lb/ft²/hr)</label>'+
+'<input id="d193-evap" type="number" value="0.15" step="0.01" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;"></div>'+
+'<div><label style="font-size:11px;color:#94a3b8;">Started Finishing Early?</label>'+
+'<select id="d193-early" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;">'+
+'<option value="0">Waited — no sheen visible</option><option value="1">Finished while sheen still present</option></select></div>'+
+'<div><label style="font-size:11px;color:#94a3b8;">Slab Thickness (in)</label>'+
+'<input id="d193-thick" type="number" value="4" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;"></div>'+
+'<div><label style="font-size:11px;color:#94a3b8;">SCM in Mix?</label>'+
+'<select id="d193-scm" style="width:100%;padding:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;font-size:13px;">'+
+'<option value="0">No SCM — straight cement</option><option value="1">Fly ash or slag blend</option></select></div>'+
+'</div>'+
+'<button onclick="delamCalc193()" style="background:#d97706;border:none;border-radius:5px;color:#000;font-weight:bold;padding:8px 20px;cursor:pointer;width:100%;margin-bottom:10px;">⚠️ Assess Delamination Risk</button>'+
+'<div id="d193-res"></div>'+
+'<div style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:8px;margin-top:8px;font-size:10px;color:#64748b;">'+
+'<div style="color:#d97706;font-weight:bold;margin-bottom:4px;">📋 ACI 302.1R §8.6 — Footprint Test Before Troweling</div>'+
+'• ✅ READY: Footprint depth ≤3/8" (10mm), no water sheen visible<br>'+
+'• 🚫 NOT READY: Footprint depth >3/8", water sheen present — WAIT<br>'+
+'• Air-entrained mixes: most susceptible — air bubbles rise with bleed water<br>'+
+'• High evap (El Paso wind + heat + low RH): surface looks dry but bleed continues below<br>'+
+'• SCM/fly ash mixes: set 2–3× slower than straight cement — finishers often rush ahead<br>'+
+'• If delaminated: hollow sound on drag chain test next day → grind or overlay required</div>'+
+'</div>');
+
+window.delamCalc193=function(){
+  var air=parseInt(document.getElementById('d193-air').value)||0;
+  var wcm=parseFloat(document.getElementById('d193-wcm').value)||0.45;
+  var evap=parseFloat(document.getElementById('d193-evap').value)||0.15;
+  var early=parseInt(document.getElementById('d193-early').value)||0;
+  var thick=parseFloat(document.getElementById('d193-thick').value)||4;
+  var scm=parseInt(document.getElementById('d193-scm').value)||0;
+  var score=0,flags=[];
+  if(air){score+=30;flags.push({c:'#ef4444',t:'AIR ENTRAINED MIX (+30)',d:'Highest risk factor — air bubbles rise with bleed water and get trapped under closed surface (ACI 302.1R §8.6.2)'});}
+  if(wcm>0.50){score+=20;flags.push({c:'#ef4444',t:'HIGH W/CM >0.50 (+20)',d:'Excessive bleed water expected. More bleed volume = more risk of trapping if finished early'});}
+  else if(wcm>0.45){score+=10;flags.push({c:'#f59e0b',t:'MODERATE W/CM 0.45–0.50 (+10)',d:'Normal bleed volume. Wait for complete sheen evaporation before any troweling'});}
+  if(evap>0.20){score+=20;flags.push({c:'#ef4444',t:'HIGH EVAPORATION >0.20 lb/ft²/hr (+20)',d:'ACI 305R: Surface dries faster than bleed water rises. Classic El Paso summer condition — wind + heat + low RH'});}
+  else if(evap>0.10){score+=10;flags.push({c:'#f59e0b',t:'MODERATE EVAPORATION (+10)',d:'Monitor surface closely. Use evaporation retarder if bleed is visible beneath dry surface'});}
+  if(early){score+=35;flags.push({c:'#ef4444',t:'FINISHED EARLY — SHEEN VISIBLE (+35)',d:'#1 cause of delamination. Bleed water trapped permanently under closed surface. Delamination is near-certain.'});}
+  if(thick<=3.5){score+=10;flags.push({c:'#f59e0b',t:'THIN SLAB ≤3.5" (+10)',d:'Sets faster in El Paso heat. Very narrow window between bleed end and correct troweling start'});}
+  if(scm){score+=15;flags.push({c:'#f59e0b',t:'SCM / FLY ASH / SLAG (+15)',d:'SCM blends set 2–3× slower. Extended bleed period. Finishers frequently rush ahead of bleed on these mixes'});}
+  var rl,rc,rec;
+  if(score>=60){rl='🚫 CRITICAL — DELAMINATION LIKELY';rc='#ef4444';rec='Inspect with drag chain tomorrow. Hollow areas = delaminated. Repair options: diamond grind surface, apply bonded overlay, or full remove-and-replace depending on depth.';}
+  else if(score>=35){rl='⚠️ HIGH RISK — EXTRA CAUTION';rc='#f59e0b';rec='Apply evaporation retarder now if not done. Wait 30–60 min longer than normal. Perform footprint test every pass. No rush on machine troweling.';}
+  else if(score>=15){rl='⚠️ MODERATE — MONITOR';rc='#fbbf24';rec='Standard precautions. Wait for full bleed evaporation. Conduct footprint test before every trowel pass.';}
+  else{rl='✅ LOW RISK';rc='#22c55e';rec='Low delamination risk. Follow standard ACI 302.1R finishing sequence. Conduct footprint test to confirm readiness.';}
+  var html='<div style="background:#1e293b;border-radius:8px;padding:12px;text-align:center;margin-bottom:8px;border:2px solid '+rc+';">'+
+  '<div style="font-size:11px;color:#94a3b8;">DELAMINATION RISK SCORE</div>'+
+  '<div style="font-size:36px;font-weight:bold;color:'+rc+';">'+score+'/100</div>'+
+  '<div style="font-size:13px;font-weight:bold;color:'+rc+';">'+rl+'</div></div>'+
+  '<div style="background:#1e293b;border-radius:6px;padding:10px;margin-bottom:8px;font-size:11px;">'+
+  '<div style="color:#14b8a6;font-weight:bold;margin-bottom:4px;">💡 Recommended Action</div>'+
+  '<div style="color:#e2e8f0;">'+rec+'</div></div>';
+  if(flags.length){
+    html+='<div style="font-size:11px;font-weight:bold;color:#94a3b8;margin-bottom:4px;">Risk Factors Identified:</div>';
+    html+=flags.map(function(f){return '<div style="background:#1e293b;border-left:4px solid '+f.c+';border-radius:4px;padding:8px;margin-bottom:4px;">'+
+      '<div style="font-weight:bold;color:'+f.c+';">'+f.t+'</div>'+
+      '<div style="color:#94a3b8;font-size:10px;margin-top:2px;">'+f.d+'</div></div>';}).join('');
+  } else {
+    html+='<div style="color:#22c55e;font-size:11px;padding:8px;background:#1e293b;border-radius:4px;">✅ No significant risk factors identified. Follow standard ACI 302.1R finishing sequence.</div>';
+  }
+  document.getElementById('d193-res').innerHTML=html;
+};
+
+// ──────────────────────────────────────────────────────────────────────
+// KEYBOARD SHORTCUTS — SESSION 193
+// ──────────────────────────────────────────────────────────────────────
+document.addEventListener('keydown',function(e){
+  if(e.ctrlKey&&e.shiftKey&&!e.altKey){
+    if(e.key==='F10'){e.preventDefault();var m=document.getElementById('s193-wash');m.style.display=m.style.display==='none'?'flex':'none';}
+    else if(e.key==='F11'){e.preventDefault();var m=document.getElementById('s193-therm');m.style.display=m.style.display==='none'?'flex':'none';}
+    else if(e.key==='F12'){e.preventDefault();var m=document.getElementById('s193-delam');m.style.display=m.style.display==='none'?'flex':'none';}
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// SIDEBAR BUTTONS — SESSION 193
+// ──────────────────────────────────────────────────────────────────────
+var sb193=document.querySelector('.sidebar-actions')||document.querySelector('.controls')||document.querySelector('.sidebar');
+if(!sb193){var sbEl193=document.createElement('div');sbEl193.className='sidebar-actions';document.body.appendChild(sbEl193);sb193=sbEl193;}
+[['🚿 Washout Volume Calc','s193-wash','#0891b2'],
+ ['🌡️ Thermal Gradient Mon.','s193-therm','#dc2626'],
+ ['⚠️ Delamination Risk','s193-delam','#d97706']].forEach(function(d){
+  var btn=document.createElement('button');btn.textContent=d[0];
+  btn.style.cssText='display:block;width:100%;padding:7px 10px;margin-bottom:5px;background:'+d[1]+';color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;text-align:left;';
+  btn.onclick=function(){var m=document.getElementById(d[1]);m.style.display=m.style.display==='none'?'flex':'none';};
+  sb193.appendChild(btn);
+});
+
+})();
+</script>
+<!-- END SESSION #193 -->
