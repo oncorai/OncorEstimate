@@ -1,5 +1,65 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 7, 2026 - 05:54 UTC (Overnight Cron #198)
+**Status:** ✅ THREE NEW FEATURES added (+335 lines)
+
+### Session #198 — 📅📝📦 (+335 lines)
+- **Concrete Pour Schedule Generator** (Ctrl+Alt+F1) — ACI 304R / ACI 302.1R; generate pour day timeline from pump setup through curing; truck count, interval calculation, truck arrival schedule; visual timeline with key events (pump arrival, first/last truck, finish work, curing, sawcut window); coordination points for batch plant calls and crew release
+- **Pre-Pour Meeting Agenda** (Ctrl+Alt+F2) — ACI 304R / ACI 302.1R; standardized meeting template for 24–48 hours before pour; 6 sections (Scope, Schedule, Access/Safety, QC, Contingency, Action Items); printable and clipboard copy; checklist format with project/location/date fields
+- **Material Lead Time Tracker** (Ctrl+Alt+F3) — Track long-lead concrete materials; preset lead times (rebar 2–4wk, PT strand 4–6wk, embeds 3–5wk, mix approval 2wk); need date vs order-by date calculation; status tracking (pending/ordered/shipped/delivered); late/urgent/on-track visual status; risk flagging
+
+### Commits:
+- aa3c2a8 (Session #198) — 335 lines
+- File now at ~219,080 lines total
+- New shortcuts: Ctrl+Alt+F1 (Pour Schedule), Ctrl+Alt+F2 (Pre-Pour Meeting), Ctrl+Alt+F3 (Lead Time Tracker)
+
+---
+
+## ✅ SESSION: Apr 7, 2026 - 05:54 UTC (Overnight Cron #197)
+**Status:** ✅ THREE NEW FEATURES added (+356 lines)
+
+### Session #197 — 📈✅🛡️ (+356 lines)
+- **Concrete Strength Gain Curve** (Ctrl+Shift+F10) — ACI 209R-92 / ASTM C1074; predict strength at any age using f(t)=f'c×t/(a+bt) model; cement type factors (I/II, III, IP, IS); temperature adjustment for curing temp; visual bar chart 1–90 days; construction milestones (form strip 40%, light traffic 75%, full load 100%); typical % reference table
+- **Pour Day Go/No-Go Checklist** (Ctrl+Shift+F11) — ACI 302.1R / ACI 304R; 21-item final verification checklist before first truck; 5 categories (Site, Crew/Equipment, Delivery, QC, Weather/Safety); critical items marked; PASS/FAIL/N/A tracking; GO/CAUTION/NO-GO status; print-ready checklist for foreman
+- **ACI 318 Exposure Class Selector** (Ctrl+Shift+F12) — ACI 318-19 Chapter 19 Table 19.3.1.1; select F/S/W/C exposure classes; auto-determine controlling min f'c, max w/cm, air entrainment, cement type, cover requirements; El Paso typical exposure reference; mix design notes for batch plant
+
+### Commits:
+- f2ff218 (Session #197) — 356 lines
+- File now at ~218,745 lines total
+- New shortcuts: Ctrl+Shift+F10 (Strength Curve), Ctrl+Shift+F11 (Go/No-Go), Ctrl+Shift+F12 (Exposure Class)
+
+---
+
+## ✅ SESSION: Apr 7, 2026 - 05:54 UTC (Overnight Cron #196)
+**Status:** ✅ THREE NEW FEATURES added (+338 lines)
+
+### Session #196 — 🌡️📊🏭 (+338 lines)
+- **Concrete Temperature Decay Estimator** (Ctrl+Shift+F7) — ACI 305R / ACI 306R; calculate temperature change during transit and site wait; ~1°F/10min toward ambient + drum friction; sun exposure factor; discharge temp estimate with ACI 305R (90°F max) and ACI 306R (50°F min) compliance check; recommended actions by status
+- **Labor Productivity Benchmark** (Ctrl+Shift+F8) — ACI 302.1R / AGC / CFMA; compare actual yd³/man-hour against industry benchmarks by element type (flatwork 0.8–1.5, foundations 0.4–0.8, walls 0.2–0.6, elevated 0.3–0.6); weather condition adjustment; visual benchmark bar; labor cost per CY; grade system (EXCELLENT to BELOW BENCHMARK)
+- **Batch Plant Comparison Matrix** (Ctrl+Shift+F9) — Compare up to 4 suppliers side-by-side; base price, fuel surcharge, short load fee, Saturday premium, transit time, service rating; calculate all-in $/CY and total cost for order volume; auto-highlight lowest cost; savings calculation; El Paso suppliers reference
+
+### Commits:
+- 711765f (Session #196) — 338 lines
+- File now at ~218,389 lines total
+- New shortcuts: Ctrl+Shift+F7 (Temp Decay), Ctrl+Shift+F8 (Labor Productivity), Ctrl+Shift+F9 (Plant Comparison)
+
+---
+
+## ✅ SESSION: Apr 7, 2026 - 05:54 UTC (Overnight Cron #195)
+**Status:** ✅ THREE NEW FEATURES added (+376 lines)
+
+### Session #195 — 🎯⚖️📊 (+376 lines)
+- **Pour Day Risk Scorecard** (Ctrl+Shift+F4) — ACI 304R / ACI 305R / ACI 306R; 10-factor risk scoring for Go/No-Go decision before calling first truck; factors: air temp, wind, RH, rain probability, crew experience, pump status, batch plant status, form/subgrade ready, ACI tech, curing materials; auto-score 0–100 with GO/CAUTION/HOLD/NO-GO recommendation; high-risk item flagging
+- **Reinforcing Steel Cage Weight Estimator** (Ctrl+Shift+F5) — ASTM A615 Gr.60 / CRSI / ASME B30.5; calculate rebar cage weights for crane picks; bar groups with size #3-#11, count, length; lap factor and ties/spirals allowance; total weight, tons, lb/ft; rigging weight +5% per ASME B30.5; element type presets (column, beam, wall, drilled pier)
+- **Concrete Volume Reconciliation Dashboard** (Ctrl+Shift+F6) — ACI 304R §6 / ASTM C94 §12; estimated vs ordered vs accepted vs invoiced tracking; pour-by-pour breakdown with waste CY, waste %, variance vs estimate; cost calculations; waste status (EXCELLENT/ACCEPTABLE/HIGH/INVESTIGATE); estimate accuracy status; El Paso buffer note 8–10% for summer pours
+
+### Commits:
+- 4d9ffb1 (Session #195) — 376 lines
+- File now at ~218,051 lines total
+- New shortcuts: Ctrl+Shift+F4 (Risk Scorecard), Ctrl+Shift+F5 (Cage Weight), Ctrl+Shift+F6 (Volume Recon)
+
+---
+
 ## ✅ SESSION: Apr 7, 2026 - 03:41 UTC (Overnight Cron #193)
 **Status:** ✅ THREE NEW FEATURES added (+293 lines)
 
