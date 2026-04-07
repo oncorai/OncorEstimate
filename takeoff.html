@@ -221273,3 +221273,384 @@ document.addEventListener('keydown',function(e){
 })();
 </script>
 <!-- END SESSION #203 -->
+
+<!-- SESSION #204 — ⏱📋🔧 Pour Duration Log (Ctrl+Alt+Shift+F7) + Concrete Surface Finish Spec (Ctrl+Alt+Shift+F8) + Field Mix Adjustment Log (Ctrl+Alt+Shift+F9) -->
+<script>
+(function(){
+'use strict';
+
+// ─── SHARED HELPERS ────────────────────────────────────────────────────────
+function _mb204(id,title,emoji,accent){
+  var d=document.createElement('div');
+  d.id=id;
+  d.style.cssText='display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9400;align-items:center;justify-content:center;';
+  d.innerHTML='<div style="background:#0f172a;border:1px solid '+accent+';border-radius:10px;width:min(760px,96vw);max-height:90vh;overflow-y:auto;padding:20px;position:relative;">'
+    +'<button onclick="document.getElementById(\''+id+'\').style.display=\'none\'" style="position:absolute;top:12px;right:14px;background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>'
+    +'<div style="font-size:16px;font-weight:700;color:'+accent+';margin-bottom:14px;">'+emoji+' '+title+'</div>'
+    +'<div id="'+id+'-body"></div></div>';
+  document.body.appendChild(d);
+}
+function _sb204(label,targetId,color){
+  var sb=document.querySelector('.sidebar-actions')||document.querySelector('#sidebar')||document.body;
+  var btn=document.createElement('button');
+  btn.textContent=label;
+  btn.style.cssText='display:block;width:100%;padding:8px 10px;margin:2px 0;background:'+color+';color:#fff;border:none;border-radius:5px;font-size:11px;cursor:pointer;text-align:left;';
+  btn.onclick=function(){var m=document.getElementById(targetId);m.style.display=m.style.display==='none'?'flex':'none';};
+  sb.appendChild(btn);
+}
+function _fmtDate(d){return d?new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—';}
+function _now(){var n=new Date();return n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOL 1 — ⏱ POUR DURATION & COMPLETION LOG (Ctrl+Alt+Shift+F7)
+// ACI 304R / ACI 302.1R — track pour start, end, trucks, yd³, duration, rate
+// ═══════════════════════════════════════════════════════════════════════════
+_mb204('s204-pdlog','Pour Duration & Completion Log','⏱','#0ea5e9');
+(function(){
+  var KEY='oncor_s204_pdlog_v1';
+  function load(){try{return JSON.parse(localStorage.getItem(KEY))||[];}catch(e){return[];}}
+  function save(arr){localStorage.setItem(KEY,JSON.stringify(arr));}
+  function calcDuration(start,end){
+    if(!start||!end)return null;
+    var [sh,sm]=start.split(':').map(Number);
+    var [eh,em]=end.split(':').map(Number);
+    var mins=(eh*60+em)-(sh*60+sm);
+    if(mins<0)mins+=1440;
+    return mins;
+  }
+  function fmtDur(mins){if(!mins)return '—';var h=Math.floor(mins/60),m=mins%60;return h+'h '+(m<10?'0':'')+m+'m';}
+  function render(){
+    var pours=load();
+    var totalYds=pours.reduce(function(a,p){return a+(parseFloat(p.actualYds)||0);},0);
+    var totalTrucks=pours.reduce(function(a,p){return a+(parseInt(p.trucks)||0);},0);
+    var totalMins=pours.reduce(function(a,p){return a+(calcDuration(p.startTime,p.endTime)||0);},0);
+    var avgRate=totalMins>0?(totalYds/(totalMins/60)).toFixed(1):0;
+    var h='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">';
+    [[pours.length,'Pour Events','#0ea5e9'],[totalYds.toFixed(1)+'','Total yd³','#10b981'],[totalTrucks,'Total Trucks','#8b5cf6'],[avgRate+' yd³/hr','Avg Rate','#f59e0b']].forEach(function(c){
+      h+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:700;color:'+c[2]+'">'+c[0]+'</div><div style="font-size:10px;color:#94a3b8">'+c[1]+'</div></div>';
+    });
+    h+='</div>';
+    // Add form
+    h+='<div style="background:#1e293b;border-radius:6px;padding:12px;margin-bottom:12px;">'
+      +'<div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">+ Log Pour Completion</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
+      +'<div><div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">Pour / Area</div><input id="pd204-area" placeholder="Slab Grid A, Footings..." style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 7px;border-radius:4px;font-size:11px;"></div>'
+      +'<div><div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">Pour Date</div><input id="pd204-date" type="date" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 7px;border-radius:4px;font-size:11px;"></div>'
+      +'<div><div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">Start Time</div><div style="display:flex;gap:4px;"><input id="pd204-start" type="time" style="flex:1;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px;border-radius:4px;font-size:11px;"><button onclick="document.getElementById(\'pd204-start\').value=\''+_now()+'\'" style="background:#1d4ed8;color:#fff;border:none;border-radius:4px;padding:4px 7px;font-size:9px;cursor:pointer;">⏱</button></div></div>'
+      +'<div><div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">End Time</div><div style="display:flex;gap:4px;"><input id="pd204-end" type="time" style="flex:1;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px;border-radius:4px;font-size:11px;"><button onclick="document.getElementById(\'pd204-end\').value=\''+_now()+'\'" style="background:#1d4ed8;color:#fff;border:none;border-radius:4px;padding:4px 7px;font-size:9px;cursor:pointer;">⏱</button></div></div>'
+      +'<div><div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">Ordered yd³</div><input id="pd204-ordered" type="number" placeholder="55" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 7px;border-radius:4px;font-size:11px;"></div>'
+      +'<div><div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">Actual yd³ Placed</div><input id="pd204-actual" type="number" placeholder="52" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 7px;border-radius:4px;font-size:11px;"></div>'
+      +'<div><div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">Truck Count</div><input id="pd204-trucks" type="number" placeholder="6" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 7px;border-radius:4px;font-size:11px;"></div>'
+      +'<div><div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">Crew Size</div><input id="pd204-crew" type="number" placeholder="8" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 7px;border-radius:4px;font-size:11px;"></div>'
+      +'</div>'
+      +'<div style="margin-top:8px;"><div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">Notes / Issues</div><textarea id="pd204-notes" placeholder="Any delays, issues, QC notes..." rows="2" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 7px;border-radius:4px;font-size:11px;resize:vertical;"></textarea></div>'
+      +'<button onclick="window._pd204add()" style="background:#0ea5e9;color:#fff;border:none;border-radius:5px;padding:7px 16px;font-size:11px;cursor:pointer;margin-top:8px;">+ Add Pour Log</button></div>';
+    // Pour log table
+    if(pours.length===0){
+      h+='<div style="text-align:center;color:#475569;padding:20px;font-size:12px;">No pours logged yet. Log your first pour above.</div>';
+    } else {
+      h+='<table style="width:100%;border-collapse:collapse;font-size:10px;">'
+        +'<thead><tr style="background:#1e293b;color:#94a3b8;">'
+        +'<th style="padding:6px 8px;text-align:left;">Pour / Area</th><th style="padding:6px 8px;text-align:left;">Date</th>'
+        +'<th style="padding:6px 8px;text-align:right;">Ordered</th><th style="padding:6px 8px;text-align:right;">Placed</th>'
+        +'<th style="padding:6px 8px;text-align:right;">Duration</th><th style="padding:6px 8px;text-align:right;">Rate</th>'
+        +'<th style="padding:6px 8px;text-align:right;">Trucks</th><th style="padding:6px 8px;text-align:center;"></th>'
+        +'</tr></thead><tbody>';
+      pours.slice().reverse().forEach(function(p,ri){
+        var i=pours.length-1-ri;
+        var dur=calcDuration(p.startTime,p.endTime);
+        var rate=(dur&&p.actualYds)?(parseFloat(p.actualYds)/(dur/60)).toFixed(1):'—';
+        var waste=p.orderedYds&&p.actualYds?((parseFloat(p.orderedYds)-parseFloat(p.actualYds))/parseFloat(p.orderedYds)*100).toFixed(1):null;
+        var wc=waste&&parseFloat(waste)>8?'#ef4444':waste&&parseFloat(waste)>5?'#f59e0b':'#22c55e';
+        h+='<tr style="border-bottom:1px solid #1e293b;">'
+          +'<td style="padding:6px 8px;color:#e2e8f0;font-weight:600;">'+p.area+(p.notes?'<div style="color:#64748b;font-size:9px;margin-top:2px;">'+p.notes+'</div>':'')+'</td>'
+          +'<td style="padding:6px 8px;color:#94a3b8;">'+(p.date||'—')+(p.startTime?'<br><span style="font-size:9px;">'+p.startTime+'→'+(p.endTime||'?')+'</span>':'')+'</td>'
+          +'<td style="padding:6px 8px;text-align:right;color:#94a3b8;">'+(p.orderedYds||'—')+'</td>'
+          +'<td style="padding:6px 8px;text-align:right;color:#10b981;font-weight:600;">'+(p.actualYds||'—')+'</td>'
+          +'<td style="padding:6px 8px;text-align:right;color:#0ea5e9;">'+fmtDur(dur)+'</td>'
+          +'<td style="padding:6px 8px;text-align:right;color:#f59e0b;">'+rate+(rate!=='—'?' yd³/hr':'')+'</td>'
+          +'<td style="padding:6px 8px;text-align:right;color:#8b5cf6;">'+(p.trucks||'—')+(waste?'<br><span style="color:'+wc+';font-size:9px;">'+waste+'% waste</span>':'')+'</td>'
+          +'<td style="padding:6px 8px;text-align:center;"><button onclick="window._pd204del('+i+')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:13px;">🗑</button></td>'
+          +'</tr>';
+      });
+      h+='</tbody></table>';
+    }
+    // Print
+    h+='<div style="margin-top:12px;display:flex;gap:8px;">'
+      +'<button onclick="window._pd204print()" style="background:#1d4ed8;color:#fff;border:none;border-radius:5px;padding:7px 16px;font-size:11px;cursor:pointer;">🖨️ Print Completion Log</button>'
+      +'<button onclick="if(confirm(\'Clear all pour logs?\')){{localStorage.removeItem(\''+KEY+'\');window._pd204render();}}" style="background:#7f1d1d;color:#fff;border:none;border-radius:5px;padding:7px 14px;font-size:11px;cursor:pointer;">🗑 Clear</button></div>'
+      +'<div style="margin-top:10px;padding:8px;background:#1e293b;border-radius:4px;font-size:9px;color:#64748b;">Standards: ACI 304R §5 / ACI 302.1R §3 / ASTM C94. ACI benchmark: flatwork 0.8–1.5 yd³/labor-hr. Waste >8% = investigate.</div>';
+    document.getElementById('s204-pdlog-body').innerHTML=h;
+    // Set today's date
+    var dateInput=document.getElementById('pd204-date');
+    if(dateInput&&!dateInput.value)dateInput.value=new Date().toISOString().split('T')[0];
+  }
+  window._pd204render=render;
+  window._pd204add=function(){
+    var area=document.getElementById('pd204-area').value.trim();
+    if(!area){alert('Enter pour / area name.');return;}
+    var entry={area:area,date:document.getElementById('pd204-date').value,startTime:document.getElementById('pd204-start').value,endTime:document.getElementById('pd204-end').value,orderedYds:document.getElementById('pd204-ordered').value,actualYds:document.getElementById('pd204-actual').value,trucks:document.getElementById('pd204-trucks').value,crew:document.getElementById('pd204-crew').value,notes:document.getElementById('pd204-notes').value.trim(),ts:Date.now()};
+    var arr=load();arr.push(entry);save(arr);render();
+  };
+  window._pd204del=function(i){if(confirm('Delete this pour log?')){var arr=load();arr.splice(i,1);save(arr);render();}};
+  window._pd204print=function(){
+    var pours=load();
+    var rows=pours.map(function(p,i){
+      var dur=calcDuration(p.startTime,p.endTime);
+      var rate=(dur&&p.actualYds)?(parseFloat(p.actualYds)/(dur/60)).toFixed(1):'—';
+      var waste=p.orderedYds&&p.actualYds?((parseFloat(p.orderedYds)-parseFloat(p.actualYds))/parseFloat(p.orderedYds)*100).toFixed(1)+'%':'—';
+      return '<tr><td>'+(i+1)+'</td><td>'+p.area+'</td><td>'+(p.date||'—')+'</td><td>'+(p.startTime||'—')+' – '+(p.endTime||'—')+'</td><td>'+(p.orderedYds||'—')+'</td><td><strong>'+(p.actualYds||'—')+'</strong></td><td>'+fmtDur(dur)+'</td><td>'+rate+'</td><td>'+waste+'</td><td>'+(p.trucks||'—')+'</td><td>'+(p.notes||'')+'</td></tr>';
+    }).join('');
+    var totalYds2=pours.reduce(function(a,p){return a+(parseFloat(p.actualYds)||0);},0);
+    var totalDur=pours.reduce(function(a,p){return a+(calcDuration(p.startTime,p.endTime)||0);},0);
+    var w=window.open('','_blank');
+    w.document.write('<html><head><title>Pour Duration Log</title><style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}h2{color:#0369a1;}table{width:100%;border-collapse:collapse;margin-top:10px;}th,td{border:1px solid #ccc;padding:4px 6px;}th{background:#e0f2fe;}tr:nth-child(even){background:#f8fafc;}.hdr{display:flex;justify-content:space-between;margin-bottom:10px;}.kpi{display:inline-block;background:#0369a1;color:#fff;padding:4px 10px;border-radius:4px;margin-right:6px;font-weight:700;}footer{margin-top:12px;font-size:8px;color:#666;border-top:1px solid #ccc;padding-top:6px;}</style></head><body>'
+      +'<h2>⏱ Pour Duration &amp; Completion Log</h2>'
+      +'<div class="hdr"><div><span class="kpi">'+pours.length+' Pours</span><span class="kpi">'+totalYds2.toFixed(1)+' yd³ Total</span><span class="kpi">'+fmtDur(totalDur)+' Total Duration</span></div><div>Printed: '+new Date().toLocaleDateString()+'</div></div>'
+      +'<table><thead><tr><th>#</th><th>Pour / Area</th><th>Date</th><th>Start → End</th><th>Ordered yd³</th><th>Actual yd³</th><th>Duration</th><th>Rate (yd³/hr)</th><th>Waste %</th><th>Trucks</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      +'<footer>Standards: ACI 304R / ACI 302.1R / ASTM C94 | ACI benchmark: flatwork 0.8–1.5 yd³/labor-hr | Waste &gt;8% = investigate | CONFIDENTIAL — INTERNAL USE ONLY</footer></body></html>');
+    w.document.close();w.focus();w.print();
+  };
+  document.getElementById('s204-pdlog').addEventListener('click',function(e){if(e.target===this){this.style.display='none';}});
+  document.getElementById('s204-pdlog').addEventListener('show',render);
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOL 2 — 📋 CONCRETE SURFACE FINISH SPEC SELECTOR (Ctrl+Alt+Shift+F8)
+// ACI 302.1R-15 / ACI 310R-13 — select finish type, get full spec & materials
+// ═══════════════════════════════════════════════════════════════════════════
+_mb204('s204-finspec','Concrete Surface Finish Spec Selector','📋','#7c3aed');
+(function(){
+  var FINISHES=[
+    {id:'f1',name:'F1 — Rough Broom / Stiff Broom',emoji:'🧹',apps:'Driveways, parking lots, ramps, exterior slabs',desc:'Stiff-bristle broom drag perpendicular to traffic direction immediately after bull float while bleed water is present.',spec:'ACI 302.1R §8.7.1 / ASTM C150',steps:['Strike off with screed board','Bull float (pass while plastic)','Wait for bleed water to completely evaporate','Broom across full width in one direction','Apply curing compound immediately (ASTM C309)'],mats:['Stiff-bristle broom','Bull float','Curing compound (white-pigmented, 150-200 SF/gal)'],ff:'Not required',notes:'El Paso: broom before temp exceeds 85°F or evap rate hits 0.2 lb/ft²/hr'},
+    {id:'f2',name:'F2 — Smooth Broom / Light Broom',emoji:'🪥',apps:'Interior warehouse floors, sidewalks, light commercial',desc:'Light broom drag after mag float for a uniform, non-slip texture with subtle striations.',spec:'ACI 302.1R §8.7.2',steps:['Bull float immediately after screeding','Wait for bleed water / sheen to disappear','Mag float (light pressure)','Light broom drag perpendicular to traffic','Cure with compound or burlap'],mats:['Light-bristle broom','Bull float','Mag float','Curing compound ASTM C309'],ff:'FF ≥ 20 / FL ≥ 15 typical',notes:'Most common finish for tilt-up and flex buildings in El Paso'},
+    {id:'f3',name:'F3 — Trowel Finish (Hand or Power)',emoji:'🔨',apps:'Retail floors, office slabs, smooth warehouse, exposed-to-view',desc:'Power trowel to a hard, smooth surface. Multiple passes with progressively pitched blades.',spec:'ACI 302.1R §8.7.3 / ACI 302.1R §8.6',steps:['Bull float, wait for bleed water','Mag float (opens surface)','Power trowel Pass 1 — flat blades','Power trowel Pass 2 — progressive pitch','Final pass — high pitch for burnish','Cure compound WITHIN 30 min of final trowel (ACI 308R)'],mats:['Ride-on or walk-behind trowel','Bull float','Mag float','Curing compound ASTM C309 (NOT wax-based on trowel)'],ff:'FF ≥ 25 / FL ≥ 20 minimum',notes:'El Paso: start early (5 AM), evap retarder before bull float in summer. Bleed sheen MUST be gone before troweling — delamination risk.'},
+    {id:'f4',name:'F4 — Hard Trowel / Burnished',emoji:'✨',apps:'Industrial floors, warehouse with forklifts, epoxy-coated',desc:'Multiple passes with ride-on trowel to achieve high sheen (F-number FF ≥ 35 typical). Hard, dense surface.',spec:'ACI 302.1R §8.7.4 / TR-34',steps:['Strike off, bull float, evap retarder in summer','Wait for bleed water fully gone (footprint test)','Mag float to open surface','Power trowel Pass 1 (flat)','Power trowel Pass 2 (15° pitch)','Power trowel Pass 3 (30° pitch)','Hard trowel Pass 4 (45°+ pitch, burnish)','Apply curing compound within 20 min (ACI 308R)'],mats:['Ride-on power trowel (required for large areas)','Walk-behind trowel (edges)','Mag float','Evap retarder (Confilm or equiv, ACI 305R §8.3)','Curing compound ASTM C309 Type 1-D (dissipating)'],ff:'FF ≥ 35 / FL ≥ 25 required',notes:'El Paso summer critical: ACI 305R evaporation rate ≥0.2 lb/ft²/hr = mandatory evap retarder and fogging. Ride-on trowel minimum for >5,000 SF.'},
+    {id:'f5',name:'F5 — Exposed Aggregate / Seeded',emoji:'🪨',apps:'Exterior decorative walks, plazas, entry drives',desc:'Reveal coarse aggregate by washing surface before final set. Requires retarder or careful timing.',spec:'ACI 302.1R §8.7.5 / ACI 310R',steps:['Place and screed mix with desired aggregate','Bull float lightly (do not over-work)','Apply surface retarder (controlled set)','Cover with plastic sheeting overnight','Next day: pressure wash / scrub surface to expose aggregate','Seal when fully cured (min 28 days)'],mats:['Surface retarder spray','Plastic sheeting','Pressure washer (1200-1800 PSI)','Penetrating sealer (ASTM C1315 or silicone)'],ff:'N/A (decorative)',notes:'El Paso: limit to Oct–Apr pours (summer heat shortens retarder window). Use sealer rated for alkaline surfaces.'},
+    {id:'f6',name:'F6 — Stamped Concrete',emoji:'🎨',apps:'Decorative driveways, patios, pool decks, walks',desc:'Textured impression tools pressed into plastic concrete to simulate stone, brick, or tile.',spec:'ACI 302.1R §8.7.6 / ACI 310R',steps:['Place, screed, bull float','Apply color hardener (integral or dry-shake)','Apply release agent (powder or liquid)','Wait for proper stiffness (footprint test 3/8"–1/2")','Stamp from farthest point, work toward exit','Detail edges with hand tools','Sawcut joints at columns and perimeter 24 hrs','Apply sealer (acrylic, ASTM C1315) after 28 days'],mats:['Stamp mats (rent or buy)','Color hardener (integral pigment or dry-shake)','Release agent (powder or liquid)','Tuck pointer / grout saw','Acrylic sealer'],ff:'N/A (decorative)',notes:'El Paso: integral pigment most durable. Avoid July–Sept stamping in direct sun — cures too fast. Re-seal every 2–3 years.'},
+    {id:'f7',name:'F7 — Superflat / Defined Traffic',emoji:'📐',apps:'Narrow-aisle warehouse (VNA), high-piling storage, freezer floors',desc:'Laser-screed required. Achieve FF ≥ 60 / FL ≥ 40 or better. Strict curing and saw-cut protocol.',spec:'ACI 302.1R §4.3 / ASTM E1155 / TR-34 §3',steps:['Laser screed required (Somero S-22E or equiv)','Wet-cure burlap + plastic sheet or curing blankets','NO troweling over bleed water — zero tolerance','Multiple power trowel passes with pitch control','F-number test within 24 hrs of pour (ASTM E1155)','Control joints within 24 hrs of strip','Traffic exclusion minimum 7 days'],mats:['Laser screed (required)','Ride-on power trowel with pitch control','Burlap + plastic sheeting (wet cure)','F-number floor profiler','Hardener / densifier (recommended)'],ff:'FF ≥ 50 / FL ≥ 35 typical (VNA FF ≥ 100/FL ≥ 50)',notes:'El Paso: pour at night or early morning ONLY. Temp differential &lt;15°F during cure. Owner/GC must agree on ACI 117 §4.8.2 tolerance deviation procedure.'}
+  ];
+  function render(){
+    var h='<div style="font-size:11px;color:#94a3b8;margin-bottom:12px;">Select a finish type to view full specification, required steps, and materials. ACI 302.1R-15 / ACI 310R-13 / TR-34.</div>';
+    h+='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px;">';
+    FINISHES.forEach(function(f){
+      h+='<button onclick="window._finspec204show(\''+f.id+'\')" style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:10px;text-align:left;cursor:pointer;color:#e2e8f0;">'
+        +'<div style="font-size:18px;margin-bottom:4px;">'+f.emoji+'</div>'
+        +'<div style="font-size:10px;font-weight:700;color:#c4b5fd;">'+f.name+'</div>'
+        +'<div style="font-size:9px;color:#64748b;margin-top:3px;">'+f.apps.split(',')[0]+'...</div>'
+        +'</button>';
+    });
+    h+='</div>';
+    h+='<div id="finspec204-detail"></div>';
+    h+='<div style="margin-top:10px;padding:8px;background:#1e293b;border-radius:4px;font-size:9px;color:#64748b;">Standards: ACI 302.1R-15 Guide for Concrete Floor and Slab Construction | ACI 310R-13 Guide to Decorative Concrete | TR-34 Concrete Industrial Ground Floors | ASTM E1155 F-Number System | ACI 308R Curing</div>';
+    document.getElementById('s204-finspec-body').innerHTML=h;
+  }
+  window._finspec204show=function(id){
+    var f=FINISHES.find(function(x){return x.id===id;});
+    if(!f)return;
+    var h='<div style="background:#1e293b;border:1px solid #7c3aed;border-radius:6px;padding:14px;margin-top:4px;">'
+      +'<div style="font-size:24px;margin-bottom:6px;">'+f.emoji+'</div>'
+      +'<div style="font-size:13px;font-weight:700;color:#c4b5fd;margin-bottom:4px;">'+f.name+'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">'
+      +'<div><div style="font-size:9px;color:#94a3b8;">APPLICATIONS</div><div style="font-size:10px;color:#e2e8f0;">'+f.apps+'</div></div>'
+      +'<div><div style="font-size:9px;color:#94a3b8;">CODE REFERENCE</div><div style="font-size:10px;color:#e2e8f0;">'+f.spec+'</div></div>'
+      +'<div><div style="font-size:9px;color:#94a3b8;">F-NUMBERS</div><div style="font-size:10px;color:#f59e0b;font-weight:700;">'+f.ff+'</div></div>'
+      +'</div>'
+      +'<div style="font-size:10px;color:#cbd5e1;background:#0f172a;border-radius:4px;padding:8px;margin-bottom:10px;border-left:3px solid #7c3aed;">'+f.desc+'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+      +'<div>'
+      +'<div style="font-size:9px;font-weight:700;color:#7c3aed;margin-bottom:5px;">📋 REQUIRED STEPS</div>'
+      +'<ol style="margin:0;padding-left:14px;color:#e2e8f0;font-size:10px;line-height:1.6;">'+f.steps.map(function(s){return '<li>'+s+'</li>';}).join('')+'</ol>'
+      +'</div>'
+      +'<div>'
+      +'<div style="font-size:9px;font-weight:700;color:#7c3aed;margin-bottom:5px;">🧰 MATERIALS NEEDED</div>'
+      +'<ul style="margin:0;padding-left:14px;color:#e2e8f0;font-size:10px;line-height:1.6;">'+f.mats.map(function(m){return '<li>'+m+'</li>';}).join('')+'</ul>'
+      +'<div style="margin-top:8px;background:#1a1a2e;border:1px solid #f59e0b;border-radius:4px;padding:6px;">'
+      +'<div style="font-size:9px;font-weight:700;color:#f59e0b;margin-bottom:3px;">⚡ EL PASO NOTE</div>'
+      +'<div style="font-size:9px;color:#fde68a;">'+f.notes+'</div></div>'
+      +'</div>'
+      +'</div>'
+      +'<button onclick="window._finspec204print(\''+f.id+'\')" style="background:#7c3aed;color:#fff;border:none;border-radius:5px;padding:7px 14px;font-size:11px;cursor:pointer;margin-top:10px;">🖨️ Print Finish Spec Sheet</button></div>';
+    document.getElementById('finspec204-detail').innerHTML=h;
+  };
+  window._finspec204print=function(id){
+    var f=FINISHES.find(function(x){return x.id===id;});
+    if(!f)return;
+    var w=window.open('','_blank');
+    w.document.write('<html><head><title>'+f.name+' Spec Sheet</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;}h2{color:#7c3aed;}h3{color:#4c1d95;margin-top:14px;}table{width:100%;border-collapse:collapse;margin:8px 0;}td{padding:5px 8px;border:1px solid #ccc;}td:first-child{width:160px;background:#f3f4f6;font-weight:bold;}.note{background:#fef3c7;border:1px solid #f59e0b;padding:8px;border-radius:4px;margin-top:10px;}footer{margin-top:14px;font-size:8px;color:#666;border-top:1px solid #ccc;padding-top:6px;}</style></head><body>'
+      +'<h2>'+f.emoji+' '+f.name+'</h2>'
+      +'<table>'
+      +'<tr><td>Applications</td><td>'+f.apps+'</td></tr>'
+      +'<tr><td>Code Reference</td><td>'+f.spec+'</td></tr>'
+      +'<tr><td>F-Numbers</td><td><strong>'+f.ff+'</strong></td></tr>'
+      +'<tr><td>Description</td><td>'+f.desc+'</td></tr>'
+      +'</table>'
+      +'<h3>Required Steps</h3><ol>'+f.steps.map(function(s){return '<li>'+s+'</li>';}).join('')+'</ol>'
+      +'<h3>Materials Required</h3><ul>'+f.mats.map(function(m){return '<li>'+m+'</li>';}).join('')+'</ul>'
+      +'<div class="note"><strong>⚡ El Paso Note:</strong> '+f.notes+'</div>'
+      +'<footer>ACI 302.1R-15 / ACI 310R-13 / TR-34 / ASTM E1155 / ACI 308R | Printed: '+new Date().toLocaleDateString()+' | CONFIDENTIAL</footer></body></html>');
+    w.document.close();w.focus();w.print();
+  };
+  document.getElementById('s204-finspec').addEventListener('click',function(e){if(e.target===this){this.style.display='none';}});
+  document.getElementById('s204-finspec').addEventListener('show',render);
+  render();
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOL 3 — 🔧 FIELD MIX ADJUSTMENT LOG (Ctrl+Alt+Shift+F9)
+// ASTM C94 §11.8 / ACI 212.3R — document every field adjustment to plastic concrete
+// ═══════════════════════════════════════════════════════════════════════════
+_mb204('s204-fmalog','Field Mix Adjustment Log','🔧','#059669');
+(function(){
+  var KEY='oncor_s204_fma_v1';
+  function load(){try{return JSON.parse(localStorage.getItem(KEY))||[];}catch(e){return[];}}
+  function save(arr){localStorage.setItem(KEY,JSON.stringify(arr));}
+  var ADJ_TYPES=[
+    {id:'water',label:'Water Addition',unit:'gal',code:'ASTM C94 §11.8',limit:'≤1 gal/yd³',risk:'HIGH',color:'#ef4444'},
+    {id:'hrwr',label:'HRWR / Superplasticizer',unit:'oz/yd³',code:'ASTM C494 Type F/G',limit:'Per mfr dosage',risk:'LOW',color:'#22c55e'},
+    {id:'ret',label:'Retarder Addition',unit:'oz/yd³',code:'ASTM C494 Type B',limit:'Per mfr dosage',risk:'LOW',color:'#22c55e'},
+    {id:'acc',label:'Accelerator Addition',unit:'oz/yd³',code:'ASTM C494 Type C',limit:'Per mfr dosage',risk:'MED',color:'#f59e0b'},
+    {id:'aea',label:'Air-Entraining Addition',unit:'oz/yd³',code:'ASTM C260',limit:'Per target air %',risk:'MED',color:'#f59e0b'},
+    {id:'fiber',label:'Fiber Addition',unit:'lb/yd³',code:'ASTM C1116',limit:'Per spec dosage',risk:'LOW',color:'#22c55e'},
+    {id:'other',label:'Other Adjustment',unit:'units',code:'Record type',limit:'Document fully',risk:'MED',color:'#f59e0b'}
+  ];
+  function riskBadge(r,c){return '<span style="background:'+c+';color:#fff;border-radius:3px;padding:2px 6px;font-size:9px;font-weight:700;">'+r+'</span>';}
+  function render(){
+    var logs=load();
+    var waterAdds=logs.filter(function(l){return l.type==='water';});
+    var totalWater=waterAdds.reduce(function(a,l){return a+(parseFloat(l.qty)||0);},0);
+    var highRisk=logs.filter(function(l){return l.risk==='HIGH';}).length;
+    var h='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">';
+    [[logs.length,'Total Adjustments','#059669'],[waterAdds.length,'Water Additions','#ef4444'],[totalWater.toFixed(1)+' gal','Total Water Added','#f59e0b'],[highRisk,'High-Risk Events','#dc2626']].forEach(function(c){
+      h+='<div style="background:#1e293b;border-radius:6px;padding:10px;text-align:center;"><div style="font-size:18px;font-weight:700;color:'+c[2]+'">'+c[0]+'</div><div style="font-size:10px;color:#94a3b8">'+c[1]+'</div></div>';
+    });
+    h+='</div>';
+    // ASTM C94 warning
+    h+='<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:5px;padding:10px;margin-bottom:12px;font-size:10px;color:#fca5a5;">'
+      +'<div style="font-weight:700;margin-bottom:3px;">⚠️ ASTM C94 §11.8 — Water Addition Rules</div>'
+      +'<div>Max water addition: 1 gallon per cubic yard | Must redrum 30 revolutions after addition | Reject load if over limit | Document on ticket. ANY water addition changes w/cm ratio — impacts strength.</div></div>';
+    // Add form
+    h+='<div style="background:#1e293b;border-radius:6px;padding:12px;margin-bottom:12px;">'
+      +'<div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">+ Log Field Adjustment</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">'
+      +'<div><div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">Date / Time</div><div style="display:flex;gap:4px;"><input id="fma204-date" type="date" style="flex:1;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px;border-radius:4px;font-size:11px;"><input id="fma204-time" type="time" style="flex:1;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px;border-radius:4px;font-size:11px;"></div></div>'
+      +'<div><div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">Ticket #</div><input id="fma204-ticket" placeholder="12345" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 7px;border-radius:4px;font-size:11px;"></div>'
+      +'<div><div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">Load Size (yd³)</div><input id="fma204-load" type="number" placeholder="10" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 7px;border-radius:4px;font-size:11px;"></div>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px;">'
+      +'<div><div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">Adjustment Type</div><select id="fma204-type" onchange="window._fma204typechange()" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 7px;border-radius:4px;font-size:11px;">'+ADJ_TYPES.map(function(a){return '<option value="'+a.id+'">'+a.label+'</option>';}).join('')+'</select></div>'
+      +'<div><div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">Quantity <span id="fma204-unit-lbl" style="color:#059669">(gal)</span></div><input id="fma204-qty" type="number" placeholder="2" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 7px;border-radius:4px;font-size:11px;"></div>'
+      +'<div><div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">Authorized By</div><input id="fma204-auth" placeholder="Foreman / Engineer" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 7px;border-radius:4px;font-size:11px;"></div>'
+      +'</div>'
+      +'<div id="fma204-violation" style="display:none;background:#7f1d1d;border:1px solid #ef4444;border-radius:4px;padding:8px;margin-top:8px;font-size:10px;color:#fca5a5;"></div>'
+      +'<div style="margin-top:8px;"><div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">Reason / Notes</div><textarea id="fma204-notes" placeholder="Reason for adjustment, batch plant direction, GC approval, slump before/after..." rows="2" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 7px;border-radius:4px;font-size:11px;resize:vertical;"></textarea></div>'
+      +'<button onclick="window._fma204add()" style="background:#059669;color:#fff;border:none;border-radius:5px;padding:7px 16px;font-size:11px;cursor:pointer;margin-top:8px;">+ Log Adjustment</button></div>';
+    // Log table
+    if(logs.length===0){
+      h+='<div style="text-align:center;color:#475569;padding:20px;font-size:12px;">No field adjustments logged yet. Use ONLY when required — all adjustments should be pre-authorized.</div>';
+    } else {
+      h+='<table style="width:100%;border-collapse:collapse;font-size:10px;">'
+        +'<thead><tr style="background:#1e293b;color:#94a3b8;">'
+        +'<th style="padding:6px 8px;text-align:left;">Date/Time</th><th style="padding:6px 8px;text-align:left;">Type</th>'
+        +'<th style="padding:6px 8px;text-align:right;">Ticket #</th><th style="padding:6px 8px;text-align:right;">Load yd³</th>'
+        +'<th style="padding:6px 8px;text-align:right;">Qty</th><th style="padding:6px 8px;text-align:left;">Code</th>'
+        +'<th style="padding:6px 8px;text-align:left;">Auth / Notes</th><th style="padding:6px 8px;text-align:center;"></th>'
+        +'</tr></thead><tbody>';
+      logs.slice().reverse().forEach(function(l,ri){
+        var i=logs.length-1-ri;
+        var at=ADJ_TYPES.find(function(a){return a.id===l.type;})||ADJ_TYPES[6];
+        var violation='';
+        if(l.type==='water'&&l.load&&l.qty&&(parseFloat(l.qty)/parseFloat(l.load))>1){
+          violation='<div style="color:#ef4444;font-size:9px;font-weight:700;">⚠️ ASTM C94 VIOLATION: '+(parseFloat(l.qty)/parseFloat(l.load)).toFixed(2)+' gal/yd³ &gt; 1.0 limit</div>';
+        }
+        h+='<tr style="border-bottom:1px solid #1e293b;">'
+          +'<td style="padding:6px 8px;color:#94a3b8;">'+(l.date||'—')+(l.time?'<br>'+l.time:'')+'</td>'
+          +'<td style="padding:6px 8px;">'+riskBadge(at.risk,at.color)+'<div style="font-size:9px;color:#e2e8f0;margin-top:2px;">'+at.label+'</div></td>'
+          +'<td style="padding:6px 8px;text-align:right;color:#94a3b8;">'+(l.ticket||'—')+'</td>'
+          +'<td style="padding:6px 8px;text-align:right;color:#94a3b8;">'+(l.load?l.load+' yd³':'—')+'</td>'
+          +'<td style="padding:6px 8px;text-align:right;color:#f59e0b;font-weight:700;">'+(l.qty||'—')+' '+at.unit+'</td>'
+          +'<td style="padding:6px 8px;color:#64748b;font-size:9px;">'+at.code+'</td>'
+          +'<td style="padding:6px 8px;color:#e2e8f0;font-size:9px;">'+(l.auth?'<div style="font-weight:600;">'+l.auth+'</div>':'')+(l.notes?'<div style="color:#64748b;">'+l.notes+'</div>':'')+violation+'</td>'
+          +'<td style="padding:6px 8px;text-align:center;"><button onclick="window._fma204del('+i+')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:13px;">🗑</button></td>'
+          +'</tr>';
+      });
+      h+='</tbody></table>';
+    }
+    // Reference
+    h+='<div style="margin-top:12px;background:#1e293b;border-radius:5px;padding:10px;">'
+      +'<div style="font-size:10px;font-weight:700;color:#059669;margin-bottom:6px;">📚 ASTM C94 / ACI 212.3R Field Adjustment Reference</div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:9px;">'
+      +'<thead><tr style="background:#0f172a;color:#94a3b8;"><th style="padding:4px 6px;text-align:left;">Adjustment</th><th style="padding:4px 6px;text-align:left;">Limit</th><th style="padding:4px 6px;text-align:left;">Risk</th><th style="padding:4px 6px;text-align:left;">Code</th></tr></thead><tbody>';
+    ADJ_TYPES.forEach(function(a){
+      h+='<tr style="border-bottom:1px solid #1e293b;"><td style="padding:4px 6px;color:#e2e8f0;">'+a.label+'</td>'
+        +'<td style="padding:4px 6px;color:#cbd5e1;">'+a.limit+'</td>'
+        +'<td style="padding:4px 6px;">'+riskBadge(a.risk,a.color)+'</td>'
+        +'<td style="padding:4px 6px;color:#64748b;font-size:8px;">'+a.code+'</td></tr>';
+    });
+    h+='</tbody></table></div>';
+    h+='<div style="margin-top:10px;display:flex;gap:8px;">'
+      +'<button onclick="window._fma204print()" style="background:#1d4ed8;color:#fff;border:none;border-radius:5px;padding:7px 16px;font-size:11px;cursor:pointer;">🖨️ Print Adjustment Log</button>'
+      +'<button onclick="if(confirm(\'Clear all adjustment logs?\')){{localStorage.removeItem(\''+KEY+'\');window._fma204render();}}" style="background:#7f1d1d;color:#fff;border:none;border-radius:5px;padding:7px 14px;font-size:11px;cursor:pointer;">🗑 Clear</button></div>';
+    document.getElementById('s204-fmalog-body').innerHTML=h;
+    var dateIn=document.getElementById('fma204-date');
+    if(dateIn&&!dateIn.value)dateIn.value=new Date().toISOString().split('T')[0];
+    var timeIn=document.getElementById('fma204-time');
+    if(timeIn&&!timeIn.value)timeIn.value=_now();
+  }
+  window._fma204render=render;
+  window._fma204typechange=function(){
+    var sel=document.getElementById('fma204-type');
+    var at=ADJ_TYPES.find(function(a){return a.id===sel.value;})||ADJ_TYPES[6];
+    var ul=document.getElementById('fma204-unit-lbl');
+    if(ul)ul.textContent='('+at.unit+')';
+    var viol=document.getElementById('fma204-violation');
+    if(viol)viol.style.display='none';
+  };
+  window._fma204add=function(){
+    var type=document.getElementById('fma204-type').value;
+    var qty=document.getElementById('fma204-qty').value;
+    var load=document.getElementById('fma204-load').value;
+    if(!qty){alert('Enter quantity.');return;}
+    var at=ADJ_TYPES.find(function(a){return a.id===type;})||ADJ_TYPES[6];
+    var entry={type:type,date:document.getElementById('fma204-date').value,time:document.getElementById('fma204-time').value,ticket:document.getElementById('fma204-ticket').value.trim(),load:load,qty:qty,auth:document.getElementById('fma204-auth').value.trim(),notes:document.getElementById('fma204-notes').value.trim(),risk:at.risk,ts:Date.now()};
+    var arr=load();arr.push(entry);save(arr);render();
+  };
+  window._fma204del=function(i){if(confirm('Delete this log entry?')){var arr=load();arr.splice(i,1);save(arr);render();}};
+  window._fma204print=function(){
+    var logs=load();
+    var rows=logs.map(function(l,i){
+      var at=ADJ_TYPES.find(function(a){return a.id===l.type;})||ADJ_TYPES[6];
+      var violation=(l.type==='water'&&l.load&&l.qty&&(parseFloat(l.qty)/parseFloat(l.load))>1)?'VIOLATION: '+(parseFloat(l.qty)/parseFloat(l.load)).toFixed(2)+' gal/yd³ > 1.0':'';
+      return '<tr style="'+(violation?'background:#fff0f0;':'')+'"><td>'+(i+1)+'</td><td>'+(l.date||'—')+(l.time?' '+l.time:'')+'</td><td>'+at.label+'</td><td>'+(l.ticket||'—')+'</td><td>'+(l.load||'—')+'</td><td><strong>'+(l.qty||'—')+' '+at.unit+'</strong></td><td>'+at.code+'</td><td>'+(l.auth||'—')+'</td><td>'+(l.notes||'—')+'</td><td style="color:red;font-weight:bold;">'+violation+'</td></tr>';
+    }).join('');
+    var violations=logs.filter(function(l){return l.type==='water'&&l.load&&l.qty&&(parseFloat(l.qty)/parseFloat(l.load))>1;}).length;
+    var w=window.open('','_blank');
+    w.document.write('<html><head><title>Field Mix Adjustment Log</title><style>body{font-family:Arial,sans-serif;font-size:10px;margin:20px;}h2{color:#059669;}table{width:100%;border-collapse:collapse;margin-top:10px;}th,td{border:1px solid #ccc;padding:4px 6px;}th{background:#d1fae5;}tr:nth-child(even){background:#f8fafc;}.warn{background:#fef2f2;border:1px solid #ef4444;padding:8px;border-radius:4px;margin-top:10px;color:#dc2626;}footer{margin-top:12px;font-size:8px;color:#666;border-top:1px solid #ccc;padding-top:6px;}</style></head><body>'
+      +'<h2>🔧 Field Mix Adjustment Log</h2>'
+      +(violations>0?'<div class="warn">⚠️ '+violations+' ASTM C94 §11.8 VIOLATION(S) DETECTED — Water addition exceeded 1 gal/yd³. Loads should have been rejected. Notify EOR.</div>':'')
+      +'<table><thead><tr><th>#</th><th>Date/Time</th><th>Adjustment Type</th><th>Ticket #</th><th>Load yd³</th><th>Qty / Unit</th><th>Code Reference</th><th>Authorized By</th><th>Notes / Reason</th><th>Violation</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      +'<footer>Standards: ASTM C94 §11.8 (water addition ≤1 gal/yd³, 30 rev after) | ASTM C494 Types A-G | ACI 212.3R-16 | ACI 305R (admixtures in hot weather) | Document ALL field adjustments | CONFIDENTIAL</footer></body></html>');
+    w.document.close();w.focus();w.print();
+  };
+  document.getElementById('s204-fmalog').addEventListener('click',function(e){if(e.target===this){this.style.display='none';}});
+  document.getElementById('s204-fmalog').addEventListener('show',render);
+  render();
+})();
+
+// ─── SIDEBAR BUTTONS & KEYBOARD SHORTCUTS ───────────────────────────────────
+_sb204('⏱ Pour Duration Log','s204-pdlog','#0369a1');
+_sb204('📋 Surface Finish Spec','s204-finspec','#6d28d9');
+_sb204('🔧 Field Mix Adj Log','s204-fmalog','#047857');
+
+document.addEventListener('keydown',function(e){
+  if(e.ctrlKey&&e.altKey&&e.shiftKey){
+    var k=e.key;
+    if(k==='F7'){e.preventDefault();var m=document.getElementById('s204-pdlog');if(m.style.display==='none'){window._pd204render();m.dispatchEvent(new Event('show'));}m.style.display=m.style.display==='none'?'flex':'none';}
+    else if(k==='F8'){e.preventDefault();var m=document.getElementById('s204-finspec');m.style.display=m.style.display==='none'?'flex':'none';}
+    else if(k==='F9'){e.preventDefault();var m=document.getElementById('s204-fmalog');if(m.style.display==='none'){window._fma204render();m.dispatchEvent(new Event('show'));}m.style.display=m.style.display==='none'?'flex':'none';}
+  }
+});
+
+})();
+</script>
+<!-- END SESSION #204 -->
