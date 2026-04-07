@@ -1,5 +1,20 @@
 # Overnight Build Tasks - 2026-02-14
 
+## ✅ SESSION: Apr 7, 2026 - 02:24 UTC (Overnight Cron #190)
+**Status:** ✅ THREE NEW FEATURES added (+381 lines)
+
+### Session #190 — 🌾📈🔩 (+381 lines)
+- **SCM & Fly Ash Content Calculator** (Ctrl+Alt+Shift+F7) — ACI 318-19 Table 26.4.2.2 / ASTM C618 / ASTM C989 / ACI 232.2R; calculate SCM replacement (fly ash Class C/F, GGBFS slag Grade 100, silica fume, LC3); ACI exposure class max w/cm check; k-factor applied; cement vs SCM cost comparison with savings/yd³; El Paso sulfate soil note (Class F recommended for S1-S3 exposure); printable mix proportions
+- **Mid-Job Concrete Price Escalation Impact** (Ctrl+Alt+Shift+F8) — CFMA / AGC / AIA A201 §3.4 escalation analysis; bid price vs current price, remaining yd³; calculates margin squeeze, % of profit consumed, suggested CO amount; contract type aware (lump sum, T&M, GMP); escalation remedy guidance with CO language template
+- **Rebar Mark & Cut List Generator** (Ctrl+Alt+Shift+F9) — CRSI Manual of Standard Practice / ACI 315 / ASTM A615 Gr 60; add bar marks with size (#3-#11), length, qty, location; auto-calculates LF, lb/ft, total weight, tons, material cost; CRSI bar weight reference table; printable cut list for fabricator
+
+### Commits:
+- fe21324 (Session #190) — 381 lines
+- File now at ~216,261 lines total
+- New shortcuts: Ctrl+Alt+Shift+F7 (SCM Calc), Ctrl+Alt+Shift+F8 (Escalation), Ctrl+Alt+Shift+F9 (Rebar Cut List)
+
+---
+
 ## ✅ SESSION: Apr 6, 2026 - 22:52 UTC (Overnight Build Batch)
 **Status:** ✅ FOUR SESSIONS completed (Sessions #185-187 + task file sync)
 
